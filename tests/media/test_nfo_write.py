@@ -175,3 +175,48 @@ async def test_write_nfo_preserves_multiple_series(tmp_path: Path):
     assert root.findtext("series") == "Series A"
     # Kodi Movie NFO 的 set 仅支持一个; 导出首项, Amane 数据库保留完整列表.
     assert [node.findtext("name") for node in root.findall("set")] == ["Series A"]
+    assert root.findtext("outline") == root.findtext("plot")
+
+
+TITLE_CASES: list[tuple[str, str, str]] = [
+    ("MIDV-123", "Test Title", "MIDV-123 Test Title"),
+    # 来源标题自带番号前缀: 不再重复拼接, 番号统一为条目写法
+    ("MIDV-123", "MIDV-123 Test Title", "MIDV-123 Test Title"),
+    ("MIDV-123", "midv-123 Test Title", "MIDV-123 Test Title"),
+    ("MIDV-123", "MIDV-123【限定】Test", "MIDV-123 【限定】Test"),
+    ("MIDV-123", "MIDV-123", "MIDV-123"),
+    ("MIDV-123", " MIDV-123   Test Title ", "MIDV-123 Test Title"),
+    # 番号后紧跟字母数字: 不是该番号的前缀
+    ("ABF-06", "ABF-062 別作品", "ABF-06 ABF-062 別作品"),
+    # 清理后的标题仍要转义
+    ("MIDV-123", "MIDV-123 A & B", "MIDV-123 A & B"),
+]
+
+
+@pytest.mark.parametrize(("number", "title", "expected"), TITLE_CASES)
+@pytest.mark.asyncio(loop_scope="function")
+async def test_write_nfo_title_keeps_number_once(tmp_path: Path, number: str, title: str, expected: str) -> None:
+    nfo_path = tmp_path / f"{number}.nfo"
+
+    assert await write_nfo(Metadata(number=number, title=title), nfo_path) is True
+
+    root = ET.fromstring(nfo_path.read_text(encoding="utf-8"))
+    assert root.findtext("title") == expected
+    # 原题独立成项, 无原题时不写 originaltitle / sorttitle.
+    assert root.findtext("originaltitle") is None
+    assert root.findtext("sorttitle") is None
+
+
+@pytest.mark.parametrize(("number", "title", "expected"), TITLE_CASES)
+@pytest.mark.asyncio(loop_scope="function")
+async def test_write_nfo_original_title_follows_same_rule(
+    tmp_path: Path, number: str, title: str, expected: str
+) -> None:
+    """原题与显示标题同规则: 各自去掉重复番号, 不互相顶替."""
+    nfo_path = tmp_path / f"{number}.nfo"
+
+    assert await write_nfo(Metadata(number=number, title="T", original_title=title), nfo_path) is True
+
+    root = ET.fromstring(nfo_path.read_text(encoding="utf-8"))
+    assert root.findtext("originaltitle") == expected
+    assert root.findtext("sorttitle") == expected

@@ -37,6 +37,21 @@ def _escape_xml(text: str) -> str:
     return escaped
 
 
+def _title_with_number(number: str, title: str) -> str:
+    """NFO 显示标题: 「番号 + 空格 + 标题」; 标题已以番号开头时不再重复拼接.
+
+    番号后须为非字母数字, 否则 ``ABF-06`` 会把 ``ABF-062`` 当作自己的前缀.
+    """
+    text = title.strip()
+    if number:
+        match = re.match(re.escape(number), text, re.IGNORECASE)
+        if match is not None:
+            rest = text[match.end() :]
+            if not rest or not rest[0].isalnum():
+                text = rest.strip()
+    return f"{number} {text}".strip()
+
+
 async def write_nfo(metadata: Metadata, nfo_path: Path, *, tag_mapping_path: Path | None = None) -> bool:
     try:
         nfo_path.parent.mkdir(parents=True, exist_ok=True)
@@ -65,10 +80,11 @@ async def write_nfo(metadata: Metadata, nfo_path: Path, *, tag_mapping_path: Pat
         code.write(f"  <num>{_escape_xml(metadata.number)}</num>\n")
 
         if metadata.title:
-            code.write(f"  <title>{_escape_xml(metadata.number)} {_escape_xml(metadata.title)}</title>\n")
+            code.write(f"  <title>{_escape_xml(_title_with_number(metadata.number, metadata.title))}</title>\n")
 
+        # 原题独立成项 (上游没有这一列): 有原题时按同一规则带上番号, 否则沿用显示标题.
         if metadata.original_title:
-            original_title = f"{_escape_xml(metadata.number)} {_escape_xml(metadata.original_title)}"
+            original_title = _escape_xml(_title_with_number(metadata.number, metadata.original_title))
             code.write(f"  <originaltitle>{original_title}</originaltitle>\n")
             code.write(f"  <sorttitle>{original_title}</sorttitle>\n")
 
