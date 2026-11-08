@@ -69,7 +69,8 @@ def test_metadata_number_case_insensitive_unique_merges_duplicates(alembic_cfg: 
             {"m": dup_id},
         )
 
-    command.upgrade(alembic_cfg, "head")
+    # 本测试验证旧的全局番号唯一 Migration; 新的 WESTERN Scene ID Migration 会有意替换该约束.
+    command.upgrade(alembic_cfg, "2a7c9e1d4b60")
 
     with engine.connect() as conn:
         numbers = [row[0] for row in conn.execute(text("SELECT number FROM metadata ORDER BY id")).fetchall()]

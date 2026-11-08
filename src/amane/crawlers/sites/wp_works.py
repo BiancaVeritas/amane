@@ -175,7 +175,11 @@ class WordPressWorksCrawler(Crawler):
             runtime=parse_minutes(acf.runtime),
             plot=(acf.plot or "").strip() or None,
             poster_urls=[post.images.sub] if post.images.sub else [],
+            original_poster_urls=[post.images.sub] if post.images.sub else [],
             thumb_urls=[post.images.main] if post.images.main else [],
+            double_page_poster_urls=[post.images.sub] if post.images.sub and post.images.main else [],
+            double_page_original_poster_urls=[post.images.sub] if post.images.sub and post.images.main else [],
+            double_page_thumb_urls=[post.images.main] if post.images.sub and post.images.main else [],
             extrafanart=post.images.gallery,
             source_url=self._page_url(post.slug),
         )

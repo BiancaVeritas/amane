@@ -166,6 +166,7 @@ class AvsoxCrawler(Crawler):
                 movie.description_tw,
             ),
             poster_urls=[movie.posterSmall] if movie.posterSmall else [],
+            original_poster_urls=[movie.posterSmall] if movie.posterSmall else [],
             thumb_urls=[movie.posterLarge] if movie.posterLarge else [],
             extrafanart=[item for item in movie.sampleLarge if item],
             source_url=url,

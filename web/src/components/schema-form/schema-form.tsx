@@ -42,7 +42,9 @@ function deepEqual(a: unknown, b: unknown): boolean {
 /** Keys that stay full-width even when `fieldLayout="grid"`. */
 const WIDE_TEXT_KEYS = new Set([
   "title",
+  "original_title",
   "plot",
+  "original_plot",
   "overview",
   "description",
   "body",

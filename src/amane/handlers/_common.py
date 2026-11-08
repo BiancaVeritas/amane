@@ -75,7 +75,9 @@ async def refresh_external_subtitle(repo: Repository, media: MediaFile, library:
 
 
 async def ensure_oshash(repo: Repository, media: MediaFile) -> str | None:
-    """已有指纹直接返回; 计算失败留 None, 不阻断刮削."""
+    """已有指纹直接返回; STRM 是播放指针, 不计算 OSHASH."""
+    if Path(media.path).suffix.casefold() == ".strm":
+        return None
     if media.oshash is not None:
         return media.oshash
     disk = await existing_disk_path(Path(media.path))

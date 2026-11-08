@@ -79,6 +79,7 @@
   "detail": {
     "fields": {
       "title": "标题",
+      "originalTitle": "原标题",
       "studio": "制作商",
       "publisher": "发行商",
       "release": "发行日期",
@@ -90,6 +91,7 @@
       "actors": "演员",
       "tags": "标签",
       "plot": "剧情",
+      "originalPlot": "原剧情",
       "trailer": "预告片",
       "poster": "海报",
       "thumb": "封面",
@@ -216,7 +218,8 @@
   "view": {
     "grid": "海报",
     "list": "列表",
-    "cloud": "词云"
+    "cloud": "词云",
+    "cover": "封面"
   },
   "favorite": {
     "add": "收藏",
@@ -300,6 +303,9 @@
     "title": {
       "label": "标题"
     },
+    "original_title": {
+      "label": "原标题"
+    },
     "actors": {
       "label": "演员"
     },
@@ -325,11 +331,17 @@
     "plot": {
       "label": "剧情"
     },
+    "original_plot": {
+      "label": "原剧情"
+    },
     "directors": {
       "label": "导演"
     },
     "poster_urls": {
       "label": "海报 URL"
+    },
+    "original_poster_urls": {
+      "label": "原海报 URL"
     },
     "thumb_urls": {
       "label": "封面 URL"
@@ -344,10 +356,22 @@
       "label": "评分"
     },
     "external_ids": {
-      "label": "外部 ID"
+      "label": "外部 ID",
+      "options": {
+        "caribbeancom": "Caribbeancom",
+        "caribbeancompr": "Caribbeancompr",
+        "pacopacomama": "Pacopacomama",
+        "tokyo_hot": "Tokyo-Hot"
+      }
     },
     "source_urls": {
-      "label": "来源链接"
+      "label": "来源链接",
+      "options": {
+        "caribbeancom": "Caribbeancom",
+        "caribbeancompr": "Caribbeancompr",
+        "pacopacomama": "Pacopacomama",
+        "tokyo_hot": "Tokyo-Hot"
+      }
     }
   },
   "manage": {
@@ -379,7 +403,8 @@
     "current": "当前",
     "changedCount": "已修改 {{count}} 个字段",
     "noChanges": "无修改",
-    "loadImages": "加载图片"
+    "loadImages": "加载图片",
+    "loadAllImages": "加载全部图片"
   },
   "lock": {
     "manage": "字段锁定",

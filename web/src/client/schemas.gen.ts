@@ -474,7 +474,9 @@ export const ActorScrapingConfigSchema = {
             items: {
                 type: 'string',
                 enum: [
-                    'gfriends'
+                    'gfriends',
+                    'tushy',
+                    'tushy_raw'
                 ]
             },
             type: 'array',
@@ -1251,6 +1253,10 @@ export const BrowserBackendReportResponseSchema = {
 
 export const BrowserConfigSchema = {
     properties: {
+        backend: {
+            $ref: '#/components/schemas/BrowserBackendName',
+            default: 'off'
+        },
         bsk_path: {
             anyOf: [
                 {
@@ -1263,10 +1269,6 @@ export const BrowserConfigSchema = {
             title: 'Bsk Path',
             'x-path-type': 'file',
             'x-widget': 'PathPicker'
-        },
-        backend: {
-            $ref: '#/components/schemas/BrowserBackendName',
-            default: 'off'
         },
         timeout: {
             type: 'integer',
@@ -3040,6 +3042,7 @@ export const HotSettingsSchema = {
                 ],
                 crop_poster: true,
                 poster_ratio: 0.7,
+                uncensored_poster_ratio: 0.7,
                 poster_crop_skip_ratio: 0.9,
                 jpeg_quality: 95,
                 content_routes: {
@@ -3077,7 +3080,8 @@ export const HotSettingsSchema = {
                         'javdb',
                         'javbus',
                         'avsox',
-                        'freejavbt'
+                        'freejavbt',
+                        'aventertainments'
                     ],
                     western: [
                         'theporndb',
@@ -3111,6 +3115,18 @@ export const HotSettingsSchema = {
                         use_proxy: true
                     },
                     avbase: {
+                        cookie: {},
+                        languages: [
+                            'zh',
+                            'ja',
+                            'en'
+                        ],
+                        official_routes: {},
+                        rate_limit: 2,
+                        use_browser: 'auto',
+                        use_proxy: true
+                    },
+                    aventertainments: {
                         cookie: {},
                         languages: [
                             'zh',
@@ -5356,6 +5372,12 @@ export const MetadataDetailResponseSchema = {
                 }
             ],
             title: 'Series Id'
+        },
+        series_ids: {
+            additionalProperties: { type: 'integer' },
+            type: 'object',
+            title: 'Series Ids',
+            default: {}
         }
     },
     type: 'object',
@@ -5370,7 +5392,9 @@ export const MetadataFieldSchema = {
     type: 'string',
     enum: [
         'title',
+        'original_title',
         'plot',
+        'original_plot',
         'actors',
         'directors',
         'tags',
@@ -5445,6 +5469,17 @@ export const MetadataPartialSchema = {
                 }
             ],
             title: 'Title'
+        },
+        original_title: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Original Title'
         },
         actors: {
             anyOf: [
@@ -5533,6 +5568,14 @@ export const MetadataPartialSchema = {
             ],
             title: 'Series'
         },
+        series_names: {
+            anyOf: [
+                { items: { type: 'string' }, type: 'array' },
+                { type: 'null' }
+            ],
+            title: 'Series Names',
+            default: []
+        },
         plot: {
             anyOf: [
                 {
@@ -5543,6 +5586,17 @@ export const MetadataPartialSchema = {
                 }
             ],
             title: 'Plot'
+        },
+        original_plot: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Original Plot'
         },
         directors: {
             anyOf: [
@@ -5557,6 +5611,20 @@ export const MetadataPartialSchema = {
                 }
             ],
             title: 'Directors'
+        },
+        original_poster_urls: {
+            anyOf: [
+                {
+                    items: {
+                        type: 'string'
+                    },
+                    type: 'array'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Original Poster Urls'
         },
         poster_urls: {
             anyOf: [
@@ -5678,6 +5746,17 @@ export const MetadataResponseSchema = {
         content_type: {
             $ref: '#/components/schemas/ContentType'
         },
+        theporndb_uuid: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Theporndb Uuid'
+        },
         title: {
             anyOf: [
                 {
@@ -5688,6 +5767,17 @@ export const MetadataResponseSchema = {
                 }
             ],
             title: 'Title'
+        },
+        original_title: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Original Title'
         },
         actors: {
             items: {
@@ -5760,6 +5850,12 @@ export const MetadataResponseSchema = {
             ],
             title: 'Series'
         },
+        series_names: {
+            items: { type: 'string' },
+            type: 'array',
+            title: 'Series Names',
+            default: []
+        },
         plot: {
             anyOf: [
                 {
@@ -5771,12 +5867,31 @@ export const MetadataResponseSchema = {
             ],
             title: 'Plot'
         },
+        original_plot: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Original Plot'
+        },
         directors: {
             items: {
                 type: 'string'
             },
             type: 'array',
             title: 'Directors',
+            default: []
+        },
+        original_poster_urls: {
+            items: {
+                type: 'string'
+            },
+            type: 'array',
+            title: 'Original Poster Urls',
             default: []
         },
         poster_url: {
@@ -7863,6 +7978,18 @@ export const ScrapeSubmissionSchema = {
             title: 'Media Id',
             description: 'MediaFile ID. 通常仅用于内部提交任务，手动提交无需指定'
         },
+        theporndb_uuid: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'ThePornDB UUID',
+            description: 'WESTERN 手动指定的 ThePornDB UUID'
+        },
         content_type: {
             anyOf: [
                 {
@@ -7918,6 +8045,13 @@ export const ScrapingConfigSchema = {
             title: 'Poster Ratio',
             default: 0.7
         },
+        uncensored_poster_ratio: {
+            type: 'number',
+            maximum: 1,
+            minimum: 0.3,
+            title: 'Uncensored Poster Ratio',
+            default: 0.7
+        },
         poster_crop_skip_ratio: {
             type: 'number',
             maximum: 1,
@@ -7940,6 +8074,7 @@ export const ScrapingConfigSchema = {
                     enum: [
                         'airav',
                         'avbase',
+                        'aventertainments',
                         'avsox',
                         'dahlia',
                         'dmm',
@@ -7981,6 +8116,7 @@ export const ScrapingConfigSchema = {
                     enum: [
                         'airav',
                         'avbase',
+                        'aventertainments',
                         'avsox',
                         'dahlia',
                         'dmm',
@@ -8022,6 +8158,7 @@ export const ScrapingConfigSchema = {
                     enum: [
                         'airav',
                         'avbase',
+                        'aventertainments',
                         'avsox',
                         'dahlia',
                         'dmm',
@@ -8699,6 +8836,7 @@ export const SiteNameSchema = {
     enum: [
         'airav',
         'avbase',
+        'aventertainments',
         'avsox',
         'dahlia',
         'dmm',
@@ -8722,6 +8860,7 @@ export const SiteNameSchema = {
         'prestige',
         'r18dev',
         'theporndb',
+        'tokyo_hot',
         'wikipedia',
         'xcity'
     ],

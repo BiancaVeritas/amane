@@ -14,6 +14,7 @@ from amane.crawlers.models import MediaMetadata
 from amane.db.models import MediaFileStatus, Task, TaskStatus, TaskType
 from amane.enums import MetadataField, SiteName
 from amane.handlers import RefreshHandler, RefreshPayload, ScanMode, ScrapeHandler, ScrapePayload
+from amane.handlers.scrape import _prepare_image_content_type
 from amane.library import CleanupInventory, InventorySource, InventoryStore, LibraryFileKind, LibraryHit, scan_inventory
 from amane.observability import Recorder
 from amane.parsing import ContentType
@@ -42,6 +43,22 @@ class MockCrawler:
                 "actors": ["Actor A"],
                 "tags": ["Drama"],
                 "studio": "MockStudio",
+            }
+        )
+
+
+class WesternMockCrawler(MockCrawler):
+    name = SiteName.THEPORNDB
+
+    async def fetch(self, query, options=None) -> MediaMetadata | None:
+        return MediaMetadata.model_validate(
+            {
+                "number": query.number,
+                "title": "Mock Western Title",
+                "actors": ["Actor A"],
+                "tags": ["Drama"],
+                "studio": "MockStudio",
+                "external_id": "scene-test-1",
             }
         )
 
@@ -89,6 +106,77 @@ def handler(repo, factory, resource_store):
 # --- ScrapeHandler 测试 ---
 
 
+def test_uncensored_double_page_keeps_japanese_crop_flow() -> None:
+    metadata = AggregatedMetadata(
+        number="ABC-001",
+        poster_urls=["https://example.com/poster.jpg"],
+        original_poster_urls=["https://example.com/poster.jpg"],
+        thumb_urls=["https://example.com/double-cover.jpg"],
+        double_page_poster_urls=["https://example.com/poster.jpg"],
+        double_page_original_poster_urls=["https://example.com/poster.jpg"],
+        double_page_thumb_urls=["https://example.com/double-cover.jpg"],
+    )
+    assert _prepare_image_content_type(ContentType.UNCENSORED, metadata) is ContentType.UNCENSORED
+    assert metadata.poster_urls == ["https://example.com/poster.jpg"]
+    assert metadata.thumb_urls == ["https://example.com/double-cover.jpg"]
+
+
+def test_uncensored_single_jacket_without_bigcover_uses_western_flow() -> None:
+    metadata = AggregatedMetadata(
+        number="ABC-001A",
+        poster_urls=["https://example.com/jacket.jpg"],
+        original_poster_urls=["https://example.com/jacket.jpg"],
+        thumb_urls=[],
+    )
+    assert _prepare_image_content_type(ContentType.UNCENSORED, metadata) is ContentType.WESTERN
+    assert metadata.poster_urls == ["https://example.com/jacket.jpg"]
+    assert metadata.thumb_urls == ["https://example.com/jacket.jpg"]
+
+
+def test_uncensored_original_poster_and_thumb_alone_do_not_prove_double_page() -> None:
+    metadata = AggregatedMetadata(
+        number="ABC-001B",
+        poster_urls=["https://example.com/poster-small.jpg"],
+        original_poster_urls=["https://example.com/poster-small.jpg"],
+        thumb_urls=["https://example.com/poster-large.jpg"],
+    )
+    assert _prepare_image_content_type(ContentType.UNCENSORED, metadata) is ContentType.WESTERN
+    assert metadata.poster_urls == ["https://example.com/poster-large.jpg"]
+    assert metadata.thumb_urls == ["https://example.com/poster-large.jpg"]
+
+
+def test_uncensored_single_image_uses_western_cover_flow_even_if_poster_candidates_exist() -> None:
+    metadata = AggregatedMetadata(
+        number="ABC-002",
+        poster_urls=["https://example.com/derived-poster.jpg"],
+        original_poster_urls=[],
+        thumb_urls=["https://example.com/single-cover.jpg"],
+    )
+    assert _prepare_image_content_type(ContentType.UNCENSORED, metadata) is ContentType.WESTERN
+    assert metadata.poster_urls == ["https://example.com/single-cover.jpg"]
+    assert metadata.thumb_urls == ["https://example.com/single-cover.jpg"]
+    assert metadata.original_poster_urls == ["https://example.com/single-cover.jpg"]
+
+
+def test_uncensored_missing_poster_url_uses_western_cover_flow() -> None:
+    metadata = AggregatedMetadata(
+        number="ABC-003",
+        poster_urls=[],
+        original_poster_urls=[],
+        thumb_urls=["https://example.com/cover.jpg"],
+    )
+    assert _prepare_image_content_type(ContentType.UNCENSORED, metadata) is ContentType.WESTERN
+    assert metadata.poster_urls == ["https://example.com/cover.jpg"]
+    assert metadata.original_poster_urls == ["https://example.com/cover.jpg"]
+
+
+def test_censored_image_flow_is_unchanged() -> None:
+    metadata = AggregatedMetadata(number="ABC-004", thumb_urls=["https://example.com/cover.jpg"])
+    assert _prepare_image_content_type(ContentType.CENSORED, metadata) is ContentType.CENSORED
+    assert metadata.poster_urls == []
+    assert metadata.thumb_urls == ["https://example.com/cover.jpg"]
+
+
 class TestScrapeHandler:
     @pytest.mark.asyncio(loop_scope="function")
     async def test_successful_scrape(self, repo: Repository, handler):
@@ -103,21 +191,190 @@ class TestScrapeHandler:
         assert metadata.title == "Mock Title"
 
     @pytest.mark.asyncio(loop_scope="function")
+    async def test_missing_poster_does_not_fall_back_to_thumb_for_japanese_content(self, repo: Repository, resource_store):
+        class ThumbOnlyCrawler(MockCrawler):
+            async def fetch(self, query, options=None) -> MediaMetadata | None:
+                return MediaMetadata.model_validate(
+                    {
+                        "number": "MIDV-123",
+                        "title": "Mock Title",
+                        "thumb_urls": ["https://example.com/thumb.jpg"],
+                    }
+                )
+
+        config = _config_with({ContentType.CENSORED: [SiteName.JAVDB]})
+        h = ScrapeHandler(
+            repo=repo,
+            factory=FakeFactory({"javdb": ThumbOnlyCrawler()}),
+            resource_store=resource_store,
+            pipeline_config=config,
+        )
+        media = await repo.create_media_file(library_id=1, path="/media/MIDV-123.mp4")
+        result = await h.handle(
+            ScrapePayload(media_file_id=media.id, number="MIDV-123", content_type=ContentType.CENSORED)
+        )
+        assert result.success is True
+        metadata = await repo.get_metadata_by_number("MIDV-123")
+        assert metadata is not None
+        assert metadata.poster_urls == []
+        assert metadata.original_poster_urls == []
+        assert metadata.thumb_urls == ["https://example.com/thumb.jpg"]
+
+    @pytest.mark.asyncio(loop_scope="function")
     async def test_payload_content_type_lands_on_new_entry(self, repo: Repository, resource_store):
         """payload 的条目类型写进新建条目, 不按番号重新推断."""
-        factory = RecordingFactory({"javdb": MockCrawler()})
-        config = _config_with({ContentType.WESTERN: [SiteName.JAVDB]})
+        factory = FakeFactory({"theporndb": WesternMockCrawler()})
+        config = _config_with({ContentType.WESTERN: [SiteName.THEPORNDB]})
         h = ScrapeHandler(repo=repo, factory=factory, resource_store=resource_store, pipeline_config=config)
 
         media = await repo.create_media_file(library_id=1, path="/media/MD-0123.mp4")
         result = await h.handle(
-            ScrapePayload(media_file_id=media.id, number="MD-0123", content_type=ContentType.WESTERN)
+            ScrapePayload(
+                media_file_id=media.id,
+                number="MD-0123",
+                content_type=ContentType.WESTERN,
+                theporndb_uuid="scene-test-1",
+            )
         )
 
         assert result.success is True
-        metadata = await repo.get_metadata_by_number("MD-0123")
+        metadata = await repo.get_metadata_by_theporndb_uuid("scene-test-1")
         assert metadata is not None
         assert metadata.content_type is ContentType.WESTERN
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_western_uses_cover_for_all_three_image_fields(self, repo: Repository, resource_store):
+        class WesternCoverCrawler(WesternMockCrawler):
+            async def fetch(self, query, options=None) -> MediaMetadata | None:
+                return MediaMetadata.model_validate({
+                    "number": query.number,
+                    "title": "Western Cover",
+                    "external_id": "scene-cover-test",
+                    "theporndb_uuid": "scene-cover-test",
+                    "thumb_urls": ["https://example.com/western-cover.jpg"],
+                    "poster_urls": ["https://example.com/old-poster.jpg"],
+                    "original_poster_urls": ["https://example.com/old-original.jpg"],
+                })
+
+        config = _config_with({ContentType.WESTERN: [SiteName.THEPORNDB]})
+        h = ScrapeHandler(
+            repo=repo,
+            factory=FakeFactory({"theporndb": WesternCoverCrawler()}),
+            resource_store=resource_store,
+            pipeline_config=config,
+        )
+        media = await repo.create_media_file(library_id=1, path="/media/MD-COVER.mp4")
+        result = await h.handle(
+            ScrapePayload(
+                media_file_id=media.id,
+                number="MD-COVER",
+                content_type=ContentType.WESTERN,
+                theporndb_uuid="scene-cover-test",
+            )
+        )
+        assert result.success is True
+        metadata = await repo.get_metadata_by_theporndb_uuid("scene-cover-test")
+        assert metadata is not None
+        cover = ["https://example.com/western-cover.jpg"]
+        assert metadata.thumb_urls == cover
+        assert metadata.poster_urls == cover
+        assert metadata.original_poster_urls == cover
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_western_multiple_encodings_share_scene_metadata(self, repo: Repository, resource_store):
+        config = _config_with({ContentType.WESTERN: [SiteName.THEPORNDB]})
+        handler = ScrapeHandler(
+            repo=repo,
+            factory=FakeFactory({"theporndb": WesternMockCrawler()}),
+            resource_store=resource_store,
+            pipeline_config=config,
+        )
+        first = await repo.create_media_file(
+            library_id=1, path="/media/Lancelotstylesevolution.26.10.16-1.mp4", oshash="hash-4k"
+        )
+        second = await repo.create_media_file(
+            library_id=1, path="/media/Lancelotstylesevolution.26.10.16-2.mp4", oshash="hash-1080p"
+        )
+
+        first_result = await handler.handle(
+            ScrapePayload(
+                media_file_id=first.id,
+                number="Lancelotstylesevolution.26.10.16",
+                content_type=ContentType.WESTERN,
+            )
+        )
+        second_result = await handler.handle(
+            ScrapePayload(
+                media_file_id=second.id,
+                number="Lancelotstylesevolution.26.10.16",
+                content_type=ContentType.WESTERN,
+            )
+        )
+
+        assert first_result.success is True and second_result.success is True
+        first_saved = await repo.get_media_file(first.id)
+        second_saved = await repo.get_media_file(second.id)
+        assert first_saved is not None and second_saved is not None
+        assert first_saved.metadata_id == second_saved.metadata_id
+        assert await repo.get_metadata_by_theporndb_uuid("scene-test-1") is not None
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_western_oshash_cannot_be_manually_rebound_to_another_scene(
+        self, repo: Repository, resource_store
+    ):
+        number = "Lancelotstylesevolution.26.10.16"
+        metadata = await repo.upsert_western_metadata("scene-original", number)
+        media = await repo.create_media_file(
+            library_id=1, path=f"/media/{number}-1.mp4", oshash="hash-bound", metadata_id=metadata.id
+        )
+        config = _config_with({ContentType.WESTERN: [SiteName.THEPORNDB]})
+        handler = ScrapeHandler(
+            repo=repo,
+            factory=FakeFactory({"theporndb": WesternMockCrawler()}),
+            resource_store=resource_store,
+            pipeline_config=config,
+        )
+
+        result = await handler.handle(
+            ScrapePayload(
+                media_file_id=media.id,
+                number=number,
+                content_type=ContentType.WESTERN,
+                theporndb_uuid="scene-other",
+            )
+        )
+
+        assert result.success is False
+        assert "另一条 WESTERN 作品" in (result.error or "")
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_western_rescrape_backfills_theporndb_uuid_on_original_metadata(self, repo: Repository, resource_store):
+        number = "Lancelotstylesevolution.26.10.16"
+        legacy = await repo.upsert_metadata(number=number)
+        media = await repo.create_media_file(
+            library_id=1,
+            path=f"/media/{number}-1.mp4",
+            oshash="hash-legacy",
+            metadata_id=legacy.id,
+        )
+        config = _config_with({ContentType.WESTERN: [SiteName.THEPORNDB]})
+        handler = ScrapeHandler(
+            repo=repo,
+            factory=FakeFactory({"theporndb": WesternMockCrawler()}),
+            resource_store=resource_store,
+            pipeline_config=config,
+        )
+
+        result = await handler.handle(
+            ScrapePayload(number=number, content_type=ContentType.WESTERN, metadata_id=legacy.id)
+        )
+
+        assert result.success is True
+        updated = await repo.get_metadata_by_theporndb_uuid("scene-test-1")
+        assert updated is not None
+        assert updated.id == legacy.id
+        assert updated.number == number
+        assert media.metadata_id == legacy.id
 
     @pytest.mark.asyncio(loop_scope="function")
     async def test_skips_locked_fields_end_to_end(self, repo: Repository, handler):
@@ -555,6 +812,40 @@ class TestScrapeTranslation:
         metadata = await repo.get_metadata_by_number("MIDV-123")
         assert metadata is not None
         assert metadata.title == "[zh_cn]Mock Title"
+        assert metadata.original_title == "Mock Title"
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_western_skips_translation_and_keeps_original_title(self, repo: Repository, resource_store):
+        from amane.enums import Language, MetadataField
+
+        class MustNotTranslate:
+            async def translate(self, text, target, field, *, use_cache=True):
+                raise AssertionError("WESTERN metadata must not be translated")
+
+        config = _config_with({ContentType.WESTERN: [SiteName.THEPORNDB]})
+        config.scraping.field_language = {MetadataField.TITLE: Language.ZH_CN}
+        config.llm.translate_fields = [MetadataField.TITLE]
+        h = ScrapeHandler(
+            repo=repo,
+            factory=FakeFactory({"theporndb": WesternMockCrawler()}),
+            resource_store=resource_store,
+            pipeline_config=config,
+            translator=MustNotTranslate(),
+        )
+        media = await repo.create_media_file(library_id=1, path="/media/MD-0123.mp4")
+        result = await h.handle(
+            ScrapePayload(
+                media_file_id=media.id,
+                number="MD-0123",
+                content_type=ContentType.WESTERN,
+                theporndb_uuid="scene-test-1",
+            )
+        )
+        assert result.success is True
+        metadata = await repo.get_metadata_by_theporndb_uuid("scene-test-1")
+        assert metadata is not None
+        assert metadata.title == "Mock Western Title"
+        assert metadata.original_title == "Mock Western Title"
 
     @pytest.mark.asyncio(loop_scope="function")
     async def test_translator_failure_keeps_original(self, repo: Repository, factory, resource_store):

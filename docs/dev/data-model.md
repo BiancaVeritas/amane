@@ -11,7 +11,7 @@
 | 实体 | 角色 | 唯一键 |
 |------|------|--------|
 | `MediaFile` | 磁盘上视频文件的索引 | `path` UNIQUE (**NFC**; 目录列出的 NFD 与 NFC 是同一路径) |
-| `Metadata` | 番号级聚合元数据 | `number` UNIQUE (**大小写不敏感**; 存库保留首次写入的原始大小写) |
+| `Metadata` | 作品级聚合元数据 | 非 WESTERN: `number` UNIQUE (**大小写不敏感**); WESTERN: `scene_id` UNIQUE, `number` 可重复 |
 | `Resource` | URL 级下载缓存 | `url` UNIQUE |
 | `Task` | 持久化任务队列 | `id` |
 | `Library` | 媒体库: 根目录 + 路径模板 + 整理方式 + 自动化级别 | `id` |
@@ -23,7 +23,7 @@
 | `UserTag` | 用户自定义标签 (与爬取 `Tag` 隔离) | `name` UNIQUE |
 | `Comment` | 绑定于 Metadata 的用户评论 | `id` |
 
-`MediaFile` 与 `Metadata` 解耦: **Metadata 是一等公民** (用户直接管理的番号级条目), 有效性不依赖本地文件; `MediaFile` 是磁盘视频的索引, 能对应到某条 Metadata 时以多对一绑定 `metadata_id`. `metadata_id IS NULL` 的文件 (解析失败 / 尚未刮削) 与**没有任何 MediaFile 的 Metadata** (by-number 刮削、只囤元数据) 都是常态, 不是待清理的对象.
+`MediaFile` 与 `Metadata` 解耦: **Metadata 是一等公民** (用户直接管理的作品档案), 有效性不依赖本地文件; 非 WESTERN 以番号定位, WESTERN 以 ThePornDB Scene ID 定位; `MediaFile` 是磁盘视频的索引, 能对应到某条 Metadata 时以多对一绑定 `metadata_id`. `metadata_id IS NULL` 的文件 (解析失败 / 尚未刮削) 与**没有任何 MediaFile 的 Metadata** (只囤元数据) 都是常态, 不是待清理的对象. `MediaFile.oshash` 是文件内容指纹, 与 `metadata_id` 共同构成 OSHASH → Metadata 关联; 同一作品的多个编码文件各自保留 OSHASH, 并多对一绑定同一 Metadata, 不需要重复维护一张指纹关系表.
 
 类型 (`content_type`) 是**番号的属性**, 落在 `Metadata`: 只在条目创建时落定 (有发现路径时随其路径关键词, 否则只依据番号), 番号不可改, 因此不随文件增删或后续刮削漂移; 它决定刮削路由, 也供「类型」筛选与有码 / 无码角标使用, 不进对外 PATCH. `ContentType.chinese` 是国产, 不是中字.
 

@@ -66,6 +66,7 @@ class FC2Crawler(Crawler):
             tags=tags,
             plot=plot or None,
             poster_urls=[poster_url] if poster_url else [],
+            original_poster_urls=[poster_url] if poster_url else [],
             thumb_urls=[cover] if cover else [],
             extrafanart=extrafanart,
             source_url=url,

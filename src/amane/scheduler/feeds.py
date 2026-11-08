@@ -1,4 +1,4 @@
-"""按每源 interval 拉取 RSS/Atom; auto_enqueue 时入队 by-number SCRAPE."""
+"""按每源 interval 拉取 RSS/Atom; auto_enqueue 仅为可按番号定位的类型入队."""
 
 from __future__ import annotations
 
@@ -226,9 +226,15 @@ class FeedService:
                 if number is None or number in enqueued_numbers or _entry.item_key in ignored_keys:
                     continue
                 enqueued_numbers.add(number)
+                try:
+                    scrape_payload = build_feed_scrape_payload(feed, number)
+                except ValueError:
+                    # WESTERN 不能只凭 Feed 番号确认 ThePornDB UUID, 不自动创建猜测型刮削任务.
+                    logger.info("skip western feed auto-enqueue without ThePornDB UUID", feed_id=feed_id, number=number)
+                    continue
                 await self._repo.create_task(
                     task_type=TaskType.SCRAPE,
-                    payload=build_feed_scrape_payload(feed, number),
+                    payload=scrape_payload,
                     priority=_SCRAPE_PRIORITY,
                 )
                 enqueued += 1

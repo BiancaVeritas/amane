@@ -6,6 +6,7 @@ import pytest
 
 from amane.db.models import FeedItemReadState, FeedItemState, TaskType
 from amane.db.repository import Repository
+from amane.parsing import ContentType
 
 
 @pytest.mark.asyncio(loop_scope="function")
@@ -289,15 +290,64 @@ async def test_list_feed_items_joins_metadata_case_insensitively(
 async def test_list_feed_items_same_number_share_metadata_id(repo: Repository) -> None:
     feed = await repo.create_feed(name="feed", url="https://example.com/dup-number.xml")
     assert feed.id is not None
-    await repo.create_feed_item(feed.id, "first", number="ABC-001")
-    await repo.create_feed_item(feed.id, "second", number="abc-001")
-    meta = await repo.upsert_metadata(number="ABC-001")
+    await repo.create_feed_item(feed.id, "first", number="MIDV-001")
+    await repo.create_feed_item(feed.id, "second", number="midv-001")
+    meta = await repo.upsert_metadata(number="MIDV-001")
     assert meta.id is not None
 
     rows, total = await repo.list_feed_items(feed.id, state=FeedItemState.ALL)
 
     assert total == 2
     assert [metadata_id for _, metadata_id in rows] == [meta.id, meta.id]
+
+
+@pytest.mark.asyncio(loop_scope="function")
+async def test_list_feed_items_does_not_guess_western_by_number(repo: Repository) -> None:
+    number = "Lancelotstylesevolution.26.10.16"
+    feed = await repo.create_feed(
+        name="western", url="https://example.com/western.xml", content_type=ContentType.WESTERN
+    )
+    assert feed.id is not None
+    await repo.create_feed_item(feed.id, "western-item", number=number)
+    await repo.upsert_western_metadata("scene-a", number)
+    await repo.upsert_western_metadata("scene-b", number)
+
+    rows, total = await repo.list_feed_items(feed.id, state=FeedItemState.ALL)
+
+    assert total == 1
+    assert rows[0][1] is None
+
+
+
+
+@pytest.mark.asyncio(loop_scope="function")
+async def test_list_feed_items_does_not_guess_single_western_by_number(repo: Repository) -> None:
+    number = "Lancelotstylesevolution.26.10.16"
+    feed = await repo.create_feed(
+        name="western-single", url="https://example.com/western-single.xml", content_type=ContentType.WESTERN
+    )
+    assert feed.id is not None
+    await repo.create_feed_item(feed.id, "western-item", number=number)
+    await repo.upsert_western_metadata("scene-only", number)
+
+    rows, total = await repo.list_feed_items(feed.id, state=FeedItemState.ALL)
+
+    assert total == 1
+    assert rows[0][1] is None
+
+
+@pytest.mark.asyncio(loop_scope="function")
+async def test_list_feed_items_infers_western_when_feed_type_is_unset(repo: Repository) -> None:
+    number = "Lancelotstylesevolution.26.10.16"
+    feed = await repo.create_feed(name="western-inferred", url="https://example.com/western-inferred.xml")
+    assert feed.id is not None
+    await repo.create_feed_item(feed.id, "western-item", number=number)
+    await repo.upsert_western_metadata("scene-inferred", number)
+
+    rows, total = await repo.list_feed_items(feed.id, state=FeedItemState.ALL)
+
+    assert total == 1
+    assert rows[0][1] is None
 
 
 @pytest.mark.asyncio(loop_scope="function")

@@ -3,14 +3,14 @@ from datetime import UTC, datetime
 from typing import Unpack
 
 from sqlalchemy import delete as sqla_delete
-from sqlalchemy import func, or_
+from sqlalchemy import and_, func, or_
 from sqlalchemy import update as sqla_update
 from sqlalchemy.sql.elements import ColumnElement
 from sqlalchemy.sql.functions import count
 from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from ...parsing import ContentType
+from ...parsing import ContentType, infer_content_type
 from ...utils.collections import unique_ids
 from ..feed_keywords import item_matches_ignore_keywords
 from ..models import Feed, FeedItem, FeedItemReadState, FeedItemState, Metadata
@@ -305,8 +305,8 @@ class FeedsRepoMixin(RepositoryMixinBase):
                 total_stmt = total_stmt.where(*filters)
             total = int((await session.exec(total_stmt)).one())
 
-            # 先取当前页 id 再 JOIN Metadata. OUTER JOIN 与 ORDER BY 写在同一句时,
-            # SQLite 会先连接再截页; COLLATE NOCASE 才能命中 ix_metadata_number.
+            # 先取当前页 id 再读取 Feed 类型与 Metadata. Feed 类型为空时按番号推断;
+            # WESTERN 永不按番号关联, 其他类型只关联同 content_type 的 Metadata.
             id_stmt = select(col(FeedItem.id))
             if join_feed:
                 id_stmt = id_stmt.join(Feed, col(FeedItem.feed_id) == col(Feed.id))
@@ -324,16 +324,34 @@ class FeedsRepoMixin(RepositoryMixinBase):
                 return [], total
 
             page_stmt = (
-                select(FeedItem, col(Metadata.id))
-                .outerjoin(Metadata, col(FeedItem.number) == col(Metadata.number).collate("NOCASE"))
+                select(FeedItem, col(Feed.content_type))
+                .join(Feed, col(FeedItem.feed_id) == col(Feed.id))
                 .where(col(FeedItem.id).in_(page_ids))
             )
-            by_id = {
-                item.id: (item, metadata_id)
-                for item, metadata_id in (await session.exec(page_stmt)).all()
-                if item.id is not None
-            }
-            return [by_id[item_id] for item_id in page_ids], total
+            page_rows = list((await session.exec(page_stmt)).all())
+            numbers = list({item.number for item, _ in page_rows if item.number})
+            metadata_by_key: dict[tuple[str, ContentType], Metadata] = {}
+            if numbers:
+                metadata_stmt = select(Metadata).where(col(Metadata.number).collate("NOCASE").in_(numbers))
+                for metadata in (await session.exec(metadata_stmt)).all():
+                    if metadata.content_type != ContentType.WESTERN:
+                        metadata_by_key[(metadata.number.casefold(), metadata.content_type)] = metadata
+
+            by_id: dict[int, tuple[FeedItem, int | None]] = {}
+            for item, feed_content_type in page_rows:
+                if item.id is None:
+                    continue
+                if not item.number:
+                    by_id[item.id] = (item, None)
+                    continue
+                resolved_type = feed_content_type or infer_content_type(item.number)
+                metadata = (
+                    metadata_by_key.get((item.number.casefold(), resolved_type))
+                    if resolved_type != ContentType.WESTERN
+                    else None
+                )
+                by_id[item.id] = (item, metadata.id if metadata is not None else None)
+            return [by_id[item_id] for item_id in page_ids if item_id in by_id], total
 
     async def ignore_feed_items(self, feed_id: int, item_ids: list[int]) -> tuple[int, int]:
         """只处理属于该 Feed 的行; 已忽略则幂等."""

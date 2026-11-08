@@ -27,6 +27,7 @@ function rememberGridState(key: string, state: StateSnapshot): void {
 const GRID_COLS = { base: 2, xs: 3, sm: 3, md: 4, lg: 6, xl: 7 } as const;
 
 interface ActorGridProps {
+  cardSize?: "xs" | "sm" | "small" | "medium" | "default" | "large" | "xl" | "xxl";
   items: ActorResponse[];
   loading?: boolean;
   emptyMessage?: string;
@@ -93,8 +94,15 @@ export function ActorCardGrid({ items }: { items: ActorResponse[] }) {
  * 列表没有 Grid 的 `stateChanged`, 快照只能经句柄取; 卸载是唯一需要的时机 (快照只服务于
  * 下一次挂载), 而父组件的清理函数先于子树的 ref 解绑执行, 句柄此时仍可用.
  */
-function ActorPosterWall({ items, restoreKey }: { items: ActorResponse[]; restoreKey: string }) {
-  const cols = useMatches(GRID_COLS);
+function ActorPosterWall({
+  items,
+  restoreKey,
+  cols,
+}: {
+  items: ActorResponse[];
+  restoreKey: string;
+  cols: number;
+}) {
   const rows = useMemo(() => toRows(items, cols), [items, cols]);
   const virtuosoRef = useRef<VirtuosoHandle>(null);
   const [restoreState] = useState(() => GRID_STATE_CACHE.get(restoreKey));
@@ -127,13 +135,26 @@ export const ActorGrid = memo(function ActorGrid({
   items,
   loading = false,
   emptyMessage,
+  cardSize = "default",
 }: ActorGridProps) {
   // 历史条目 key 与路由器自身的滚动缓存同源: 新进入的条目没有快照, 不会继承上一次的浏览位置.
   const restoreKey = useLocation({ select: (l) => l.state.key ?? l.href });
+  const baseCols = useMatches(GRID_COLS);
+  const sizeFactor = {
+    xs: 1.7,
+    sm: 1.45,
+    small: 1.2,
+    medium: 1.08,
+    default: 1,
+    large: 0.85,
+    xl: 0.72,
+    xxl: 0.62,
+  }[cardSize];
+  const cols = Math.max(1, Math.round(baseCols * sizeFactor));
 
   if (loading) {
     return (
-      <SimpleGrid cols={GRID_COLS} spacing="md">
+      <SimpleGrid cols={cols} spacing="md">
         {Array.from({ length: 12 }, (_, i) => (
           <Stack key={i} gap={2}>
             <AspectRatio ratio={0.75}>
@@ -156,5 +177,5 @@ export const ActorGrid = memo(function ActorGrid({
     );
   }
 
-  return <ActorPosterWall items={items} restoreKey={restoreKey} />;
+  return <ActorPosterWall items={items} restoreKey={restoreKey} cols={cols} />;
 });

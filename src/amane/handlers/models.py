@@ -104,11 +104,16 @@ class ScrapePayload(BaseModel):
     number: str
     content_type: ContentType = ContentType.CENSORED
     media_file_id: int | None = None
+    # 重新刮削以 Metadata ID 锁定原作品; 手动兜底可直接指定 ThePornDB UUID.
+    metadata_id: int | None = None
+    theporndb_uuid: str | None = None
     use_cache: set[CacheKind] = {CacheKind.metadata, CacheKind.trans}
 
 
 def build_feed_scrape_payload(feed: Feed, number: str) -> ScrapePayload:
     content_type = feed.content_type or infer_content_type(number)
+    if content_type == ContentType.WESTERN:
+        raise ValueError("WESTERN Feed items require a media-file OSHASH or an explicit ThePornDB UUID")
 
     use_cache: set[CacheKind] = set()
     for raw_kind in feed.use_cache:

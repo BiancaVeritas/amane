@@ -242,6 +242,10 @@
         "label": "File ID",
         "description": "Not needed for manual scrape"
       },
+      "theporndb_uuid": {
+        "label": "ThePornDB UUID",
+        "description": "The ThePornDB UUID from ThePornDB"
+      },
       "content_type": {
         "label": "Content Type",
         "description": "Leave empty to detect automatically",

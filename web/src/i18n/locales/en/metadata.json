@@ -80,6 +80,7 @@
   "detail": {
     "fields": {
       "title": "Title",
+      "originalTitle": "Original Title",
       "studio": "Studio",
       "publisher": "Publisher",
       "release": "Release Date",
@@ -91,6 +92,7 @@
       "actors": "Actors",
       "tags": "Tags",
       "plot": "Plot",
+      "originalPlot": "Original Plot",
       "trailer": "Trailer",
       "poster": "Poster",
       "thumb": "Cover",
@@ -220,7 +222,8 @@
   "view": {
     "grid": "Grid",
     "list": "List",
-    "cloud": "Cloud"
+    "cloud": "Cloud",
+    "cover": "Cover"
   },
   "favorite": {
     "add": "Favorite",
@@ -319,6 +322,9 @@
     "title": {
       "label": "Title"
     },
+    "original_title": {
+      "label": "Original Title"
+    },
     "actors": {
       "label": "Actors"
     },
@@ -344,8 +350,14 @@
     "plot": {
       "label": "Plot"
     },
+    "original_plot": {
+      "label": "Original Plot"
+    },
     "directors": {
       "label": "Directors"
+    },
+    "original_poster_urls": {
+      "label": "Original Poster URL"
     },
     "poster_urls": {
       "label": "Poster URLs"
@@ -363,10 +375,22 @@
       "label": "Scores"
     },
     "external_ids": {
-      "label": "External IDs"
+      "label": "External IDs",
+      "options": {
+        "caribbeancom": "Caribbeancom",
+        "caribbeancompr": "Caribbeancompr",
+        "pacopacomama": "Pacopacomama",
+        "tokyo_hot": "Tokyo-Hot"
+      }
     },
     "source_urls": {
-      "label": "Source Links"
+      "label": "Source Links",
+      "options": {
+        "caribbeancom": "Caribbeancom",
+        "caribbeancompr": "Caribbeancompr",
+        "pacopacomama": "Pacopacomama",
+        "tokyo_hot": "Tokyo-Hot"
+      }
     }
   },
   "manage": {
@@ -402,7 +426,8 @@
     "noChanges": "No changes",
     "changedCount_one": "{{count}} field(s) changed",
     "changedCount_other": "{{count}} field(s) changed",
-    "loadImages": "Load images"
+    "loadImages": "Load images",
+    "loadAllImages": "Load all images"
   },
   "lock": {
     "manage": "Field Locks",

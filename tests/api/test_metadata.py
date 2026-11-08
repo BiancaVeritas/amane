@@ -127,6 +127,34 @@ class TestMetadataHttp:
         assert (await client.delete("metadata/9999")).status_code == 404
 
     @pytest.mark.asyncio(loop_scope="function")
+    async def test_western_external_id_editor_roundtrips_theporndb_uuid(
+        self, client: AsyncClient, repo: Repository
+    ):
+        metadata = await repo.upsert_western_metadata(
+            theporndb_uuid="5ad1967c-5cef-4020-8256-50227acf985b",
+            number="LANCELOT-001",
+            external_ids={"javdb": "javdb-123"},
+        )
+        assert metadata.id is not None
+
+        detail = await client.get(f"metadata/{metadata.id}")
+        assert detail.status_code == 200
+        assert detail.json()["metadata"]["theporndb_uuid"] == "5ad1967c-5cef-4020-8256-50227acf985b"
+
+        updated = await client.patch(
+            f"metadata/{metadata.id}",
+            json={
+                "external_ids": {
+                    "theporndb": "5ad1967c-5cef-4020-8256-50227acf985b",
+                    "javdb": "javdb-456",
+                }
+            },
+        )
+        assert updated.status_code == 200
+        assert updated.json()["theporndb_uuid"] == "5ad1967c-5cef-4020-8256-50227acf985b"
+        assert updated.json()["external_ids"] == {"javdb": "javdb-456"}
+
+    @pytest.mark.asyncio(loop_scope="function")
     async def test_detail_file_rows_carry_derived_phase(self, client: AsyncClient, repo: Repository):
         """详情里的文件行与条目相位同源: 有码条目的文件行带 censored, 带无码标记的再带 uncensored."""
         meta = await repo.upsert_metadata(number="MIDV-123")
@@ -190,7 +218,7 @@ class TestMetadataHttp:
         assert resp.status_code == 200
         assert resp.json()["title"] == "dmm title"
         assert resp.json()["field_sources"]["title"] == "dmm"
-        assert resp.json()["locked_fields"] == ["title"]
+        assert resp.json()["locked_fields"] == ["title", "original_title"]
 
         none_meta = await repo.upsert_metadata(
             number="ABC-004", field_sources={"title": "javdb"}, raw={"javdb": {"title": None}}

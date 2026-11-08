@@ -136,6 +136,39 @@ export function useFacetIdentityActions({
     [isUserTag, t, deleteMutation, kind],
   );
 
+  const openBatchDelete = useCallback(
+    async (facetIds: number[]) => {
+      const ids = [...new Set(facetIds)];
+      if (ids.length === 0) return;
+      if (!isUserTag) {
+        const ok = await confirm({
+          title: t("common:actions.delete"),
+          message: "将从所有影片中移除选择的项目，并加入剔除名单，后续刮削时自动剔除",
+          confirmLabel: t("common:actions.delete"),
+        });
+        if (!ok) return;
+      }
+      let deleted = 0;
+      for (const id of ids) {
+        try {
+          await deleteMutation.mutateAsync({ path: { kind, facet_id: id } });
+          deleted += 1;
+        } catch {
+          // 单项 mutation 已通过 onError 展示错误; 继续处理剩余选中项.
+        }
+      }
+      if (deleted > 0) onMerged?.();
+      invalidate();
+      if (deleted > 0) {
+        notifications.show({
+          message: `已删除 ${deleted} 个项目${deleted < ids.length ? `，失败 ${ids.length - deleted} 个` : ""}`,
+          color: deleted === ids.length ? "blue" : "yellow",
+        });
+      }
+    },
+    [isUserTag, t, deleteMutation, kind, onMerged, invalidate],
+  );
+
   const openMerge = useCallback(
     async (targetId: number, selected: Set<number>) => {
       const sources = [...selected].filter((id) => id !== targetId);
@@ -177,6 +210,7 @@ export function useFacetIdentityActions({
     submitRename,
     renamePending: renameMutation.isPending,
     openDelete,
+    openBatchDelete,
     deletePending: deleteMutation.isPending,
     openMerge,
     mergePending: mergeMutation.isPending,

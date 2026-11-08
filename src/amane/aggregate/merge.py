@@ -41,9 +41,16 @@ def compute_merge_updates(
         db_field = RAW_TO_DB_FIELD.get(field, field)
         merged = _actor_names_from_raw(value) if field == "actors" else value
         updates[db_field] = {source: merged} if db_field != field else merged
+        # Source selection establishes the raw text as well as the translated display value.
+        if field == "title":
+            updates["original_title"] = merged
+        elif field == "plot":
+            updates["original_plot"] = merged
 
         if field in SCALAR_FIELD_NAMES:
             field_sources_updates[field] = source
+        elif field == "series_names":
+            field_sources_updates["series"] = source
 
     if field_sources_updates:
         updates["field_sources"] = {**field_sources, **field_sources_updates}

@@ -12,6 +12,7 @@ import {
 } from "@/components/network-check/network-check-meta";
 import classes from "@/components/network-check/network-check.module.css";
 import { useNarrowViewport } from "@/hooks/use-narrow-viewport";
+import { displaySourceName } from "@/lib/source-display";
 
 /** 固定表格布局下单元格裁剪的可见范围, 长名称与 url 否则会撑破列宽. */
 const CELL_CLIP = { overflow: "hidden" } as const;
@@ -55,7 +56,7 @@ export function NetworkCheckList({
       <Stack gap="sm">
         {items.map((item, index) => (
           <Paper
-            key={item.source_id}
+            key={displaySourceName(item.source_id)}
             withBorder
             radius="md"
             p="sm"
@@ -106,7 +107,7 @@ export function NetworkCheckList({
         <Table.Tbody>
           {items.map((item, index) => (
             <NetworkCheckRow
-              key={item.source_id}
+              key={displaySourceName(item.source_id)}
               item={item}
               index={index}
               busy={busy}
@@ -168,7 +169,7 @@ function SourceIdentity({ item, showUrl }: { item: ConnectivityItemResponse; sho
     <Stack gap={2} style={{ minWidth: 0 }}>
       <Group gap={6} wrap="nowrap">
         <Text size="sm" fw={500} truncate>
-          {item.name}
+          {displaySourceName(item.name)}
         </Text>
         <Badge size="xs" variant="light" color="gray" tt="none">
           {t(KIND_LABEL_KEY[item.kind])}
@@ -176,7 +177,7 @@ function SourceIdentity({ item, showUrl }: { item: ConnectivityItemResponse; sho
       </Group>
       {item.source_id !== item.name ? (
         <Text size="xs" c="dimmed" ff="monospace" truncate className={classes.sourceId}>
-          {item.source_id}
+          {displaySourceName(item.source_id)}
         </Text>
       ) : null}
       {showUrl && item.url != null ? (

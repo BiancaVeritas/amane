@@ -18,15 +18,25 @@ interface PosterCardProps {
   actorBirthday?: string | null;
   /** 覆盖卡片图片 (语义检索命中剧照); 未给则使用条目的海报. */
   imageUrl?: string | null;
-  /** 图片宽高比; 剧照按 16:9 显示, 默认为海报竖版宽高比. */
+  /** 图片宽高比; 剧照/封面按 16:9 显示, 默认为海报竖版宽高比. */
   imageRatio?: number;
+  /** 图片显示适配方式; fill 会拉伸图片填满展示框, contain 会完整等比例显示. */
+  imageFit?: "cover" | "contain" | "fill";
 }
 
 /** 加载失败退化为番号占位块. */
-export function PosterCard({ item, actorBirthday, imageUrl, imageRatio = 0.7 }: PosterCardProps) {
+export function PosterCard({
+  item,
+  actorBirthday,
+  imageUrl,
+  imageRatio = 0.7,
+  imageFit = "cover",
+}: PosterCardProps) {
   const { t } = useTranslation("metadata");
   const [errored, setErrored] = useState(false);
-  const posterUrl = proxyImageUrl(imageUrl ?? item.poster_url ?? item.poster_urls?.[0]);
+  const posterUrl = proxyImageUrl(
+    imageUrl !== undefined ? imageUrl : (item.poster_url ?? item.poster_urls?.[0]),
+  );
   const showImage = posterUrl && !errored;
   const actors = item.actors ?? [];
   const actorsLabel = actors.length > 0 ? actors.join(" / ") : null;
@@ -48,7 +58,14 @@ export function PosterCard({ item, actorBirthday, imageUrl, imageRatio = 0.7 }: 
                 alt={item.number}
                 loading="lazy"
                 referrerPolicy="no-referrer"
-                style={{ display: "block" }}
+                style={{
+                  display: "block",
+                  width: "100%",
+                  height: "100%",
+                  objectFit: imageFit,
+                  background:
+                    imageFit === "contain" ? "var(--mantine-color-default-hover)" : undefined,
+                }}
                 onError={() => setErrored(true)}
               />
             ) : (
@@ -72,7 +89,15 @@ export function PosterCard({ item, actorBirthday, imageUrl, imageRatio = 0.7 }: 
           />
           {/* 与评分同角成组: 左上角被相位水印 (马赛克标记) 占用, 单独放会与它重叠. */}
           {(item.vr || item.score != null) && (
-            <Group pos="absolute" top={6} right={6} gap={4} wrap="nowrap">
+            <Group
+              pos="absolute"
+              top={6}
+              right={6}
+              gap={4}
+              wrap="nowrap"
+              align="flex-end"
+              style={{ flexDirection: "column" }}
+            >
               {item.vr && <VrOverlayChip />}
               {item.score != null && (
                 <OverlayChip>

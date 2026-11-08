@@ -2,6 +2,7 @@ import { notifications } from "@mantine/notifications";
 import { useMutation } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { cropPosterFromThumbMutation } from "@/client/@tanstack/react-query.gen";
+import type { ContentType } from "@/client/types.gen";
 import { ImageCropDialog } from "@/components/media/image-crop-dialog";
 import { useConfig } from "@/hooks/use-config";
 import { extractErrorMessage } from "@/lib/api-error";
@@ -13,6 +14,7 @@ export interface PosterCropDialogProps {
   onClose: () => void;
   metadataId: number;
   thumbUrl: string;
+  contentType: ContentType;
   onSuccess?: () => void;
 }
 
@@ -22,11 +24,15 @@ export function PosterCropDialog({
   onClose,
   metadataId,
   thumbUrl,
+  contentType,
   onSuccess,
 }: PosterCropDialogProps) {
   const { t } = useTranslation(["metadata", "common"]);
   const { data: config } = useConfig();
-  const configRatio = config?.scraping?.poster_ratio ?? DEFAULT_POSTER_RATIO;
+  const configRatio =
+    (contentType === "uncensored"
+      ? config?.scraping?.uncensored_poster_ratio
+      : config?.scraping?.poster_ratio) ?? DEFAULT_POSTER_RATIO;
 
   const mutation = useMutation({
     ...cropPosterFromThumbMutation(),

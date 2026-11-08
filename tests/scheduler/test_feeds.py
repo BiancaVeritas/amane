@@ -387,9 +387,8 @@ async def test_content_type_and_use_cache_per_feed(repo: Repository):
     web = FakeWeb(FakeResp(200, RSS_TWO_ITEMS))
     service = _service(repo, web)
     await service.poll_one(feed.id)
-    task = next(t for t in await repo.list_tasks() if t.type == TaskType.SCRAPE)
-    assert task.payload["content_type"] == "western"
-    assert task.payload["use_cache"] == []
+    # WESTERN Feed 没有文件 OSHASH / Scene ID, 不自动创建番号猜测型任务.
+    assert [t for t in await repo.list_tasks() if t.type == TaskType.SCRAPE] == []
 
 
 @pytest.mark.asyncio

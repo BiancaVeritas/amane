@@ -1,5 +1,5 @@
 """本地文件按 url hash 直出 (无选源/裁剪/超分).
-SR 可能就地覆盖 (URL 不变, 字节变), 须 ETag + no-cache 再验证.
+按超分开关区分浏览器缓存 URL: 关闭时原图缓存 30 天, 开启时就地覆盖仍走 ETag 验证.
 """
 
 from pathlib import Path
@@ -11,7 +11,7 @@ from fastapi import APIRouter, HTTPException, Query, Request, Response
 from fastapi.responses import FileResponse
 
 from ..deps import RuntimeDep
-from ..support.http_cache import RESOURCE_CACHE_HEADERS, format_etag, maybe_not_modified
+from ..support.http_cache import ORIGINAL_RESOURCE_CACHE_HEADERS, RESOURCE_CACHE_HEADERS, format_etag, maybe_not_modified
 
 logger = structlog.get_logger()
 
@@ -28,20 +28,37 @@ _EXT_TO_MIME = {
 }
 
 
-def _image_response(request: Request, path: Path, content_hash: str | None) -> Response:
+def _image_response(request: Request, path: Path, content_hash: str | None, cache_mode: str) -> Response:
+    # `original` is safe for 30-day browser caching only while SR is disabled;
+    # the query parameter is also part of the browser cache key.
+    if cache_mode == "original":
+        return FileResponse(
+            path=path,
+            media_type=_EXT_TO_MIME.get(path.suffix.lower(), "image/jpeg"),
+            headers=dict(ORIGINAL_RESOURCE_CACHE_HEADERS),
+        )
     not_modified = maybe_not_modified(request, content_hash)
     if not_modified is not None:
         return not_modified
-
     headers = dict(RESOURCE_CACHE_HEADERS)
     if content_hash:
         headers["ETag"] = format_etag(content_hash)
     return FileResponse(path=path, media_type=_EXT_TO_MIME.get(path.suffix.lower(), "image/jpeg"), headers=headers)
 
 
+def _cache_mode(runtime: object, requested: str | None) -> str:
+    if requested in {"original", "sr"}:
+        return requested
+    config = getattr(runtime, "config", None)
+    hot = getattr(config, "hot", None)
+    sr = getattr(hot, "sr", None)
+    return "sr" if bool(getattr(sr, "enabled", False)) else "original"
+
+
 @router.get("/proxy")
 async def proxy_image(
-    runtime: RuntimeDep, request: Request, url: Annotated[str, Query(description="External image URL to proxy")]
+    runtime: RuntimeDep, request: Request, url: Annotated[str, Query(description="External image URL to proxy")],
+    mode: Annotated[str | None, Query(description="Browser cache mode")]=None,
 ) -> Response:
     """上游失败记入进程内负缓存 (15 分钟), 窗口内同 URL 直接 502.
     同 URL 进行中请求合并为一次 acquire.
@@ -51,13 +68,14 @@ async def proxy_image(
     if parsed.scheme not in ("http", "https") or not parsed.netloc:
         raise HTTPException(status_code=400, detail="仅支持 http/https URL")
 
+    cache_mode = _cache_mode(runtime, mode)
     store = runtime.resource_store
     if request.state.via_image_token:
-        local_path = await store.resolve(url)
-        if local_path is None:
+        found = await store.resolve_record(url)
+        if found is None:
             raise HTTPException(status_code=404, detail="资源不在本地缓存")
-        record = await store.get_by_url(url)
-        return _image_response(request, local_path, record.content_hash if record is not None else None)
+        record, local_path = found
+        return _image_response(request, local_path, record.content_hash, cache_mode)
 
     # 负缓存命中则直接 502
     failures = runtime.proxy_failure_cache
@@ -65,32 +83,34 @@ async def proxy_image(
         raise HTTPException(status_code=502, detail="上游图片获取失败")
 
     # 同 URL 进行中的 acquire 合并为一次
-    local_path = await failures.coalesce(url, lambda: store.acquire(url, runtime.web_client))
-    if local_path is None:
+    found = await failures.coalesce(url, lambda: store.acquire_with_record(url, runtime.web_client))
+    if found is None:
         failures.remember(url)
         logger.warning("proxy image acquire failed", url=url)
         raise HTTPException(status_code=502, detail="上游图片获取失败")
 
     # 成功后清除负缓存
     failures.forget(url)
-
-    record = await store.get_by_url(url)
-    return _image_response(request, local_path, record.content_hash if record is not None else None)
+    record, local_path = found
+    return _image_response(request, local_path, record.content_hash, cache_mode)
 
 
 @router.get("/{url_hash}")
-async def serve_resource(url_hash: str, request: Request, runtime: RuntimeDep) -> Response:
+async def serve_resource(url_hash: str, request: Request, runtime: RuntimeDep, mode: Annotated[str | None, Query(description="Browser cache mode")]=None) -> Response:
     found = await runtime.resource_store.get_by_url_hash(url_hash)
     if found is None:
         raise HTTPException(status_code=404, detail="资源不存在")
     record, path = found
 
-    not_modified = maybe_not_modified(request, record.content_hash)
-    if not_modified is not None:
-        return not_modified
-
-    headers = dict(RESOURCE_CACHE_HEADERS)
-    if record.content_hash:
-        headers["ETag"] = format_etag(record.content_hash)
+    cache_mode = _cache_mode(runtime, mode)
+    if cache_mode == "original":
+        headers = dict(ORIGINAL_RESOURCE_CACHE_HEADERS)
+    else:
+        not_modified = maybe_not_modified(request, record.content_hash)
+        if not_modified is not None:
+            return not_modified
+        headers = dict(RESOURCE_CACHE_HEADERS)
+        if record.content_hash:
+            headers["ETag"] = format_etag(record.content_hash)
     media_type = record.mime_type or _EXT_TO_MIME.get(path.suffix.lower(), "application/octet-stream")
     return FileResponse(path=path, media_type=media_type, headers=headers)

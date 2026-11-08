@@ -1285,6 +1285,13 @@ def test_prefix_suffix_placeholders(media: Path, number: str, prefix: str, suffi
     assert result.video == media / prefix / suffix / f"{number}.mp4"
 
 
+def test_raw_prefix_placeholder_preserves_original_case(media: Path) -> None:
+    number = "LancelotStylesEvolution.26.10.16"
+    wp = Library(name="t", path=str(media), video_template="{raw_prefix}/{number}.{ext}")
+    result = resolve_paths(wp, _meta(number=number), ext="mp4")
+    assert result.video == media / "LancelotStylesEvolution" / f"{number}.mp4"
+
+
 def test_resolve_paths_uses_actress_placeholder(media: Path) -> None:
     wp = Library(name="t", path=str(media), video_template="{actresses}/{number}.{ext}")
     result = resolve_paths(

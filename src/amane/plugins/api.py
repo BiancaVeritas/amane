@@ -85,6 +85,7 @@ class PlaybackQuery(BaseModel):
     runtime: int | None = None
     tags: list[str] = Field(default_factory=list)
     series: str | None = None
+    series_names: list[str] = Field(default_factory=list)
     plot: str | None = None
     directors: list[str] = Field(default_factory=list)
     source_urls: dict[str, str] = Field(default_factory=dict)

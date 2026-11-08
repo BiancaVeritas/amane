@@ -1,4 +1,5 @@
 from collections.abc import Iterable, Sequence
+from pathlib import Path
 from typing import TYPE_CHECKING, Protocol
 
 from structlog.contextvars import bind_contextvars
@@ -6,11 +7,13 @@ from structlog.contextvars import bind_contextvars
 from ..aggregate import SCALAR_FIELDS, AggregatedMetadata, CrawlerLike, FieldLanguage, aggregate, compile_priority
 from ..crawlers.models import SearchQuery
 from ..crawlers.site_roles import builtin_descriptors
-from ..db.models import TaskType
-from ..enums import ActorGender, MetadataField
+from ..db.models import MediaIdentityType, TaskType
+from ..enums import ActorGender, MetadataField, SiteName
 from ..media import materialize_images
+from ..utils.litepan_strm import read_litepan_115_file_id
 from ..observability import current
 from ..observability.models import SiteOutcomeKind
+from ..parsing import ContentType
 from ..plugins.models import SourceDescriptor, SourceTrait
 from ._common import ensure_oshash, finalize_media_file
 from .models import ActorScrapePayload, CacheKind, OrganizePayload, ScrapePayload, ScrapeResult
@@ -23,9 +26,38 @@ if TYPE_CHECKING:
     from ..llm import Translator
     from ..media import ResourceStore
     from ..net.http import WebClient
+    from ..tags.mapping import TagMappingStore
 
 # 进度: 聚合按已满足标量字段计数; 其后固定两步 (物化图片 / 持久化).
 _PROGRESS_POST_STEPS = 2
+
+
+def _prepare_image_content_type(content_type: ContentType, metadata: AggregatedMetadata) -> ContentType:
+    """无码仅在同一个来源明确提供原海报与双页封面时走日本双页裁剪流程."""
+    if content_type != ContentType.UNCENSORED:
+        return content_type
+
+    if (
+        metadata.double_page_poster_urls
+        and metadata.double_page_original_poster_urls
+        and metadata.double_page_thumb_urls
+    ):
+        # 强制使用同一个来源的成对图片, 防止聚合后的跨来源 URL 错配.
+        metadata.poster_urls = list(metadata.double_page_poster_urls)
+        metadata.original_poster_urls = list(metadata.double_page_original_poster_urls)
+        metadata.thumb_urls = list(metadata.double_page_thumb_urls)
+        return ContentType.UNCENSORED
+
+    # 没有同源的完整双页组合, 一律按单图处理. poster_urls 可能只是
+    # thumb 的派生尺寸, 不能单独作为双页结构证据.
+    cover_urls = list(metadata.thumb_urls or metadata.poster_urls)
+    if cover_urls:
+        metadata.poster_urls = list(cover_urls)
+        metadata.thumb_urls = list(cover_urls)
+        metadata.original_poster_urls = list(cover_urls)
+    else:
+        metadata.original_poster_urls = []
+    return ContentType.WESTERN
 
 
 class CrawlerFactoryLike(Protocol):
@@ -44,6 +76,7 @@ class ScrapeHandler(TaskHandler[ScrapePayload, ScrapeResult]):
         web_client: WebClient | None = None,
         translator: Translator | None = None,
         source_catalog: Sequence[SourceDescriptor] | None = None,
+        tag_mappings: TagMappingStore | None = None,
     ):
         super().__init__(payload_t=ScrapePayload, result_t=ScrapeResult)
         self._repo = repo
@@ -52,6 +85,7 @@ class ScrapeHandler(TaskHandler[ScrapePayload, ScrapeResult]):
         self._web_client = web_client
         self._resource_store = resource_store
         self._translator = translator
+        self._tag_mappings = tag_mappings
         # 调度事实只从来源目录读取: 内置来源的 descriptor 由 profile() 合成, 插件来源由插件声明.
         catalog = source_catalog if source_catalog is not None else builtin_descriptors()
         self._multi_language_sources = frozenset(d.id for d in catalog if SourceTrait.MULTI_LANGUAGE in d.traits)
@@ -64,18 +98,39 @@ class ScrapeHandler(TaskHandler[ScrapePayload, ScrapeResult]):
         content_type = payload.content_type
         progress_total = len(SCALAR_FIELDS) + _PROGRESS_POST_STEPS
         rec = current()
+        if payload.theporndb_uuid and content_type != ContentType.WESTERN:
+            return TaskResult(success=False, error="ThePornDB UUID 只能用于 WESTERN 刮削")
 
-        # 启用 metadata 缓存时读取 raw 快照.
-        use_metadata_cache = CacheKind.metadata in payload.use_cache
-        db_data = await self._repo.get_metadata_by_number(payload.number) if use_metadata_cache else None
-        if db_data is not None and db_data.raw:
-            rec.write_raw_cache(db_data.raw)
+        identity_metadata = None
+        if payload.metadata_id is not None:
+            identity_metadata = await self._repo.get_metadata(payload.metadata_id)
+            if identity_metadata is None:
+                return TaskResult(success=False, error=f"Metadata {payload.metadata_id} 不存在")
+            if identity_metadata.content_type != content_type:
+                return TaskResult(success=False, error="重新刮削的内容类型与原 Metadata 不一致")
+            stored_theporndb_uuid = identity_metadata.theporndb_uuid
+            if payload.theporndb_uuid and stored_theporndb_uuid and payload.theporndb_uuid.casefold() != stored_theporndb_uuid.casefold():
+                return TaskResult(success=False, error="手动指定的 ThePornDB UUID 与目标 Metadata 的身份不一致")
+
+        # 当前文件先读取出来; WESTERN 的缓存身份不能仅凭番号确定.
+        file = None
+        if payload.media_file_id:
+            file = await self._repo.get_media_file(media_id=payload.media_file_id)
 
         # 校验 content_type 路由; 无资格站点则失败.
         route = self._config.scraping.content_routes.get(content_type)
         if not route:
             rec.warning("no eligible crawlers for content type", content_type=content_type)
             return TaskResult(success=False, error=f"内容类型 {content_type} 没有可用来源")
+        if content_type == ContentType.WESTERN and str(SiteName.THEPORNDB) not in {str(site) for site in route}:
+            return TaskResult(success=False, error="WESTERN 作品身份依赖 ThePornDB UUID，请在欧美来源路由中启用 ThePornDB")
+        if (
+            content_type == ContentType.WESTERN
+            and file is None
+            and not payload.theporndb_uuid
+            and payload.metadata_id is None
+        ):
+            return TaskResult(success=False, error="WESTERN 刮削需要媒体文件 OSHASH 或手动指定 ThePornDB UUID")
         rec.info("scraping started", content_type=str(content_type), crawlers=route)
         rec.update_summary(eligible_sites=[str(s) for s in route])
 
@@ -84,20 +139,102 @@ class ScrapeHandler(TaskHandler[ScrapePayload, ScrapeResult]):
             current().warning("no crawlers available", requested=route)
             return TaskResult(success=False, error=f"番号 {payload.number} 没有可用来源")
 
-        file = None
-        if payload.media_file_id:
-            file = await self._repo.get_media_file(media_id=payload.media_file_id)
+        # LitePan STRM 的 115 原生文件 ID 与 OSHASH 是两种独立身份。
+        file_115_id = None
+        if payload.content_type == ContentType.WESTERN and file is not None:
+            file_115_id = await read_litepan_115_file_id(Path(file.path))
+            if file_115_id:
+                file_115_metadata = await self._repo.get_metadata_by_identity(
+                    MediaIdentityType.FILE_115_ID, file_115_id
+                )
+                if file_115_metadata is not None:
+                    if identity_metadata is not None and identity_metadata.id != file_115_metadata.id:
+                        return TaskResult(
+                            success=False,
+                            error="当前 LitePan 115 文件 ID 已关联到另一条 WESTERN 作品，拒绝跨作品关联",
+                        )
+                    identity_metadata = identity_metadata or file_115_metadata
 
         # 仅当本次可用来源声明需要指纹时计算 oshash.
         file_hash = file.oshash if file else None
         if file is not None and file_hash is None and any(name in self._file_hash_sources for name in crawlers):
             file_hash = await ensure_oshash(self._repo, file)
 
+        # 重新刮削始终取得一个已关联文件的 OSHASH (即使 Metadata 已有 ThePornDB UUID).
+        # 只取一个指纹, 不批量提交多个文件 hash.
+        if payload.content_type == ContentType.WESTERN and payload.metadata_id is not None and file_hash is None:
+            linked_files = await self._repo.get_media_by_metadata_id(payload.metadata_id)
+            for linked_file in linked_files:
+                linked_hash = linked_file.oshash or await ensure_oshash(self._repo, linked_file)
+                if linked_hash:
+                    file_hash = linked_hash
+                    if file is None:
+                        file = linked_file
+                    break
+
+        # OSHASH → Metadata 关系来自已入库 MediaFile.metadata_id; 不受 raw-cache 开关影响.
+        oshash_matches = (
+            await self._repo.get_metadata_by_oshash_matches(file_hash)
+            if payload.content_type == ContentType.WESTERN and file_hash
+            else []
+        )
+        if len(oshash_matches) > 1:
+            return TaskResult(success=False, error="当前 OSHASH 已关联到多条 WESTERN Metadata，存在身份冲突，拒绝自动刮削")
+        oshash_metadata = oshash_matches[0] if oshash_matches else None
+        if (
+            payload.content_type == ContentType.WESTERN
+            and identity_metadata is not None
+            and oshash_metadata is not None
+            and oshash_metadata.id != identity_metadata.id
+        ):
+            return TaskResult(success=False, error="重新刮削所选 OSHASH 不属于目标 Metadata，拒绝跨作品关联")
+
+        # WESTERN raw 只能在番号一致且当前 OSHASH 已关联到目标 Metadata 时复用.
+        # metadata_id / ThePornDB UUID 本身是作品身份, 但不能证明 raw 快照对应当前文件.
+        use_metadata_cache = CacheKind.metadata in payload.use_cache
+        db_data = None
+        if use_metadata_cache:
+            if payload.content_type == ContentType.WESTERN:
+                candidate = identity_metadata or oshash_metadata
+                if (
+                    candidate is not None
+                    and candidate.id is not None
+                    and candidate.number.casefold() == payload.number.casefold()
+                    and oshash_metadata is not None
+                    and oshash_metadata.id == candidate.id
+                ):
+                    db_data = candidate
+            elif identity_metadata is not None:
+                db_data = identity_metadata
+            elif payload.theporndb_uuid:
+                db_data = await self._repo.get_metadata_by_theporndb_uuid(payload.theporndb_uuid)
+            else:
+                db_data = await self._repo.get_metadata_by_number(
+                    payload.number, content_type=payload.content_type
+                )
+        if db_data is not None and db_data.raw:
+            rec.write_raw_cache(db_data.raw)
+
+        theporndb_uuid = payload.theporndb_uuid
+        if theporndb_uuid is None and identity_metadata is not None:
+            theporndb_uuid = identity_metadata.theporndb_uuid
+        if theporndb_uuid is None and oshash_metadata is not None:
+            theporndb_uuid = oshash_metadata.theporndb_uuid
+        if theporndb_uuid is None and db_data is not None:
+            theporndb_uuid = db_data.theporndb_uuid
+        linked_theporndb_uuid = (
+            oshash_metadata.theporndb_uuid
+            if oshash_metadata is not None
+            else None
+        )
+        if theporndb_uuid and linked_theporndb_uuid and theporndb_uuid.casefold() != linked_theporndb_uuid.casefold():
+            return TaskResult(success=False, error="当前文件 OSHASH 已关联到另一条 WESTERN 作品, 拒绝跨 ThePornDB UUID 绑定")
         q = SearchQuery(
             payload.number,
             file.path if file else None,
             file_hash,
             payload.content_type,
+            theporndb_uuid=theporndb_uuid,
         )
 
         field_priority = compile_priority(
@@ -143,9 +280,26 @@ class ScrapeHandler(TaskHandler[ScrapePayload, ScrapeResult]):
         # 获取结束: 进度分子对齐标量字段数, 其后为物化与持久化.
         await self.report_progress(len(SCALAR_FIELDS), progress_total, "fetch")
 
-        # 翻译文本字段; 失败不阻断刮削.
-        if self._translator is not None:
+        # 在翻译前保存聚合后最终选定来源的原始文本; 原始字段不参与 LLM 翻译.
+        result.metadata.original_title = result.metadata.title
+        result.metadata.original_plot = result.metadata.plot
+
+        # WESTERN (包括识别失败后的 WESTERN 回退) 保留原文, 其余类型按现有配置翻译.
+        if self._translator is not None and payload.content_type != ContentType.WESTERN:
             await self._translate_metadata(result.metadata, field_language, CacheKind.trans in payload.use_cache)
+
+        # WESTERN 作品统一以封面作为三个图片字段的输入来源。必须在物化/裁剪前完成，
+        # 使 poster 与 thumb 指向同一张图，skip_ratio 判断自然跳过裁剪；原海报字段独立保留该地址。
+        if payload.content_type == ContentType.WESTERN and result.metadata.thumb_urls:
+            western_cover_urls = list(result.metadata.thumb_urls)
+            result.metadata.poster_urls = list(western_cover_urls)
+            result.metadata.original_poster_urls = list(western_cover_urls)
+
+        # 无码单图改走欧美式对齐; 双页仍使用无码独立裁剪比例.
+        image_content_type = _prepare_image_content_type(payload.content_type, result.metadata)
+
+        # 在物化前独立保留原海报 URL; 后续 poster_out 可被裁剪资源 URL 替换.
+        original_poster_urls = list(result.metadata.original_poster_urls)
 
         # 物化到 Resource; 失败保留原始 URL.
         poster_out = result.metadata.poster_urls
@@ -161,6 +315,7 @@ class ScrapeHandler(TaskHandler[ScrapePayload, ScrapeResult]):
                     self._web_client,
                     self._config,
                     self._resource_store.data_dir,
+                    content_type=image_content_type,
                     extrafanart_urls=result.metadata.extrafanart_urls,
                 )
                 poster_out = materialized.poster_urls
@@ -173,11 +328,10 @@ class ScrapeHandler(TaskHandler[ScrapePayload, ScrapeResult]):
 
         # 写库并关联 MediaFile. Metadata.actors 仍是展示名; 性别写入 Actor 空位.
         cast = result.metadata.actors
-        meta = await self._repo.upsert_metadata(
-            number=payload.number,
-            content_type=payload.content_type,
+        metadata_fields = dict(
             actor_genders={item.name: item.gender for item in cast if item.gender != ActorGender.UNKNOWN},
             title=result.metadata.title,
+            original_title=result.metadata.original_title,
             actors=[item.name for item in cast],
             studio=result.metadata.studio,
             publisher=result.metadata.publisher,
@@ -185,8 +339,11 @@ class ScrapeHandler(TaskHandler[ScrapePayload, ScrapeResult]):
             runtime=result.metadata.runtime,
             tags=result.metadata.tags,
             series=result.metadata.series,
+            series_names=result.metadata.series_names or ([result.metadata.series] if result.metadata.series else []),
             plot=result.metadata.plot,
+            original_plot=result.metadata.original_plot,
             directors=result.metadata.directors,
+            original_poster_urls=original_poster_urls,
             poster_urls=poster_out,
             thumb_urls=thumb_out,
             trailer_urls=trailer_out,
@@ -197,8 +354,37 @@ class ScrapeHandler(TaskHandler[ScrapePayload, ScrapeResult]):
             field_sources=result.field_sources,
             raw=result.raw,
         )
+        if payload.content_type == ContentType.WESTERN:
+            returned_theporndb_uuid = result.metadata.external_ids.get("theporndb")
+            if theporndb_uuid and returned_theporndb_uuid and returned_theporndb_uuid.casefold() != theporndb_uuid.casefold():
+                return TaskResult(
+                    success=False,
+                    error=f"ThePornDB UUID 不匹配：预期 {theporndb_uuid}，实际 {returned_theporndb_uuid}",
+                )
+            theporndb_uuid = returned_theporndb_uuid or theporndb_uuid
+            if not theporndb_uuid or not returned_theporndb_uuid:
+                return TaskResult(success=False, error="ThePornDB 未验证并返回有效 ThePornDB UUID，无法建立欧美作品身份")
+            meta = await self._repo.finalize_western_scrape(
+                theporndb_uuid=theporndb_uuid,
+                number=payload.number,
+                metadata_id=payload.metadata_id,
+                media_file_id=payload.media_file_id,
+                oshash=file_hash,
+                file_115_id=file_115_id,
+                **metadata_fields,
+            )
+        else:
+            meta = await self._repo.upsert_metadata(
+                number=payload.number,
+                content_type=payload.content_type,
+                **metadata_fields,
+            )
 
-        await finalize_media_file(self._repo, payload.media_file_id, meta.id)
+        if self._tag_mappings is not None:
+            self._tag_mappings.observe(meta.tags, source=meta.field_sources.get("tags"))
+
+        if payload.content_type != ContentType.WESTERN:
+            await finalize_media_file(self._repo, payload.media_file_id, meta.id)
 
         # 为尚未刮削的演员扇出 ACTOR_SCRAPE.
         actor_followups = await self._actor_scrape_followups(meta.actors)

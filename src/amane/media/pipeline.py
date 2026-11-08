@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 import structlog
 
 from ..config import DownloadableResource
+from ..parsing import ContentType
 from ..sr import get_preset_meta, run_SR
 from .images import (
     CropRotation,
@@ -92,10 +93,12 @@ async def materialize_images(
     config: HotSettings,
     data_dir: Path,
     *,
+    content_type: ContentType | None = None,
     extrafanart_urls: dict[str, list[str]] | None = None,
 ) -> MaterializedImages:
-    """仅下载集合内的类型; 未选中的保留聚合 URL.
+    """仅下载集合内的类型; 未选中的图片类型保留聚合 URL.
 
+    预告片是例外: 未启用预告片下载时, 同时清空其 URL, 避免下游仍显示播放入口.
     死 URL 保序置于尾部, 供来源恢复后重试.
     extrafanart 仅下载到 Resource, 站点分组结构不重排.
     """
@@ -144,7 +147,11 @@ async def materialize_images(
             and should_crop_poster(thumb_size, cand_size, skip_ratio=config.scraping.poster_crop_skip_ratio)
             and thumb_local
         ):
-            ratio = config.scraping.poster_ratio
+            ratio = (
+                config.scraping.uncensored_poster_ratio
+                if content_type == ContentType.UNCENSORED
+                else config.scraping.poster_ratio
+            )
             args = f"{ratio:.4f}"
             local_thumb = thumb_local
 
@@ -182,7 +189,11 @@ async def materialize_images(
     out = MaterializedImages(
         poster_urls=result_poster_urls,
         thumb_urls=_success_first(thumb_urls, thumb_ok),
-        trailer_urls=_success_first(trailer_urls, trailer_ok),
+        trailer_urls=(
+            _success_first(trailer_urls, trailer_ok)
+            if DownloadableResource.trailer in kinds
+            else []
+        ),
     )
     logger.debug(
         "images materialized",

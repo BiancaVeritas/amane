@@ -86,3 +86,21 @@ async def test_search_reports_other_failures(query: str, routes: dict[str, Route
     with pytest.raises(RequestError) as excinfo:
         await crawler._search(SearchQuery(query))
     assert excinfo.value.http_status == status
+
+
+@pytest.mark.asyncio
+async def test_scrape_marks_single_cover_as_not_having_an_independent_poster() -> None:
+    detail = """<html><body>
+    <h3>011812-564 Example Title</h3>
+    <span class="header">識別碼:</span><span>011812-564</span>
+    <a class="bigImage" href="/cover/011812-564_b.jpg">cover</a>
+    </body></html>"""
+    crawler = JavBusCrawler(client=http_client(_fake_web({"011812_564": _ok(detail)})))
+
+    metadata = await crawler._scrape("https://www.javbus.com/011812_564")
+
+    assert metadata is not None
+    assert metadata.thumb_urls == ["https://www.javbus.com/cover/011812-564_b.jpg"]
+    assert metadata.poster_urls == ["https://www.javbus.com/thumb/011812-564.jpg"]
+    assert metadata.original_poster_urls == []
+    assert metadata.double_page_poster_urls == []

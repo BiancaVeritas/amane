@@ -185,33 +185,43 @@ class MediaRepoMixin(RepositoryMixinBase):
             result = await session.exec(stmt)
             return result.one() or 0
 
+    async def update_media_file_in_session(
+        self, session: AsyncSession, media_id: int, **updates: Unpack[MediaFileUpdates]
+    ) -> MediaFile | None:
+        """在调用方事务中更新 MediaFile; 不提交、不刷新 Session."""
+        media = await session.get(MediaFile, media_id)
+        if media is None:
+            return None
+        # 显式赋值, 禁止 setattr; 字段集由 MediaFileUpdates 与 MediaFile 静态对齐.
+        if "path" in updates:
+            media.path = nfc_path(updates["path"])
+            _apply_path_phase(media)
+        if "number" in updates:
+            media.number = updates["number"]
+        if "oshash" in updates:
+            media.oshash = updates["oshash"]
+        if "size" in updates:
+            media.size = updates["size"]
+        if "duration" in updates:
+            media.duration = updates["duration"]
+        if "codec" in updates:
+            media.codec = updates["codec"]
+        if "status" in updates:
+            media.status = updates["status"]
+        if "metadata_id" in updates:
+            media.metadata_id = updates["metadata_id"]
+        if "has_external_subtitle" in updates:
+            media.has_external_subtitle = updates["has_external_subtitle"]
+        media.updated_at = _utcnow()
+        session.add(media)
+        await session.flush()
+        return media
+
     async def update_media_file(self, media_id: int, **updates: Unpack[MediaFileUpdates]) -> MediaFile | None:
         async with self._session() as session:
-            media = await session.get(MediaFile, media_id)
+            media = await self.update_media_file_in_session(session, media_id, **updates)
             if media is None:
                 return None
-            # 显式赋值, 禁止 setattr; 字段集由 MediaFileUpdates 与 MediaFile 静态对齐.
-            if "path" in updates:
-                media.path = nfc_path(updates["path"])
-                _apply_path_phase(media)
-            if "number" in updates:
-                media.number = updates["number"]
-            if "oshash" in updates:
-                media.oshash = updates["oshash"]
-            if "size" in updates:
-                media.size = updates["size"]
-            if "duration" in updates:
-                media.duration = updates["duration"]
-            if "codec" in updates:
-                media.codec = updates["codec"]
-            if "status" in updates:
-                media.status = updates["status"]
-            if "metadata_id" in updates:
-                media.metadata_id = updates["metadata_id"]
-            if "has_external_subtitle" in updates:
-                media.has_external_subtitle = updates["has_external_subtitle"]
-            media.updated_at = _utcnow()
-            session.add(media)
             await session.commit()
             await session.refresh(media)
             return media

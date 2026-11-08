@@ -397,6 +397,30 @@ def test_split_number(number: str, prefix: str, suffix: str) -> None:
     assert split_number(number) == (prefix, suffix)
 
 
+def test_western_dated_number_preserves_original_case() -> None:
+    assert parse_file_info("LancelotStylesEvolution.26.04.05.mp4").number == "LancelotStylesEvolution.26.04.05"
+    assert parse_file_info(text="lAnCeLoTStylesEvolution.26.04.05").number == "lAnCeLoTStylesEvolution.26.04.05"
+
+
+def test_western_dated_known_studio_keeps_canonical_name() -> None:
+    assert parse_file_info("vIxEn.23.04.15.mp4").number == "Vixen.23.04.15"
+
+
+@pytest.mark.parametrize(
+    ("filename", "expected"),
+    [
+        ("GL894-GiorgioGrandi.24.04.18.mp4", "GiorgioGrandi.24.04.18"),
+        ("GL894-GiorgioGrandi.26.04.05-C-4K.mp4", "GiorgioGrandi.26.04.05"),
+    ],
+)
+def test_western_dated_number_ignores_prefix_before_last_hyphen(
+    filename: str, expected: str
+) -> None:
+    assert parse_file_info(filename).number == expected
+
+
+
+
 INFER_CONTENT_TYPE_CASES: list[tuple[str, str | None, ContentType]] = [
     ("MIDV-123", None, ContentType.CENSORED),
     ("SSIS-456", None, ContentType.CENSORED),
@@ -598,3 +622,64 @@ VR_CASES: list[tuple[list[str], bool]] = [
 @pytest.mark.parametrize(("tags", "expected"), VR_CASES)
 def test_is_vr(tags: list[str], expected: bool) -> None:
     assert is_vr(tags) is expected
+
+
+# 日本无码 BD 系列白名单：完整系列前缀必须保留，不能被旧通用规则截短。
+UNCENSORED_BD_SERIES_CASES = [
+    ("BD-G02", "BD-G", "02"),
+    ("BD-M22", "BD-M", "22"),
+    ("CDRPBD-03", "CDRPBD", "03"),
+    ("CW3D2BD-05", "CW3D2BD", "05"),
+    ("CW3D2DBD-11", "CW3D2DBD", "11"),
+    ("CWMBD-02", "CWMBD", "02"),
+    ("CWPBD-004", "CWPBD", "004"),
+    ("CZBD-015", "CZBD", "015"),
+    ("DRGBD-06", "DRGBD", "06"),
+    ("DSAMBD-05", "DSAMBD", "05"),
+    ("LAFBD-05", "LAFBD", "05"),
+    ("MCB3DBD-05", "MCB3DBD", "05"),
+    ("MCBD-06", "MCBD", "06"),
+    ("MER-04", "MER", "04"),
+    ("MK3D2DBD-04", "MK3D2DBD", "04"),
+    ("MKBD-S006", "MKBD-S", "006"),
+    ("MUBD-05", "MUBD", "05"),
+    ("S2MBD-005", "S2MBD", "005"),
+    ("S2MBD-046", "S2MBD", "046"),
+    ("S2MCR-002", "S2MCR", "002"),
+    ("SHD-04", "SHD", "04"),
+    ("SKYHD-003", "SKYHD", "003"),
+    ("SM3D2DBD-18", "SM3D2DBD", "18"),
+    ("SMBD-006", "SMBD", "006"),
+    ("SPBD-03", "SPBD", "03"),
+]
+
+
+@pytest.mark.parametrize(("number", "expected_prefix", "expected_suffix"), UNCENSORED_BD_SERIES_CASES)
+def test_uncensored_bd_series_keep_full_prefix(number: str, expected_prefix: str, expected_suffix: str) -> None:
+    info = parse_file_info(text=number)
+    assert info.number == number
+    assert info.content_type == ContentType.UNCENSORED
+    assert info.prefix == expected_prefix
+    assert split_number(number) == (expected_prefix, expected_suffix)
+
+
+@pytest.mark.parametrize(
+    ("number", "expected_prefix"),
+    [
+        ("SPBD-3", "SPBD"),
+        ("SPBD-003", "SPBD"),
+        ("S2MBD-5", "S2MBD"),
+        ("S2MBD-05", "S2MBD"),
+        ("MKBD-S6", "MKBD-S"),
+        ("MKBD-S06", "MKBD-S"),
+    ],
+)
+def test_uncensored_bd_series_allow_variable_digit_width(number: str, expected_prefix: str) -> None:
+    info = parse_file_info(text=number)
+    assert info.content_type == ContentType.UNCENSORED
+    assert info.prefix == expected_prefix
+
+
+def test_uncensored_bd_series_do_not_match_longer_unrelated_prefixes() -> None:
+    assert parse_file_info(text="SPBDXYZ-03").content_type != ContentType.UNCENSORED
+    assert parse_file_info(text="BD-MXYZ22").content_type != ContentType.UNCENSORED

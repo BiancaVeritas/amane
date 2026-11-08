@@ -304,7 +304,7 @@ export type ActorScrapingConfig = {
      *
      * 头像来源顺序 (优先于资料来源附图); 仅演员头像来源
      */
-    image_sites?: Array<'gfriends'>;
+    image_sites?: Array<'gfriends' | 'tushy' | 'tushy_raw'>;
     /**
      * Download Images
      */
@@ -689,11 +689,11 @@ export type BrowserBackendReportResponse = {
  * BrowserConfig
  */
 export type BrowserConfig = {
+    backend?: BrowserBackendName;
     /**
      * Bsk Path
      */
     bsk_path?: string | null;
-    backend?: BrowserBackendName;
     /**
      * Timeout
      */
@@ -2663,12 +2663,13 @@ export type MetadataDetailResponse = {
      * Series Id
      */
     series_id?: number | null;
+    series_ids?: { [key: string]: number };
 };
 
 /**
  * MetadataField
  */
-export type MetadataField = 'title' | 'plot' | 'actors' | 'directors' | 'tags' | 'series' | 'release' | 'runtime' | 'publisher' | 'studio' | 'poster_urls' | 'thumb_urls' | 'trailer_urls' | 'extrafanart' | 'score';
+export type MetadataField = 'title' | 'original_title' | 'plot' | 'original_plot' | 'actors' | 'directors' | 'tags' | 'series' | 'release' | 'runtime' | 'publisher' | 'studio' | 'poster_urls' | 'thumb_urls' | 'trailer_urls' | 'extrafanart' | 'score';
 
 /**
  * MetadataListResponse
@@ -2710,6 +2711,7 @@ export type MetadataPartial = {
      * Title
      */
     title?: string | null;
+    original_title?: string | null;
     /**
      * Actors
      */
@@ -2738,14 +2740,20 @@ export type MetadataPartial = {
      * Series
      */
     series?: string | null;
+    series_names?: Array<string> | null;
     /**
      * Plot
      */
     plot?: string | null;
+    original_plot?: string | null;
     /**
      * Directors
      */
     directors?: Array<string> | null;
+    /**
+     * Original Poster Urls
+     */
+    original_poster_urls?: Array<string> | null;
     /**
      * Poster Urls
      */
@@ -2798,9 +2806,14 @@ export type MetadataResponse = {
     number: string;
     content_type: ContentType;
     /**
+     * ThePornDB UUID, WESTERN only.
+     */
+    theporndb_uuid?: string | null;
+    /**
      * Title
      */
     title?: string | null;
+    original_title?: string | null;
     /**
      * Actors
      */
@@ -2829,14 +2842,20 @@ export type MetadataResponse = {
      * Series
      */
     series?: string | null;
+    series_names?: Array<string>;
     /**
      * Plot
      */
     plot?: string | null;
+    original_plot?: string | null;
     /**
      * Directors
      */
     directors?: Array<string>;
+    /**
+     * Original Poster Urls
+     */
+    original_poster_urls?: Array<string>;
     /**
      * Poster Url
      */
@@ -4108,6 +4127,10 @@ export type ScrapeSubmission = {
      */
     media_id?: number | null;
     /**
+     * WESTERN 手动指定的 ThePornDB UUID
+     */
+    theporndb_uuid?: string | null;
+    /**
      * 内容类型; 未给出时: 仅 media_id 按文件路径推断, 有 number 时按番号推断
      */
     content_type?: ContentType | null;
@@ -4142,6 +4165,10 @@ export type ScrapingConfig = {
      */
     poster_ratio?: number;
     /**
+     * Uncensored Poster Ratio
+     */
+    uncensored_poster_ratio?: number;
+    /**
      * Poster Crop Skip Ratio
      */
     poster_crop_skip_ratio?: number;
@@ -4153,19 +4180,19 @@ export type ScrapingConfig = {
      * Content Routes
      */
     content_routes?: {
-        [key in ContentType]?: Array<'airav' | 'avbase' | 'avsox' | 'dahlia' | 'dmm' | 'faleno' | 'fc2' | 'fc2club' | 'fc2ppvdb' | 'freejavbt' | 'getchu' | 'giga' | 'iqqtv' | 'jav321' | 'javbus' | 'javdb' | 'javlibrary' | 'kin8' | 'mgstage' | 'official' | 'prestige' | 'r18dev' | 'theporndb' | 'xcity'>;
+        [key in ContentType]?: Array<'airav' | 'avbase' | 'aventertainments' | 'avsox' | 'dahlia' | 'dmm' | 'faleno' | 'fc2' | 'fc2club' | 'fc2ppvdb' | 'freejavbt' | 'getchu' | 'giga' | 'iqqtv' | 'jav321' | 'javbus' | 'javdb' | 'javlibrary' | 'kin8' | 'mgstage' | 'official' | 'prestige' | 'r18dev' | 'theporndb' | 'xcity'>;
     };
     /**
      * Field Priority
      */
     field_priority?: {
-        [key in MetadataField]?: Array<'airav' | 'avbase' | 'avsox' | 'dahlia' | 'dmm' | 'faleno' | 'fc2' | 'fc2club' | 'fc2ppvdb' | 'freejavbt' | 'getchu' | 'giga' | 'iqqtv' | 'jav321' | 'javbus' | 'javdb' | 'javlibrary' | 'kin8' | 'mgstage' | 'official' | 'prestige' | 'r18dev' | 'theporndb' | 'xcity'>;
+        [key in MetadataField]?: Array<'airav' | 'avbase' | 'aventertainments' | 'avsox' | 'dahlia' | 'dmm' | 'faleno' | 'fc2' | 'fc2club' | 'fc2ppvdb' | 'freejavbt' | 'getchu' | 'giga' | 'iqqtv' | 'jav321' | 'javbus' | 'javdb' | 'javlibrary' | 'kin8' | 'mgstage' | 'official' | 'prestige' | 'r18dev' | 'theporndb' | 'xcity'>;
     };
     /**
      * Field Blacklist
      */
     field_blacklist?: {
-        [key in MetadataField]?: Array<'airav' | 'avbase' | 'avsox' | 'dahlia' | 'dmm' | 'faleno' | 'fc2' | 'fc2club' | 'fc2ppvdb' | 'freejavbt' | 'getchu' | 'giga' | 'iqqtv' | 'jav321' | 'javbus' | 'javdb' | 'javlibrary' | 'kin8' | 'mgstage' | 'official' | 'prestige' | 'r18dev' | 'theporndb' | 'xcity'>;
+        [key in MetadataField]?: Array<'airav' | 'avbase' | 'aventertainments' | 'avsox' | 'dahlia' | 'dmm' | 'faleno' | 'fc2' | 'fc2club' | 'fc2ppvdb' | 'freejavbt' | 'getchu' | 'giga' | 'iqqtv' | 'jav321' | 'javbus' | 'javdb' | 'javlibrary' | 'kin8' | 'mgstage' | 'official' | 'prestige' | 'r18dev' | 'theporndb' | 'xcity'>;
     };
     /**
      * Field Language
@@ -4574,7 +4601,7 @@ export type SiteConfig = {
  *
  * 爬虫站点名称 (影片与演员源共用).
  */
-export type SiteName = 'airav' | 'avbase' | 'avsox' | 'dahlia' | 'dmm' | 'faleno' | 'fc2' | 'fc2club' | 'fc2ppvdb' | 'freejavbt' | 'getchu' | 'gfriends' | 'giga' | 'iqqtv' | 'jav321' | 'javbus' | 'javdb' | 'javlibrary' | 'kin8' | 'mgstage' | 'minnano' | 'official' | 'prestige' | 'r18dev' | 'theporndb' | 'wikipedia' | 'xcity';
+export type SiteName = 'airav' | 'avbase' | 'aventertainments' | 'avsox' | 'dahlia' | 'dmm' | 'faleno' | 'fc2' | 'fc2club' | 'fc2ppvdb' | 'freejavbt' | 'getchu' | 'gfriends' | 'giga' | 'iqqtv' | 'jav321' | 'javbus' | 'javdb' | 'javlibrary' | 'kin8' | 'mgstage' | 'minnano' | 'official' | 'prestige' | 'r18dev' | 'theporndb' | 'tokyo_hot' | 'tushy' | 'tushy_raw' | 'wikipedia' | 'xcity';
 
 /**
  * SiteOutcomeKind
@@ -8091,6 +8118,8 @@ export type ProxyImageData = {
          * External image URL to proxy
          */
         url: string;
+        /** Browser cache mode (original or SR/ETag). */
+        mode?: 'original' | 'sr';
     };
     url: '/api/resources/proxy';
 };
@@ -8119,7 +8148,10 @@ export type ServeResourceData = {
          */
         url_hash: string;
     };
-    query?: never;
+    query?: {
+        /** Browser cache mode (original or SR/ETag). */
+        mode?: 'original' | 'sr';
+    };
     url: '/api/resources/{url_hash}';
 };
 

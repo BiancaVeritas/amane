@@ -157,6 +157,7 @@ class TaskWorkerResponse(BaseModel):
 class ScrapeRequest(BaseModel):
     number: str | None = Field(default=None)
     media_id: int | None = Field(default=None, description="MediaFile ID. 通常仅用于内部提交任务，手动提交无需指定")
+    theporndb_uuid: str | None = Field(default=None, description="WESTERN 手动指定的 ThePornDB UUID")
     content_type: ContentType | None = Field(
         default=None, description="内容类型; 未给出时: 仅 media_id 按文件路径推断, 有 number 时按番号推断"
     )
@@ -164,6 +165,14 @@ class ScrapeRequest(BaseModel):
         default_factory=lambda: {CacheKind.metadata, CacheKind.trans},
         description="启用的缓存种类 (metadata: 复用 DB per-site 快照; trans: 复用译文). 空集 = 全部强制刷新",
     )
+
+    @field_validator("theporndb_uuid", mode="before")
+    @classmethod
+    def _normalize_theporndb_uuid(cls, value: object) -> object:
+        if isinstance(value, str):
+            stripped = value.strip()
+            return stripped or None
+        return value
 
     @field_validator("number", mode="before")
     @classmethod
@@ -197,6 +206,7 @@ class ScrapeRequest(BaseModel):
                     number=self.number,
                     content_type=self.content_type or infer_content_type(self.number),
                     media_file_id=self.media_id,
+                    theporndb_uuid=self.theporndb_uuid,
                     use_cache=self.use_cache,
                 )
             parsed = parse_file_info(media.path)
@@ -205,12 +215,14 @@ class ScrapeRequest(BaseModel):
                 number=parsed.number,
                 content_type=self.content_type or parsed.content_type,
                 media_file_id=self.media_id,
+                theporndb_uuid=self.theporndb_uuid,
                 use_cache=self.use_cache,
             )
         assert self.number is not None
         return ScrapePayload(
             number=self.number,
             content_type=self.content_type or infer_content_type(self.number),
+            theporndb_uuid=self.theporndb_uuid,
             use_cache=self.use_cache,
         )
 

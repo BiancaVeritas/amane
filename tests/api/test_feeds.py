@@ -133,15 +133,15 @@ class TestFeedsCrud:
         feed = await repo.create_feed(
             name="scrape",
             url="https://example.com/scrape-items.xml",
-            content_type=ContentType.WESTERN,
+            content_type=ContentType.CENSORED,
             use_cache=[],
         )
         other = await repo.create_feed(name="other", url="https://example.com/other-scrape.xml")
         assert feed.id is not None and other.id is not None
-        first = await repo.create_feed_item(feed.id, "first", number="ABC-001")
-        duplicate = await repo.create_feed_item(feed.id, "duplicate", number="abc-001")
+        first = await repo.create_feed_item(feed.id, "first", number="MIDV-001")
+        duplicate = await repo.create_feed_item(feed.id, "duplicate", number="midv-001")
         no_number = await repo.create_feed_item(feed.id, "no-number")
-        foreign = await repo.create_feed_item(other.id, "foreign", number="XYZ-999")
+        foreign = await repo.create_feed_item(other.id, "foreign", number="MIDV-999")
         assert first.id is not None and duplicate.id is not None
         assert no_number.id is not None and foreign.id is not None
 
@@ -156,18 +156,12 @@ class TestFeedsCrud:
         assert body["missing"] == 1
         assert body["skipped"] == 1
         assert body["submitted"] == 1
-        assert len(body["task_ids"]) == 1
-
-        tasks = await repo.list_tasks()
-        assert len(tasks) == 1
-        task = tasks[0]
+        task = await repo.get_task(body["task_ids"][0])
+        assert task is not None
         assert task.priority == 0
-        assert task.payload == {
-            "number": "ABC-001",
-            "content_type": "western",
-            "media_file_id": None,
-            "use_cache": [],
-        }
+        assert task.payload["number"] == "MIDV-001"
+        assert task.payload["content_type"] == "censored"
+        assert task.payload["use_cache"] == []
 
         assert (
             await client.post(f"feeds/{feed.id}/items/batch", json={"action": "ignore", "ids": []})
@@ -176,6 +170,26 @@ class TestFeedsCrud:
             await client.post(f"feeds/{feed.id}/items/batch", json={"action": "unknown", "ids": [1]})
         ).status_code == 422
         assert (await client.post("feeds/9999/items/batch", json={"action": "ignore", "ids": [1]})).status_code == 404
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_western_feed_batch_scrape_requires_scene_id(self, client: AsyncClient, repo: Repository):
+        feed = await repo.create_feed(
+            name="western",
+            url="https://example.com/western-items.xml",
+            content_type=ContentType.WESTERN,
+        )
+        assert feed.id is not None
+        item = await repo.create_feed_item(feed.id, "item", number="Lancelotstylesevolution.26.10.16")
+        assert item.id is not None
+
+        response = await client.post(
+            f"feeds/{feed.id}/items/batch",
+            json={"action": "scrape", "ids": [item.id]},
+        )
+
+        assert response.status_code == 422
+        assert "OSHASH" in response.json()["detail"]
+        assert await repo.list_tasks() == []
 
 
 class TestFeedGroup:

@@ -282,6 +282,7 @@ class DmmCrawler(Crawler):
             plot=data.description or None,
             thumb_urls=thumb_urls,
             poster_urls=poster_urls,
+            original_poster_urls=[],  # packageImage 的 medium/large 是同一张图的不同尺寸, 不代表独立海报.
             trailer_urls=trailer_urls,
             score=resp.data.reviewSummary.average if resp.data.reviewSummary else None,
             directors=[d.name for d in data.directors if d.name],
@@ -436,6 +437,7 @@ class DmmCrawler(Crawler):
             plot=plot or None,
             thumb_urls=thumb_urls,
             poster_urls=poster_urls,
+            original_poster_urls=[],  # 此页面只有封面图, poster_urls 是由封面派生的展示图地址.
             score=score,
             directors=directors,
             extrafanart=extrafanart,
@@ -491,6 +493,7 @@ class DmmCrawler(Crawler):
             plot=plot or None,
             thumb_urls=thumb_urls,
             poster_urls=poster_urls,
+            original_poster_urls=[],  # 此页面只有封面图, poster_urls 是由封面派生的展示图地址.
             score=score,
             directors=directors,
             extrafanart=extrafanart,
@@ -540,6 +543,8 @@ class DmmCrawler(Crawler):
             series=data.series.name if data.series else None,
             plot=data.description or None,
             poster_urls=[data.packageImage] if data.packageImage else [],
+            original_poster_urls=[data.packageImage] if data.packageImage else [],
+            # packageImage / packageLargeImage 是同一包装图的不同尺寸, 不标记为双页组合.
             thumb_urls=[data.packageLargeImage] if data.packageLargeImage else [],
             trailer_urls=[trailer_url] if trailer_url else [],
             score=data.reviewSummary.averagePoint if data.reviewSummary else None,
@@ -584,6 +589,7 @@ class DmmCrawler(Crawler):
             tags=[g.name for g in data.genres if g.name],
             plot=data.description or None,
             poster_urls=[data.keyVisualImage] if data.keyVisualImage else [],
+            original_poster_urls=[data.keyVisualImage] if data.keyVisualImage else [],
             thumb_urls=[data.packageImage] if data.packageImage else [],
             score=data.reviewSummary.averagePoint if data.reviewSummary else None,
             directors=directors,

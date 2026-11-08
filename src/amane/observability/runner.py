@@ -22,6 +22,7 @@ from ..db.repository import Repository
 from ..handlers import ScrapeHandler
 from ..handlers.models import CacheKind, ScrapePayload
 from ..media import ResourceStore
+from ..parsing import ContentType
 from ..net.http import WebClient
 from .models import RecordManifest, TaskSnapshot
 from .replay import ReplayWebClient
@@ -61,7 +62,8 @@ async def run_record(record_path: Path, *, online: bool = False) -> int:
 
         payload = ScrapePayload.model_validate(task.payload)
         # 回放不接触用户媒体文件
-        payload = payload.model_copy(update={"media_file_id": None})
+        # 回放库是临时空库, 原数据库的 Metadata ID 不可直接复用; 身份改由 number / ThePornDB UUID 重建.
+        payload = payload.model_copy(update={"media_file_id": None, "metadata_id": None})
 
         use_offline = (not online) and manifest.http_captured and (root / "http").is_dir()
         tmp = Path(tempfile.mkdtemp(prefix="amane-record-"))
@@ -74,7 +76,14 @@ async def run_record(record_path: Path, *, online: bool = False) -> int:
             raw_path = root / "raw_cache.json"
             if raw_path.is_file() and CacheKind.metadata in payload.use_cache:
                 raw = json.loads(raw_path.read_text(encoding="utf-8"))
-                await repo.upsert_metadata(payload.number, raw=raw)
+                if payload.content_type == ContentType.WESTERN:
+                    cached_scene = raw.get("theporndb", {}).get("external_id") if isinstance(raw, dict) else None
+                    theporndb_uuid = payload.theporndb_uuid or (str(cached_scene) if cached_scene else None)
+                    if theporndb_uuid:
+                        payload = payload.model_copy(update={"theporndb_uuid": theporndb_uuid})
+                        await repo.upsert_western_metadata(theporndb_uuid, payload.number, raw=raw)
+                else:
+                    await repo.upsert_metadata(payload.number, content_type=payload.content_type, raw=raw)
 
             r18_db = build_r18_db(hot.r18) if not use_offline else None
             browser: BrowserPool | None = None

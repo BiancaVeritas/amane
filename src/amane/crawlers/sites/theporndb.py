@@ -1,9 +1,10 @@
-from typing import TYPE_CHECKING, Any, override
+from typing import Any, override
 
 from ...enums import ActorGender, SiteName
 from ...net.connectivity import ConnectivityOutcome, SkipReason, assess_response
 from ...net.errors import FailureReason, RequestError
 from ...plugins.models import SourceTrait
+from ...parsing.file_info import ContentType
 from ..base import Crawler, CrawlerProfile
 from ..models import FetchOptions, FilmActor, MediaMetadata, SearchQuery
 from ..parsing import fold_number, fold_studio, is_same_number, parse_western_number
@@ -17,9 +18,6 @@ _PERFORMER_GENDER: dict[str, ActorGender] = {
 # kin8 条目的 ``code`` 是站内 4 位 id, 补零规则只在 ``sites/kin8.py::movie_id`` 维护;
 # 他厂会用同一数字当番号, 因此该形态的命中必须同时限定片商.
 _KIN8_STUDIO = fold_studio("Kin8tengoku")
-
-if TYPE_CHECKING:
-    from ...parsing.file_info import ContentType
 
 _SCENE_FIELDS = """
     id title code date duration director details
@@ -125,9 +123,62 @@ class ThePornDBCrawler(Crawler):
         return _scene_url(await self._search_scene(query, token))
 
     async def _search_scene(self, query: SearchQuery, token: str) -> dict[str, Any] | None:
-        """指纹优先于文本检索; 命中判据一律经 ``pick_scene``."""
+        """优先复用明确 UUID; WESTERN 多结果先按片商 + 日期匹配, 再用 OSHASH 消歧."""
         headers = {"Authorization": f"Bearer {token}"}
         gql_url = self._gql_url(query.content_type)
+
+        # 手动指定 / 重新刮削的 Scene ID 是确定身份, 不再经过指纹或番号猜测.
+        if query.theporndb_uuid:
+            data = await self.client.post_json(
+                gql_url,
+                json={"query": _FIND_BY_ID_QUERY, "variables": {"id": query.theporndb_uuid}},
+                headers=headers,
+            )
+            scene = _gql_field(data, "findScene")
+            if isinstance(scene, dict) and str(scene.get("id") or "").casefold() == query.theporndb_uuid.casefold():
+                return scene
+            return None
+
+        if query.content_type == ContentType.WESTERN:
+            # 恢复原有番号检索: 唯一结果本身足以确定作品, 不强制要求 OSHASH.
+            search_data = await self.client.post_json(
+                gql_url,
+                json={"query": _SEARCH_QUERY, "variables": {"term": query.number}},
+                headers=headers,
+            )
+            search_results = _gql_field(search_data, "searchScene")
+            scenes = [item for item in search_results if isinstance(item, dict)] if isinstance(search_results, list) else []
+            if len(scenes) == 1:
+                return scenes[0]
+            if len(scenes) > 1:
+                # 搜索词可能返回同片商的多部影片: 先用日期号中的片商 + 日期
+                # 筛出唯一候选, 只有仍无法确定时才尝试 OSHASH 消歧.
+                scene = pick_scene(scenes, query.number)
+                if scene is not None:
+                    return scene
+            if len(scenes) > 1 and query.file_hash:
+                fingerprint_data = await self.client.post_json(
+                    gql_url,
+                    json={
+                        "query": _FINGERPRINT_QUERY,
+                        "variables": {"fingerprints": [[{"hash": query.file_hash, "algorithm": "OSHASH"}]]},
+                    },
+                    headers=headers,
+                )
+                fingerprint_results = _gql_field(fingerprint_data, "findScenesBySceneFingerprints")
+                groups = _as_list(fingerprint_results)
+                fingerprint_scenes = [item for item in _as_list(groups[0])] if groups else []
+                candidate_ids = {str(scene.get("id") or "").casefold() for scene in scenes}
+                matched_by_id: dict[str, dict[str, Any]] = {}
+                for candidate in fingerprint_scenes:
+                    if not isinstance(candidate, dict):
+                        continue
+                    candidate_id = str(candidate.get("id") or "").casefold()
+                    if candidate_id and candidate_id in candidate_ids:
+                        matched_by_id.setdefault(candidate_id, candidate)
+                if len(matched_by_id) == 1:
+                    return next(iter(matched_by_id.values()))
+            return None
 
         if query.file_hash:
             data = await self.client.post_json(
@@ -138,10 +189,12 @@ class ThePornDBCrawler(Crawler):
                 },
                 headers=headers,
             )
-            scene = pick_fingerprint_scene(_gql_field(data, "findScenesBySceneFingerprints"))
+            fingerprint_results = _gql_field(data, "findScenesBySceneFingerprints")
+            scene = pick_fingerprint_scene(fingerprint_results)
             if scene is not None:
                 return scene
 
+        # 非 WESTERN 沿用原有番号检索流程.
         data = await self.client.post_json(
             gql_url,
             # 检索词保留番号原样: kin8 的站前缀才是命中它的条件, 换成裸 ``movie_id`` 后 TPDB 返回 0 条.
@@ -213,6 +266,7 @@ class ThePornDBCrawler(Crawler):
             plot=scene.get("details") or None,
             thumb_urls=[thumb_url] if thumb_url else [],
             external_id=scene.get("id") or None,
+            theporndb_uuid=scene.get("id") or None,
             source_url=f"https://theporndb.net/scenes/{scene['id']}" if scene.get("id") else None,
         )
 
@@ -225,6 +279,15 @@ def pick_scene(results: object, number: str) -> dict[str, Any] | None:
     片商 + 发布日期确认, 只认唯一命中. ``KIN8-####`` 按站内 4 位 id 判定.
     """
     scenes = [item for item in results if isinstance(item, dict)] if isinstance(results, list) else []
+    western = parse_western_number(number)
+    if western is not None:
+        hits = [
+            scene
+            for scene in scenes
+            if _scene_date(scene) == western.date and fold_studio(_scene_studio(scene)) == western.studio
+        ]
+        return hits[0] if len(hits) == 1 else None
+
     kin8_id = kin8_movie_id(number)
     for scene in scenes:
         code = scene.get("code")
@@ -235,30 +298,42 @@ def pick_scene(results: object, number: str) -> dict[str, Any] | None:
         if kin8_id is not None and _is_kin8_scene(scene, code, kin8_id):
             return scene
 
-    western = parse_western_number(number)
-    if western is None:
-        return None
-    hits = [
-        scene
-        for scene in scenes
-        if _scene_date(scene) == western.date and fold_studio(_scene_studio(scene)) == western.studio
-    ]
-    return hits[0] if len(hits) == 1 else None
+    return None
 
 
-def pick_fingerprint_scene(results: object) -> dict[str, Any] | None:
-    """批量指纹应答 → 首条条目; 只发一个指纹, 因此只看外层第一组.
+def pick_fingerprint_scene(results: object, number: str | None = None) -> dict[str, Any] | None:
+    """指纹应答只看本次唯一 OSHASH 对应的第一组.
 
-    上游把内外两层都声明为非空, TPDB 的兼容实现两层都可空, 逐层按可空展开,
-    结构不符或没有命中都返回 None.
+    WESTERN 还必须用文件番号校验候选, 并且只接受唯一 Scene ID. 同一 Scene 的重复应答去重;
+    不同 Scene 即使番号相同也不取首条. 非 WESTERN 保留既有首条指纹命中行为.
     """
     groups = _as_list(results)
     if not groups:
         return None
-    for scene in _as_list(groups[0]):
-        if isinstance(scene, dict):
-            return scene
-    return None
+    scenes = [scene for scene in _as_list(groups[0]) if isinstance(scene, dict)]
+    if number is None:
+        return scenes[0] if scenes else None
+
+    western = parse_western_number(number)
+    if western is None:
+        hits = [
+            scene
+            for scene in scenes
+            if isinstance(scene.get("code"), str) and is_same_number(scene["code"], number)
+        ]
+    else:
+        hits = [
+            scene
+            for scene in scenes
+            if _scene_date(scene) == western.date and fold_studio(_scene_studio(scene)) == western.studio
+        ]
+
+    by_id: dict[str, dict[str, Any]] = {}
+    for scene in hits:
+        scene_id = scene.get("id")
+        if isinstance(scene_id, str) and scene_id.strip():
+            by_id.setdefault(scene_id.casefold(), scene)
+    return next(iter(by_id.values())) if len(by_id) == 1 else None
 
 
 def _as_list(value: object) -> list[object]:

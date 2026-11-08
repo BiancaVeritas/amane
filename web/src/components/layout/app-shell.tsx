@@ -35,6 +35,7 @@ import {
   IconRss,
   IconSearch,
   IconSettings,
+  IconTags,
   IconSun,
   IconSunMoon,
   IconUsers,
@@ -450,6 +451,13 @@ export function AppShellLayout(): ReactNode {
         <NavItemLink
           item={{ to: "/settings", labelKey: "nav.settings", icon: IconSettings }}
           onNavigate={closeMobile}
+        />
+        <NavLink
+          component={Link}
+          to="/tag-mappings"
+          label="标签中文映射"
+          leftSection={<IconTags size={18} />}
+          onClick={closeMobile}
         />
         {/* 窄屏顶栏放不下版本与外链, 收进侧栏底部. */}
         <Group hiddenFrom="sm" gap="xs" px="xs" pt="sm" wrap="nowrap">

@@ -73,15 +73,20 @@ def _languages_schema(schema: dict[str, Any]) -> None:
 _DEFAULT_CONTENT_ROUTES: dict[ContentType, list[SiteName]] = {
     ContentType.CENSORED: [
         SiteName.DMM,
+        SiteName.MGSTAGE,
         SiteName.JAVDB,
-        SiteName.JAVBUS,
-        SiteName.OFFICIAL,
-    ],
-    ContentType.UNCENSORED: [
-        SiteName.JAVDB,
+        SiteName.AVBASE,
         SiteName.JAVBUS,
         SiteName.AVSOX,
-        SiteName.FREEJAVBT,
+    ],
+    ContentType.UNCENSORED: [
+        SiteName.AVENTERTAINMENTS,
+        SiteName.TENMUSUME,
+        SiteName.PONDO,
+        SiteName.CARIBBEANCOM,
+        SiteName.PACOPACOMAMA,
+        SiteName.TOKYO_HOT,
+        SiteName.CARIBBEANCOMPR,
     ],
     ContentType.FC2: [
         SiteName.JAVDB,
@@ -104,8 +109,6 @@ _DEFAULT_CONTENT_ROUTES: dict[ContentType, list[SiteName]] = {
     ],
     ContentType.WESTERN: [
         SiteName.THEPORNDB,
-        SiteName.JAVDB,
-        SiteName.FREEJAVBT,
     ],
     ContentType.HENTAI: [
         SiteName.GETCHU,
@@ -333,7 +336,10 @@ class ScrapingConfig(BaseModel):
     crop_poster: bool = True
 
     poster_ratio: float = Field(default=0.7, ge=0.3, le=1.0)
-    """海报裁剪宽高比 (w/h). 从封面右侧裁剪生成海报. 默认 0.7 (贴近常见 379x538 / 高清海报)."""
+    """日本有码等常规影片的海报裁剪宽高比 (w/h). 默认 0.7."""
+
+    uncensored_poster_ratio: float = Field(default=0.87, ge=0.3, le=1.0)
+    """无码影片独立的海报裁剪宽高比 (w/h); 裁剪开关与常规影片共用 crop_poster."""
 
     poster_crop_skip_ratio: float = Field(default=0.9, ge=0.5, le=1.0)
     """海报裁剪跳过阈值. 当 poster 候选高度已达 thumb 高度的此比例以上时, 视为候选够用, 不再从 thumb 裁剪
@@ -388,6 +394,13 @@ class ScrapingConfig(BaseModel):
     @field_validator("content_routes", mode="before")
     @classmethod
     def _complete_content_routes(cls, v: Any) -> Any:
+        # Upgrade an untouched legacy default route so existing installations start
+        # querying the newly added AVE source; preserve any user-customized ordering.
+        if isinstance(v, dict):
+            uncensored = v.get(ContentType.UNCENSORED, v.get(ContentType.UNCENSORED.value))
+            legacy_default = ["javdb", "javbus", "avsox", "freejavbt"]
+            if uncensored == legacy_default:
+                v = {**v, ContentType.UNCENSORED.value: [*legacy_default, str(SiteName.AVENTERTAINMENTS)]}
         return _complete_frozen_dict(
             v, {ct: [str(site) for site in _DEFAULT_CONTENT_ROUTES.get(ct, [])] for ct in ContentType}
         )
@@ -553,12 +566,12 @@ def _require_browser_engine(
 
 
 class BrowserConfig(BaseModel):
+    backend: BrowserBackendName = BrowserBackendName.OFF
     bsk_path: str | None = Field(
         default=None,
         json_schema_extra={"x-widget": "PathPicker", "x-path-type": "file"},
     )
-    """``bsk`` CLI 的路径; 桌面壳的 PATH 不含登录 shell 条目, 留空时从 PATH / ``AMANE_BSK_PATH`` 查找."""
-    backend: BrowserBackendName = BrowserBackendName.OFF
+    """``bsk`` CLI 的路径; 桌面壳的 PATH 不含登录 shell 条目, 留空时从 PATH 查找."""
     timeout: int = Field(default=30000, ge=5000, le=120000)
     """页面导航默认超时 (毫秒); 单次渲染可覆盖."""
     solver_url: str = Field(default="http://127.0.0.1:8191", pattern=r"^https?://.+")

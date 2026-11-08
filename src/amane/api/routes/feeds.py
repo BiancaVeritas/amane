@@ -6,6 +6,7 @@ from sqlalchemy.exc import IntegrityError
 
 from ...db import Feed, FeedItem, FeedItemReadState, FeedItemState, TaskType
 from ...handlers.models import CacheKind, ScrapePayload, build_feed_scrape_payload
+from ...parsing import ContentType
 from ...utils.model import to_resp
 from ..deps import RepoDep, RuntimeDep
 from ..models.feeds import (
@@ -276,6 +277,11 @@ async def batch_feed_items(feed_id: int, req: FeedItemBatchRequest, repo: RepoDe
             affected, missing = await repo.delete_feed_items(feed_id, req.ids)
             response = FeedItemBatchResponse(affected=affected, missing=missing)
         case FeedItemBatchAction.SCRAPE:
+            if (feed.content_type or ContentType.CENSORED) == ContentType.WESTERN:
+                raise HTTPException(
+                    status_code=422,
+                    detail="WESTERN Feed 条目不能仅凭番号刮削，请从片库文件使用 OSHASH 或手动指定 ThePornDB UUID",
+                )
             items, missing = await repo.list_feed_items_by_ids(feed_id, req.ids)
             seen_numbers: set[str] = set()
             payloads: list[ScrapePayload] = []
@@ -288,7 +294,10 @@ async def batch_feed_items(feed_id: int, req: FeedItemBatchRequest, repo: RepoDe
                 if key in seen_numbers:
                     continue
                 seen_numbers.add(key)
-                payloads.append(build_feed_scrape_payload(feed, item.number))
+                try:
+                    payloads.append(build_feed_scrape_payload(feed, item.number))
+                except ValueError as exc:
+                    raise HTTPException(status_code=422, detail=str(exc)) from exc
 
             tasks = await repo.create_tasks(TaskType.SCRAPE, payloads, priority=0)
             task_ids = [task.id for task in tasks if task.id is not None]

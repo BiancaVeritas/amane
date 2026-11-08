@@ -1,5 +1,6 @@
 """Kodi ``<movie>`` NFO, 供 Emby / Jellyfin / Kodi 读取."""
 
+import json
 import re
 from io import StringIO
 from typing import TYPE_CHECKING
@@ -7,6 +8,7 @@ from typing import TYPE_CHECKING
 import aiofiles
 import structlog
 
+from ..parsing import ContentType
 from ..utils.text import strip_illegal_xml_chars
 
 if TYPE_CHECKING:
@@ -35,7 +37,7 @@ def _escape_xml(text: str) -> str:
     return escaped
 
 
-async def write_nfo(metadata: Metadata, nfo_path: Path) -> bool:
+async def write_nfo(metadata: Metadata, nfo_path: Path, *, tag_mapping_path: Path | None = None) -> bool:
     try:
         nfo_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -47,11 +49,15 @@ async def write_nfo(metadata: Metadata, nfo_path: Path) -> bool:
             # 长文本按纯文本写出: 转义后 "]]>" 不可能出现, CDATA 只带来非法 XML 的风险.
             plot_escaped = _escape_xml(metadata.plot)
             code.write(f"  <plot>{plot_escaped}</plot>\n")
-            code.write(f"  <outline>{plot_escaped}</outline>\n")
+
+        if metadata.original_plot:
+            code.write(f"  <originalplot>{_escape_xml(metadata.original_plot)}</originalplot>\n")
 
         if metadata.release:
+            code.write(f"  <tagline>发行日期 {metadata.release}</tagline>\n")
             code.write(f"  <premiered>{metadata.release}</premiered>\n")
             code.write(f"  <releasedate>{metadata.release}</releasedate>\n")
+            code.write(f"  <release>{metadata.release}</release>\n")
             year_match = re.match(r"(\d{4})", metadata.release)
             if year_match:
                 code.write(f"  <year>{year_match.group(1)}</year>\n")
@@ -60,10 +66,11 @@ async def write_nfo(metadata: Metadata, nfo_path: Path) -> bool:
 
         if metadata.title:
             code.write(f"  <title>{_escape_xml(metadata.number)} {_escape_xml(metadata.title)}</title>\n")
-            code.write(
-                f"  <originaltitle>{_escape_xml(metadata.number)} {_escape_xml(metadata.title)}</originaltitle>\n"
-            )
-            code.write(f"  <sorttitle>{_escape_xml(metadata.number)} {_escape_xml(metadata.title)}</sorttitle>\n")
+
+        if metadata.original_title:
+            original_title = f"{_escape_xml(metadata.number)} {_escape_xml(metadata.original_title)}"
+            code.write(f"  <originaltitle>{original_title}</originaltitle>\n")
+            code.write(f"  <sorttitle>{original_title}</sorttitle>\n")
 
         code.write("  <mpaa>JP-18+</mpaa>\n")
 
@@ -81,10 +88,13 @@ async def write_nfo(metadata: Metadata, nfo_path: Path) -> bool:
         if metadata.runtime is not None:
             code.write(f"  <runtime>{metadata.runtime}</runtime>\n")
 
-        if metadata.series:
-            code.write(f"  <series>{_escape_xml(metadata.series)}</series>\n")
+        series_values = metadata.series_names or ([metadata.series] if metadata.series else [])
+        series_names = list(dict.fromkeys(name for name in series_values if name))
+        if series_names:
+            # Kodi Movie NFO 的 <set> 是单值字段; 保留首项, 多系列完整数据仍保存在 Amane 数据库中.
+            code.write(f"  <series>{_escape_xml(series_names[0])}</series>\n")
             code.write("  <set>\n")
-            code.write(f"    <name>{_escape_xml(metadata.series)}</name>\n")
+            code.write(f"    <name>{_escape_xml(series_names[0])}</name>\n")
             code.write("  </set>\n")
 
         if metadata.studio:
@@ -96,13 +106,21 @@ async def write_nfo(metadata: Metadata, nfo_path: Path) -> bool:
             code.write(f"  <label>{_escape_xml(metadata.publisher)}</label>\n")
 
         if metadata.tags:
-            for tag in metadata.tags:
-                if tag:
-                    code.write(f"  <tag>{_escape_xml(tag)}</tag>\n")
-                    code.write(f"  <genre>{_escape_xml(tag)}</genre>\n")
+            tags = [tag for tag in metadata.tags if tag]
+            if tag_mapping_path is not None and tag_mapping_path.is_file():
+                try:
+                    mapping_data = json.loads(tag_mapping_path.read_text(encoding="utf-8"))
+                    entries = mapping_data.get("entries", {})
+                    tags = list(dict.fromkeys(entries.get(tag, {}).get("translation") or tag for tag in tags))
+                except (OSError, ValueError, TypeError):
+                    logger.warning("tag mapping dictionary could not be read; writing original tags", path=str(tag_mapping_path))
+            for tag in tags:
+                code.write(f"  <genre>{_escape_xml(tag)}</genre>\n")
+            for tag in tags:
+                code.write(f"  <tag>{_escape_xml(tag)}</tag>\n")
 
-        if metadata.poster_url:
-            code.write(f"  <poster>{_escape_xml(metadata.poster_url)}</poster>\n")
+        if metadata.original_poster_urls:
+            code.write(f"  <poster>{_escape_xml(metadata.original_poster_urls[0])}</poster>\n")
 
         if metadata.thumb_url:
             code.write(f"  <cover>{_escape_xml(metadata.thumb_url)}</cover>\n")
@@ -110,14 +128,17 @@ async def write_nfo(metadata: Metadata, nfo_path: Path) -> bool:
         if metadata.trailer_url:
             code.write(f"  <trailer>{_escape_xml(metadata.trailer_url)}</trailer>\n")
 
-        if metadata.directors:
-            for director in metadata.directors:
-                code.write(f"  <director>{_escape_xml(director)}</director>\n")
-
         if metadata.external_ids:
             for site, ext_id in metadata.external_ids.items():
-                if ext_id:
+                if ext_id and str(site).casefold() not in {"javbus", "dmm"}:
+                    # WESTERN 的 ThePornDB UUID 使用专用列, 只在文末以 theporndbid 输出.
+                    if metadata.content_type == ContentType.WESTERN and str(site).casefold() == "theporndb":
+                        continue
                     code.write(f"  <{site}id>{_escape_xml(str(ext_id))}</{site}id>\n")
+
+        # WESTERN NFO 的 ThePornDB UUID 固定放在全部字段末尾, 海报/封面/预告及其他 ID 之后.
+        if metadata.content_type == ContentType.WESTERN and metadata.theporndb_uuid:
+            code.write(f"  <theporndbid>{_escape_xml(metadata.theporndb_uuid)}</theporndbid>\n")
 
         code.write("</movie>\n")
 

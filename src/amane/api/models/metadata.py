@@ -32,6 +32,7 @@ class MetadataResponse(BaseModel):
     number: str
     content_type: ContentType
     title: str | None = None
+    original_title: str | None = None
     actors: list[str] = []
     studio: str | None = None
     publisher: str | None = None
@@ -39,7 +40,9 @@ class MetadataResponse(BaseModel):
     runtime: int | None = None
     tags: list[str] = []
     series: str | None = None
+    series_names: list[str] = []
     plot: str | None = None
+    original_plot: str | None = None
     directors: list[str] = []
     poster_url: str | None = None
     thumb_url: str | None = None
@@ -47,12 +50,14 @@ class MetadataResponse(BaseModel):
     extrafanart: list[str] = []
     score: float | None = None
     vr: bool = False
+    original_poster_urls: list[str] = []
     poster_urls: list[str] = []
     thumb_urls: list[str] = []
     trailer_urls: list[str] = []
     extrafanart_urls: dict = {}
     scores: dict[str, float] = {}
     external_ids: dict = {}
+    theporndb_uuid: str | None = None
     source_urls: dict = {}
     field_sources: dict = {}
     raw: dict = {}
@@ -82,6 +87,7 @@ PartialMetadata = create_partial_model(
         "id",
         "number",
         "content_type",
+        "theporndb_uuid",
         "created_at",
         "updated_at",
         "raw",
@@ -90,6 +96,8 @@ PartialMetadata = create_partial_model(
     ),
     json_schema_extras={
         "extrafanart_urls": anyof_extras(kv({"v-x-long": True})),
+        "plot": anyof_extras(kv({"x-long": True})),
+        "original_plot": anyof_extras(kv({"x-long": True})),
         "release": anyof_extras(
             {
                 "description": "发行日 (YYYY-MM-DD); 也可输入带时刻的 ISO 串, 服务端只保留日期",
@@ -129,6 +137,7 @@ class MetadataDetailResponse(BaseModel):
     studio_id: int | None = None
     publisher_id: int | None = None
     series_id: int | None = None
+    series_ids: dict[str, int] = Field(default_factory=dict)
 
 
 class MergeRequest(BaseModel):

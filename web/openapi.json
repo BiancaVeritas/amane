@@ -7109,7 +7109,9 @@
             "items": {
               "type": "string",
               "enum": [
-                "gfriends"
+                "gfriends",
+                "tushy",
+                "tushy_raw"
               ]
             },
             "type": "array",
@@ -7865,6 +7867,10 @@
       },
       "BrowserConfig": {
         "properties": {
+          "backend": {
+            "$ref": "#/components/schemas/BrowserBackendName",
+            "default": "off"
+          },
           "bsk_path": {
             "anyOf": [
               {
@@ -7877,10 +7883,6 @@
             "title": "Bsk Path",
             "x-path-type": "file",
             "x-widget": "PathPicker"
-          },
-          "backend": {
-            "$ref": "#/components/schemas/BrowserBackendName",
-            "default": "off"
           },
           "timeout": {
             "type": "integer",
@@ -9600,6 +9602,7 @@
               ],
               "crop_poster": true,
               "poster_ratio": 0.7,
+              "uncensored_poster_ratio": 0.7,
               "poster_crop_skip_ratio": 0.9,
               "jpeg_quality": 95,
               "content_routes": {
@@ -9637,7 +9640,8 @@
                   "javdb",
                   "javbus",
                   "avsox",
-                  "freejavbt"
+                  "freejavbt",
+                  "aventertainments"
                 ],
                 "western": [
                   "theporndb",
@@ -9671,6 +9675,18 @@
                   "use_proxy": true
                 },
                 "avbase": {
+                  "cookie": {},
+                  "languages": [
+                    "zh",
+                    "ja",
+                    "en"
+                  ],
+                  "official_routes": {},
+                  "rate_limit": 2.0,
+                  "use_browser": "auto",
+                  "use_proxy": true
+                },
+                "aventertainments": {
                   "cookie": {},
                   "languages": [
                     "zh",
@@ -9996,7 +10012,9 @@
                 "avbase"
               ],
               "image_sites": [
-                "gfriends"
+                "gfriends",
+                "tushy",
+                "tushy_raw"
               ],
               "download_images": true,
               "auto_scrape": true,
@@ -11885,6 +11903,14 @@
               }
             ],
             "title": "Series Id"
+          },
+          "series_ids": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Series Ids",
+            "default": {}
           }
         },
         "type": "object",
@@ -11970,6 +11996,17 @@
               }
             ],
             "title": "Title"
+          },
+          "original_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Original Title"
           },
           "actors": {
             "anyOf": [
@@ -12058,6 +12095,17 @@
             ],
             "title": "Series"
           },
+          "series_names": {
+            "anyOf": [
+              {
+                "items": { "type": "string" },
+                "type": "array"
+              },
+              { "type": "null" }
+            ],
+            "title": "Series Names",
+            "default": []
+          },
           "plot": {
             "anyOf": [
               {
@@ -12068,6 +12116,17 @@
               }
             ],
             "title": "Plot"
+          },
+          "original_plot": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Original Plot"
           },
           "directors": {
             "anyOf": [
@@ -12082,6 +12141,20 @@
               }
             ],
             "title": "Directors"
+          },
+          "original_poster_urls": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Original Poster Urls"
           },
           "poster_urls": {
             "anyOf": [
@@ -12213,6 +12286,17 @@
             ],
             "title": "Title"
           },
+          "original_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Original Title"
+          },
           "actors": {
             "items": {
               "type": "string"
@@ -12284,6 +12368,12 @@
             ],
             "title": "Series"
           },
+          "series_names": {
+            "items": { "type": "string" },
+            "type": "array",
+            "title": "Series Names",
+            "default": []
+          },
           "plot": {
             "anyOf": [
               {
@@ -12295,12 +12385,31 @@
             ],
             "title": "Plot"
           },
+          "original_plot": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Original Plot"
+          },
           "directors": {
             "items": {
               "type": "string"
             },
             "type": "array",
             "title": "Directors",
+            "default": []
+          },
+          "original_poster_urls": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Original Poster Urls",
             "default": []
           },
           "poster_url": {
@@ -14387,6 +14496,13 @@
             "title": "Poster Ratio",
             "default": 0.7
           },
+          "uncensored_poster_ratio": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.3,
+            "title": "Uncensored Poster Ratio",
+            "default": 0.7
+          },
           "poster_crop_skip_ratio": {
             "type": "number",
             "maximum": 1.0,
@@ -14409,6 +14525,7 @@
                 "enum": [
                   "airav",
                   "avbase",
+                  "aventertainments",
                   "avsox",
                   "dahlia",
                   "dmm",
@@ -14450,6 +14567,7 @@
                 "enum": [
                   "airav",
                   "avbase",
+                  "aventertainments",
                   "avsox",
                   "dahlia",
                   "dmm",
@@ -14491,6 +14609,7 @@
                 "enum": [
                   "airav",
                   "avbase",
+                  "aventertainments",
                   "avsox",
                   "dahlia",
                   "dmm",
@@ -15154,6 +15273,7 @@
         "enum": [
           "airav",
           "avbase",
+          "aventertainments",
           "avsox",
           "dahlia",
           "dmm",
@@ -15177,6 +15297,9 @@
           "prestige",
           "r18dev",
           "theporndb",
+          "tokyo_hot",
+          "tushy",
+          "tushy_raw",
           "wikipedia",
           "xcity"
         ],

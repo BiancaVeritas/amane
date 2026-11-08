@@ -56,7 +56,7 @@ export const metaSearchSchema = z.object({
   semantic: z.literal(1).optional(),
   /** 语义检索的图片来源; 缺省时封面与剧照均参与. */
   kind: z.enum(EMBEDDING_KINDS).optional().catch(undefined),
-  view: z.enum(["grid", "list"]).catch("grid").default("grid"),
+  view: z.enum(["grid", "cover", "list"]).catch("grid").default("grid"),
   sort_by: z.enum(METADATA_SORT_FIELDS).optional(),
   order: z.enum(SORT_ORDERS).optional(),
   page: z.coerce.number().int().min(1).catch(1).default(1),

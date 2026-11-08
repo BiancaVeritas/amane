@@ -43,6 +43,8 @@
     "numberPlaceholder": "例如 MIDV-123",
     "contentType": "内容类型",
     "contentTypeHint": "留空则根据填写的番号推断",
+    "theporndbUuid": "ThePornDB UUID",
+    "theporndbUuidPlaceholder": "输入 ThePornDB UUID",
     "contentTypeAuto": "自动推断",
     "submit": "开始刮削",
     "contentTypes": {
@@ -154,6 +156,7 @@
     "items": {
       "number": "番号",
       "prefix": "番号前缀. 例 MIDV-123 → MIDV",
+      "raw_prefix": "番号前缀，保留原始大小写. 例 LancelotStylesEvolution.26.10.16 → LancelotStylesEvolution",
       "suffix": "番号去掉前缀后的剩余段. 例 MIDV-123 → 123",
       "title": "标题",
       "actor": "第一位演员",

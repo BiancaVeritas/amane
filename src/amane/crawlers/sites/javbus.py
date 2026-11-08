@@ -121,6 +121,8 @@ class JavBusCrawler(Crawler):
             series=series or None,
             directors=directors,
             poster_urls=[poster_url] if poster_url else [],
+            # JavBus 的 poster/thumb 是同一张封面的不同尺寸，不是独立原海报与双页封面.
+            original_poster_urls=[],
             thumb_urls=[thumb_url] if thumb_url else [],
             extrafanart=extrafanart,
             source_url=url,

@@ -62,7 +62,9 @@ def apply_metadata_facet_fields(meta: Metadata, rules_by_kind: RulesByKind) -> N
     meta.tags = apply_list(meta.tags, rules_by_kind.get(FacetKind.TAG, {}))
     meta.studio = apply_scalar(meta.studio, rules_by_kind.get(FacetKind.STUDIO, {}))
     meta.publisher = apply_scalar(meta.publisher, rules_by_kind.get(FacetKind.PUBLISHER, {}))
-    meta.series = apply_scalar(meta.series, rules_by_kind.get(FacetKind.SERIES, {}))
+    series_values = meta.series_names or ([meta.series] if meta.series else [])
+    meta.series_names = apply_list(series_values, rules_by_kind.get(FacetKind.SERIES, {}))
+    meta.series = meta.series_names[0] if meta.series_names else None
 
 
 def empty_rules_by_kind() -> dict[FacetKind, dict[str, RuleEntry]]:

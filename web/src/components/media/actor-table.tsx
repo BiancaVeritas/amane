@@ -29,7 +29,7 @@ import {
 } from "@tabler/icons-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { ParseKeys } from "i18next";
 import { useTranslation } from "react-i18next";
 import {
@@ -201,7 +201,37 @@ export function ActorTable({
     onChange: setActorColumnWidths,
   });
 
-  const { selected, selectedIds, toggleOne, toggleAll, isAllSelected, clear } = useIdSelection();
+  const { selected, selectedIds, toggleAll, isAllSelected, clear, setSelected } = useIdSelection();
+  const selectionAnchorId = useRef<number | null>(null);
+
+  function handleRowSelection(id: number, checked: boolean, shiftKey: boolean) {
+    const currentIndex = pageIds.indexOf(id);
+    const anchorIndex =
+      selectionAnchorId.current == null ? -1 : pageIds.indexOf(selectionAnchorId.current);
+
+    if (shiftKey && anchorIndex >= 0 && currentIndex >= 0) {
+      const start = Math.min(anchorIndex, currentIndex);
+      const end = Math.max(anchorIndex, currentIndex);
+      const rangeIds = pageIds.slice(start, end + 1);
+      setSelected((prev) => {
+        const next = new Set(prev);
+        for (const rangeId of rangeIds) {
+          if (checked) next.add(rangeId);
+          else next.delete(rangeId);
+        }
+        return next;
+      });
+      return;
+    }
+
+    selectionAnchorId.current = id;
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  }
   const identity = useFacetIdentityActions({
     kind,
     listQueryKey: listActorsQueryKey(),
@@ -480,6 +510,17 @@ export function ActorTable({
             </Button>
             <Button
               size="xs"
+              color="red"
+              variant="light"
+              leftSection={<IconTrash size={14} />}
+              loading={identity.deletePending}
+              disabled={selected.size === 0 || identity.deletePending}
+              onClick={() => void identity.openBatchDelete(selectedIds)}
+            >
+              批量删除并加入剔除
+            </Button>
+            <Button
+              size="xs"
               variant="light"
               leftSection={<IconEraser size={14} />}
               loading={busy}
@@ -543,7 +584,17 @@ export function ActorTable({
                 bg={selected.has(actor.id) ? "var(--mantine-color-blue-light)" : undefined}
               >
                 <Table.Td>
-                  <Checkbox checked={selected.has(actor.id)} onChange={() => toggleOne(actor.id)} />
+                  <Checkbox
+                    checked={selected.has(actor.id)}
+                    onChange={(event) => {
+                      const checked = event.currentTarget.checked;
+                      handleRowSelection(
+                        actor.id,
+                        checked,
+                        (event.nativeEvent as MouseEvent).shiftKey,
+                      );
+                    }}
+                  />
                 </Table.Td>
                 <Table.Td visibleFrom={PHOTO_VISIBLE_FROM}>
                   {actor.image_urls?.[0] ? (

@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, get_args
 import pytest
 from pydantic import BaseModel
 
-from amane.api.models.tasks import TaskResultPayload
+from amane.api.models.tasks import ScrapeRequest, TaskResultPayload
 from amane.db.models import TaskType
 from amane.enums import DownloadableResource
 from amane.handlers import models as handler_models
@@ -17,6 +17,11 @@ if TYPE_CHECKING:
     from httpx2 import AsyncClient
 
     from amane.db.repository import Repository
+
+
+def test_manual_scrape_number_preserves_user_case() -> None:
+    request = ScrapeRequest(number="  LancelotStylesEvolution.26.04.05  ")
+    assert request.number == "LancelotStylesEvolution.26.04.05"
 
 
 class TestListTasks:
@@ -121,6 +126,18 @@ class TestSubmitTask:
             },
         )
         assert forced_override.json()["payload"]["content_type"] == "western"
+        manual_scene = await client.post(
+            "tasks",
+            json={
+                "type": "scrape",
+                "media_id": media.id,
+                "number": "Lancelotstylesevolution.26.10.16",
+                "content_type": "western",
+                "theporndb_uuid": "scene-manual-1",
+            },
+        )
+        assert manual_scene.status_code == 202
+        assert manual_scene.json()["payload"]["theporndb_uuid"] == "scene-manual-1"
         blank = await client.post("tasks", json={"type": "scrape", "media_id": media.id, "number": "   "})
         assert blank.status_code == 202
         assert blank.json()["payload"]["number"] == "MD-0123"

@@ -219,7 +219,20 @@ class TestBrowserTimeoutMigration:
             ({"network": {"browser": {"backend": "solver"}}}, 30000),
         ],
     )
-    def test_browser_timeout_moves_into_browser_config(self, payload: dict, expected: int):
+    def test_browser_timeout_moves_into_browser_config(
+        self, payload: dict, expected: int, monkeypatch: pytest.MonkeyPatch
+    ):
+        import importlib
+
+        original_import_module = importlib.import_module
+
+        def _import_module(name: str):
+            if name == "camoufox":
+                return object()
+            return original_import_module(name)
+
+        monkeypatch.setattr("amane.config.manager.importlib.import_module", _import_module)
+
         cfg = HotSettings.model_validate(payload)
         assert cfg.network.browser.timeout == expected
 
@@ -351,17 +364,35 @@ class TestScrapingPriorityMigration:
         assert set(cfg.content_routes) == set(ContentType)
         assert cfg.content_routes[ContentType.FC2] == ScrapingConfig().content_routes[ContentType.FC2]
 
+    def test_uncensored_poster_ratio_is_independent(self):
+        cfg = ScrapingConfig.model_validate({"poster_ratio": 0.65, "uncensored_poster_ratio": 0.82})
+        assert cfg.poster_ratio == 0.65
+        assert cfg.uncensored_poster_ratio == 0.82
+        assert ScrapingConfig().uncensored_poster_ratio == 0.87
+
+    def test_legacy_uncensored_default_route_adds_aventertainments(self):
+        cfg = ScrapingConfig.model_validate({
+            "content_routes": {"uncensored": ["javdb", "javbus", "avsox", "freejavbt"]}
+        })
+        assert cfg.content_routes[ContentType.UNCENSORED] == [
+            SiteName.JAVDB,
+            SiteName.JAVBUS,
+            SiteName.AVSOX,
+            SiteName.FREEJAVBT,
+            SiteName.AVENTERTAINMENTS,
+        ]
+
     def test_default_routes_type_specific_heads(self):
         routes = ScrapingConfig().content_routes
         assert routes[ContentType.AMATEUR][0] == SiteName.MGSTAGE
         assert routes[ContentType.CHINESE][0] == SiteName.IQQTV
         assert routes[ContentType.HENTAI][0] == SiteName.GETCHU
         assert routes[ContentType.WESTERN][0] == SiteName.THEPORNDB
-        assert SiteName.AVSOX in routes[ContentType.UNCENSORED]
+        assert routes[ContentType.UNCENSORED][0] == SiteName.AVENTERTAINMENTS
+        assert routes[ContentType.UNCENSORED][-1] == SiteName.CARIBBEANCOMPR
         assert SiteName.FC2PPVDB in routes[ContentType.FC2]
         # 官方电子市场下架的作品只剩索引站在线看站收录, airav 排在 fc2 路线的链尾
         assert routes[ContentType.FC2][-1] == SiteName.AIRAV
-        assert SiteName.OFFICIAL in routes[ContentType.CENSORED]
 
 
 class TestFrozenKeyDictCompleteness:
@@ -696,7 +727,6 @@ class TestLLMConfig:
 class TestBskBackendAvailability:
     def test_missing_cli_rejects_global_backend(self, monkeypatch: pytest.MonkeyPatch):
         monkeypatch.setattr("amane.net.bsk.shutil.which", lambda name: None)
-        monkeypatch.delenv("AMANE_BSK_PATH", raising=False)
 
         with pytest.raises(ValidationError, match="未找到 bsk CLI"):
             BrowserConfig(backend=BrowserBackendName.BSK)
@@ -707,7 +737,6 @@ class TestBskBackendAvailability:
         fake = tmp_path / "bsk"
         fake.write_text("", encoding="utf-8")
         monkeypatch.setattr("amane.net.bsk.shutil.which", lambda name: None)
-        monkeypatch.delenv("AMANE_BSK_PATH", raising=False)
 
         config = BrowserConfig(bsk_path=str(fake), backend=BrowserBackendName.BSK)
 

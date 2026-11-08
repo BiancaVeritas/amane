@@ -13,6 +13,7 @@ from amane.db.models import (
     FacetRuleAction,
     MediaFile,
     MediaFileStatus,
+    MediaIdentityType,
     MediaSortField,
     Metadata,
     MetadataSortField,
@@ -436,6 +437,285 @@ class TestMetadataRepo:
         assert found.title == "X"
 
     @pytest.mark.asyncio(loop_scope="function")
+    async def test_western_same_number_different_theporndb_uuids_are_distinct(self, repo: Repository):
+        first = await repo.upsert_western_metadata("scene-1", "Lancelotstylesevolution.26.10.16", title="First")
+        second = await repo.upsert_western_metadata("scene-2", "Lancelotstylesevolution.26.10.16", title="Second")
+
+        assert first.id != second.id
+        assert first.number == second.number
+        assert await repo.get_metadata_by_theporndb_uuid("SCENE-1") is not None
+        assert await repo.get_metadata_by_theporndb_uuid("scene-2") is not None
+        # 同番号多条时禁止旧接口任取一条, 防止 raw cache 串作品.
+        assert await repo.get_metadata_by_number("Lancelotstylesevolution.26.10.16") is None
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_western_uuid_is_not_duplicated_in_external_ids(self, repo: Repository):
+        metadata = await repo.upsert_western_metadata(
+            "uuid-authoritative",
+            "Lancelotstylesevolution.26.10.16",
+            external_ids={"theporndb": "uuid-authoritative", "other_source": "external-123"},
+        )
+
+        assert metadata.theporndb_uuid == "uuid-authoritative"
+        assert metadata.external_ids == {"other_source": "external-123"}
+        found = await repo.get_metadata_by_theporndb_uuid("UUID-AUTHORITATIVE")
+        assert found is not None and found.id == metadata.id
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_western_manual_update_maps_theporndb_external_id_to_uuid_column(
+        self, repo: Repository
+    ):
+        metadata = await repo.upsert_western_metadata(
+            theporndb_uuid="uuid-manual-update", number="Manual.Update.001"
+        )
+        assert metadata.id is not None
+
+        updated = await repo.update_metadata(
+            metadata.id,
+            mode=WriteMode.MANUAL,
+            external_ids={"ThePornDB": "duplicate-uuid", "javdb": "javdb-123"},
+        )
+
+        assert updated is not None
+        assert updated.theporndb_uuid == "duplicate-uuid"
+        assert updated.external_ids == {"javdb": "javdb-123"}
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_western_same_theporndb_uuid_updates_same_metadata(self, repo: Repository):
+        first = await repo.upsert_western_metadata("scene-1", "Lancelotstylesevolution.26.10.16", title="Old")
+        updated = await repo.upsert_western_metadata("scene-1", "Lancelotstylesevolution.26.10.16", title="New")
+
+        assert updated.id == first.id
+        assert updated.title == "New"
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_western_theporndb_uuid_cannot_change_its_number(self, repo: Repository):
+        await repo.upsert_western_metadata("scene-fixed", "Lancelotstylesevolution.26.10.16")
+        with pytest.raises(ValueError, match="number conflict"):
+            await repo.upsert_western_metadata("scene-fixed", "Lancelotstylesevolution.26.10.17")
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_western_concurrent_same_theporndb_uuid_creates_one_metadata(self, repo: Repository):
+        results = await asyncio.gather(
+            *(
+                repo.upsert_western_metadata(
+                    "scene-concurrent", "Lancelotstylesevolution.26.10.16", title=f"Part {index}"
+                )
+                for index in range(6)
+            )
+        )
+        assert len({item.id for item in results}) == 1
+        items, total = await repo.list_metadata()
+        assert total == 1
+        assert items[0].theporndb_uuid == "scene-concurrent"
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_media_identity_is_idempotent_and_resolves_metadata(self, repo: Repository):
+        metadata = await repo.upsert_western_metadata("scene-identity", "Lancelotstylesevolution.26.10.16")
+        first = await repo.register_media_identity(metadata.id, MediaIdentityType.FILE_115_ID, "3500105553135273569")
+        second = await repo.register_media_identity(metadata.id, MediaIdentityType.FILE_115_ID, "3500105553135273569")
+
+        assert first.id == second.id
+        found = await repo.get_metadata_by_identity(MediaIdentityType.FILE_115_ID, "3500105553135273569")
+        assert found is not None
+        assert found.id == metadata.id
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_western_finalize_rolls_back_all_writes_on_identity_conflict(self, repo: Repository):
+        number = "Lancelotstylesevolution.26.10.16"
+        owner = await repo.upsert_western_metadata("uuid-owner", number)
+        media = await repo.create_media_file(
+            library_id=1,
+            path="/video/atomic-finalize.mp4",
+            number=number,
+            oshash="atomic-hash",
+        )
+        await repo.register_media_identity(owner.id, MediaIdentityType.LOCAL_OSHASH, "atomic-hash")
+
+        with pytest.raises(ValueError, match="already linked"):
+            await repo.finalize_western_scrape(
+                theporndb_uuid="uuid-new",
+                number=number,
+                media_file_id=media.id,
+                oshash="atomic-hash",
+                file_115_id="3500105553135273569",
+                title="Must Roll Back",
+            )
+
+        assert await repo.get_metadata_by_theporndb_uuid("uuid-new") is None
+        refreshed_media = await repo.get_media_file(media.id)
+        assert refreshed_media is not None
+        assert refreshed_media.metadata_id is None
+        assert refreshed_media.status == MediaFileStatus.PENDING
+        assert await repo.get_metadata_by_identity(MediaIdentityType.FILE_115_ID, "3500105553135273569") is None
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_western_finalize_rejects_115_and_oshash_owned_by_different_metadata(
+        self, repo: Repository
+    ):
+        number = "Lancelotstylesevolution.26.10.16"
+        owner_115 = await repo.upsert_western_metadata("uuid-owner-115", number)
+        owner_hash = await repo.upsert_western_metadata("uuid-owner-hash", number)
+        await repo.register_media_identity(
+            owner_115.id, MediaIdentityType.FILE_115_ID, "115-cross-conflict"
+        )
+        await repo.register_media_identity(
+            owner_hash.id, MediaIdentityType.LOCAL_OSHASH, "oshash-cross-conflict"
+        )
+        media = await repo.create_media_file(
+            library_id=1,
+            path="/video/cross-identity-conflict.mp4",
+            number=number,
+            oshash="oshash-cross-conflict",
+        )
+
+        with pytest.raises(ValueError, match="already linked"):
+            await repo.finalize_western_scrape(
+                theporndb_uuid="uuid-new-cross-conflict",
+                number=number,
+                media_file_id=media.id,
+                oshash="oshash-cross-conflict",
+                file_115_id="115-cross-conflict",
+                title="Must Not Be Linked",
+            )
+
+        assert await repo.get_metadata_by_theporndb_uuid("uuid-new-cross-conflict") is None
+        refreshed_media = await repo.get_media_file(media.id)
+        assert refreshed_media is not None
+        assert refreshed_media.metadata_id is None
+        assert refreshed_media.status == MediaFileStatus.PENDING
+        assert (await repo.get_metadata_by_identity(
+            MediaIdentityType.FILE_115_ID, "115-cross-conflict"
+        )).id == owner_115.id
+        assert (await repo.get_metadata_by_identity(
+            MediaIdentityType.LOCAL_OSHASH, "oshash-cross-conflict"
+        )).id == owner_hash.id
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_western_finalize_rolls_back_when_115_id_belongs_to_another_metadata(
+        self, repo: Repository
+    ):
+        number = "Lancelotstylesevolution.26.10.16"
+        owner = await repo.upsert_western_metadata("uuid-owner-115-only", number)
+        await repo.register_media_identity(
+            owner.id, MediaIdentityType.FILE_115_ID, "115-owned-elsewhere"
+        )
+        media = await repo.create_media_file(
+            library_id=1,
+            path="/video/115-identity-conflict.mp4",
+            number=number,
+            oshash="oshash-not-yet-registered",
+        )
+
+        with pytest.raises(ValueError, match="already linked"):
+            await repo.finalize_western_scrape(
+                theporndb_uuid="uuid-new-115-conflict",
+                number=number,
+                media_file_id=media.id,
+                oshash="oshash-not-yet-registered",
+                file_115_id="115-owned-elsewhere",
+                title="Must Roll Back",
+            )
+
+        assert await repo.get_metadata_by_theporndb_uuid("uuid-new-115-conflict") is None
+        refreshed_media = await repo.get_media_file(media.id)
+        assert refreshed_media is not None
+        assert refreshed_media.metadata_id is None
+        assert refreshed_media.status == MediaFileStatus.PENDING
+        assert await repo.get_metadata_by_identity(
+            MediaIdentityType.LOCAL_OSHASH, "oshash-not-yet-registered"
+        ) is None
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_media_identity_survives_western_metadata_facet_refresh(self, repo: Repository):
+        number = "Lancelotstylesevolution.26.10.16"
+        metadata = await repo.upsert_western_metadata("uuid-facet-refresh", number, title="Before")
+        await repo.register_media_identity(
+            metadata.id, MediaIdentityType.FILE_115_ID, "3500105553135273569"
+        )
+
+        updated = await repo.upsert_western_metadata(
+            "uuid-facet-refresh", number, title="After", actors=["Facet Test Actor"]
+        )
+        restored = await repo.get_metadata_by_identity(
+            MediaIdentityType.FILE_115_ID, "3500105553135273569"
+        )
+
+        assert updated.id == metadata.id
+        assert restored is not None
+        assert restored.id == metadata.id
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_media_identity_survives_media_file_deletion_and_resolves_metadata(self, repo: Repository):
+        number = "Lancelotstylesevolution.26.10.16"
+        metadata = await repo.upsert_western_metadata("uuid-moved-file", number)
+        media = await repo.create_media_file(
+            library_id=1,
+            path="/video/before-move.strm",
+            number=number,
+            metadata_id=metadata.id,
+        )
+        await repo.register_media_identity(
+            metadata.id, MediaIdentityType.FILE_115_ID, "3500105553135273569"
+        )
+
+        # 外部移动/重新扫描可能删除旧 MediaFile；稳定身份不应随文件行一起删除。
+        assert await repo.delete_media_file(media.id) is True
+        restored = await repo.get_metadata_by_identity(
+            MediaIdentityType.FILE_115_ID, "3500105553135273569"
+        )
+        assert restored is not None
+        assert restored.id == metadata.id
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_media_identity_is_deleted_with_metadata(self, repo: Repository):
+        metadata = await repo.upsert_western_metadata("uuid-delete", "Lancelotstylesevolution.26.10.16")
+        await repo.register_media_identity(metadata.id, MediaIdentityType.FILE_115_ID, "115-delete-test")
+
+        assert await repo.delete_metadata(metadata.id) is True
+        assert await repo.get_metadata_by_identity(MediaIdentityType.FILE_115_ID, "115-delete-test") is None
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_media_identity_cannot_be_reassigned_to_another_metadata(self, repo: Repository):
+        number = "Lancelotstylesevolution.26.10.16"
+        first = await repo.upsert_western_metadata("scene-identity-a", number)
+        second = await repo.upsert_western_metadata("scene-identity-b", number)
+        await repo.register_media_identity(first.id, MediaIdentityType.LOCAL_OSHASH, "same-oshash")
+
+        with pytest.raises(ValueError, match="already linked"):
+            await repo.register_media_identity(second.id, MediaIdentityType.LOCAL_OSHASH, "SAME-OSHASH")
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_western_oshash_resolves_through_media_file(self, repo: Repository):
+        metadata = await repo.upsert_western_metadata("scene-1", "Lancelotstylesevolution.26.10.16")
+        media = await repo.create_media_file(
+            library_id=1, path="/video/Lancelotstylesevolution.26.10.16-1.mp4",
+            number="Lancelotstylesevolution.26.10.16", oshash="hash-4k", metadata_id=metadata.id,
+        )
+        assert media.metadata_id == metadata.id
+        found = await repo.get_metadata_by_oshash("hash-4k")
+        assert found is not None
+        assert found.id == metadata.id
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_western_oshash_reports_conflicting_metadata_matches(self, repo: Repository):
+        number = "Lancelotstylesevolution.26.10.16"
+        first = await repo.upsert_western_metadata("scene-hash-a", number)
+        second = await repo.upsert_western_metadata("scene-hash-b", number)
+        await repo.create_media_file(
+            library_id=1, path="/video/hash-a.mp4", number=number, oshash="same-hash", metadata_id=first.id
+        )
+        await repo.create_media_file(
+            library_id=1, path="/video/hash-b.mp4", number=number, oshash="same-hash", metadata_id=second.id
+        )
+
+        matches = await repo.get_metadata_by_oshash_matches("same-hash")
+        found = await repo.get_metadata_by_oshash("same-hash")
+
+        assert {item.id for item in matches} == {first.id, second.id}
+        assert found is None
+
+    @pytest.mark.asyncio(loop_scope="function")
     async def test_upsert_update(self, repo: Repository):
         await repo.upsert_metadata(number="MIDV-123", title="Old", content_type=ContentType.CENSORED)
         await repo.upsert_metadata(number="MIDV-123", title="New", actors=["C"], content_type=ContentType.UNCENSORED)
@@ -632,7 +912,7 @@ class TestMetadataRepo:
     )
     @pytest.mark.asyncio(loop_scope="function")
     async def test_upsert_concurrent_same_number(self, repo: Repository, numbers: list[str]):
-        """同号并发写入不违反 ix_metadata_number: 判定与写入同处一个写事务."""
+        """同号并发写入不违反非 WESTERN 番号唯一索引: 判定与写入同处一个写事务."""
         metas = await asyncio.gather(
             *(repo.upsert_metadata(number=number, title=f"part-{i}") for i, number in enumerate(numbers))
         )
@@ -643,9 +923,11 @@ class TestMetadataRepo:
 
     @pytest.mark.asyncio(loop_scope="function")
     async def test_number_lookup_seeks_index(self, repo: Repository):
-        """查号按 ix_metadata_number 查找: 计划退化为扫描后成本随表行数线性增长."""
-        await repo.upsert_metadata(number="MD-408", title="X")
-        stmt = select(Metadata.id).where(metadata_number_predicate("md-408"))
+        """查号使用大小写不敏感番号索引, 不退化为全表扫描."""
+        await repo.upsert_metadata(number="MD-408", title="X", content_type=ContentType.CHINESE)
+        stmt = select(Metadata.id).where(
+            metadata_number_predicate("md-408"), Metadata.content_type != ContentType.WESTERN
+        )
         sql = str(stmt.compile(compile_kwargs={"literal_binds": True}))
         async with repo._session() as session:
             connection = await session.connection()
@@ -852,6 +1134,67 @@ class TestMetadataRepo:
         assert updated is not None
         assert updated.title == "New Title"
         assert updated.plot == "A plot"
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_update_metadata_series_syncs_compatibility_fields(
+        self, repo: Repository
+    ):
+        """旧调用方只更新 series 时，同步多系列兼容字段。"""
+        meta = await repo.upsert_metadata(number="SERIES-UPDATE-001")
+        assert meta.id is not None
+
+        updated = await repo.update_metadata(meta.id, series="Series A")
+
+        assert updated is not None
+        assert updated.series == "Series A"
+        assert updated.series_names == ["Series A"]
+
+        cleared = await repo.update_metadata(meta.id, series=None)
+
+        assert cleared is not None
+        assert cleared.series is None
+        assert cleared.series_names == []
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_update_metadata_series_names_normalizes_and_syncs_series(
+        self, repo: Repository
+    ):
+        """更新多系列字段时，去重、清理空白并同步首个系列。"""
+        meta = await repo.upsert_metadata(number="SERIES-UPDATE-002")
+        assert meta.id is not None
+
+        updated = await repo.update_metadata(
+            meta.id,
+            series_names=[" Series A ", "", "Series B", "Series A", "   "],
+        )
+
+        assert updated is not None
+        assert updated.series_names == ["Series A", "Series B"]
+        assert updated.series == "Series A"
+
+        cleared = await repo.update_metadata(meta.id, series_names=[])
+
+        assert cleared is not None
+        assert cleared.series_names == []
+        assert cleared.series is None
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_update_metadata_series_names_takes_precedence(
+        self, repo: Repository
+    ):
+        """同时更新时，以规范化的 series_names 为准。"""
+        meta = await repo.upsert_metadata(number="SERIES-UPDATE-003")
+        assert meta.id is not None
+
+        updated = await repo.update_metadata(
+            meta.id,
+            series="Legacy Series",
+            series_names=["Series A", "Series B"],
+        )
+
+        assert updated is not None
+        assert updated.series_names == ["Series A", "Series B"]
+        assert updated.series == "Series A"
 
     @pytest.mark.asyncio(loop_scope="function")
     async def test_plot_plain_text_on_write(self, repo: Repository):

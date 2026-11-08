@@ -106,7 +106,7 @@
 | airav | airav.io | FC2、国产 | | 中文标题 |
 | iqqtv | iqq5.xyz | 国产 | | 国产第一来源; 按「字段语言偏好」请求对应语言的页面 |
 | mgstage | mgstage.com | 素人 | | 素人第一来源; 素人影片不记录站内化名为演员 |
-| theporndb | theporndb.net | 欧美 | :material-check: | 需要 API Token, 未填写时跳过; 有媒体文件时按文件指纹匹配 |
+| theporndb | theporndb.net | 欧美 | :material-check: | 需要 API Token; 新文件按 OSHASH 匹配, 重新刮削 / 手动兜底可指定 Scene ID; 指纹未命中不按重复番号猜测 |
 | getchu | getchu.com | 动漫 | | 动漫第一来源 |
 | r18dev | 本地 PostgreSQL 镜像 | | | 离线数据源, 见 [r18.dev](#r18dev) |
 | jav321 | jav321.com | | | DMM 目录镜像 |

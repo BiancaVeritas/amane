@@ -31,10 +31,12 @@ from ..models import (
     FacetSortField,
     MediaFile,
     MediaFileStatus,
+    MediaIdentity,
     Metadata,
     MetadataActor,
     MetadataDirector,
     MetadataTag,
+    MetadataSeries,
     MetadataUserTag,
     Publisher,
     Series,
@@ -62,8 +64,10 @@ type _NamedEntity = Actor | Director | Tag | UserTag | Studio | Publisher | Seri
 @dataclass(frozen=True, slots=True)
 class _LinkFacetSpec:
     kind: FacetKind
-    entity: type[Actor] | type[Director] | type[Tag] | type[UserTag]
-    link: type[MetadataActor] | type[MetadataDirector] | type[MetadataTag] | type[MetadataUserTag]
+    entity: type[Actor] | type[Director] | type[Tag] | type[UserTag] | type[Series]
+    link: (
+        type[MetadataActor] | type[MetadataDirector] | type[MetadataTag] | type[MetadataUserTag] | type[MetadataSeries]
+    )
     link_fk: Any
     label: str
     get_names: Callable[[Metadata], list[str]] | None = None
@@ -74,7 +78,7 @@ class _LinkFacetSpec:
 @dataclass(frozen=True, slots=True)
 class _ScalarFacetSpec:
     kind: FacetKind
-    entity: type[Studio] | type[Publisher] | type[Series]
+    entity: type[Studio] | type[Publisher]
     meta_col: Mapped
     label: str
 
@@ -101,6 +105,21 @@ def _get_tags(m: Metadata) -> list[str]:
 
 def _set_tags(m: Metadata, names: list[str]) -> None:
     m.tags = names
+
+
+def _normalize_series_names(names: list[str] | None) -> list[str]:
+    if not names:
+        return []
+    return list(dict.fromkeys(name.strip() for name in names if isinstance(name, str) and name.strip()))
+
+
+def _get_series(m: Metadata) -> list[str]:
+    return _normalize_series_names(m.series_names or ([m.series] if m.series else []))
+
+
+def _set_series(m: Metadata, names: list[str]) -> None:
+    m.series_names = _normalize_series_names(names)
+    m.series = m.series_names[0] if m.series_names else None
 
 
 LINK_FACETS: dict[FacetKind, _LinkFacetSpec] = {
@@ -139,6 +158,15 @@ LINK_FACETS: dict[FacetKind, _LinkFacetSpec] = {
         link_fk=MetadataUserTag.user_tag_id,
         label="标签",
     ),
+    FacetKind.SERIES: _LinkFacetSpec(
+        kind=FacetKind.SERIES,
+        entity=Series,
+        link=MetadataSeries,
+        link_fk=MetadataSeries.series_id,
+        label="系列",
+        get_names=_get_series,
+        set_names=_set_series,
+    ),
 }
 
 SCALAR_FACETS: dict[FacetKind, _ScalarFacetSpec] = {
@@ -153,12 +181,6 @@ SCALAR_FACETS: dict[FacetKind, _ScalarFacetSpec] = {
         entity=Publisher,
         meta_col=col(Metadata.publisher),
         label="发行商",
-    ),
-    FacetKind.SERIES: _ScalarFacetSpec(
-        kind=FacetKind.SERIES,
-        entity=Series,
-        meta_col=col(Metadata.series),
-        label="系列",
     ),
 }
 
@@ -538,10 +560,6 @@ async def _strip_names_from_scalar_metadata(session: AsyncSession, kind: FacetKi
         await session.exec(
             update(Metadata).where(col(Metadata.publisher).in_(list(names))).values(publisher=None, updated_at=now)
         )
-    elif kind == FacetKind.SERIES:
-        await session.exec(
-            update(Metadata).where(col(Metadata.series).in_(list(names))).values(series=None, updated_at=now)
-        )
     else:
         raise ValueError(f"not a scalar facet kind: {kind}")
     await session.flush()
@@ -653,9 +671,12 @@ async def cascade_delete_metadata(session: AsyncSession, metadata: Metadata) -> 
         mf.status = MediaFileStatus.PENDING
         mf.updated_at = _utcnow()
         session.add(mf)
+    # 测试连接可能关闭 SQLite FK, 因此显式清理独立身份索引。
+    await session.exec(sqla_delete(MediaIdentity).where(col(MediaIdentity.metadata_id) == metadata_id))
     await session.exec(sqla_delete(MetadataActor).where(col(MetadataActor.metadata_id) == metadata_id))
     await session.exec(sqla_delete(MetadataDirector).where(col(MetadataDirector.metadata_id) == metadata_id))
     await session.exec(sqla_delete(MetadataTag).where(col(MetadataTag.metadata_id) == metadata_id))
+    await session.exec(sqla_delete(MetadataSeries).where(col(MetadataSeries.metadata_id) == metadata_id))
     await session.exec(sqla_delete(MetadataUserTag).where(col(MetadataUserTag.metadata_id) == metadata_id))
     await session.exec(sqla_delete(Comment).where(col(Comment.metadata_id) == metadata_id))
     await session.delete(metadata)
@@ -831,6 +852,7 @@ async def sync_metadata_facets(session: AsyncSession, meta: Metadata) -> None:
     assert meta.id is not None
     metadata_id = meta.id
 
+    # 身份索引独立于 facet 投影生命周期; 重建演员/导演/标签关联时不得清理媒体身份。
     await session.exec(sqla_delete(MetadataActor).where(col(MetadataActor.metadata_id) == metadata_id))
     for position, name in enumerate(normalize_names(meta.actors)):
         actor = await _get_or_create_named(session, Actor, name)
@@ -844,6 +866,7 @@ async def sync_metadata_facets(session: AsyncSession, meta: Metadata) -> None:
         session.add(MetadataDirector(metadata_id=metadata_id, director_id=director.id, position=position))
 
     await session.exec(sqla_delete(MetadataTag).where(col(MetadataTag.metadata_id) == metadata_id))
+    await session.exec(sqla_delete(MetadataSeries).where(col(MetadataSeries.metadata_id) == metadata_id))
     for position, name in enumerate(normalize_names(meta.tags)):
         tag = await _get_or_create_named(session, Tag, name)
         assert tag.id is not None
@@ -853,8 +876,14 @@ async def sync_metadata_facets(session: AsyncSession, meta: Metadata) -> None:
         await _get_or_create_named(session, Studio, meta.studio)
     if meta.publisher:
         await _get_or_create_named(session, Publisher, meta.publisher)
-    if meta.series:
-        await _get_or_create_named(session, Series, meta.series)
+    series_names = _normalize_series_names(meta.series_names or ([meta.series] if meta.series else []))
+    # 兼容旧调用方只写 Metadata.series 的情况, 同时将首项作为旧字段投影.
+    meta.series_names = series_names
+    meta.series = series_names[0] if series_names else None
+    for position, name in enumerate(series_names):
+        series = await _get_or_create_named(session, Series, name)
+        assert series.id is not None
+        session.add(MetadataSeries(metadata_id=metadata_id, series_id=series.id, position=position))
 
 
 async def _load_named_sources[T: _NamedEntity](
@@ -889,10 +918,6 @@ async def _bulk_set_scalar_field(
     elif kind == FacetKind.PUBLISHER:
         await session.exec(
             update(Metadata).where(col(Metadata.publisher).in_(names)).values(publisher=new_name, updated_at=now)
-        )
-    elif kind == FacetKind.SERIES:
-        await session.exec(
-            update(Metadata).where(col(Metadata.series).in_(names)).values(series=new_name, updated_at=now)
         )
     else:
         raise ValueError(f"not a scalar facet kind: {kind}")

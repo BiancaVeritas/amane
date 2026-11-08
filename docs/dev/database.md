@@ -22,12 +22,12 @@ r18 库由项目导入 / 管理但 schema 不受我们控制, **不能纳入 Ale
 
 ## 写入事务边界
 
-pysqlite 只在 DML 之前发出 `BEGIN`, 纯 SELECT 落在事务之外 (SQLAlchemy 的 autobegin 只是记账, 不发出语句). 因此「先查询判定, 再按判定写入」默认不构成一个事务: 并发调用双方都读到写入前的状态, 后写入者随后违反唯一约束. 这类写入必须自行取得写锁, 现用于 `src/amane/db/repos/metadata.py::MetadataRepoMixin.upsert_metadata` 的首句 `BEGIN IMMEDIATE`.
+pysqlite 只在 DML 之前发出 `BEGIN`, 纯 SELECT 落在事务之外 (SQLAlchemy 的 autobegin 只是记账, 不发出语句). 因此「先查询判定, 再按判定写入」默认不构成一个事务: 并发调用双方都读到写入前的状态, 后写入者随后违反唯一约束. 这类写入必须自行取得写锁, 现用于 `src/amane/db/repos/metadata.py::MetadataRepoMixin.upsert_metadata` 与 `upsert_western_metadata` 的首句 `BEGIN IMMEDIATE`.
 
 - 写锁是库级的, 从取得写锁到提交之间其它写入被阻塞. 临界区内不允许出现联网或磁盘等待, 否则全库写入一并被拖住.
 - 会话在进入该调用之前不得已有未结束的数据库事务, 否则 `BEGIN IMMEDIATE` 失败.
 - 该写法依赖驱动不自行发出 `BEGIN`; 驱动或方言改为显式发出时失效.
-- 番号比较一律经 `src/amane/db/models.py::metadata_number_predicate`, 才能命中 `ix_metadata_number`.
+- 番号查找经 `src/amane/db/models.py::metadata_number_predicate`, 使用 `ix_metadata_number_lookup` (大小写不敏感普通索引); 非 WESTERN 的番号唯一性由 `ix_metadata_number_non_western` 部分唯一索引保证. WESTERN 不得仅凭番号定位, 使用 `scene_id` 唯一索引 `ix_metadata_western_scene_id`.
 - 同类窗口的另一处: `src/amane/db/repos/media.py::MediaRepoMixin.create_media_file` 直接提交, 两条并行 `REFRESH` 都会判定路径未见, 后提交者违反 `media_files.path` 的 UNIQUE 约束, 整个 `REFRESH` 失败且文件不入库.
 
 连接级 PRAGMA (WAL / `synchronous=NORMAL` / `busy_timeout` / 外键) 只能在 `db/engine.py` 的连接钩子里逐连接下发, 别处另开业务引擎会退回驱动默认. 写锁被占用时连接等待至多 `busy_timeout` 才报 `database is locked`, 临界区短于该值即不失败. `synchronous=NORMAL` 的取舍限于 WAL 已开启: 掉电丢最近若干已提交事务而不损坏库, 换掉逐笔 fsync 拉长的持锁时间.

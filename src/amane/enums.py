@@ -6,6 +6,7 @@ class SiteName(StrEnum):
 
     AIRAV = "airav"
     AVBASE = "avbase"
+    AVENTERTAINMENTS = "aventertainments"
     AVSOX = "avsox"
     DAHLIA = "dahlia"
     DMM = "dmm"
@@ -26,9 +27,17 @@ class SiteName(StrEnum):
     MGSTAGE = "mgstage"
     MINNANO = "minnano"
     OFFICIAL = "official"
+    PONDO = "1pondo"
+    PACOPACOMAMA = "pacopacomama"
+    CARIBBEANCOM = "caribbeancom"
+    CARIBBEANCOMPR = "caribbeancompr"
     PRESTIGE = "prestige"
     R18DEV = "r18dev"
+    TENMUSUME = "10musume"
+    TOKYO_HOT = "tokyo_hot"
     THEPORNDB = "theporndb"
+    TUSHY = "tushy"
+    TUSHY_RAW = "tushy_raw"
     WIKIPEDIA = "wikipedia"
     XCITY = "xcity"
 
@@ -117,7 +126,9 @@ class DownloadableResource(StrEnum):
 
 class MetadataField(StrEnum):
     TITLE = "title"
+    ORIGINAL_TITLE = "original_title"
     PLOT = "plot"
+    ORIGINAL_PLOT = "original_plot"
     ACTORS = "actors"
     DIRECTORS = "directors"
     TAGS = "tags"

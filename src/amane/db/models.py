@@ -24,6 +24,13 @@ def _utcnow() -> datetime:
     return datetime.now(UTC)
 
 
+class MediaIdentityType(StrEnum):
+    """WESTERN 媒体的稳定身份类型。"""
+
+    LOCAL_OSHASH = "LOCAL_OSHASH"
+    FILE_115_ID = "115_FILE_ID"
+
+
 class MediaFileStatus(StrEnum):
     PENDING = "pending"
     SCRAPED = "scraped"
@@ -185,7 +192,7 @@ class MediaFile(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     # 库内身份为 NFC. 写入与按路径查找只经 Repository (`nfc_path`).
     path: str = Field(unique=True, nullable=False, index=True)
-    oshash: str | None = None
+    oshash: str | None = Field(default=None, index=True)
     size: int | None = None
     duration: float | None = None
     codec: str | None = None
@@ -243,15 +250,33 @@ class _VrProperty(property):
 
 class Metadata(SQLModel, table=True):
     __tablename__ = "metadata"  # type: ignore[assignment]
-    # number 唯一性大小写不敏感 (COLLATE NOCASE); 存库保留首次写入的原始大小写.
-    __table_args__ = (Index("ix_metadata_number", text("number COLLATE NOCASE"), unique=True),)
+    # 非 WESTERN 仍按番号唯一; WESTERN 按 ThePornDB ThePornDB UUID 唯一, 番号允许重复.
+    # 旧 WESTERN 记录在重新刮削前 theporndb_uuid 可为空, 新刮削入口负责保证其非空.
+    __table_args__ = (
+        Index("ix_metadata_number_lookup", text("number COLLATE NOCASE"), unique=False),
+        Index(
+            "ix_metadata_number_non_western",
+            text("number COLLATE NOCASE"),
+            unique=True,
+            sqlite_where=text("content_type != 'WESTERN'"),
+        ),
+        Index(
+            "ix_metadata_western_theporndb_uuid",
+            text("lower(theporndb_uuid)"),
+            unique=True,
+            sqlite_where=text("content_type = 'WESTERN' AND theporndb_uuid IS NOT NULL"),
+        ),
+    )
 
     id: int | None = Field(default=None, primary_key=True)
     number: str = Field(nullable=False)
+    #: ThePornDB ThePornDB UUID; WESTERN 的作品身份. 旧数据允许暂时为空, 新刮削必须补齐.
+    theporndb_uuid: str | None = Field(default=None, index=False)
     #: 番号类型; 只在条目创建时落定 (契约见 docs/dev/data-model.md), 不随挂载文件或后续刮削变化, 也不进对外 PATCH.
     content_type: ContentType = Field(default=ContentType.WESTERN, index=True)
 
     title: str | None = None
+    original_title: str | None = None
     actors: list[str] = Field(default_factory=list, sa_column=Column(JSON))
     # studio/publisher/series 同时投影到目录表.
     studio: str | None = Field(default=None, index=True)
@@ -260,11 +285,18 @@ class Metadata(SQLModel, table=True):
     runtime: int | None = None
     tags: list[str] = Field(default_factory=list, sa_column=Column(JSON))
     series: str | None = Field(default=None, index=True)
+    # 多系列规范化关联的有序名称投影；series 保留首个系列供旧调用方兼容。
+    series_names: list[str] = Field(
+        default_factory=list, sa_column=Column(JSON, nullable=False, server_default=text("'[]'"))
+    )
     # 长文本存纯文本, 上游 HTML/实体在入库前经 utils.text 归一, 见 docs/dev/data-model.md.
     plot: str | None = None
+    original_plot: str | None = None
     directors: list[str] = Field(default_factory=list, sa_column=Column(JSON))
 
     poster_urls: list[str] = Field(default_factory=list, sa_column=Column(JSON))
+    # 刮削来源的原始海报地址; 与可能被裁剪资源 URL 替换的 poster_urls 分离.
+    original_poster_urls: list[str] = Field(default_factory=list, sa_column=Column(JSON))
     thumb_urls: list[str] = Field(default_factory=list, sa_column=Column(JSON))
     trailer_urls: list[str] = Field(default_factory=list, sa_column=Column(JSON))
 
@@ -316,6 +348,28 @@ class Metadata(SQLModel, table=True):
         return is_vr(self.tags or [])
 
 
+
+class MediaIdentity(SQLModel, table=True):
+    """独立于文件路径的 WESTERN 稳定身份索引。"""
+
+    __tablename__ = "media_identities"  # type: ignore[assignment]
+    __table_args__ = (
+        Index(
+            "ix_media_identities_type_value",
+            "identity_type",
+            text("lower(identity_value)"),
+            unique=True,
+        ),
+        Index("ix_media_identities_metadata_id", "metadata_id"),
+    )
+
+    id: int | None = Field(default=None, primary_key=True)
+    metadata_id: int = Field(foreign_key="metadata.id", ondelete="CASCADE", nullable=False)
+    identity_type: MediaIdentityType = Field(nullable=False, index=False)
+    identity_value: str = Field(nullable=False)
+    created_at: datetime = Field(default_factory=_utcnow)
+    updated_at: datetime = Field(default_factory=_utcnow)
+
 def metadata_vr_predicate() -> ColumnElement[bool]:
     """`Metadata.vr` 的 SQL 等价式: 标签整体命中 `parsing.VR_TAGS` (忽略大小写与首尾空白).
 
@@ -328,8 +382,8 @@ def metadata_vr_predicate() -> ColumnElement[bool]:
 def metadata_number_predicate(number: str) -> ColumnElement[bool]:
     """番号相等判定, 大小写不敏感.
 
-    比较必须带 ``COLLATE NOCASE`` 才能命中 ``ix_metadata_number``; 等价式 ``lower(number) = lower(?)``
-    无法命中该索引, 计划退化为覆盖索引扫描, 成本随表行数增长.
+    大小写不敏感的番号查找使用 ``ix_metadata_number_lookup``; 非 WESTERN 的唯一性由部分唯一索引
+    ``ix_metadata_number_non_western`` 另行保证. WESTERN 同番号允许多条, 调用方不得仅凭此谓词确定作品身份.
     """
     return col(Metadata.number).collate("NOCASE") == number
 
@@ -672,6 +726,16 @@ class MetadataTag(SQLModel, table=True):
 
     metadata_id: int = Field(foreign_key="metadata.id", primary_key=True, ondelete="CASCADE")
     tag_id: int = Field(foreign_key="tags.id", primary_key=True)
+    position: int = Field(default=0)
+
+
+class MetadataSeries(SQLModel, table=True):
+    """影片与系列的多对多关系；position 保留来源给出的顺序。"""
+
+    __tablename__ = "metadata_series"  # type: ignore[assignment]
+
+    metadata_id: int = Field(foreign_key="metadata.id", primary_key=True, ondelete="CASCADE")
+    series_id: int = Field(foreign_key="series.id", primary_key=True, index=True)
     position: int = Field(default=0)
 
 

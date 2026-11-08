@@ -25,7 +25,7 @@ _IMG_RAW: dict[str, dict[str, object]] = {
             {"javdb": {"title": "javdb title"}, "dmm": {"title": "dmm title"}},
             {"title": "javdb"},
             {"title": "dmm"},
-            {"title": "dmm title", "field_sources": {"title": "dmm"}},
+            {"title": "dmm title", "original_title": "dmm title", "field_sources": {"title": "dmm"}},
         ),
         (
             {"javdb": {"score": 85.0}},
@@ -52,7 +52,7 @@ _IMG_RAW: dict[str, dict[str, object]] = {
             },
             {"title": "javdb", "studio": "javdb"},
             {"title": "dmm"},
-            {"title": "dmm title", "field_sources": {"title": "dmm", "studio": "javdb"}},
+            {"title": "dmm title", "original_title": "dmm title", "field_sources": {"title": "dmm", "studio": "javdb"}},
         ),
         (
             _IMG_RAW,
@@ -94,6 +94,12 @@ _IMG_RAW: dict[str, dict[str, object]] = {
             {"actors": "javdb"},
             {"actors": ["Mei", "MaleA"], "field_sources": {"actors": "javdb"}},
         ),
+        (
+            {"tokyo_hot": {"series_names": ["Series A", "Series B"]}},
+            {},
+            {"series_names": "tokyo_hot"},
+            {"series_names": ["Series A", "Series B"], "field_sources": {"series": "tokyo_hot"}},
+        ),
     ],
     ids=[
         "scalar_title",
@@ -106,6 +112,7 @@ _IMG_RAW: dict[str, dict[str, object]] = {
         "thumb_and_extrafanart",
         "actors_film_actor_objects",
         "actors_string_list",
+        "multi_series",
     ],
 )
 def test_compute_merge_updates(
@@ -130,3 +137,14 @@ def test_compute_merge_updates_rejects(
 ) -> None:
     with pytest.raises(ValueError, match=match):
         compute_merge_updates(raw, {}, selections)
+
+
+def test_title_and_plot_source_selection_refreshes_original_fields() -> None:
+    raw = {"javdb": {"title": "Raw title", "plot": "Raw plot"}}
+    assert compute_merge_updates(raw, {}, {"title": "javdb", "plot": "javdb"}) == {
+        "title": "Raw title",
+        "original_title": "Raw title",
+        "plot": "Raw plot",
+        "original_plot": "Raw plot",
+        "field_sources": {"title": "javdb", "plot": "javdb"},
+    }

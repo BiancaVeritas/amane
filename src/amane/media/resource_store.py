@@ -147,40 +147,42 @@ class ResourceStore:
     def data_dir(self) -> Path:
         return self._base_dir.parent
 
-    async def resolve(self, url: str) -> Path | None:
+    async def resolve_record(self, url: str) -> tuple[Resource, Path] | None:
+        """一次查询同时返回记录与文件, 供图片响应直接读取哈希, 避免命中后重复查库."""
         async with self._session() as session:
-            stmt = select(Resource).where(Resource.url == url)
-            result = await session.exec(stmt)
+            result = await session.exec(select(Resource).where(Resource.url == url))
             record = result.first()
             if record is None:
                 return None
-
             full_path = self._base_dir / record.file_path
             if not full_path.exists():
-                # 文件丢失则删除记录.
                 logger.warning("resource file missing, invalidating record", url=url, path=str(full_path))
                 await session.delete(record)
                 await session.commit()
                 return None
+            return record, full_path
 
-            return full_path
+    async def resolve(self, url: str) -> Path | None:
+        found = await self.resolve_record(url)
+        return found[1] if found is not None else None
 
-    async def acquire(self, url: str, client: WebClient) -> Path | None:
+    async def acquire_with_record(self, url: str, client: WebClient) -> tuple[Resource, Path] | None:
         # 内部 URL 是对既有 Resource 的引用: 直接解析本地文件, 不下载也不写记录.
         internal = internal_url_hash(url)
         if internal is not None:
-            found = await self.get_by_url_hash(internal)
-            return found[1] if found else None
-
-        # 同一 URL 的内容写入串行: 一起到达的调用都判缓存未命中, 若各自下载并改名到同一路径,
-        # 后写会覆盖先写 (含先写方刚做完的就地超分), 而先写方的记录仍然作数.
+            return await self.get_by_url_hash(internal)
+        # 同 URL 串行, 保留就地超分覆盖时的写入顺序.
         async with self._serialized(url):
-            return await self._acquire_locked(url, client)
+            return await self._acquire_locked_with_record(url, client)
 
-    async def _acquire_locked(self, url: str, client: WebClient) -> Path | None:
-        # 缓存命中且文件存在则直出. 判据是记录 + 文件存在, 不看哈希: 超分是就地覆盖, 哈希每次都会变.
-        cached = await self.resolve(url)
-        if cached:
+    async def acquire(self, url: str, client: WebClient) -> Path | None:
+        found = await self.acquire_with_record(url, client)
+        return found[1] if found is not None else None
+
+    async def _acquire_locked_with_record(self, url: str, client: WebClient) -> tuple[Resource, Path] | None:
+        # 命中时记录与路径一次查询取回; 不看哈希, 因为超分会就地覆盖并更新哈希.
+        cached = await self.resolve_record(url)
+        if cached is not None:
             return cached
 
         # 上游改派占位图时跳过, 不占用 dest 也不写记录.
@@ -223,7 +225,7 @@ class ResourceStore:
             session.add(record)
             await session.commit()
 
-        return dest
+        return record, dest
 
     async def resolve_source(self, url: str, client: WebClient) -> ResolvedSource | None:
         """处理入口的源解析: 内部 URL 定位既有 Resource, 外部仅接受 http(s), 其余返回 None."""

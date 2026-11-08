@@ -311,7 +311,7 @@ function CatalogKindPage() {
     >
       {isList ? (
         <CatalogFacetTable
-          key={listLimit}
+          key={`${kind}-${listLimit}`}
           kind={kind}
           items={data?.items ?? []}
           isLoading={isLoading}

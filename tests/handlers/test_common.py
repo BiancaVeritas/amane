@@ -111,6 +111,28 @@ class TestEnsureOshash:
         assert await ensure_oshash(repo, media) == "already"
 
     @pytest.mark.asyncio
+    async def test_strm_never_computes_oshash(self, repo: Repository, tmp_path):
+        strm = tmp_path / "Lancelot-styles-evolution.26.05.13.strm"
+        strm.write_text("https://example.invalid/strm-placeholder", encoding="utf-8")
+        media = await repo.create_media_file(library_id=1, path=str(strm))
+        assert media.id is not None
+        assert await ensure_oshash(repo, media) is None
+        stored = await repo.get_media_file(media.id)
+        assert stored is not None
+        assert stored.oshash is None
+
+    @pytest.mark.asyncio
+    async def test_zero_byte_file_stays_none(self, repo: Repository, tmp_path):
+        video = tmp_path / "blank-placeholder.mp4"
+        video.write_bytes(b"")
+        media = await repo.create_media_file(library_id=1, path=str(video))
+        assert media.id is not None
+        assert await ensure_oshash(repo, media) is None
+        stored = await repo.get_media_file(media.id)
+        assert stored is not None
+        assert stored.oshash is None
+
+    @pytest.mark.asyncio
     async def test_tiny_file_stays_none(self, repo: Repository, tmp_path):
         video = tmp_path / "MIDV-123.mp4"
         video.write_bytes(b"tiny")

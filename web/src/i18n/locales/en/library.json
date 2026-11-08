@@ -43,6 +43,8 @@
     "numberPlaceholder": "e.g. MIDV-123",
     "contentType": "Content type",
     "contentTypeHint": "Leave empty to infer from the number you enter",
+    "theporndbUuid": "ThePornDB UUID",
+    "theporndbUuidPlaceholder": "Enter ThePornDB UUID",
     "contentTypeAuto": "Infer automatically",
     "submit": "Start scrape",
     "contentTypes": {
@@ -156,6 +158,7 @@
     "items": {
       "number": "Catalog number",
       "prefix": "Catalog prefix. e.g. MIDV-123 → MIDV",
+      "raw_prefix": "Catalog prefix preserving original letter case. e.g. LancelotStylesEvolution.26.10.16 → LancelotStylesEvolution",
       "suffix": "Catalog number without the prefix. e.g. MIDV-123 → 123",
       "title": "Title",
       "actor": "First actor",

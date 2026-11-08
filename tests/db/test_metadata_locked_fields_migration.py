@@ -50,7 +50,7 @@ def test_metadata_locked_fields_backfill(alembic_cfg: Config) -> None:
     with engine.begin() as conn:
         legacy_id = _insert_metadata(conn, number="ABC-001", title="Legacy")
 
-    command.upgrade(alembic_cfg, "head")
+    command.upgrade(alembic_cfg, "e4f7dd7d4711")
 
     with engine.connect() as conn:
         columns = {column["name"]: column for column in inspect(conn).get_columns("metadata")}

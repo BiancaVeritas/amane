@@ -17,7 +17,10 @@ from .registry import registry
 from .sites import (
     AiravCrawler,
     AvbaseCrawler,
+    AVEntertainmentsCrawler,
     AvsoxCrawler,
+    CaribbeancomCrawler,
+    CaribbeancomprCrawler,
     DahliaCrawler,
     DmmCrawler,
     FalenoCrawler,
@@ -35,9 +38,13 @@ from .sites import (
     Kin8Crawler,
     MGStageCrawler,
     OfficialCrawler,
+    PacopacomamaCrawler,
     PrestigeCrawler,
+    PondoCrawler,
     R18DevCrawler,
+    TenmusumeCrawler,
     ThePornDBCrawler,
+    TokyoHotCrawler,
     XCityCrawler,
 )
 
@@ -50,6 +57,7 @@ registry.register(JavLibraryCrawler)
 registry.register(FreejavbtCrawler)
 registry.register(Jav321Crawler)
 registry.register(AiravCrawler)
+registry.register(AVEntertainmentsCrawler)
 registry.register(AvsoxCrawler)
 registry.register(AvbaseCrawler)
 registry.register(XCityCrawler)
@@ -62,9 +70,15 @@ registry.register(FC2PPVDBCrawler)
 registry.register(GetchuCrawler)
 registry.register(IqqtvCrawler)
 registry.register(PrestigeCrawler)
+registry.register(PondoCrawler)
+registry.register(PacopacomamaCrawler)
+registry.register(CaribbeancomCrawler)
+registry.register(CaribbeancomprCrawler)
 registry.register(R18DevCrawler)
+registry.register(TenmusumeCrawler)
 registry.register(ThePornDBCrawler)
 registry.register(OfficialCrawler)
+registry.register(TokyoHotCrawler)
 
 # 演员站在 amane.crawlers.actor 导入时注册.
 
@@ -74,9 +88,12 @@ __all__ = [
     "AiravCrawler",
     "AvbaseActorCrawler",
     "AvbaseCrawler",
+    "AVEntertainmentsCrawler",
     "AvsoxCrawler",
     "Crawler",
     "DahliaCrawler",
+    "CaribbeancomCrawler",
+    "CaribbeancomprCrawler",
     "DmmCrawler",
     "FC2ClubCrawler",
     "FC2Crawler",
@@ -102,11 +119,15 @@ __all__ = [
     "MetadataField",
     "MinnanoActorCrawler",
     "OfficialCrawler",
+    "PacopacomamaCrawler",
     "PrestigeCrawler",
+    "PondoCrawler",
     "R18DevCrawler",
     "SiteName",
     "ThePornDBActorCrawler",
+    "TenmusumeCrawler",
     "ThePornDBCrawler",
+    "TokyoHotCrawler",
     "WikipediaActorCrawler",
     "XCityCrawler",
     "actor_registry",

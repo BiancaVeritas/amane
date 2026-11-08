@@ -43,6 +43,7 @@ from ..plugins.manager import PluginManager
 from ..plugins.packaging import install_plugin_path, install_plugin_zip, uninstall_plugin_tree
 from ..scheduler.worker import MAIN_LOOP_STOP_TIMEOUT, AsyncWorker
 from ..semantic import SemanticService
+from ..tags.mapping import TagMappingStore
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -231,6 +232,7 @@ class AppRuntime:
     playback_state: PlaybackState = field(default_factory=PlaybackState)
     library_locks: LibraryTaskLocks = field(default_factory=LibraryTaskLocks)
     inventory_store: InventoryStore = field(default_factory=InventoryStore)
+    tag_mappings: TagMappingStore = field(init=False)
     semantic: SemanticService | None = None
     browser: BrowserPool | None = None
     r18_handle: R18Handle | None = None
@@ -249,6 +251,7 @@ class AppRuntime:
         if self.r18_handle is None and self.r18_db is not None:
             self.r18_handle = R18Handle(self.r18_db)
         self._browser_key = self._current_browser_key()
+        self.tag_mappings = TagMappingStore(self.config.cold.data_dir)
         if self.semantic is None:
             self.semantic = SemanticService(
                 self.repo, self.resource_store, self.config.cold.data_dir, self.config.hot.semantic
@@ -336,6 +339,7 @@ class AppRuntime:
                 library_locks=self.library_locks,
                 inventory_store=self.inventory_store,
                 semantic=self.semantic,
+                tag_mappings=self.tag_mappings,
             ),
             concurrency=hot.worker.concurrency,
             poll_interval=hot.worker.poll_interval,
@@ -543,6 +547,7 @@ def build_handlers(
     semantic: SemanticService,
     library_locks: LibraryTaskLocks | None = None,
     inventory_store: InventoryStore | None = None,
+    tag_mappings: TagMappingStore | None = None,
 ) -> dict[TaskType, TaskHandler[Any, Any]]:
     # 未启用/缺密钥时 translator 为 None, ScrapeHandler 跳过翻译.
     # 经 _rebuild() 热重载; 代理沿用 network.proxy.
@@ -576,6 +581,7 @@ def build_handlers(
             web_client,
             translator,
             plugin_manager.descriptors() if plugin_manager is not None else None,
+            tag_mappings,
         ),
         TaskType.ACTOR_SCRAPE: ActorScrapeHandler(repo, factory, resource_store, hot, web_client),
         TaskType.ORGANIZE: OrganizeHandler(
@@ -585,6 +591,7 @@ def build_handlers(
             web_client,
             safe_dirs,
             watermark_dir=user_watermark_dir(state_dir) if state_dir is not None else None,
+            tag_mapping_path=(state_dir / "tag_mappings.json") if state_dir is not None else None,
             library_locks=library_locks,
         ),
         TaskType.SCAN_INVALID: ScanInvalidHandler(repo, hot, inventory_store),

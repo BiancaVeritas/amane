@@ -34,7 +34,7 @@ async def test_serve_resource_etag(app: FastAPI, client: AsyncClient):
     h, content_hash = await _make_derived(store)
     etag = f'"{content_hash}"'
 
-    resp = await client.get(f"resources/{h}")
+    resp = await client.get(f"resources/{h}?mode=sr")
     assert resp.status_code == 200
     assert resp.headers["content-type"] == "image/jpeg"
     assert resp.headers["etag"] == etag
@@ -44,13 +44,13 @@ async def test_serve_resource_etag(app: FastAPI, client: AsyncClient):
     assert "max-age" not in cache_control
     assert resp.content[:2] == b"\xff\xd8"  # JPEG magic
 
-    cached = await client.get(f"resources/{h}", headers={"If-None-Match": etag})
+    cached = await client.get(f"resources/{h}?mode=sr", headers={"If-None-Match": etag})
     assert cached.status_code == 304
     assert cached.headers["etag"] == etag
     assert "no-cache" in cached.headers.get("cache-control", "")
     assert cached.content == b""
 
-    stale = await client.get(f"resources/{h}", headers={"If-None-Match": '"stale-hash"'})
+    stale = await client.get(f"resources/{h}?mode=sr", headers={"If-None-Match": '"stale-hash"'})
     assert stale.status_code == 200
     assert len(stale.content) > 0
 
@@ -74,18 +74,18 @@ class TestProxyImage:
     async def test_upstream_error_and_negative_cache(self, client: AsyncClient, app, monkeypatch):
         """上游失败 → 502 + 负缓存, 二次请求不再打 acquire."""
         mock_store = AsyncMock()
-        mock_store.acquire = AsyncMock(return_value=None)
+        mock_store.acquire_with_record = AsyncMock(return_value=None)
         monkeypatch.setattr(app.state.runtime, "resource_store", mock_store)
 
         url = "http://example.com/notfound.png"
-        first = await client.get(f"resources/proxy?url={url}")
+        first = await client.get(f"resources/proxy?url={url}&mode=sr")
         assert first.status_code == 502
-        assert mock_store.acquire.await_count == 1
+        assert mock_store.acquire_with_record.await_count == 1
         assert app.state.runtime.proxy_failure_cache.is_blocked(url)
 
-        second = await client.get(f"resources/proxy?url={url}")
+        second = await client.get(f"resources/proxy?url={url}&mode=sr")
         assert second.status_code == 502
-        assert mock_store.acquire.await_count == 1
+        assert mock_store.acquire_with_record.await_count == 1
 
     @pytest.mark.asyncio(loop_scope="function")
     async def test_proxy_image_success_and_etag(self, client: AsyncClient, app, monkeypatch, tmp_path):
@@ -102,19 +102,18 @@ class TestProxyImage:
         record.content_hash = "abc123hash"
 
         mock_store = AsyncMock()
-        mock_store.acquire = AsyncMock(return_value=img_path)
-        mock_store.get_by_url = AsyncMock(return_value=record)
+        mock_store.acquire_with_record = AsyncMock(return_value=(record, img_path))
         monkeypatch.setattr(app.state.runtime, "resource_store", mock_store)
 
         url = "http://example.com/image.png"
-        resp = await client.get(f"resources/proxy?url={url}")
+        resp = await client.get(f"resources/proxy?url={url}&mode=sr")
         assert resp.status_code == 200
         assert resp.content == png_data
         assert "no-cache" in resp.headers.get("cache-control", "")
         assert resp.headers["etag"] == '"abc123hash"'
         assert not app.state.runtime.proxy_failure_cache.is_blocked(url)
 
-        cached = await client.get(f"resources/proxy?url={url}", headers={"If-None-Match": '"abc123hash"'})
+        cached = await client.get(f"resources/proxy?url={url}&mode=sr", headers={"If-None-Match": '"abc123hash"'})
         assert cached.status_code == 304
         assert cached.content == b""
         assert cached.headers["etag"] == '"abc123hash"'
@@ -132,23 +131,22 @@ class TestImageToken:
         record.content_hash = "cachedhash"
 
         store = AsyncMock()
-        store.resolve = AsyncMock(return_value=img_path)
-        store.get_by_url = AsyncMock(return_value=record)
-        store.acquire = AsyncMock()
+        store.resolve_record = AsyncMock(return_value=(record, img_path))
+        store.acquire_with_record = AsyncMock()
         monkeypatch.setattr(app.state.runtime, "resource_store", store)
         monkeypatch.setattr(app.state.runtime, "api_token", "main-token")
         monkeypatch.setattr(app.state.runtime, "image_token", "img-token")
 
         url = "http://example.com/cached.png"
-        resp = await client.get("resources/proxy", params={"url": url, "token": "img-token"})
+        resp = await client.get("resources/proxy", params={"url": url, "token": "img-token", "mode": "sr"})
         assert resp.status_code == 200
         assert resp.headers["etag"] == '"cachedhash"'
-        assert store.acquire.await_count == 0
+        assert store.acquire_with_record.await_count == 0
         assert not app.state.runtime.proxy_failure_cache.is_blocked(url)
 
         cached = await client.get(
             "resources/proxy",
-            params={"url": url, "token": "img-token"},
+            params={"url": url, "token": "img-token", "mode": "sr"},
             headers={"If-None-Match": '"cachedhash"'},
         )
         assert cached.status_code == 304
@@ -157,17 +155,17 @@ class TestImageToken:
     @pytest.mark.asyncio(loop_scope="function")
     async def test_proxy_miss_does_not_fetch(self, client: AsyncClient, app, monkeypatch):
         store = AsyncMock()
-        store.resolve = AsyncMock(return_value=None)
-        store.acquire = AsyncMock()
+        store.resolve_record = AsyncMock(return_value=None)
+        store.acquire_with_record = AsyncMock()
         monkeypatch.setattr(app.state.runtime, "resource_store", store)
         monkeypatch.setattr(app.state.runtime, "api_token", "main-token")
         monkeypatch.setattr(app.state.runtime, "image_token", "img-token")
 
         url = "http://example.com/missing.png"
-        resp = await client.get("resources/proxy", params={"url": url, "token": "img-token"})
+        resp = await client.get("resources/proxy", params={"url": url, "token": "img-token", "mode": "sr"})
         assert resp.status_code == 404
         assert "本地缓存" in resp.json()["detail"]
-        assert store.acquire.await_count == 0
+        assert store.acquire_with_record.await_count == 0
         assert not app.state.runtime.proxy_failure_cache.is_blocked(url)
 
     @pytest.mark.asyncio(loop_scope="function")
@@ -178,9 +176,7 @@ class TestImageToken:
         record.content_hash = "fetchedhash"
 
         store = AsyncMock()
-        store.resolve = AsyncMock(return_value=None)
-        store.get_by_url = AsyncMock(return_value=record)
-        store.acquire = AsyncMock(return_value=img_path)
+        store.acquire_with_record = AsyncMock(return_value=(record, img_path))
         monkeypatch.setattr(app.state.runtime, "resource_store", store)
         monkeypatch.setattr(app.state.runtime, "api_token", "main-token")
         monkeypatch.setattr(app.state.runtime, "image_token", "img-token")
@@ -188,9 +184,27 @@ class TestImageToken:
         url = "http://example.com/fetched.png"
         resp = await client.get(
             "resources/proxy",
-            params={"url": url, "token": "img-token"},
+            params={"url": url, "token": "img-token", "mode": "sr"},
             headers={"Authorization": "Bearer main-token"},
         )
         assert resp.status_code == 200
-        assert store.acquire.await_count == 1
-        assert store.resolve.await_count == 0
+        assert store.acquire_with_record.await_count == 1
+        assert store.resolve_record.await_count == 0
+
+@pytest.mark.asyncio(loop_scope="function")
+async def test_serve_resource_original_mode_uses_30_day_cache(app: FastAPI, client: AsyncClient):
+    store = app.state.runtime.resource_store
+    h, _ = await _make_derived(store)
+    response = await client.get(f"resources/{h}?mode=original")
+    assert response.status_code == 200
+    assert response.headers["cache-control"] == "public, max-age=2592000"
+
+
+@pytest.mark.asyncio(loop_scope="function")
+async def test_serve_resource_sr_mode_uses_etag_validation(app: FastAPI, client: AsyncClient):
+    store = app.state.runtime.resource_store
+    h, content_hash = await _make_derived(store)
+    response = await client.get(f"resources/{h}?mode=sr")
+    assert response.status_code == 200
+    assert response.headers["cache-control"] == "public, no-cache"
+    assert response.headers["etag"] == f'"{content_hash}"'

@@ -23,11 +23,20 @@ import {
   type PageSizeKey,
 } from "@/lib/page-size";
 import type { LogLevel } from "./logs";
+import type { ActorSortField } from "@/client/types.gen";
+import { ACTOR_SORT_FIELDS } from "@/lib/exhaustive-maps";
 
 type Theme = "light" | "dark" | "auto";
 type Language = "zh-CN" | "en";
 
+export type CardSize = "xs" | "sm" | "small" | "medium" | "default" | "large" | "xl" | "xxl";
+export type CardSizeKey = "meta" | "actors";
+
 const STORAGE_KEY = "amane-web";
+
+function isCardSize(value: unknown): value is CardSize {
+  return ["xs", "sm", "small", "medium", "default", "large", "xl", "xxl"].includes(value as string);
+}
 
 /** 与 MetaTable 列 key 对齐. */
 export type MetaTableColumnKey =
@@ -60,6 +69,7 @@ interface UIState {
   autoScroll: boolean;
   logLevelFilter: LogLevel[];
   pageSizes: Record<PageSizeKey, PageSize>;
+  cardSizes: Record<CardSizeKey, CardSize>;
   /** 片库 list 列宽覆盖; 缺省列采用组件内默认值. */
   metaColumnWidths: ColumnWidths<MetaTableColumnKey>;
   /** 演员 list 列宽覆盖. */
@@ -80,9 +90,13 @@ interface UIState {
   /**
    * 演员详情页出演作品的排序记忆.
    *
-   * 该页没有其它导航态, 排序不写地址栏, 由这里在会话之间保留; 片库排序仍以 URL 为准.
+   * 演员详情页出演作品的排序记忆, 与片库列表排序分别保存.
    */
   actorWorksSort: MetadataSortPreference;
+  /** 片库主列表排序记忆. */
+  metaSort: MetadataSortPreference;
+  /** 演员列表排序记忆. */
+  actorListSort: { sort_by: ActorSortField; order: "asc" | "desc" };
   toggleNavbar: () => void;
   setNavbarCollapsed: (collapsed: boolean) => void;
   setTheme: (theme: Theme) => void;
@@ -90,12 +104,15 @@ interface UIState {
   setAutoScroll: (autoScroll: boolean) => void;
   setLogLevelFilter: (levels: LogLevel[]) => void;
   setPageSize: (key: PageSizeKey, size: PageSize) => void;
+  setCardSize: (key: CardSizeKey, size: CardSize) => void;
   setMetaColumnWidths: (widths: ColumnWidths<MetaTableColumnKey>) => void;
   setActorColumnWidths: (widths: ColumnWidths<ActorTableColumnKey>) => void;
   setPlaybackSourceOrder: (order: string[]) => void;
   setListDefault: (update: NavListDefaultsUpdate) => void;
   clearListDefault: (key: NavListKey) => void;
   setActorWorksSort: (sort: MetadataSortPreference) => void;
+  setMetaSort: (sort: MetadataSortPreference) => void;
+  setActorListSort: (sort: { sort_by: ActorSortField; order: "asc" | "desc" }) => void;
 }
 
 export const useUIStore = create<UIState>()(
@@ -107,11 +124,14 @@ export const useUIStore = create<UIState>()(
       autoScroll: true,
       logLevelFilter: [],
       pageSizes: { ...DEFAULT_PAGE_SIZES },
+      cardSizes: { meta: "default", actors: "default" },
       metaColumnWidths: {},
       actorColumnWidths: {},
       playbackSourceOrder: [],
       listDefaults: {},
       actorWorksSort: { ...DEFAULT_METADATA_SORT_PREFERENCE },
+      metaSort: { ...DEFAULT_METADATA_SORT_PREFERENCE },
+      actorListSort: { sort_by: "count", order: "desc" },
       toggleNavbar: () => set((s) => ({ navbarCollapsed: !s.navbarCollapsed })),
       setNavbarCollapsed: (collapsed) => set({ navbarCollapsed: collapsed }),
       setTheme: (theme) => set({ theme }),
@@ -122,6 +142,7 @@ export const useUIStore = create<UIState>()(
         set((s) => ({
           pageSizes: { ...s.pageSizes, [key]: size },
         })),
+      setCardSize: (key, size) => set((s) => ({ cardSizes: { ...s.cardSizes, [key]: size } })),
       setMetaColumnWidths: (widths) => set({ metaColumnWidths: widths }),
       setActorColumnWidths: (widths) => set({ actorColumnWidths: widths }),
       setPlaybackSourceOrder: (order) => set({ playbackSourceOrder: order }),
@@ -130,6 +151,8 @@ export const useUIStore = create<UIState>()(
       clearListDefault: (key) =>
         set((state) => ({ listDefaults: withoutListDefault(state.listDefaults, key) })),
       setActorWorksSort: (sort) => set({ actorWorksSort: sort }),
+      setMetaSort: (sort) => set({ metaSort: sort }),
+      setActorListSort: (sort) => set({ actorListSort: sort }),
     }),
     {
       name: STORAGE_KEY,
@@ -143,10 +166,15 @@ export const useUIStore = create<UIState>()(
             typeof raw === "number" ? raw : DEFAULT_PAGE_SIZES[key],
           );
         }
+        const persistedCardSizes = p?.cardSizes;
         return {
           ...current,
           ...p,
           pageSizes,
+          cardSizes: {
+            meta: isCardSize(persistedCardSizes?.meta) ? persistedCardSizes.meta : "default",
+            actors: isCardSize(persistedCardSizes?.actors) ? persistedCardSizes.actors : "default",
+          },
           metaColumnWidths: p?.metaColumnWidths ?? {},
           actorColumnWidths: p?.actorColumnWidths ?? {},
           playbackSourceOrder: p?.playbackSourceOrder ?? [],
@@ -159,6 +187,15 @@ export const useUIStore = create<UIState>()(
           actorWorksSort: metadataSortPreferenceSchema.safeParse(p?.actorWorksSort).data ?? {
             ...DEFAULT_METADATA_SORT_PREFERENCE,
           },
+          metaSort: metadataSortPreferenceSchema.safeParse(p?.metaSort).data ?? {
+            ...DEFAULT_METADATA_SORT_PREFERENCE,
+          },
+          actorListSort:
+            p?.actorListSort &&
+            (ACTOR_SORT_FIELDS as readonly string[]).includes(p.actorListSort.sort_by) &&
+            (p.actorListSort.order === "asc" || p.actorListSort.order === "desc")
+              ? p.actorListSort
+              : { sort_by: "count", order: "desc" },
         };
       },
     },

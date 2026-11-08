@@ -68,6 +68,8 @@ class RescrapeHandler(TaskHandler[RescrapePayload, RescrapeResult]):
                 payload=ScrapePayload(
                     number=meta.number,
                     content_type=meta.content_type,
+                    metadata_id=meta.id,
+                    theporndb_uuid=meta.theporndb_uuid,
                     use_cache=_USE_CACHE,
                 ).model_dump(mode="json"),
                 priority=-1,

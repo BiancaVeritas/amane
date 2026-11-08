@@ -18,13 +18,12 @@ import {
   IconTable,
   IconX,
 } from "@tabler/icons-react";
-import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, stripSearchParams } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   getFacetOptions,
-  listMetadataInfiniteOptions,
   listMetadataOptions,
   semanticStatusOptions,
 } from "@/client/@tanstack/react-query.gen";
@@ -37,9 +36,9 @@ import type {
 } from "@/client/types.gen";
 import { BrowsePageShell } from "@/components/common/browse-page-shell";
 import { HintedActionIcon } from "@/components/common/hinted-action-icon";
-import { InfiniteScrollSentinel } from "@/components/common/infinite-scroll-sentinel";
+import { ListPagination } from "@/components/common/list-pagination";
 import { ListDefaultActions } from "@/components/common/list-default-actions";
-import { PageSizeSelect } from "@/components/common/page-size-select";
+import { BrowseDisplaySettings } from "@/components/common/browse-display-settings";
 import { SortMenu } from "@/components/common/sort-menu";
 import { FacetBadge } from "@/components/media/facet-badge";
 import {
@@ -52,13 +51,10 @@ import { PosterGrid } from "@/components/media/poster-grid";
 import { activeFacetFilters, addFacetId, type FacetFilters, removeFacetId } from "@/lib/facets";
 import { useNarrowViewport } from "@/hooks/use-narrow-viewport";
 import { EMBEDDING_KINDS } from "@/lib/exhaustive-maps";
-import { nextOffsetPageParam } from "@/lib/infinite-list";
 import { metaSearchSchema, METADATA_SORT_OPTIONS } from "@/lib/media/browse";
 import { metaListDefaults } from "@/lib/nav-defaults";
 import { useUIStore } from "@/stores/ui";
 import classes from "./meta.module.css";
-
-const CHUNK = 30;
 
 const SEMANTIC_KIND_OPTIONS = ["all", ...EMBEDDING_KINDS] as const;
 
@@ -150,6 +146,9 @@ function MetaIndexPage() {
   const semanticActive = semanticQuery != null;
   const navigate = Route.useNavigate();
   const listLimit = useUIStore((s) => s.pageSizes.metaList);
+  const cardSize = useUIStore((s) => s.cardSizes.meta);
+  const metaSort = useUIStore((s) => s.metaSort);
+  const setMetaSort = useUIStore((s) => s.setMetaSort);
   const narrowViewport = useNarrowViewport("md");
 
   const hasFiles = parseHasFiles(search.has_files);
@@ -216,6 +215,22 @@ function MetaIndexPage() {
     if (semanticMode) void refetchSemanticStatus();
   }, [semanticMode, refetchSemanticStatus]);
 
+  // URL 未携带有效的非默认排序时，恢复 UI 持久化的上次选择；
+  // URL 已明确使用非默认排序时，以当前 URL 为准并同步记忆。
+  useEffect(() => {
+    const currentBy = search.sort_by ?? "updated_at";
+    const currentOrder = search.order ?? "desc";
+    const isDefault = currentBy === "updated_at" && currentOrder === "desc";
+    const storedIsDefault = metaSort.sort_by === "updated_at" && metaSort.order === "desc";
+    if (isDefault && !storedIsDefault) {
+      void navigate({
+        search: (prev) => ({ ...prev, sort_by: metaSort.sort_by, order: metaSort.order, page: 1 }),
+      });
+    } else if (!isDefault && (metaSort.sort_by !== currentBy || metaSort.order !== currentOrder)) {
+      setMetaSort({ sort_by: currentBy, order: currentOrder });
+    }
+  }, [search.sort_by, search.order, metaSort, setMetaSort, navigate]);
+
   const semanticNotice =
     !semanticActive || semanticStatus == null
       ? null
@@ -231,15 +246,15 @@ function MetaIndexPage() {
   // 语义状态未返回或不可检索时不发送列表请求, 避免先按普通排序渲染一屏.
   const listEnabled = !semanticActive || (semanticStatus != null && semanticNotice == null);
 
-  const gridQuery = useInfiniteQuery({
-    ...listMetadataInfiniteOptions({
+  const gridOffset = (search.page - 1) * listLimit;
+  const gridQuery = useQuery({
+    ...listMetadataOptions({
       query: {
         ...listQueryParams,
-        limit: CHUNK,
+        offset: gridOffset,
+        limit: listLimit,
       },
     }),
-    initialPageParam: 0,
-    getNextPageParam: nextOffsetPageParam,
     enabled: !isList && listEnabled,
   });
 
@@ -255,20 +270,15 @@ function MetaIndexPage() {
     enabled: isList && listEnabled,
   });
 
-  const gridItems = useMemo(
-    () => gridQuery.data?.pages.flatMap((p) => p.items) ?? [],
-    [gridQuery.data],
-  );
-  const total = isList ? (listQuery.data?.total ?? 0) : (gridQuery.data?.pages[0]?.total ?? 0);
+  const gridItems = gridQuery.data?.items ?? [];
+  const total = isList ? (listQuery.data?.total ?? 0) : (gridQuery.data?.total ?? 0);
   const semanticHits = useMemo(() => {
     const map = new Map<number, SemanticHitInfo>();
     if (!semanticActive) return map;
     if (isList) {
       for (const hit of listQuery.data?.semantic_hits ?? []) map.set(hit.id, hit);
     } else {
-      for (const page of gridQuery.data?.pages ?? []) {
-        for (const hit of page.semantic_hits ?? []) map.set(hit.id, hit);
-      }
+      for (const hit of gridQuery.data?.semantic_hits ?? []) map.set(hit.id, hit);
     }
     return map;
   }, [semanticActive, isList, listQuery.data, gridQuery.data]);
@@ -380,11 +390,14 @@ function MetaIndexPage() {
   function handleSort(field: MetadataSortField) {
     void navigate({
       search: (prev) => {
-        if ((prev.sort_by ?? "updated_at") === field) {
-          const nextOrder = (prev.order ?? "desc") === "asc" ? "desc" : "asc";
-          return { ...prev, sort_by: field, order: nextOrder, page: 1 };
-        }
-        return { ...prev, sort_by: field, order: "desc", page: 1 };
+        const nextOrder =
+          (prev.sort_by ?? "updated_at") === field
+            ? (prev.order ?? "desc") === "asc"
+              ? "desc"
+              : "asc"
+            : "desc";
+        setMetaSort({ sort_by: field, order: nextOrder });
+        return { ...prev, sort_by: field, order: nextOrder, page: 1 };
       },
     });
   }
@@ -411,13 +424,14 @@ function MetaIndexPage() {
             void navigate({
               search: (prev) => ({
                 ...prev,
-                view: v === "list" ? "list" : "grid",
+                view: v === "list" || v === "cover" ? v : "grid",
                 page: 1,
               }),
             })
           }
           data={[
             { value: "grid", label: t("view.grid") },
+            { value: "cover", label: t("view.cover") },
             { value: "list", label: t("view.list") },
           ]}
         />
@@ -534,15 +548,11 @@ function MetaIndexPage() {
               }
             />
           )}
-        </>
-      }
-      pageSize={
-        isList ? (
-          <PageSizeSelect
-            sizeKey="metaList"
-            onChanged={() => void navigate({ search: (prev) => ({ ...prev, page: 1 }) })}
+          <BrowseDisplaySettings
+            pageSizeKey="metaList"
+            onPageSizeChanged={() => void navigate({ search: (prev) => ({ ...prev, page: 1 }) })}
           />
-        ) : undefined
+        </>
       }
       filterPanel={
         <FacetFilterControls
@@ -655,28 +665,28 @@ function MetaIndexPage() {
       ) : (
         <>
           <PosterGrid
+            cardSize={cardSize}
             items={gridItems}
             loading={gridQuery.isLoading && gridItems.length === 0}
             emptyMessage={t("empty")}
             imageUrlOf={(item) => {
               const hit = semanticHits.get(item.id);
-              return hit?.kind === "still" ? hit.resource_url : undefined;
+              if (hit?.kind === "still") return hit.resource_url;
+              return search.view === "cover" ? (item.thumb_urls?.[0] ?? null) : undefined;
             }}
             imageRatioOf={(item) =>
-              semanticHits.get(item.id)?.kind === "still" ? 16 / 9 : undefined
+              semanticHits.get(item.id)?.kind === "still" || search.view === "cover"
+                ? 16 / 9
+                : undefined
             }
+            defaultImageRatio={search.view === "cover" ? 16 / 9 : 0.7}
+            imageFit={search.view === "cover" ? "fill" : "cover"}
           />
-          {gridItems.length > 0 && (
-            <InfiniteScrollSentinel
-              hasNextPage={Boolean(gridQuery.hasNextPage)}
-              isFetchingNextPage={gridQuery.isFetchingNextPage}
-              fetchNextPage={() => void gridQuery.fetchNextPage()}
-              loadedLabel={t("common:pagination.loadedOfTotal", {
-                loaded: gridItems.length,
-                total,
-              })}
-            />
-          )}
+          <ListPagination
+            totalPages={Math.ceil(total / listLimit)}
+            page={search.page}
+            onChange={(page) => void navigate({ search: (prev) => ({ ...prev, page }) })}
+          />
         </>
       )}
     </BrowsePageShell>

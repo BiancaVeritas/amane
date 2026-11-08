@@ -93,6 +93,42 @@ class FilePhaseSummary:
 # Constants
 # ---------------------------------------------------------------------------
 
+# 用户提供的日本无码 BD 系列白名单。只用于这批系列的前置识别与完整 prefix 拆分；
+# 其余番号继续沿用原有分类和提取规则。
+_UNCENSORED_BD_SERIES = (
+    "BD-G",
+    "BD-M",
+    "CDRPBD",
+    "CW3D2BD",
+    "CW3D2DBD",
+    "CWMBD",
+    "CWPBD",
+    "CZBD",
+    "DRGBD",
+    "DSAMBD",
+    "LAFBD",
+    "MCB3DBD",
+    "MCBD",
+    "MER",
+    "MK3D2DBD",
+    "MKBD-S",
+    "MUBD",
+    "S2MBD",
+    "S2MCR",
+    "SHD",
+    "SKYHD",
+    "SM3D2DBD",
+    "SMBD",
+    "SPBD",
+)
+
+
+def _bd_series_match(number: str) -> re.Match[str] | None:
+    """匹配白名单系列完整番号；系列后的编号数字可变长并允许前导零。"""
+    alternatives = "|".join(re.escape(p) for p in sorted(_UNCENSORED_BD_SERIES, key=len, reverse=True))
+    return re.match(rf"^({alternatives})[-_. ]?(\d+)(?=$|[^A-Z0-9])", number.upper())
+
+
 _UNCENSORED_PREFIXES = (
     "BT-",
     "CT-",
@@ -395,7 +431,9 @@ def max_definition(values: Iterable[str | None]) -> str | None:
         if current is not None and current < best_rank:
             best = value
             best_rank = current
-    return best
+    # 仅当所有文件名都没有识别到明确分辨率时，才使用默认 1080p；
+    # 一旦存在明确标记，仍按原有优先级返回识别结果。
+    return best if best is not None else "1080p"
 
 
 def summarize_file_phases(phases: Iterable[FilePhase], content_type: ContentType) -> FilePhaseSummary:
@@ -407,7 +445,8 @@ def summarize_file_phases(phases: Iterable[FilePhase], content_type: ContentType
         censored=content_type is ContentType.CENSORED,
         uncensored=content_type is ContentType.UNCENSORED or Mosaic.UNCENSORED in mosaic_present,
         mosaics=tuple(mosaic for mosaic in MOSAIC_VALUES if mosaic in mosaic_present),
-        definition=max_definition(phase["definition"] for phase in items),
+        # 没有任何文件时不伪造分辨率; 有文件但均未识别时默认显示 1080p.
+        definition=max_definition(phase["definition"] for phase in items) if items else None,
     )
 
 
@@ -484,6 +523,11 @@ def _match(basename: str, escape_strings: list[str], *, generic: bool) -> tuple[
     t = _prepare(basename, escape_strings)
     c, escaped, dated = t.catalog, t.escaped, t.dated
 
+    # 这 24 个无码 BD 系列必须先于旧的宽泛正则提取，避免 CW/MCB/MK/SM/S2M 等短前缀截断。
+    series_pattern = "|".join(re.escape(p) for p in sorted(_UNCENSORED_BD_SERIES, key=len, reverse=True))
+    if m := re.search(rf"(?<![A-Z0-9])(?:{series_pattern})[-_. ]?\d+(?=$|[^A-Z0-9])", escaped):
+        return m.group(), ContentType.UNCENSORED
+
     if "MYWIFE" in c and re.search(r"NO\.\d*", c):
         return f"Mywife No.{re.findall(r'NO\.(\d*)', c)[0]}", ContentType.CENSORED
     if m := re.search(r"CW3D2D?BD-?\d{2,}", c):
@@ -498,11 +542,19 @@ def _match(basename: str, escape_strings: list[str], *, generic: bool) -> tuple[
     if _WESTERN_PROBE.findall(dated):
         result = _WESTERN_PARSE.findall(dated)
         if result:
-            short_name = result[0][0].strip("-").lower()
-            full_name: str = _WESTERN_NAMES.get(short_name) or short_name
-            number = (
-                full_name.lower().replace("-", "").replace(".", "") + "." + result[0][1].replace("-", ".")
-            ).capitalize()
+            # 日期前最后一个短横线之前的内容属于文件名前缀, 不纳入片库番号.
+            normalized_studio = result[0][0].rsplit("-", 1)[-1].strip("-")
+            short_name = normalized_studio.lower()
+            canonical_name = _WESTERN_NAMES.get(short_name)
+            if canonical_name is not None:
+                # 已登记厂牌继续使用既有规范名称, 不改变厂牌规范化规则.
+                studio_name = canonical_name
+            else:
+                # 匹配仍使用 _prepare 生成的大写文本; 仅保存时从原始文件名取厂牌大小写.
+                raw_match = re.search(_WESTERN_PARSE.pattern, basename, re.IGNORECASE)
+                raw_studio = raw_match.group(1).rsplit("-", 1)[-1].strip("-") if raw_match else normalized_studio
+                studio_name = raw_studio.replace(".", "")
+            number = studio_name + "." + result[0][1].replace("-", ".")
             return number, ContentType.WESTERN
     # 其余规则用 catalog.
     if m := re.search(r"XXX-AV-\d{4,}", c):
@@ -596,6 +648,8 @@ def _fallback(stem: str, escape: list[str]) -> tuple[str, ContentType]:
 
 
 def _type_of_catalog_id(number: str) -> ContentType:
+    if _bd_series_match(number):
+        return ContentType.UNCENSORED
     if re.fullmatch(r"\d{6}[-_]\d{2,4}", number):
         return ContentType.UNCENSORED
     if re.match(r"n\d{4}", number) or re.search(r"[^.]+\.\d{2}\.\d{2}\.\d{2}", number):
@@ -620,6 +674,9 @@ def _type_of_catalog_id(number: str) -> ContentType:
 
 def _prefix(number: str) -> str:
     upper = number.upper()
+    # 白名单系列优先取完整前缀，不能被原有通用规则拆成 CW/MCB/MK/SM/S2M 等短段。
+    if m := _bd_series_match(number):
+        return m.group(1).upper()
     if m := re.search(r"([A-Za-z0-9-.]{3,})[-_. ]\d{2}\.\d{2}\.\d{2}", number):
         return m[1].upper()
     if m := re.match(r"(T\d{2})", upper):

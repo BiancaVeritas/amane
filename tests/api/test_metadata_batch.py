@@ -67,6 +67,13 @@ class TestMetadataBatchHttp:
         assert custom_task.payload["content_type"] == "uncensored"
         assert custom_task.payload["use_cache"] == []
 
+        western = await repo.upsert_western_metadata("scene-batch-1", "Lancelotstylesevolution.26.10.16")
+        western_resp = await client.post("metadata/batch/scrape", json={"ids": [western.id]})
+        western_task = await repo.get_task(western_resp.json()["task_ids"][0])
+        assert western_task is not None
+        assert western_task.payload["metadata_id"] == western.id
+        assert western_task.payload["theporndb_uuid"] == "scene-batch-1"
+
         missing = await client.post("metadata/batch/scrape", json={"ids": [9999]})
         assert missing.status_code == 202
         assert missing.json() == {"submitted": 0, "missing": 1, "task_ids": []}

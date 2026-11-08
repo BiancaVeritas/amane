@@ -44,6 +44,7 @@ def playback_query(
         runtime=metadata.runtime,
         tags=list(metadata.tags),
         series=metadata.series,
+        series_names=list(metadata.series_names or ([metadata.series] if metadata.series else [])),
         plot=metadata.plot,
         directors=list(metadata.directors),
         source_urls=dict(metadata.source_urls),

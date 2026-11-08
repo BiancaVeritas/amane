@@ -23,7 +23,7 @@ import {
 } from "@tabler/icons-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   batchFacetsMutation,
@@ -74,7 +74,8 @@ export function CatalogFacetTable({
   const queryClient = useQueryClient();
   const pageIds = items.map((i) => i.id);
 
-  const { selected, selectedIds, toggleOne, toggleAll, isAllSelected, clear } = useIdSelection();
+  const { selected, selectedIds, toggleAll, isAllSelected, clear, setSelected } = useIdSelection();
+  const selectionAnchorId = useRef<number | null>(null);
   const identity = useFacetIdentityActions({
     kind,
     listQueryKey: listFacetsQueryKey({ path: { kind } }),
@@ -137,7 +138,42 @@ export function CatalogFacetTable({
 
   function handlePageChange(p: number) {
     clear();
+    selectionAnchorId.current = null;
     onPageChange(p);
+  }
+
+  function handleRowSelection(id: number, checked: boolean, shiftKey: boolean) {
+    const currentIndex = pageIds.indexOf(id);
+    const anchorIndex =
+      selectionAnchorId.current == null ? -1 : pageIds.indexOf(selectionAnchorId.current);
+    if (shiftKey && anchorIndex >= 0 && currentIndex >= 0) {
+      const range = pageIds.slice(
+        Math.min(anchorIndex, currentIndex),
+        Math.max(anchorIndex, currentIndex) + 1,
+      );
+      setSelected((previous) => {
+        const next = new Set(previous);
+        for (const rangeId of range) {
+          if (checked) {
+            next.add(rangeId);
+          } else {
+            next.delete(rangeId);
+          }
+        }
+        return next;
+      });
+      return;
+    }
+    selectionAnchorId.current = id;
+    setSelected((previous) => {
+      const next = new Set(previous);
+      if (checked) {
+        next.add(id);
+      } else {
+        next.delete(id);
+      }
+      return next;
+    });
   }
 
   return (
@@ -169,6 +205,17 @@ export function CatalogFacetTable({
               </Group>
             )}
             <SelectionBar count={selected.size} hint={t("manage.mergeGuide")}>
+              <Button
+                size="xs"
+                color="red"
+                variant="light"
+                leftSection={<IconTrash size={14} />}
+                disabled={!selected.size || identity.deletePending}
+                loading={identity.deletePending}
+                onClick={() => void identity.openBatchDelete(selectedIds)}
+              >
+                {isUserTag ? "批量删除" : "批量删除并加入剔除"}
+              </Button>
               {/* 不支持收藏的 kind 不渲染这两个动作: 端点对它们一律返回 400. */}
               {isFavoriteKind && (
                 <>
@@ -242,8 +289,23 @@ export function CatalogFacetTable({
           <Table.Tbody>
             {items.map((facet) => (
               <Table.Tr key={facet.id}>
-                <Table.Td>
-                  <Checkbox checked={selected.has(facet.id)} onChange={() => toggleOne(facet.id)} />
+                <Table.Td
+                  onClickCapture={(event) => {
+                    (event.currentTarget as HTMLTableCellElement).dataset.shift = String(
+                      event.shiftKey,
+                    );
+                  }}
+                >
+                  <Checkbox
+                    checked={selected.has(facet.id)}
+                    onChange={(event) => {
+                      const checked = event.currentTarget.checked;
+                      const shiftKey =
+                        (event.currentTarget.closest("td") as HTMLTableCellElement | null)?.dataset
+                          .shift === "true";
+                      handleRowSelection(facet.id, checked, shiftKey);
+                    }}
+                  />
                 </Table.Td>
                 <Table.Td>
                   <Link

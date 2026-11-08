@@ -13,7 +13,11 @@ interface ScrapeOverrideDialogProps {
   target: MediaFileResponse | null;
   saving: boolean;
   onClose: () => void;
-  onSubmit: (number: string, contentType: ContentType | undefined) => void;
+  onSubmit: (
+    number: string,
+    contentType: ContentType | undefined,
+    theporndbUuid: string | undefined,
+  ) => void;
 }
 
 export function ScrapeOverrideDialog({
@@ -48,12 +52,18 @@ function ScrapeOverrideForm({
   initialNumber: string;
   saving: boolean;
   onClose: () => void;
-  onSubmit: (number: string, contentType: ContentType | undefined) => void;
+  onSubmit: (
+    number: string,
+    contentType: ContentType | undefined,
+    theporndbUuid: string | undefined,
+  ) => void;
 }) {
   const { t } = useTranslation(["library", "common"]);
   const [number, setNumber] = useState(initialNumber);
   const [contentType, setContentType] = useState<ContentTypeChoice>("");
+  const [theporndbUuid, setTheporndbUuid] = useState("");
   const trimmed = number.trim();
+  const trimmedThePornDBUuid = theporndbUuid.trim();
 
   return (
     <Stack>
@@ -80,6 +90,14 @@ function ScrapeOverrideForm({
           }
         />
       </Input.Wrapper>
+      {contentType === "western" && (
+        <TextInput
+          label={t("scrapeOverride.theporndbUuid")}
+          placeholder={t("scrapeOverride.theporndbUuidPlaceholder")}
+          value={theporndbUuid}
+          onChange={(event) => setTheporndbUuid(event.currentTarget.value)}
+        />
+      )}
       <Group justify="flex-end">
         <Button variant="default" onClick={onClose} disabled={saving}>
           {t("common:actions.cancel")}
@@ -87,7 +105,15 @@ function ScrapeOverrideForm({
         <Button
           loading={saving}
           disabled={trimmed === ""}
-          onClick={() => onSubmit(trimmed, contentType === "" ? undefined : contentType)}
+          onClick={() =>
+            onSubmit(
+              trimmed,
+              contentType === "" ? undefined : contentType,
+              contentType === "western" && trimmedThePornDBUuid !== ""
+                ? trimmedThePornDBUuid
+                : undefined,
+            )
+          }
         >
           {t("scrapeOverride.submit")}
         </Button>

@@ -59,8 +59,12 @@
         "description": "已有海报与封面高度之比超过此值则不裁切"
       },
       "poster_ratio": {
-        "label": "海报裁切比例",
-        "description": "从封面裁切海报的宽高比"
+        "label": "常规海报裁剪比例",
+        "description": "非无码影片从封面裁切海报的宽高比；日本有码沿用此设置。"
+      },
+      "uncensored_poster_ratio": {
+        "label": "无码海报裁剪比例",
+        "description": "无码影片独立使用的海报裁剪宽高比；裁剪开关与常规影片共用。"
       },
       "jpeg_quality": {
         "label": "JPEG 质量",
@@ -90,6 +94,7 @@
           "options": {
             "airav": "airav",
             "avbase": "avbase",
+            "aventertainments": "aventertainments",
             "avsox": "avsox",
             "dahlia": "dahlia",
             "dmm": "dmm",
@@ -113,13 +118,22 @@
             "prestige": "prestige",
             "r18dev": "r18dev",
             "theporndb": "theporndb",
+            "tushy": "Tushy",
+            "tushy_raw": "Tushy Raw",
             "wikipedia": "wikipedia",
-            "xcity": "xcity"
+            "xcity": "xcity",
+            "10musume": "10musume",
+            "1pondo": "1pondo",
+            "caribbeancom": "Caribbeancom",
+            "caribbeancompr": "Caribbeancompr",
+            "pacopacomama": "Pacopacomama",
+            "tokyo_hot": "Tokyo-Hot"
           },
           "$": {
             "options": {
               "airav": "airav",
               "avbase": "avbase",
+              "aventertainments": "aventertainments",
               "avsox": "avsox",
               "dahlia": "dahlia",
               "dmm": "dmm",
@@ -143,8 +157,16 @@
               "prestige": "prestige",
               "r18dev": "r18dev",
               "theporndb": "theporndb",
+              "tushy": "Tushy",
+              "tushy_raw": "Tushy Raw",
               "wikipedia": "wikipedia",
-              "xcity": "xcity"
+              "xcity": "xcity",
+              "10musume": "10musume",
+              "1pondo": "1pondo",
+              "caribbeancom": "Caribbeancom",
+              "caribbeancompr": "Caribbeancompr",
+              "pacopacomama": "Pacopacomama",
+              "tokyo_hot": "Tokyo-Hot"
             }
           }
         }
@@ -173,6 +195,7 @@
           "options": {
             "airav": "airav",
             "avbase": "avbase",
+            "aventertainments": "aventertainments",
             "avsox": "avsox",
             "dahlia": "dahlia",
             "dmm": "dmm",
@@ -196,13 +219,22 @@
             "prestige": "prestige",
             "r18dev": "r18dev",
             "theporndb": "theporndb",
+            "tushy": "Tushy",
+            "tushy_raw": "Tushy Raw",
             "wikipedia": "wikipedia",
-            "xcity": "xcity"
+            "xcity": "xcity",
+            "10musume": "10musume",
+            "1pondo": "1pondo",
+            "caribbeancom": "Caribbeancom",
+            "caribbeancompr": "Caribbeancompr",
+            "pacopacomama": "Pacopacomama",
+            "tokyo_hot": "Tokyo-Hot"
           },
           "$": {
             "options": {
               "airav": "airav",
               "avbase": "avbase",
+              "aventertainments": "aventertainments",
               "avsox": "avsox",
               "dahlia": "dahlia",
               "dmm": "dmm",
@@ -226,8 +258,16 @@
               "prestige": "prestige",
               "r18dev": "r18dev",
               "theporndb": "theporndb",
+              "tushy": "Tushy",
+              "tushy_raw": "Tushy Raw",
               "wikipedia": "wikipedia",
-              "xcity": "xcity"
+              "xcity": "xcity",
+              "10musume": "10musume",
+              "1pondo": "1pondo",
+              "caribbeancom": "Caribbeancom",
+              "caribbeancompr": "Caribbeancompr",
+              "pacopacomama": "Pacopacomama",
+              "tokyo_hot": "Tokyo-Hot"
             }
           }
         }
@@ -266,6 +306,7 @@
         "options": {
           "airav": "airav",
           "avbase": "avbase",
+          "aventertainments": "aventertainments",
           "avsox": "avsox",
           "dahlia": "dahlia",
           "dmm": "dmm",
@@ -402,6 +443,7 @@
           "options": {
             "airav": "airav",
             "avbase": "avbase",
+            "aventertainments": "aventertainments",
             "avsox": "avsox",
             "dahlia": "dahlia",
             "dmm": "dmm",
@@ -425,13 +467,22 @@
             "prestige": "prestige",
             "r18dev": "r18dev",
             "theporndb": "theporndb",
+            "tushy": "Tushy",
+            "tushy_raw": "Tushy Raw",
             "wikipedia": "wikipedia",
-            "xcity": "xcity"
+            "xcity": "xcity",
+            "10musume": "10musume",
+            "1pondo": "1pondo",
+            "caribbeancom": "Caribbeancom",
+            "caribbeancompr": "Caribbeancompr",
+            "pacopacomama": "Pacopacomama",
+            "tokyo_hot": "Tokyo-Hot"
           },
           "$": {
             "options": {
               "airav": "airav",
               "avbase": "avbase",
+              "aventertainments": "aventertainments",
               "avsox": "avsox",
               "dahlia": "dahlia",
               "dmm": "dmm",
@@ -455,8 +506,16 @@
               "prestige": "prestige",
               "r18dev": "r18dev",
               "theporndb": "theporndb",
+              "tushy": "Tushy",
+              "tushy_raw": "Tushy Raw",
               "wikipedia": "wikipedia",
-              "xcity": "xcity"
+              "xcity": "xcity",
+              "10musume": "10musume",
+              "1pondo": "1pondo",
+              "caribbeancom": "Caribbeancom",
+              "caribbeancompr": "Caribbeancompr",
+              "pacopacomama": "Pacopacomama",
+              "tokyo_hot": "Tokyo-Hot"
             }
           }
         }
@@ -482,8 +541,8 @@
       "browser": {
         "label": "浏览器渲染",
         "bsk_path": {
-          "label": "BrowserSkill 路径",
-          "description": "留空则从 PATH 查找; 桌面版需要填绝对路径"
+          "label": "bsk 路径",
+          "description": "BrowserSkill CLI; 留空则从 PATH 查找; 桌面版需要填绝对路径"
         },
         "backend": {
           "label": "浏览器后端",
@@ -637,6 +696,7 @@
         "$": {
           "options": {
             "title": "标题",
+            "original_title": "原标题",
             "actors": "演员",
             "tags": "标签",
             "release": "发行日期",
@@ -646,6 +706,7 @@
             "studio": "制作商",
             "publisher": "发行商",
             "plot": "剧情",
+            "original_plot": "原剧情",
             "poster_urls": "海报",
             "thumb_urls": "封面",
             "trailer_urls": "预告片",
@@ -813,6 +874,8 @@
             "javdb": "javdb",
             "minnano": "minnano",
             "theporndb": "theporndb",
+            "tushy": "Tushy",
+            "tushy_raw": "Tushy Raw",
             "wikipedia": "wikipedia"
           }
         }
@@ -820,11 +883,15 @@
       "image_sites": {
         "label": "头像来源优先级",
         "options": {
-          "gfriends": "gfriends"
+          "gfriends": "gfriends",
+          "tushy": "Tushy",
+          "tushy_raw": "Tushy Raw"
         },
         "$": {
           "options": {
-            "gfriends": "gfriends"
+            "gfriends": "gfriends",
+            "tushy": "Tushy",
+            "tushy_raw": "Tushy Raw"
           }
         }
       },

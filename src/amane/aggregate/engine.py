@@ -262,7 +262,8 @@ def _resolve_scalars(graph: FetchGraph, state: ExecutionState) -> None:
             data = state.fetched[cache_key]
             if data is None:
                 continue
-            if getattr(data, field, None):
+            value = (data.series_names or data.series) if field == MetadataField.SERIES else getattr(data, field, None)
+            if value:
                 _fill_scalar(state.result, field, data, cache_key)
                 break
 
@@ -415,6 +416,10 @@ def _fill_scalar(
 ) -> None:
     if field == MetadataField.ACTORS:
         result.actors = [item.model_copy() for item in data.actors]
+    elif field == MetadataField.SERIES:
+        values = data.series_names or ([data.series] if data.series else [])
+        result.series_names = list(dict.fromkeys(name for name in values if isinstance(name, str) and name))
+        result.series = result.series_names[0] if result.series_names else None
     else:
         setattr(result, field, getattr(data, field))
     result.field_sources[field] = source_key
@@ -444,6 +449,44 @@ def _assemble_url_fields(
             items = [value] if isinstance(value, str) else value
             urls.extend(v for v in items if v)
         setattr(result, dst, list(dict.fromkeys(urls)))
+
+    # 原海报使用同一来源优先级, 但允许爬虫明确声明“没有独立海报”(空列表)。
+    original_urls: list[str] = []
+    for node in graph.field_chains[MetadataField.POSTER_URLS]:
+        if cache_keys is not None and node.cache_key not in cache_keys:
+            continue
+        data = fetched.get(node.cache_key)
+        if data is None:
+            continue
+        # 原海报字段只记录爬虫明确返回的原始地址；缺失/空值均保持为空，
+        # 不从可能经过派生或裁剪的 poster_urls 推断。
+        value = data.original_poster_urls or []
+        original_urls.extend(url for url in value if url)
+    result.original_poster_urls = list(dict.fromkeys(original_urls))
+
+    # 无码双页判断只接受爬虫显式标记的同源图片组合. 不从 original_poster_urls
+    # 与 thumb_urls 推断, 因为它们可能只是同一图片的不同尺寸/朝向.
+    result.double_page_poster_urls = []
+    result.double_page_original_poster_urls = []
+    result.double_page_thumb_urls = []
+    thumb_nodes = {node.cache_key for node in graph.field_chains[MetadataField.THUMB_URLS]}
+    for node in graph.field_chains[MetadataField.POSTER_URLS]:
+        if node.cache_key not in thumb_nodes:
+            continue
+        if cache_keys is not None and node.cache_key not in cache_keys:
+            continue
+        data = fetched.get(node.cache_key)
+        if data is None:
+            continue
+        poster_pair = list(dict.fromkeys(url for url in data.double_page_poster_urls if url))
+        original_pair = list(dict.fromkeys(url for url in data.double_page_original_poster_urls if url))
+        thumb_pair = list(dict.fromkeys(url for url in data.double_page_thumb_urls if url))
+        if not poster_pair or not original_pair or not thumb_pair:
+            continue
+        result.double_page_poster_urls = poster_pair
+        result.double_page_original_poster_urls = original_pair
+        result.double_page_thumb_urls = thumb_pair
+        break
 
 
 def _assemble_aggregate_fields(graph: FetchGraph, state: ExecutionState) -> None:

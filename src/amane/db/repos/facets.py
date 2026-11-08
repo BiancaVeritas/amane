@@ -210,7 +210,9 @@ class FacetsRepoMixin(RepositoryMixinBase):
             }
             studio = (await _rows_by_names(session, Studio, [meta.studio] if meta.studio else []))[:1]
             publisher = (await _rows_by_names(session, Publisher, [meta.publisher] if meta.publisher else []))[:1]
-            series = (await _rows_by_names(session, Series, [meta.series] if meta.series else []))[:1]
+            series_names = normalize_names(meta.series_names or ([meta.series] if meta.series else []))
+            series_rows = await _rows_by_names(session, Series, series_names)
+            series_ids = {row.name: row.id for row in series_rows if row.id is not None}
             return (
                 actor_ids,
                 actor_genders,
@@ -218,8 +220,15 @@ class FacetsRepoMixin(RepositoryMixinBase):
                 tag_ids,
                 studio[0].id if studio else None,
                 publisher[0].id if publisher else None,
-                series[0].id if series else None,
+                next((series_ids[name] for name in series_names if name in series_ids), None),
             )
+
+    async def resolve_metadata_series_ids(self, meta: Metadata) -> dict[str, int]:
+        """返回影片全部系列名称到实体 ID 的映射; 保持旧的 facet ID 元组接口不变."""
+        async with self._session() as session:
+            names = normalize_names(meta.series_names or ([meta.series] if meta.series else []))
+            rows = await _rows_by_names(session, Series, names)
+            return {row.name: row.id for row in rows if row.id is not None}
 
     async def list_facets(
         self,

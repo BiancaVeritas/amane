@@ -3,7 +3,7 @@ from datetime import datetime
 from typing import Unpack, cast
 
 import structlog
-from sqlalchemy import ColumnElement, or_, text
+from sqlalchemy import ColumnElement, func, or_, text
 from sqlalchemy.sql.functions import count
 from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -14,6 +14,9 @@ from ...utils.collections import unique_ids
 from ...utils.text import normalize_long_text
 from ..models import (
     MediaFile,
+    MediaIdentity,
+    MediaIdentityType,
+    MediaFileStatus,
     Metadata,
     MetadataActor,
     MetadataDirector,
@@ -54,10 +57,12 @@ def _normalize_text_fields(fields: MetadataFields) -> MetadataFields:
 
     覆盖面是全部写库路径: 首刮 / 补刮 / merge / REST PATCH / Agent 工具都经这两个写方法.
     """
-    plot = fields.get("plot")
-    if not isinstance(plot, str):
-        return fields
-    return {**fields, "plot": normalize_long_text(plot)}
+    updates: MetadataFields = {**fields}
+    for key in ("plot", "original_plot"):
+        value = updates.get(key)
+        if isinstance(value, str):
+            updates[key] = normalize_long_text(value)
+    return updates
 
 
 def _image_signature(metadata: Metadata) -> tuple[list[str], list[str], dict[str, list[str]]]:
@@ -68,7 +73,9 @@ def _image_signature(metadata: Metadata) -> tuple[list[str], list[str], dict[str
 # 锁字段 (MetadataField) ↔ Metadata 列名; 仅 extrafanart / score 两名不同.
 _LOCK_FIELD_COLUMN: dict[MetadataField, str] = {
     MetadataField.TITLE: "title",
+    MetadataField.ORIGINAL_TITLE: "original_title",
     MetadataField.PLOT: "plot",
+    MetadataField.ORIGINAL_PLOT: "original_plot",
     MetadataField.ACTORS: "actors",
     MetadataField.DIRECTORS: "directors",
     MetadataField.TAGS: "tags",
@@ -84,6 +91,7 @@ _LOCK_FIELD_COLUMN: dict[MetadataField, str] = {
     MetadataField.SCORE: "scores",
 }
 _LOCK_COLUMN_FIELD: dict[str, MetadataField] = {column: field for field, column in _LOCK_FIELD_COLUMN.items()}
+_LOCK_COLUMN_FIELD["series_names"] = MetadataField.SERIES
 
 
 def _locked_fields_of(meta: Metadata) -> set[MetadataField]:
@@ -103,7 +111,7 @@ def _filter_locked(
     """AUTO 写入: 跳过锁定列, ``field_sources`` 保留锁定字段的既有来源."""
     if not locked:
         return fields
-    locked_columns = {_LOCK_FIELD_COLUMN[field] for field in locked}
+    locked_columns = {column for column, field in _LOCK_COLUMN_FIELD.items() if field in locked}
     filtered = cast("MetadataFields", {key: value for key, value in fields.items() if key not in locked_columns})
     sources = filtered.get("field_sources")
     if sources is not None:
@@ -189,7 +197,16 @@ class MetadataRepoMixin(RepositoryMixinBase):
         if series_ids and not series_names:
             return None
         if series_names:
-            conditions.append(col(Metadata.series).in_(series_names))
+            from ..models import MetadataSeries
+
+            series_ids_resolved = (
+                await session.exec(select(Series.id).where(col(Series.name).in_(series_names)))
+            ).all()
+            conditions.append(
+                col(Metadata.id).in_(
+                    select(MetadataSeries.metadata_id).where(col(MetadataSeries.series_id).in_(series_ids_resolved))
+                )
+            )
         if has_files is not None:
             conditions.append(_metadata_has_files_clause(has_files=has_files))
         if vr is True:
@@ -335,12 +352,268 @@ class MetadataRepoMixin(RepositoryMixinBase):
         async with self._session() as session:
             return await session.get(Metadata, metadata_id)
 
-    async def get_metadata_by_number(self, number: str) -> Metadata | None:
-        """大小写不敏感; 返回行保留库内原始大小写."""
+    async def get_metadata_by_number(
+        self, number: str, *, content_type: ContentType | None = None
+    ) -> Metadata | None:
+        """大小写不敏感查询番号. WESTERN 同番号可能有多条, 未指定类型且结果歧义时返回 None."""
         async with self._session() as session:
             stmt = select(Metadata).where(metadata_number_predicate(number))
+            if content_type is not None:
+                stmt = stmt.where(Metadata.content_type == content_type)
+            stmt = stmt.limit(2)
+            result = await session.exec(stmt)
+            rows = result.all()
+            return rows[0] if len(rows) == 1 else None
+
+    async def get_metadata_by_theporndb_uuid(self, theporndb_uuid: str) -> Metadata | None:
+        """按 WESTERN ThePornDB UUID 定位作品; ThePornDB UUID 是外部作品身份."""
+        theporndb_uuid = theporndb_uuid.strip().casefold()
+        async with self._session() as session:
+            stmt = select(Metadata).where(
+                Metadata.content_type == ContentType.WESTERN, Metadata.theporndb_uuid == theporndb_uuid
+            )
             result = await session.exec(stmt)
             return result.first()
+
+    async def get_metadata_by_identity(
+        self, identity_type: MediaIdentityType, identity_value: str
+    ) -> Metadata | None:
+        """通过稳定媒体身份定位 WESTERN Metadata。"""
+        value = identity_value.strip().casefold()
+        if not value:
+            return None
+        async with self._session() as session:
+            stmt = (
+                select(Metadata)
+                .join(MediaIdentity, col(MediaIdentity.metadata_id) == col(Metadata.id))
+                .where(
+                    Metadata.content_type == ContentType.WESTERN,
+                    MediaIdentity.identity_type == identity_type,
+                    func.lower(MediaIdentity.identity_value) == value,
+                )
+            )
+            return (await session.exec(stmt)).first()
+
+    async def register_media_identity_in_session(
+        self,
+        session: AsyncSession,
+        metadata_id: int,
+        identity_type: MediaIdentityType,
+        identity_value: str,
+    ) -> MediaIdentity:
+        """在调用方事务中幂等登记身份; 不提交事务."""
+        value = identity_value.strip()
+        if not value:
+            raise ValueError("Media identity cannot be empty")
+        metadata = await session.get(Metadata, metadata_id)
+        if metadata is None or metadata.content_type != ContentType.WESTERN:
+            raise ValueError(f"Metadata {metadata_id} does not exist or is not WESTERN")
+        stmt = select(MediaIdentity).where(
+            MediaIdentity.identity_type == identity_type,
+            func.lower(MediaIdentity.identity_value) == value.casefold(),
+        )
+        existing = (await session.exec(stmt)).first()
+        if existing is not None:
+            if existing.metadata_id != metadata_id:
+                raise ValueError(
+                    f"Identity {identity_type}:{value} is already linked to Metadata {existing.metadata_id}"
+                )
+            return existing
+        identity = MediaIdentity(metadata_id=metadata_id, identity_type=identity_type, identity_value=value)
+        session.add(identity)
+        await session.flush()
+        return identity
+
+    async def register_media_identity(
+        self, metadata_id: int, identity_type: MediaIdentityType, identity_value: str
+    ) -> MediaIdentity:
+        """独立事务登记稳定身份; 已绑定其他作品时拒绝改绑."""
+        async with self._session() as session:
+            connection = await session.connection()
+            await connection.exec_driver_sql("BEGIN IMMEDIATE")
+            identity = await self.register_media_identity_in_session(
+                session, metadata_id, identity_type, identity_value
+            )
+            await session.commit()
+            await session.refresh(identity)
+            return identity
+
+    async def get_metadata_by_oshash_matches(self, oshash: str) -> list[Metadata]:
+        """返回 OSHASH 已关联的全部不同 WESTERN Metadata, 供调用方识别冲突."""
+        async with self._session() as session:
+            identity_stmt = (
+                select(Metadata)
+                .join(MediaIdentity, col(MediaIdentity.metadata_id) == col(Metadata.id))
+                .where(
+                    MediaIdentity.identity_type == MediaIdentityType.LOCAL_OSHASH,
+                    func.lower(MediaIdentity.identity_value) == oshash.strip().casefold(),
+                    Metadata.content_type == ContentType.WESTERN,
+                )
+            )
+            legacy_stmt = (
+                select(Metadata)
+                .join(MediaFile, col(MediaFile.metadata_id) == col(Metadata.id))
+                .where(MediaFile.oshash == oshash, Metadata.content_type == ContentType.WESTERN)
+            )
+            rows = (await session.exec(identity_stmt)).all() + (await session.exec(legacy_stmt)).all()
+            return list({row.id: row for row in rows if row.id is not None}.values())
+
+    async def get_metadata_by_oshash(self, oshash: str) -> Metadata | None:
+        """通过已关联 MediaFile 的 OSHASH 定位作品; 多条记录指向不同作品时返回 None."""
+        rows = await self.get_metadata_by_oshash_matches(oshash)
+        return rows[0] if len(rows) == 1 else None
+
+    async def upsert_western_metadata_in_session(
+        self,
+        session: AsyncSession,
+        theporndb_uuid: str,
+        number: str,
+        *,
+        metadata_id: int | None = None,
+        actor_genders: Mapping[str, ActorGender] | None = None,
+        **kwargs: Unpack[MetadataFields],
+    ) -> tuple[Metadata, bool]:
+        """在调用方事务中创建或更新 WESTERN Metadata; 返回 (Metadata, 图片字段是否变化)."""
+        theporndb_uuid = theporndb_uuid.strip().casefold()
+        if not theporndb_uuid:
+            raise ValueError("WESTERN Metadata requires a ThePornDB UUID")
+        fields = _normalize_text_fields(kwargs)
+        if "series_names" not in fields and "series" in fields:
+            fields["series_names"] = [fields["series"]] if fields["series"] else []
+        elif "series_names" in fields:
+            fields["series_names"] = list(dict.fromkeys(n.strip() for n in fields["series_names"] if isinstance(n, str) and n.strip()))
+            fields["series"] = fields["series_names"][0] if fields["series_names"] else None
+        # WESTERN 的 ThePornDB UUID 只存放在专用列；external_ids 仅保留其他来源 ID。
+        external_ids = fields.get("external_ids")
+        if isinstance(external_ids, dict):
+            fields["external_ids"] = {key: value for key, value in external_ids.items() if key.casefold() != "theporndb"}
+        stmt = select(Metadata).where(
+            Metadata.content_type == ContentType.WESTERN, Metadata.theporndb_uuid == theporndb_uuid
+        )
+        existing = (await session.exec(stmt)).first()
+        selected = await session.get(Metadata, metadata_id) if metadata_id is not None else None
+        if metadata_id is not None and selected is None:
+            raise ValueError(f"Metadata {metadata_id} does not exist")
+        if selected is not None:
+            if selected.content_type != ContentType.WESTERN:
+                raise ValueError(f"Metadata {metadata_id} is not WESTERN")
+            if existing is not None and existing.id != selected.id:
+                raise ValueError(f"ThePornDB UUID {theporndb_uuid} is already linked to Metadata {existing.id}")
+            stored_uuid = selected.theporndb_uuid
+            if stored_uuid and stored_uuid.casefold() != theporndb_uuid:
+                raise ValueError(f"Metadata {metadata_id} already has a different ThePornDB UUID")
+            existing = selected
+        if existing is not None:
+            if existing.number.casefold() != number.casefold():
+                raise ValueError(
+                    f"ThePornDB UUID {theporndb_uuid} number conflict: stored={existing.number!r}, incoming={number!r}"
+                )
+            before = _image_signature(existing)
+            fields = _filter_locked(fields, _locked_fields_of(existing), existing.field_sources or {})
+            existing.theporndb_uuid = theporndb_uuid
+            for key, value in fields.items():
+                setattr(existing, key, value)
+            existing.updated_at = _utcnow()
+            session.add(existing)
+            await session.flush()
+            await clean_actor_names(session, existing, actor_genders)
+            await apply_facet_rules_to_metadata(session, existing)
+            await sync_metadata_facets(session, existing)
+            await session.flush()
+            return existing, _image_signature(existing) != before
+
+        meta = Metadata(number=number, content_type=ContentType.WESTERN, theporndb_uuid=theporndb_uuid, **fields)
+        session.add(meta)
+        await session.flush()
+        await clean_actor_names(session, meta, actor_genders)
+        await apply_facet_rules_to_metadata(session, meta)
+        await sync_metadata_facets(session, meta)
+        await session.flush()
+        return meta, any(_image_signature(meta))
+
+    async def upsert_western_metadata(
+        self,
+        theporndb_uuid: str,
+        number: str,
+        *,
+        metadata_id: int | None = None,
+        actor_genders: Mapping[str, ActorGender] | None = None,
+        **kwargs: Unpack[MetadataFields],
+    ) -> Metadata:
+        """独立事务入口; 统一收尾流程应调用 upsert_western_metadata_in_session()."""
+        async with self._session() as session:
+            connection = await session.connection()
+            await connection.exec_driver_sql("BEGIN IMMEDIATE")
+            metadata, images_changed = await self.upsert_western_metadata_in_session(
+                session,
+                theporndb_uuid,
+                number,
+                metadata_id=metadata_id,
+                actor_genders=actor_genders,
+                **kwargs,
+            )
+            await session.commit()
+            await session.refresh(metadata)
+            assert metadata.id is not None
+            if images_changed:
+                await self.notify_media_changed(metadata.id)
+            return metadata
+
+    async def finalize_western_scrape(
+        self,
+        *,
+        theporndb_uuid: str,
+        number: str,
+        media_file_id: int | None,
+        oshash: str | None,
+        file_115_id: str | None,
+        metadata_id: int | None = None,
+        actor_genders: Mapping[str, ActorGender] | None = None,
+        **kwargs: Unpack[MetadataFields],
+    ) -> Metadata:
+        """WESTERN 成功收尾: Metadata、MediaFile 与稳定身份在同一事务提交."""
+        metadata: Metadata
+        images_changed = False
+        async with self._session() as session:
+            try:
+                connection = await session.connection()
+                await connection.exec_driver_sql("BEGIN IMMEDIATE")
+                metadata, images_changed = await self.upsert_western_metadata_in_session(
+                    session,
+                    theporndb_uuid,
+                    number,
+                    metadata_id=metadata_id,
+                    actor_genders=actor_genders,
+                    **kwargs,
+                )
+                if metadata.id is None:
+                    raise ValueError("WESTERN Metadata did not receive an ID")
+                if media_file_id is not None:
+                    media = await self.update_media_file_in_session(
+                        session,
+                        media_file_id,
+                        status=MediaFileStatus.SCRAPED,
+                        metadata_id=metadata.id,
+                    )
+                    if media is None:
+                        raise ValueError(f"MediaFile {media_file_id} does not exist")
+                if oshash:
+                    await self.register_media_identity_in_session(
+                        session, metadata.id, MediaIdentityType.LOCAL_OSHASH, oshash
+                    )
+                if file_115_id:
+                    await self.register_media_identity_in_session(
+                        session, metadata.id, MediaIdentityType.FILE_115_ID, file_115_id
+                    )
+                await session.commit()
+                await session.refresh(metadata)
+            except Exception:
+                await session.rollback()
+                raise
+        assert metadata.id is not None
+        if images_changed:
+            await self.notify_media_changed(metadata.id)
+        return metadata
 
     async def content_types_by_metadata_ids(self, metadata_ids: Sequence[int]) -> dict[int, ContentType]:
         """文件行派生相位用; 不存在的 id 不在结果里, 调用方按"没有条目"处理."""
@@ -366,15 +639,28 @@ class MetadataRepoMixin(RepositoryMixinBase):
         ``actor_genders`` 只填 ``Actor.gender`` 空位, 不是 Metadata 列.
         ``content_type`` 只在插入时落库, None 按番号推断; 已存在时不改写 (契约见 docs/dev/data-model.md).
         """
+        resolved_type = content_type or infer_content_type(number)
+        if content_type == ContentType.WESTERN:
+            raise ValueError("WESTERN metadata must be upserted by ThePornDB UUID")
         fields = _normalize_text_fields(kwargs)
+        if "series_names" not in fields and "series" in fields:
+            fields["series_names"] = [fields["series"]] if fields["series"] else []
+        elif "series_names" in fields:
+            fields["series_names"] = list(dict.fromkeys(n.strip() for n in fields["series_names"] if isinstance(n, str) and n.strip()))
+            fields["series"] = fields["series_names"][0] if fields["series_names"] else None
         async with self._session() as session:
-            # pysqlite 只在 DML 之前发出 BEGIN, 查号落在事务之外时并发同号写入会双双判定为「无行」,
-            # 后者在插入时违反 ix_metadata_number. 手工取得写锁后判定与写入同处一个事务.
+            # pysqlite 只在 DML 之前发出 BEGIN; 判定与写入必须处于同一写事务.
             connection = await session.connection()
             await connection.exec_driver_sql("BEGIN IMMEDIATE")
             stmt = select(Metadata).where(metadata_number_predicate(number))
+            if content_type is not None:
+                stmt = stmt.where(Metadata.content_type != ContentType.WESTERN)
+            stmt = stmt.limit(2)
             result = await session.exec(stmt)
-            existing = result.first()
+            rows = result.all()
+            if len(rows) > 1:
+                raise ValueError(f"Metadata number {number!r} is ambiguous; use ThePornDB UUID or Metadata ID")
+            existing = rows[0] if rows else None
             if existing:
                 before = _image_signature(existing)
                 fields = _filter_locked(fields, _locked_fields_of(existing), existing.field_sources or {})
@@ -392,7 +678,7 @@ class MetadataRepoMixin(RepositoryMixinBase):
                 if _image_signature(existing) != before:
                     await self.notify_media_changed(existing.id)
                 return existing
-            meta = Metadata(number=number, content_type=content_type or infer_content_type(number), **fields)
+            meta = Metadata(number=number, content_type=resolved_type, **fields)
             session.add(meta)
             await session.flush()
             await clean_actor_names(session, meta, actor_genders)
@@ -425,9 +711,41 @@ class MetadataRepoMixin(RepositoryMixinBase):
                 updates = _filter_locked(updates, locked, metadata.field_sources or {})
             else:
                 metadata.locked_fields = _merge_auto_locks(updates, locked)
+            # WESTERN 编辑界面沿用 external_ids 的 `theporndb` 行展示 UUID,
+            # 但实际仍写入专用列; 不把 UUID 重复保存到 external_ids.
+            external_ids = updates.get("external_ids")
+            if metadata.content_type == ContentType.WESTERN and isinstance(external_ids, dict):
+                uuid_entry = next(
+                    (
+                        (key, value)
+                        for key, value in external_ids.items()
+                        if isinstance(key, str) and key.casefold() == "theporndb"
+                    ),
+                    None,
+                )
+                if uuid_entry is not None:
+                    raw_uuid = uuid_entry[1]
+                    normalized_uuid = raw_uuid.strip().casefold() if isinstance(raw_uuid, str) else ""
+                    if normalized_uuid:
+                        duplicate = await session.exec(
+                            select(Metadata.id).where(
+                                Metadata.content_type == ContentType.WESTERN,
+                                func.lower(Metadata.theporndb_uuid) == normalized_uuid,
+                                Metadata.id != metadata_id,
+                            )
+                        )
+                        if duplicate.first() is not None:
+                            raise ValueError(f"ThePornDB UUID {normalized_uuid} is already linked to another Metadata")
+                    metadata.theporndb_uuid = normalized_uuid or None
+                updates["external_ids"] = {
+                    key: value for key, value in external_ids.items()
+                    if not isinstance(key, str) or key.casefold() != "theporndb"
+                }
             # 显式赋值, 禁止 setattr; 字段集由 MetadataFields 与 Metadata 静态对齐.
             if "title" in updates:
                 metadata.title = updates["title"]
+            if "original_title" in updates:
+                metadata.original_title = updates["original_title"]
             if "actors" in updates:
                 metadata.actors = updates["actors"]
             if "studio" in updates:
@@ -440,12 +758,22 @@ class MetadataRepoMixin(RepositoryMixinBase):
                 metadata.runtime = updates["runtime"]
             if "tags" in updates:
                 metadata.tags = updates["tags"]
-            if "series" in updates:
+            if "series_names" in updates:
+                metadata.series_names = list(
+                    dict.fromkeys(n.strip() for n in updates["series_names"] if isinstance(n, str) and n.strip())
+                )
+                metadata.series = metadata.series_names[0] if metadata.series_names else None
+            elif "series" in updates:
                 metadata.series = updates["series"]
+                metadata.series_names = [updates["series"]] if updates["series"] else []
             if "plot" in updates:
                 metadata.plot = updates["plot"]
+            if "original_plot" in updates:
+                metadata.original_plot = updates["original_plot"]
             if "directors" in updates:
                 metadata.directors = updates["directors"]
+            if "original_poster_urls" in updates:
+                metadata.original_poster_urls = updates["original_poster_urls"]
             if "poster_urls" in updates:
                 metadata.poster_urls = updates["poster_urls"]
             if "thumb_urls" in updates:

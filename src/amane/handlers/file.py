@@ -83,6 +83,7 @@ async def execute_file_operations(
     safe_dirs: Sequence[Path] | None = (),
     watermark_dir: Path | None = None,
     actor_genders: dict[str, ActorGender] | None = None,
+    tag_mapping_path: Path | None = None,
 ) -> FileOperationsResult:
     """``file_info`` 由渲染路径的那一次 ``parse_file_info`` 产出, 必须带上 ``has_external_subtitle``.
 
@@ -160,7 +161,7 @@ async def execute_file_operations(
 
     # 写入 NFO.
     if org_result.outcome is PlaceOutcome.PLACED and org_result.dest and write_nfo:
-        await write_nfo_file(metadata, paths.nfo)
+        await write_nfo_file(metadata, paths.nfo, tag_mapping_path=tag_mapping_path)
 
     # 字幕按模板落到 video_dest 侧.
     subtitle_conflicts: list[SubtitleConflict] = []
@@ -200,6 +201,7 @@ async def apply_file_operations(
     web_client: WebClient | None = None,
     safe_dirs: Sequence[Path] | None = (),
     watermark_dir: Path | None = None,
+    tag_mapping_path: Path | None = None,
 ) -> FileOperationsResult | None:
     """缺少 media_file_id 或对应记录时返回 None (跳过, 不视为失败).
     Library 由 MediaFile.library_id 派生.
@@ -242,6 +244,7 @@ async def apply_file_operations(
         safe_dirs=safe_dirs,
         watermark_dir=watermark_dir,
         actor_genders=actor_genders,
+        tag_mapping_path=tag_mapping_path,
     )
 
 
@@ -348,7 +351,11 @@ def _place_library_images(
             crop_poster(
                 paths.thumb,
                 paths.poster,
-                poster_ratio=config.scraping.poster_ratio,
+                poster_ratio=(
+                    config.scraping.uncensored_poster_ratio
+                    if content_type == ContentType.UNCENSORED
+                    else config.scraping.poster_ratio
+                ),
                 jpeg_quality=config.scraping.jpeg_quality,
             )
 
@@ -454,6 +461,7 @@ class OrganizeHandler(TaskHandler[OrganizePayload, OrganizeResult]):
         web_client: WebClient | None = None,
         safe_dirs: Sequence[Path] | None = (),
         watermark_dir: Path | None = None,
+        tag_mapping_path: Path | None = None,
         *,
         library_locks: LibraryTaskLocks | None = None,
     ):
@@ -464,6 +472,7 @@ class OrganizeHandler(TaskHandler[OrganizePayload, OrganizeResult]):
         self._resource_store = resource_store
         self._safe_dirs = safe_dirs
         self._watermark_dir = watermark_dir
+        self._tag_mapping_path = tag_mapping_path
         self._library_locks = library_locks if library_locks is not None else LibraryTaskLocks()
 
     async def _load_scope(self, payload: OrganizePayload, library: Library) -> list[MediaFile]:
@@ -568,6 +577,7 @@ class OrganizeHandler(TaskHandler[OrganizePayload, OrganizeResult]):
                     web_client=self._web_client,
                     safe_dirs=self._safe_dirs,
                     watermark_dir=self._watermark_dir,
+                    tag_mapping_path=self._tag_mapping_path,
                 )
                 if fop_result is None:
                     skipped += 1

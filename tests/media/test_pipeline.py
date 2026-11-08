@@ -10,6 +10,7 @@ from PIL import Image
 
 from amane.config import HotSettings, SrConfig
 from amane.enums import DownloadableResource
+from amane.parsing import ContentType
 from amane.media import CropRotation, ResourceStore, manual_crop_image, materialize_images
 from amane.media import pipeline as pipeline_mod
 from tests.helpers import LOAD_TOLERANT_TIMEOUT, await_for
@@ -88,6 +89,36 @@ async def test_poster_cropped_when_candidate_small(resource_store: ResourceStore
 
 
 @pytest.mark.asyncio
+async def test_uncensored_uses_its_own_poster_ratio(resource_store: ResourceStore, tmp_path: Path):
+    client = FakeClient(
+        {
+            "https://s/uncensored-cover.jpg": (800, 538),
+            "https://s/uncensored-poster.jpg": (300, 420),
+        }
+    )
+    cfg = HotSettings()
+    cfg.scraping.poster_ratio = 0.7
+    cfg.scraping.uncensored_poster_ratio = 0.5
+    out = await materialize_images(
+        ["https://s/uncensored-poster.jpg"],
+        ["https://s/uncensored-cover.jpg"],
+        [],
+        resource_store,
+        cast("WebClient", client),
+        cfg,
+        tmp_path,
+        content_type=ContentType.UNCENSORED,
+    )
+    url_hash = out.poster_urls[0].rsplit("/", 1)[-1]
+    got = await resource_store.get_by_url_hash(url_hash)
+    assert got is not None
+    crop_res, crop_path = got
+    assert crop_res.meta is not None
+    assert crop_res.meta.get("args") == "0.5000"
+    assert Image.open(crop_path).size == (269, 538)
+
+
+@pytest.mark.asyncio
 async def test_poster_external_when_candidate_tall(resource_store: ResourceStore, tmp_path: Path):
     """poster 候选够高 → 不裁剪, poster 记外部 URL."""
     client = FakeClient(
@@ -129,6 +160,27 @@ async def test_trailer_downloaded_external_url(resource_store: ResourceStore, tm
     )
     assert out.trailer_urls == ["https://s/trailer.mp4"]
     assert "https://s/trailer.mp4" in client.downloaded  # 已下载到本地
+
+
+@pytest.mark.asyncio
+async def test_trailer_disabled_drops_url_without_downloading(resource_store: ResourceStore, tmp_path: Path):
+    """关闭预告片下载时, 不下载文件且不把外部预告片 URL 写回元数据."""
+    client = FakeClient({})
+    settings = HotSettings()
+    assert DownloadableResource.trailer not in settings.scraping.download_resources
+
+    out = await materialize_images(
+        [],
+        [],
+        ["https://s/trailer.mp4"],
+        resource_store,
+        cast("WebClient", client),
+        settings,
+        tmp_path,
+    )
+
+    assert out.trailer_urls == []
+    assert "https://s/trailer.mp4" not in client.downloaded
 
 
 @pytest.mark.asyncio

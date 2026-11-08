@@ -15,19 +15,29 @@ class AggregatedMetadata:
     number: str
 
     title: str | None = None
+    original_title: str | None = None
     studio: str | None = None
     publisher: str | None = None
     release: str | None = None
     runtime: int | None = None
     series: str | None = None
+    series_names: list[str] = field(default_factory=list)
     plot: str | None = None
+    original_plot: str | None = None
     actors: list[FilmActor] = field(default_factory=list)
     tags: list[str] = field(default_factory=list)
     directors: list[str] = field(default_factory=list)
 
     poster_urls: list[str] = field(default_factory=list)
+    original_poster_urls: list[str] = field(default_factory=list)
     thumb_urls: list[str] = field(default_factory=list)
     trailer_urls: list[str] = field(default_factory=list)
+
+    # 仅记录同一个来源同时提供的“原海报 + 双页封面”组合, 供无码分流使用.
+    # 不参与数据库字段映射, 避免跨来源聚合的 URL 被误拼成双页组合.
+    double_page_poster_urls: list[str] = field(default_factory=list)
+    double_page_original_poster_urls: list[str] = field(default_factory=list)
+    double_page_thumb_urls: list[str] = field(default_factory=list)
 
     extrafanart_urls: dict[str, list[str]] = field(default_factory=dict)
 
