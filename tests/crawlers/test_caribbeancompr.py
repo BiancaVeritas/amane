@@ -35,6 +35,17 @@ def test_title_body_and_volume_normalization() -> None:
     assert _split_title("メイどーる Vol12 何か") == ("メイどーる 何か", 12)
 
 
+def test_search_title_normalizes_volume_spelling() -> None:
+    """发往搜索框的序号统一成站点写法 ``Vol.``; javbus 侧常写作 ``Vo.``."""
+    assert _clean_search_title("メイどーる Vo.4~ご主人様のいいなり性人形~") == (
+        "メイどーる Vol.4~ご主人様のいいなり性人形~"
+    )
+    assert _clean_search_title("メイどーる vol.4 x") == "メイどーる Vol.4 x"
+    assert _clean_search_title("メイどーる VOL.4 x") == "メイどーる Vol.4 x"
+    # 已经是全写的保持不变.
+    assert _clean_search_title("メイどーる Vol.18 x") == "メイどーる Vol.18 x"
+
+
 def test_search_candidates_reads_title_anchor_itself() -> None:
     html = '''<a class="meta-title" href="/moviepages/122122_701/index.html">激烈ハードに3穴責め！！Vol.2</a>'''
     assert _search_candidates(html, "https://www.caribbeancompr.com/search/?q=x") == [

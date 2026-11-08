@@ -23,6 +23,10 @@ _VOL_RE = re.compile(r"(?:vo[l]?\s*\.\s*0*(\d+)\b|\bvo[l]?\s*0*(\d+)\b|[（(]\s*
 """续集序号. ``VO`` 是站点自用的缩写 (javbus 侧常写作 ``Vo.4``, 站点页写作 ``Vol.4``),
 因此 ``l`` 必须可选, 否则两侧解析出的序号一个为空一个为 4, 比对必然失败."""
 _SEARCH_NOISE_RE = re.compile(r"アダルト動画|HEYZO", re.IGNORECASE)
+_VOL_ABBREV_RE = re.compile(r"\bvo(?!l)\.", re.IGNORECASE)
+"""``Vo.`` 是 javbus 侧的缩写, 补全成站点写法 ``Vol.`` 后再发往搜索框."""
+_VOL_CASE_RE = re.compile(r"\bvol\.", re.IGNORECASE)
+"""统一小写成 ``Vol.``; 站点标题一律这个写法."""
 
 
 def _number(value: str) -> str | None:
@@ -50,6 +54,9 @@ def _clean_search_title(value: str) -> str:
     title = unicodedata.normalize("NFKC", value)
     title = _SEARCH_NOISE_RE.sub("", title)
     title = title.replace("-", "")
+    # 序号写法对齐站点: javbus 侧常缩写为 ``Vo.4``, 站点数据一律 ``Vol.4``.
+    title = _VOL_ABBREV_RE.sub("Vol.", title)
+    title = _VOL_CASE_RE.sub("Vol.", title)
     return re.sub(r"\s+", " ", title).strip(" \t-:：_、")
 
 
