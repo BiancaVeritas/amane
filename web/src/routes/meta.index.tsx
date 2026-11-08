@@ -680,7 +680,8 @@ function MetaIndexPage() {
                 : undefined
             }
             defaultImageRatio={search.view === "cover" ? 16 / 9 : 0.7}
-            imageFit={search.view === "cover" ? "fill" : "cover"}
+            // contain: 等比缩放完整显示, 不裁切图片边缘; cover(裁切填满)会把比例不符的图切掉.
+            imageFit={search.view === "cover" ? "fill" : "contain"}
           />
           <ListPagination
             totalPages={Math.ceil(total / listLimit)}
