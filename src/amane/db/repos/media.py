@@ -25,6 +25,7 @@ def _apply_path_phase(media: MediaFile) -> None:
     media.mosaic = phase["mosaic"]
     media.has_subtitle_in_name = phase["has_subtitle"]
     media.definition = phase["definition"]
+    media.ltx = phase["ltx"]
 
 
 def file_phase_of(media: MediaFile) -> FilePhase:
@@ -33,6 +34,7 @@ def file_phase_of(media: MediaFile) -> FilePhase:
         mosaic=media.mosaic,
         has_subtitle=media.has_subtitle,
         definition=media.definition,
+        ltx=media.ltx,
     )
 
 

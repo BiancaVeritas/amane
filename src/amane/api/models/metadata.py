@@ -25,6 +25,7 @@ class FilePhaseSummary(BaseModel):
     uncensored: bool = False
     mosaics: list[Mosaic] = []
     definition: str | None = None
+    ltx: bool = False
 
 
 class MetadataResponse(BaseModel):

@@ -206,6 +206,8 @@ class MediaFile(SQLModel, table=True):
     #: 作为 `parse_file_info` 的 `has_external_subtitle` 入参并入文件相位.
     has_external_subtitle: bool = Field(default=False, index=True)
     definition: str | None = Field(default=None, index=True)
+    ltx: bool = Field(default=False, sa_column=Column(Boolean, nullable=False, index=True))
+    """文件名含独立的 LTX 标记; 只由 path 派生, 与 mosaic 无关."""
     metadata_id: int | None = Field(default=None, foreign_key="metadata.id", index=True)
     library_id: int = Field(foreign_key="libraries.id", index=True)
     created_at: datetime = Field(default_factory=_utcnow)
@@ -348,7 +350,6 @@ class Metadata(SQLModel, table=True):
         return is_vr(self.tags or [])
 
 
-
 class MediaIdentity(SQLModel, table=True):
     """独立于文件路径的 WESTERN 稳定身份索引。"""
 
@@ -369,6 +370,7 @@ class MediaIdentity(SQLModel, table=True):
     identity_value: str = Field(nullable=False)
     created_at: datetime = Field(default_factory=_utcnow)
     updated_at: datetime = Field(default_factory=_utcnow)
+
 
 def metadata_vr_predicate() -> ColumnElement[bool]:
     """`Metadata.vr` 的 SQL 等价式: 标签整体命中 `parsing.VR_TAGS` (忽略大小写与首尾空白).

@@ -1721,6 +1721,10 @@ export type FilePhaseSummary = {
      * Definition
      */
     definition?: string | null;
+    /**
+     * Ltx
+     */
+    ltx?: boolean;
 };
 
 /**
@@ -2495,6 +2499,10 @@ export type MediaFileResponse = {
      * Definition
      */
     definition?: string | null;
+    /**
+     * Ltx
+     */
+    ltx?: boolean;
     /**
      * Metadata Id
      */

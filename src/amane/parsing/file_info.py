@@ -78,6 +78,7 @@ class FilePhase(TypedDict):
     mosaic: Mosaic | None
     has_subtitle: bool
     definition: str | None
+    ltx: bool
 
 
 @dataclass(frozen=True)
@@ -89,6 +90,7 @@ class FilePhaseSummary:
     uncensored: bool = False
     mosaics: tuple[Mosaic, ...] = ()
     definition: str | None = None
+    ltx: bool = False
 
 
 # ---------------------------------------------------------------------------
@@ -400,6 +402,7 @@ def file_phase_from_path(path: str | Path) -> FilePhase:
         mosaic=info.mosaic,
         has_subtitle=info.has_subtitle_in_name,
         definition=info.definition,
+        ltx=info.ltx,
     )
 
 
@@ -450,6 +453,8 @@ def summarize_file_phases(phases: Iterable[FilePhase], content_type: ContentType
         mosaics=tuple(mosaic for mosaic in MOSAIC_VALUES if mosaic in mosaic_present),
         # 没有任何文件时不伪造分辨率; 有文件但均未识别时默认显示 1080p.
         definition=max_definition(phase["definition"] for phase in items) if items else None,
+        # 用 get: 调用方可能传入不含新键的历史相位字典.
+        ltx=any(phase.get("ltx", False) for phase in items),
     )
 
 

@@ -2978,6 +2978,11 @@ export const FilePhaseSummarySchema = {
                 }
             ],
             title: 'Definition'
+        },
+        ltx: {
+            type: 'boolean',
+            title: 'Ltx',
+            default: false
         }
     },
     type: 'object',
@@ -5218,6 +5223,11 @@ export const MediaFileResponseSchema = {
                 }
             ],
             title: 'Definition'
+        },
+        ltx: {
+            type: 'boolean',
+            title: 'Ltx',
+            default: false
         },
         metadata_id: {
             anyOf: [

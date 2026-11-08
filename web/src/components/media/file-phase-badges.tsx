@@ -6,6 +6,7 @@ import {
   IconEye,
   IconLockOpen,
   IconSubtitles,
+  IconTag,
 } from "@tabler/icons-react";
 import type { TFunction } from "i18next";
 import type { ReactNode } from "react";
@@ -23,9 +24,11 @@ export type FilePhaseLike = {
   /** 文件相位: 这一份文件自己的马赛克标记. */
   mosaic?: Mosaic | null;
   definition?: string | null;
+  /** 文件名含独立的 LTX 标记; 与 mosaic 无关, 单独成角标. */
+  ltx?: boolean;
 };
 
-type PhaseChipKey = "sub" | "cen" | "u" | "crack" | "leak" | "def";
+type PhaseChipKey = "sub" | "cen" | "u" | "crack" | "leak" | "ltx" | "def";
 
 type PhaseChip = { key: PhaseChipKey; label: string };
 
@@ -54,6 +57,11 @@ const PHASE_CHIP = exhaustiveRecord<PhaseChipKey>()({
     color: "teal",
     Icon: IconDroplet,
     iconColor: "var(--mantine-color-teal-3)",
+  },
+  ltx: {
+    color: "orange",
+    Icon: IconTag,
+    iconColor: "var(--mantine-color-orange-4)",
   },
   def: {
     color: "blue",
@@ -91,6 +99,9 @@ function mosaicChips(phase: FilePhaseLike, t: TFunction<"metadata">): PhaseChip[
   }
   if (hasMosaic(phase, "leaked")) {
     chips.push({ key: "leak", label: t("filePhase.leaked") });
+  }
+  if (phase.ltx === true) {
+    chips.push({ key: "ltx", label: "LTX" });
   }
   return chips;
 }

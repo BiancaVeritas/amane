@@ -9888,6 +9888,11 @@
               }
             ],
             "title": "Definition"
+          },
+          "ltx": {
+            "type": "boolean",
+            "title": "Ltx",
+            "default": false
           }
         },
         "type": "object",
@@ -12102,6 +12107,11 @@
               }
             ],
             "title": "Definition"
+          },
+          "ltx": {
+            "type": "boolean",
+            "title": "Ltx",
+            "default": false
           },
           "metadata_id": {
             "anyOf": [

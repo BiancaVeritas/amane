@@ -52,7 +52,9 @@ logger = structlog.get_logger()
 router = APIRouter(prefix="/metadata", tags=["metadata"])
 
 
-async def build_metadata_responses(repo: RepoDep, items: Sequence[Metadata], runtime: RuntimeDep) -> list[MetadataResponse]:
+async def build_metadata_responses(
+    repo: RepoDep, items: Sequence[Metadata], runtime: RuntimeDep
+) -> list[MetadataResponse]:
     """列表与语义检索共用: 补 file_count / file_phase 聚合."""
     summaries = await repo.summarize_media_by_metadata(items)
     responses: list[MetadataResponse] = []
@@ -77,6 +79,7 @@ def _file_phase_resp(summary: ParsedFilePhase) -> FilePhaseSummary:
         uncensored=summary.uncensored,
         mosaics=list(summary.mosaics),
         definition=summary.definition,
+        ltx=summary.ltx,
     )
 
 
@@ -310,7 +313,9 @@ async def get_metadata(metadata_id: int, repo: RepoDep, runtime: RuntimeDep) -> 
 
 
 @router.patch("/{metadata_id}")
-async def update_metadata(metadata_id: int, req: PartialMetadata, repo: RepoDep, runtime: RuntimeDep) -> MetadataResponse:
+async def update_metadata(
+    metadata_id: int, req: PartialMetadata, repo: RepoDep, runtime: RuntimeDep
+) -> MetadataResponse:
     updates = cast("MetadataFields", {k: v for k, v in req.model_dump().items() if v is not None})
     if not updates:
         raise HTTPException(status_code=422, detail="没有需要修改的字段")
@@ -334,7 +339,9 @@ async def update_metadata(metadata_id: int, req: PartialMetadata, repo: RepoDep,
 
 
 @router.put("/{metadata_id}/locks")
-async def set_metadata_locks(metadata_id: int, req: MetadataLocksRequest, repo: RepoDep, runtime: RuntimeDep) -> MetadataResponse:
+async def set_metadata_locks(
+    metadata_id: int, req: MetadataLocksRequest, repo: RepoDep, runtime: RuntimeDep
+) -> MetadataResponse:
     """整体替换锁定字段集合."""
     metadata = await repo.set_metadata_locks(metadata_id, req.fields)
     if metadata is None:

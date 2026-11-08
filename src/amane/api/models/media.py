@@ -23,6 +23,7 @@ class MediaFileResponse(BaseModel):
     uncensored: bool = False
     has_subtitle: bool = False
     definition: str | None = None
+    ltx: bool = False
     metadata_id: int | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
