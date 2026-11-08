@@ -23,13 +23,13 @@ def test_detail_parses_metadata_and_all_public_gallery_links() -> None:
         f'<div><a class="gallery-item" data-is_sample="1" href="/moviepages/072926-001/images/l/{i:03}.jpg"></a></div>'
         for i in range(1, 6)
     )
-    html = f'''<h1 itemprop="name">Sample title</h1><p itemprop="description">Sample plot</p>
+    html = f"""<h1 itemprop="name">Sample title</h1><p itemprop="description">Sample plot</p>
     <ul><li><span class="spec-title">出演</span><span class="spec-content"><a class="spec__tag"><span>Actress A</span></a></span></li>
     <li><span class="spec-title">配信日</span><span itemprop="uploadDate" class="spec-content">2026/07/29</span></li>
     <li><span class="spec-title">再生時間</span><span class="spec-content"><span>00:40:28</span></span></li>
     <li><span class="spec-title">シリーズ</span><span class="spec-content"><a>Series A</a></span></li>
     <li><span class="spec-title">タグ</span><span class="spec-content"><a class="spec-item">Tag A</a></span></li></ul>
-    {gallery_html}<a class="gallery-item" data-is_sample="0" href="javascript:void(0);"></a>'''
+    {gallery_html}<a class="gallery-item" data-is_sample="0" href="javascript:void(0);"></a>"""
     data, gallery = _detail(html, "https://www.caribbeancom.com/moviepages/072926-001/index.html")
     assert data["title"] == "Sample title"
     assert data["plot"] == "Sample plot"
@@ -48,16 +48,38 @@ def test_runtime_rounding() -> None:
     assert _runtime_minutes("bad") is None
 
 
+@pytest.mark.parametrize(
+    ("links", "expected"),
+    [
+        # 每个演员独立 <a>; 整段拼接后只剩空白, 靠分隔符切不开.
+        (["朝桐光", "美月優芽"], ["朝桐光", "美月優芽"]),
+        (["田辺莉子", "榊カヲル", "ありさ"], ["田辺莉子", "榊カヲル", "ありさ"]),
+        # 「他」表示还有未列出的出演者, 不是人名.
+        (["A", "他"], ["A"]),
+        (["  空白  ", ""], ["空白"]),
+        ([], []),
+    ],
+)
+def test_detail_splits_multiple_actors_by_link(links: list[str], expected: list[str]) -> None:
+    actors_html = "".join(
+        f'<a class="spec__tag" itemprop="actor"><span itemprop="name">{name}</span></a>' for name in links
+    )
+    html = f"""<h1 itemprop="name">Title</h1>
+    <ul><li><span class="spec-title">出演</span><span class="spec-content">{actors_html}</span></li></ul>"""
+    data, _ = _detail(html, "https://www.caribbeancom.com/moviepages/072926-001/index.html")
+    assert data["actors"] == expected
+
+
 class _FakeClient:
     async def get_html(self, url: str, **kwargs: object) -> str:
         assert kwargs.get("encoding") == "euc_jp"
-        return '''<h1 itemprop="name">Test title</h1><p itemprop="description">Test plot</p>
+        return """<h1 itemprop="name">Test title</h1><p itemprop="description">Test plot</p>
         <ul><li><span class="spec-title">出演</span><span class="spec-content"><a class="spec__tag"><span>Actor A</span></a></span></li>
         <li><span class="spec-title">配信日</span><span itemprop="uploadDate" class="spec-content">2026/11/05</span></li>
         <li><span class="spec-title">再生時間</span><span class="spec-content"><span>00:30:00</span></span></li>
         <li><span class="spec-title">シリーズ</span><span class="spec-content"><a>Series A</a></span></li>
         <li><span class="spec-title">タグ</span><span class="spec-content"><a class="spec-item">Tag A</a></span></li></ul>
-        <a class="gallery-item" data-is_sample="1" href="/moviepages/103126-001/images/l/001.jpg"></a>'''
+        <a class="gallery-item" data-is_sample="1" href="/moviepages/103126-001/images/l/001.jpg"></a>"""
 
 
 @pytest.mark.asyncio

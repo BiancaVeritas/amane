@@ -1,4 +1,5 @@
 """Caribbeancom regular-site detail-page crawler."""
+
 from __future__ import annotations
 
 import json
@@ -13,6 +14,8 @@ from ..models import FetchOptions, MediaMetadata, SearchQuery, film_actors
 
 _BASE_URL = "https://www.caribbeancom.com"
 _NUMBER_RE = re.compile(r"[0-9]{6}-[0-9]{3}")
+#: 出演栏里的占位词: 表示「还有其他人」, 不是演员名.
+_NON_NAMES = frozenset({"他", "他/他", "ほか", "他多数", "その他"})
 _CONNECTIVITY_NUMBER = "072926-001"
 
 
@@ -40,6 +43,8 @@ class _DetailParser(HTMLParser):
         self._in_spec_content = False
         self._spec_depth = 0
         self._spec_text: list[str] = []
+        #: 出演栏每个 ``<a>`` 的文本, 逐条收集. 整段文本拼接后再切分拿不到边界.
+        self._actor_links: list[str] = []
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         a = dict(attrs)
@@ -61,6 +66,9 @@ class _DetailParser(HTMLParser):
             self._spec_text = []
         elif tag == "a" and "spec-item" in classes:
             self._start_capture("tag", tag)
+        elif tag == "a" and (a.get("itemprop") == "actor" or "spec__tag" in classes):
+            # 每个演员一个 <a>, 名字在其 <span itemprop="name"> 里.
+            self._start_capture("actor", tag)
         elif self._capture:
             self._capture_depth += 1
         if self._in_spec_content and not (tag == "span" and "spec-content" in classes):
@@ -83,6 +91,11 @@ class _DetailParser(HTMLParser):
                     self.plot = value
                 elif self._capture == "spec-title":
                     self._spec_key = value
+                elif self._capture == "actor":
+                    name = re.sub(r"\s+", " ", value).strip()
+                    # 「他」不是人名, 只表示还有未列出的出演者.
+                    if name and name not in _NON_NAMES and name not in self._actor_links:
+                        self._actor_links.append(name)
                 elif self._capture == "tag" and value and value not in self.tags:
                     self.tags.append(value)
                 self._capture = None
@@ -91,8 +104,9 @@ class _DetailParser(HTMLParser):
             if self._spec_depth <= 0 and tag == "span":
                 value = "".join(self._spec_text).strip()
                 if self._spec_key == "出演":
-                    for name in re.split(r"[,、]", value):
-                        name = name.strip()
+                    # 逐 <a> 取得的人名带边界; 整段拼接后只剩空格, 无法可靠切分.
+                    names = self._actor_links or [name.strip() for name in re.split(r"[,、]", value) if name.strip()]
+                    for name in names:
                         if name and name not in self.actors:
                             self.actors.append(name)
                 elif self._spec_key == "配信日":
@@ -110,6 +124,7 @@ class _DetailParser(HTMLParser):
             self._capture_text.append(data)
         if self._in_spec_content:
             self._spec_text.append(data)
+
 
 def _trailer_urls(html: str) -> list[str]:
     match = re.search(r"\bvar\s+Movie\s*=\s*(\{.*?\})\s*;", html, re.DOTALL)

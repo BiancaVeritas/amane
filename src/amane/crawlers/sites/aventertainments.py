@@ -46,7 +46,7 @@ def _load_pro_index() -> dict[str, list[int]]:
         return _pro_index
     try:
         raw = json.loads(_PRO_INDEX_PATH.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
+    except OSError, json.JSONDecodeError:
         logger.warning("pro index unavailable", path=str(_PRO_INDEX_PATH))
         _pro_index = {}
         return _pro_index
@@ -120,7 +120,7 @@ def _jsonld_video(html: Selector) -> dict:
     for raw in html.xpath('//script[@type="application/ld+json"]/text()').getall():
         try:
             payload = json.loads(raw)
-        except (json.JSONDecodeError, TypeError):
+        except json.JSONDecodeError, TypeError:
             continue
         candidates = payload if isinstance(payload, list) else [payload]
         for item in candidates:
@@ -151,6 +151,21 @@ def _label_value(html: Selector, label: str) -> str:
         if key == label:
             return _text(row.xpath('normalize-space(string(.//span[contains(@class,"value")][1]))').get())
     return ""
+
+
+def _label_links(html: Selector, label: str) -> list[str]:
+    """取该行 ``span.value`` 里每个 ``<a>`` 的文本.
+
+    多主演时每个名字各佔一个链接, 而 ``string()`` 会把它们拼成「甲 乙」, 分隔符 (逗号)
+    只出现在 ``<title>`` 里. 按链接逐个取才能拿到准确的人名边界.
+    """
+    for row in html.xpath('//*[contains(concat(" ", normalize-space(@class), " "), " single-info ")]'):
+        key = _text(row.xpath('normalize-space(string(.//span[contains(@class,"title")][1]))').get())
+        if key != label:
+            continue
+        names = [_text(value) for value in row.xpath('.//span[contains(@class,"value")][1]//a//text()').getall()]
+        return [name for name in names if name]
+    return []
 
 
 def _parse_date(value: str) -> str | None:
@@ -190,19 +205,17 @@ def _metadata_from_page(url: str, text: str) -> MediaMetadata | None:
     # poster. AVE serves it from both legacy /archive/ and newer /new/ paths.
     # Read only explicit product-image links/images; never use <video poster>.
     bigcover = _text(
-        html.xpath(
-            "(//a[contains(@href, '/archive/bigcover/') or contains(@href, '/new/bigcover/')]/@href)[1]"
-        ).get()
+        html.xpath("(//a[contains(@href, '/archive/bigcover/') or contains(@href, '/new/bigcover/')]/@href)[1]").get()
     ) or _text(
-        html.xpath(
-            "(//img[contains(@src, '/archive/bigcover/') or contains(@src, '/new/bigcover/')]/@src)[1]"
-        ).get()
+        html.xpath("(//img[contains(@src, '/archive/bigcover/') or contains(@src, '/new/bigcover/')]/@src)[1]").get()
     )
     jacket = urljoin(url, jacket) if jacket else ""
     bigcover = urljoin(url, bigcover) if bigcover else ""
 
-    actor = _label_value(html, "主演女優")
-    actors = [name.strip() for name in re.split(r"[、,/／]", actor) if name.strip()]
+    # 主演栏每个名字各佔一个 <a>, 整段 string() 只会拼成「甲 乙」. 优先按链接取边界.
+    actors = _label_links(html, "主演女優")
+    if not actors:
+        actors = [name.strip() for name in re.split(r"[、,/／]", _label_value(html, "主演女優")) if name.strip()]
     categories: list[str] = []
     for row in html.xpath('//*[contains(concat(" ", normalize-space(@class), " "), " single-info ")]'):
         label = _text(row.xpath('normalize-space(string(.//span[contains(@class,"title")][1]))').get())
@@ -398,11 +411,7 @@ class AVEntertainmentsCrawler(Crawler):
         current_is_bd = _is_bd_number(initial.number)
         ordered: list[str] = []
         preferred_bd = bd_url or (url if current_is_bd else None)
-        preferred_dvd = (
-            dvd_url
-            or (url if not current_is_bd else None)
-            or self._search_dvd_fallback
-        )
+        preferred_dvd = dvd_url or (url if not current_is_bd else None) or self._search_dvd_fallback
         for candidate in (preferred_bd, preferred_dvd):
             if candidate and candidate not in ordered:
                 ordered.append(candidate)
