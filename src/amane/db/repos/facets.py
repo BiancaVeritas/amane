@@ -2,7 +2,8 @@ from collections.abc import Collection, Sequence
 from datetime import datetime
 from typing import Unpack, cast
 
-from sqlalchemy import asc
+import structlog
+from sqlalchemy import asc, func
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -11,6 +12,7 @@ from ...enums import ActorField, ActorGender
 from ...utils.collections import unique_ids
 from ...utils.text import normalize_long_text
 from ..actor_lookup import build_actor_lookup_names, list_actor_aliases, lookup_actors_by_name
+from ..actor_merge import compare, normalize_name
 from ..actor_person import (
     actor_to_aggregated,
     apply_aggregated_to_actor,
@@ -20,6 +22,7 @@ from ..actor_person import (
 from ..models import (
     SCRAPE_FACET_KINDS,
     Actor,
+    ActorAlias,
     ActorSortField,
     ActorUserTag,
     Comment,
@@ -28,6 +31,7 @@ from ..models import (
     FacetRule,
     FacetSortField,
     Metadata,
+    MetadataActor,
     MetadataUserTag,
     Publisher,
     Series,
@@ -71,6 +75,8 @@ from .facet_helpers import (
     replace_actor_aliases,
     set_facets_favorite,
 )
+
+logger = structlog.get_logger(__name__)
 
 
 async def _rows_by_names[T: Actor | Director | Tag | Studio | Publisher | Series](
@@ -323,6 +329,7 @@ class FacetsRepoMixin(RepositoryMixinBase):
         """不存在返回 None. ``aliases`` 提供时整表替换别名行; 省略或别名已锁则不动别名.
 
         AUTO 写入 (演员刮削), 锁定字段保留库内值与来源; 手动字段写入经 ``update_actor``.
+        写入后按 ``actor_merge`` 的判据尝试自动合并同名同人的其它实体.
         """
         if actor.id is None:
             return None
@@ -341,7 +348,48 @@ class FacetsRepoMixin(RepositoryMixinBase):
                 await replace_actor_aliases(session, db, aliases)
             await session.commit()
             await session.refresh(db)
-            return db
+            merged = await self._auto_merge_actor(session, db)
+            await session.refresh(merged)
+            return merged
+
+    async def _auto_merge_actor(self, session: AsyncSession, actor: Actor) -> Actor:
+        """把与 ``actor`` 判定为同一人的其它实体并入, 返回保留的那一个.
+
+        判据见 ``db.actor_merge``: 名字有交集 + 生日身高一致 (+ 双方都有时的三围罩杯).
+        保留作品数更多的一方为目标 —— 合并是填空式, 目标越完整, 丢掉的信息越少.
+        """
+        candidates = await _actors_sharing_name(session, actor)
+        if not candidates:
+            return actor
+
+        actor_aliases = await list_actor_aliases(session, actor.id) if actor.id is not None else []
+        groups: list[Actor] = []
+        for other in candidates:
+            other_aliases = await list_actor_aliases(session, other.id) if other.id is not None else []
+            if compare(actor, actor_aliases, other, other_aliases).merge:
+                groups.append(other)
+        if not groups:
+            return actor
+
+        members = [actor, *groups]
+        counts = await _metadata_counts(session, [m.id for m in members if m.id is not None])
+        target = max(members, key=lambda m: counts.get(m.id or 0, 0))
+        sources = [m for m in members if m.id != target.id]
+        if not sources:
+            return actor
+
+        await merge_link_facets(session, LINK_FACETS[FacetKind.ACTOR], target.id or 0, {s.id or 0 for s in sources})
+        for src in sources:
+            row = await session.get(Actor, src.id)
+            if row is not None:
+                await session.delete(row)
+        await session.commit()
+        logger.info(
+            "actor auto merged",
+            target=target.name,
+            absorbed=[s.name for s in sources],
+        )
+        return target
 
     async def get_actor_aliases(self, actor_id: int) -> list[str]:
         """保序; 不含展示名."""
@@ -650,3 +698,44 @@ class FacetsRepoMixin(RepositoryMixinBase):
             await session.delete(comment)
             await session.commit()
             return True
+
+
+async def _actors_sharing_name(session: AsyncSession, actor: Actor) -> list[Actor]:
+    """展示名或别名与 ``actor`` 的名字集合有交集的其它实体.
+
+    先用展示名与别名做一次粗筛, 精确判定交给 ``actor_merge.compare``.
+    """
+    own = {normalize_name(actor.name)}
+    if actor.id is not None:
+        own.update(normalize_name(a) for a in await list_actor_aliases(session, actor.id))
+    own.discard("")
+    if not own:
+        return []
+
+    rows = list((await session.exec(select(Actor))).all())
+    alias_rows = list((await session.exec(select(ActorAlias))).all())
+    aliases_by_actor: dict[int, set[str]] = {}
+    for row in alias_rows:
+        aliases_by_actor.setdefault(row.actor_id, set()).add(normalize_name(row.name))
+
+    found: list[Actor] = []
+    for other in rows:
+        if other.id == actor.id:
+            continue
+        names = {normalize_name(other.name), *aliases_by_actor.get(other.id or 0, set())}
+        names.discard("")
+        if names & own:
+            found.append(other)
+    return found
+
+
+async def _metadata_counts(session: AsyncSession, actor_ids: list[int]) -> dict[int, int]:
+    """各演员的作品数; 合并时以作品多的一方为目标."""
+    if not actor_ids:
+        return {}
+    stmt = (
+        select(col(MetadataActor.actor_id), func.count(col(MetadataActor.metadata_id)))
+        .where(col(MetadataActor.actor_id).in_(actor_ids))
+        .group_by(col(MetadataActor.actor_id))
+    )
+    return {int(actor_id): int(total) for actor_id, total in (await session.exec(stmt)).all()}
