@@ -12,7 +12,7 @@ from ..parsing.file_info import FileInfo
 from ..utils.path import is_descendant, path_key
 from .template import PLACEHOLDER_MAP_KEYS as PLACEHOLDER_MAP_KEYS
 from .template import PLACEHOLDERS as PLACEHOLDERS
-from .template import Parser, PathEngine, TemplateContext
+from .template import CustomToken, Parser, PathEngine, TemplateContext
 
 if TYPE_CHECKING:
     from ..db.models import Library, Metadata
@@ -62,6 +62,16 @@ def render_path_template(template: str, variables: dict[str, str]) -> str:
     return PathEngine(template).render(TemplateContext.from_mapping(variables))
 
 
+def _custom_tokens(library: Library) -> dict[str, CustomToken]:
+    """库级自定义占位符 → 匹配规则. 配置里存的是「占位符名 → 字面串」."""
+    tokens = getattr(library, "custom_tokens", None) or {}
+    return {
+        name: CustomToken(literal=literal)
+        for name, literal in tokens.items()
+        if isinstance(name, str) and name.isidentifier() and isinstance(literal, str) and literal
+    }
+
+
 def resolve_paths(
     library: Library,
     metadata: Metadata,
@@ -82,6 +92,7 @@ def resolve_paths(
         cd=cd,
         actor_genders=actor_genders,
         library_root=base_path,
+        custom_tokens=_custom_tokens(library),
     )
 
     # 先渲染视频, 注入 `{video_*}` 后再渲染链接与刮削产物.
@@ -164,6 +175,7 @@ def resolve_subtitle_path(
         file_info=file_info,
         actor_genders=actor_genders,
         library_root=base_path,
+        custom_tokens=_custom_tokens(library),
     )
     if video_dest is not None:
         ctx.apply_video(video_dest, base_path)

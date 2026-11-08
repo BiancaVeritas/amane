@@ -31,6 +31,47 @@ PATH_FIELD_ELLIPSIS = "…"
 _CLIP_KEYS = frozenset({"title", "actor", "actors", "actress", "actresses"})
 _ELLIPSIS_BYTES = len(PATH_FIELD_ELLIPSIS.encode("utf-8"))
 
+
+@dataclass(frozen=True, slots=True)
+class CustomToken:
+    """库级自定义占位符: 文件名里出现某段字面串时输出固定值.
+
+    典型用途是给文件名加标记 (如 ``SONE-638-LTX`` 里的 ``LTX``). 匹配不区分大小写,
+    但输出强制大写 —— 文件名大小写常不统一, 而归档命名要一致.
+
+    ``literal`` 必须**连续出现**, 不能散落在别的字母之间; 且前后不能紧贴字母
+    (``SALTX`` 不算命中), 数字或分隔符相邻可以 (``SONE638LTX`` 算命中).
+    """
+
+    literal: str
+    """要匹配的字面串, 大小写不敏感."""
+
+    def matches(self, name: str) -> bool:
+        """连续匹配 + 字母边界.
+
+        前后不得紧贴字母 (``SALTX`` 不算命中), 数字与分隔符相邻可以 (``SONE638LTX``
+        算命中). 相邻的重复串 (``LTXLTX``) 也认 —— 它更像是标记重复而非词内嵌.
+        """
+        if not self.literal or not name:
+            return False
+        target = self.literal.upper()
+        upper = name.upper()
+        start = 0
+        while True:
+            index = upper.find(target, start)
+            if index < 0:
+                return False
+            before = upper[index - 1] if index > 0 else ""
+            after = upper[index + len(target)] if index + len(target) < len(upper) else ""
+            if not before.isalpha() and not after.isalpha():
+                return True
+            # 前后紧贴的是同一个标记的重复, 仍然认.
+            if (before and upper[max(0, index - len(target)) : index] == target) or (
+                after and upper[index + len(target) : index + 2 * len(target)] == target
+            ):
+                return True
+            start = index + 1
+
 # cd? / sub? / mosaic? / def? 不是合法标识符, 只能用函数式 TypedDict.
 TemplateVariables = TypedDict(
     "TemplateVariables",
@@ -310,6 +351,24 @@ def actress_names(actors: Sequence[str], genders: Mapping[str, ActorGender] | No
     return [name for name in actors if genders.get(name, ActorGender.UNKNOWN) is not ActorGender.MALE]
 
 
+def custom_variable_values(
+    tokens: Mapping[str, CustomToken] | None,
+    *filenames: str | None,
+) -> dict[str, str]:
+    """按文件名逐个检测自定义占位符; 任一候选名命中即取值, 输出大写.
+
+    ``{LTX}`` 这类占位符在模板里的名字就是配置项的键, 因此返回值直接并入 variables.
+    """
+    if not tokens:
+        return {}
+    names = [name for name in filenames if name]
+    values: dict[str, str] = {}
+    for key, token in tokens.items():
+        if any(token.matches(name) for name in names):
+            values[key] = token.literal.upper()
+    return values
+
+
 def _build_variables(
     metadata: Metadata,
     ext: str = "",
@@ -318,6 +377,7 @@ def _build_variables(
     cd: int | None = None,
     actor_genders: Mapping[str, ActorGender] | None = None,
     library_root: Path | None = None,
+    custom_tokens: Mapping[str, CustomToken] | None = None,
 ) -> TemplateVariables:
     year = metadata.release[:4] if metadata.release and len(metadata.release) >= 4 else None
     actor = metadata.actors[0] if metadata.actors else None
@@ -376,6 +436,13 @@ def _build_variables(
         "link_dir": _UNKNOWN,
         "link_name": _UNKNOWN,
         "raw_srt_name": _UNKNOWN,
+        # 库级自定义占位符: 用原始文件名与目录名检测, 未命中则给空串 (模板里的空段会被折叠).
+        **{
+            key: value
+            for key, value in custom_variable_values(
+                custom_tokens, source_path.name if source_path else None, raw_dir
+            ).items()
+        },
     }
 
 
@@ -402,8 +469,11 @@ class TemplateContext:
         cd: int | None = None,
         actor_genders: Mapping[str, ActorGender] | None = None,
         library_root: Path | None = None,
+        custom_tokens: Mapping[str, CustomToken] | None = None,
     ) -> TemplateContext:
-        built = _build_variables(metadata, ext, source_path, file_info, cd, actor_genders, library_root)
+        built = _build_variables(
+            metadata, ext, source_path, file_info, cd, actor_genders, library_root, custom_tokens
+        )
         variables = cast(dict[str, str], {**built})
         # {dir} 是 {raw_dir} 的别名, 不下发 schema.
         variables["dir"] = built["raw_dir"]

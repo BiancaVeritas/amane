@@ -443,6 +443,14 @@ class Library(SQLModel, table=True):
     patterns: list[str] = Field(default_factory=list, sa_column=Column(JSON, nullable=False))
     move_mode: MoveMode = Field(default=MoveMode.MOVE)
     video_template: PathTemplate = Field(default=VIDEO_TEMPLATE_DEFAULT)
+    custom_tokens: dict[str, str] = Field(
+        default_factory=dict, sa_column=Column(JSON, nullable=False, server_default=text("'{}'"))
+    )
+    """库级自定义占位符: 占位符名 → 要匹配的字面串. 文件名里连续出现该串时, 模板中的
+    ``{名字}`` 取其大写形式, 否则为空. 名字须是合法标识符, 字面串大小写不敏感.
+
+    用于给归档名附加文件名里的标记 (如 ``SONE-638-LTX`` 的 ``LTX``).
+    """
     link_template: PathTemplate | None = None
     """空则不创建链接. 非空时 ORGANIZE 在视频就位后按此模板写 strm 或符号链接, 必须在库外."""
     link_mode: LinkMode = Field(default=LinkMode.STRM)
