@@ -35,6 +35,8 @@
     "scrape": "Scrape",
     "scrapeWithNumber": "Scrape with number",
     "batchScrape": "Batch Scrape",
+    "batchScrapeCached": "Scrape with cache",
+    "batchScrapeForce": "Force re-scrape",
     "batchOrganize": "Batch Organize"
   },
   "scrapeOverride": {

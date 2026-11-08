@@ -35,6 +35,8 @@
     "scrape": "刮削",
     "scrapeWithNumber": "指定番号刮削",
     "batchScrape": "批量刮削",
+    "batchScrapeCached": "使用缓存刮削",
+    "batchScrapeForce": "强制重新刮削",
     "batchOrganize": "批量整理"
   },
   "scrapeOverride": {

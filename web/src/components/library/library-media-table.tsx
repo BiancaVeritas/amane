@@ -12,7 +12,14 @@ import {
   type MantineBreakpoint,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
-import { IconDots, IconFolderDown, IconForms, IconRefresh, IconTrash } from "@tabler/icons-react";
+import {
+  IconChevronDown,
+  IconDots,
+  IconFolderDown,
+  IconForms,
+  IconRefresh,
+  IconTrash,
+} from "@tabler/icons-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { type ReactNode, useEffect, useRef, useState } from "react";
@@ -192,12 +199,20 @@ export function LibraryMediaTable({
 
   const invalidate = () => void queryClient.invalidateQueries({ queryKey: listMediaQueryKey() });
 
-  async function handleBatchScrape() {
+  async function handleBatchScrape(options?: { force?: boolean }) {
     const ids = selectedIds;
+    // 空 use_cache 表示不读 DB per-site 快照与既有译文, 全部重新抓取.
+    const useCache = options?.force ? [] : undefined;
     setBatchScraping(true);
     try {
       const { data } = await batchSubmitTasks({
-        body: { submissions: ids.map((id) => ({ type: "scrape", media_id: id })) },
+        body: {
+          submissions: ids.map((id) => ({
+            type: "scrape" as const,
+            media_id: id,
+            ...(useCache !== undefined ? { use_cache: useCache } : {}),
+          })),
+        },
         throwOnError: true,
       });
       if (data.submitted > 0) {
@@ -378,16 +393,36 @@ export function LibraryMediaTable({
         <SelectionBar count={selected.size}>
           {/* 窄屏三个批量按钮分成多行, 占用表体高度: sm 以下改由菜单提供, 选中数仍由 Badge 常驻呈现. */}
           <Group gap="xs" wrap="wrap" visibleFrom="sm">
-            <Button
-              size="xs"
-              variant="light"
-              leftSection={<IconRefresh size={14} />}
-              loading={busy}
-              disabled={selected.size === 0}
-              onClick={() => void handleBatchScrape()}
-            >
-              {t("actions.batchScrape")}
-            </Button>
+            <Menu position="bottom-start" withinPortal>
+              <Menu.Target>
+                <Button
+                  size="xs"
+                  variant="light"
+                  leftSection={<IconRefresh size={14} />}
+                  rightSection={<IconChevronDown size={12} />}
+                  loading={busy}
+                  disabled={selected.size === 0}
+                >
+                  {t("actions.batchScrape")}
+                </Button>
+              </Menu.Target>
+              <Menu.Dropdown>
+                <Menu.Item
+                  leftSection={<IconRefresh size={14} />}
+                  onClick={() => void handleBatchScrape()}
+                >
+                  {t("actions.batchScrapeCached")}
+                </Menu.Item>
+                {/* 空 use_cache = 不读 DB 快照与既有译文, 全部重新抓取. */}
+                <Menu.Item
+                  leftSection={<IconRefresh size={14} />}
+                  color="orange"
+                  onClick={() => void handleBatchScrape({ force: true })}
+                >
+                  {t("actions.batchScrapeForce")}
+                </Menu.Item>
+              </Menu.Dropdown>
+            </Menu>
             <Button
               size="xs"
               variant="light"
