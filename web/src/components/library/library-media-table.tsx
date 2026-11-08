@@ -407,19 +407,18 @@ export function LibraryMediaTable({
                 </Button>
               </Menu.Target>
               <Menu.Dropdown>
-                <Menu.Item
-                  leftSection={<IconRefresh size={14} />}
-                  onClick={() => void handleBatchScrape()}
-                >
-                  {t("actions.batchScrapeCached")}
+                <Menu.Item onClick={() => void handleBatchScrape()}>
+                  <Text size="sm">{t("common:actions.scrapeNormal")}</Text>
+                  <Text size="xs" c="dimmed">
+                    {t("common:actions.scrapeNormalDesc")}
+                  </Text>
                 </Menu.Item>
                 {/* 空 use_cache = 不读 DB 快照与既有译文, 全部重新抓取. */}
-                <Menu.Item
-                  leftSection={<IconRefresh size={14} />}
-                  color="orange"
-                  onClick={() => void handleBatchScrape({ force: true })}
-                >
-                  {t("actions.batchScrapeForce")}
+                <Menu.Item onClick={() => void handleBatchScrape({ force: true })}>
+                  <Text size="sm">{t("common:actions.scrapeForce")}</Text>
+                  <Text size="xs" c="dimmed">
+                    {t("common:actions.scrapeForceDesc")}
+                  </Text>
                 </Menu.Item>
               </Menu.Dropdown>
             </Menu>
