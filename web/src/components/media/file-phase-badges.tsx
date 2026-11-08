@@ -108,11 +108,11 @@ function mosaicChips(phase: FilePhaseLike, t: TFunction<"metadata">): PhaseChip[
 
 function mediaChips(phase: FilePhaseLike, t: TFunction<"metadata">): PhaseChip[] {
   const chips: PhaseChip[] = [];
-  if (phase.has_subtitle) {
-    chips.push({ key: "sub", label: t("filePhase.subtitle") });
-  }
   if (phase.definition) {
     chips.push({ key: "def", label: phase.definition });
+  }
+  if (phase.has_subtitle) {
+    chips.push({ key: "sub", label: t("filePhase.subtitle") });
   }
   return chips;
 }
