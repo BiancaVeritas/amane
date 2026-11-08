@@ -64,7 +64,7 @@ def _names_of(actor: Actor, aliases: list[str]) -> set[str]:
 
 def _field(value: object) -> object:
     """三围/身高这类整数, 0 与 None 都视为缺失."""
-    return value if value else None
+    return value or None
 
 
 def compare(

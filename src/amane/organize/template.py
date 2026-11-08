@@ -72,6 +72,7 @@ class CustomPlaceholder:
                 return True
             start = index + 1
 
+
 # cd? / sub? / mosaic? / def? 不是合法标识符, 只能用函数式 TypedDict.
 TemplateVariables = TypedDict(
     "TemplateVariables",
@@ -394,11 +395,7 @@ def _build_variables(
         upper_number = metadata.number.upper()
         upper_prefix = prefix.upper()
         prefix_index = 0 if upper_number.startswith(upper_prefix) else upper_number.find(upper_prefix)
-        raw_prefix = (
-            metadata.number[prefix_index : prefix_index + len(prefix)]
-            if prefix_index >= 0
-            else prefix
-        )
+        raw_prefix = metadata.number[prefix_index : prefix_index + len(prefix)] if prefix_index >= 0 else prefix
 
     return {
         "number": metadata.number,
@@ -437,12 +434,7 @@ def _build_variables(
         "link_name": _UNKNOWN,
         "raw_srt_name": _UNKNOWN,
         # 库级自定义占位符: 用原始文件名与目录名检测, 未命中则给空串 (模板里的空段会被折叠).
-        **{
-            key: value
-            for key, value in custom_variable_values(
-                custom_placeholders, source_path.name if source_path else None, raw_dir
-            ).items()
-        },
+        **custom_variable_values(custom_placeholders, source_path.name if source_path else None, raw_dir),
     }
 
 

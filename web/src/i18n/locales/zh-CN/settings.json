@@ -127,7 +127,8 @@
             "caribbeancom": "Caribbeancom",
             "caribbeancompr": "Caribbeancompr",
             "pacopacomama": "Pacopacomama",
-            "tokyo_hot": "Tokyo-Hot"
+            "tokyo_hot": "Tokyo-Hot",
+            "d2pass": "d2pass"
           },
           "$": {
             "options": {
@@ -166,7 +167,8 @@
               "caribbeancom": "Caribbeancom",
               "caribbeancompr": "Caribbeancompr",
               "pacopacomama": "Pacopacomama",
-              "tokyo_hot": "Tokyo-Hot"
+              "tokyo_hot": "Tokyo-Hot",
+              "d2pass": "d2pass"
             }
           }
         }
@@ -228,7 +230,8 @@
             "caribbeancom": "Caribbeancom",
             "caribbeancompr": "Caribbeancompr",
             "pacopacomama": "Pacopacomama",
-            "tokyo_hot": "Tokyo-Hot"
+            "tokyo_hot": "Tokyo-Hot",
+            "d2pass": "d2pass"
           },
           "$": {
             "options": {
@@ -267,7 +270,8 @@
               "caribbeancom": "Caribbeancom",
               "caribbeancompr": "Caribbeancompr",
               "pacopacomama": "Pacopacomama",
-              "tokyo_hot": "Tokyo-Hot"
+              "tokyo_hot": "Tokyo-Hot",
+              "d2pass": "d2pass"
             }
           }
         }
@@ -331,7 +335,8 @@
           "r18dev": "r18dev",
           "theporndb": "theporndb",
           "wikipedia": "wikipedia",
-          "xcity": "xcity"
+          "xcity": "xcity",
+          "d2pass": "d2pass"
         },
         "$": {
           "base_url": {
@@ -424,6 +429,10 @@
                 "en": "英文"
               }
             }
+          },
+          "tls_impersonate": {
+            "label": "浏览器 TLS 指纹",
+            "description": "关闭后该站点用原生 TLS 发送请求. 对按「指纹与 UA 是否自洽」判定机器人的站点有用."
           }
         }
       },
@@ -476,7 +485,8 @@
             "caribbeancom": "Caribbeancom",
             "caribbeancompr": "Caribbeancompr",
             "pacopacomama": "Pacopacomama",
-            "tokyo_hot": "Tokyo-Hot"
+            "tokyo_hot": "Tokyo-Hot",
+            "d2pass": "d2pass"
           },
           "$": {
             "options": {
@@ -515,7 +525,8 @@
               "caribbeancom": "Caribbeancom",
               "caribbeancompr": "Caribbeancompr",
               "pacopacomama": "Pacopacomama",
-              "tokyo_hot": "Tokyo-Hot"
+              "tokyo_hot": "Tokyo-Hot",
+              "d2pass": "d2pass"
             }
           }
         }

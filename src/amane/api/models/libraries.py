@@ -1,3 +1,4 @@
+from collections.abc import Mapping
 from typing import TYPE_CHECKING, Self
 
 from pydantic import BaseModel, Field, model_validator
@@ -90,6 +91,7 @@ class LibraryResponse(BaseModel):
     patterns: list[str] = []
     move_mode: MoveMode
     video_template: str
+    custom_placeholders: dict[str, str] = Field(default_factory=dict)
     link_template: str | None = None
     link_mode: LinkMode
     strm_content_template: str | None = None
@@ -163,12 +165,10 @@ def path_template_schema(
     自定义项在 UI 上单独成组 (``custom=True``), 以便与内置项区分并支持删除.
     """
     builtin = [
-        PathTemplatePlaceholder(name=name, map_keys=list(PLACEHOLDER_MAP_KEYS.get(name, ())))
-        for name in PLACEHOLDERS
+        PathTemplatePlaceholder(name=name, map_keys=list(PLACEHOLDER_MAP_KEYS.get(name, ()))) for name in PLACEHOLDERS
     ]
     extra = [
-        PathTemplatePlaceholder(name=name, custom=True, literal=literal)
-        for name, literal in (custom or {}).items()
+        PathTemplatePlaceholder(name=name, custom=True, literal=literal) for name, literal in (custom or {}).items()
     ]
     return PathTemplateSchemaResponse(
         video_default=VIDEO_TEMPLATE_DEFAULT,

@@ -2266,6 +2266,7 @@ export const FailureReasonSchema = {
         'ip_banned',
         'geo_restricted',
         'age_verification',
+        'captcha',
         'login_required',
         'empty_response',
         'no_usable_metadata',
@@ -3042,7 +3043,7 @@ export const HotSettingsSchema = {
                 ],
                 crop_poster: true,
                 poster_ratio: 0.7,
-                uncensored_poster_ratio: 0.7,
+                uncensored_poster_ratio: 0.87,
                 poster_crop_skip_ratio: 0.9,
                 jpeg_quality: 95,
                 content_routes: {
@@ -3054,9 +3055,11 @@ export const HotSettingsSchema = {
                     ],
                     censored: [
                         'dmm',
+                        'mgstage',
                         'javdb',
+                        'avbase',
                         'javbus',
-                        'official'
+                        'avsox'
                     ],
                     chinese: [
                         'iqqtv',
@@ -3077,16 +3080,17 @@ export const HotSettingsSchema = {
                         'javdb'
                     ],
                     uncensored: [
-                        'javdb',
-                        'javbus',
-                        'avsox',
-                        'freejavbt',
-                        'aventertainments'
+                        'aventertainments',
+                        'd2pass',
+                        '10musume',
+                        '1pondo',
+                        'caribbeancom',
+                        'pacopacomama',
+                        'tokyo_hot',
+                        'caribbeancompr'
                     ],
                     western: [
-                        'theporndb',
-                        'javdb',
-                        'freejavbt'
+                        'theporndb'
                     ]
                 },
                 field_priority: {},
@@ -3102,6 +3106,32 @@ export const HotSettingsSchema = {
                     title: 'zh_cn'
                 },
                 site_config: {
+                    '10musume': {
+                        cookie: {},
+                        languages: [
+                            'zh',
+                            'ja',
+                            'en'
+                        ],
+                        official_routes: {},
+                        rate_limit: 2,
+                        tls_impersonate: true,
+                        use_browser: 'auto',
+                        use_proxy: true
+                    },
+                    '1pondo': {
+                        cookie: {},
+                        languages: [
+                            'zh',
+                            'ja',
+                            'en'
+                        ],
+                        official_routes: {},
+                        rate_limit: 2,
+                        tls_impersonate: true,
+                        use_browser: 'auto',
+                        use_proxy: true
+                    },
                     airav: {
                         cookie: {},
                         languages: [
@@ -3111,6 +3141,7 @@ export const HotSettingsSchema = {
                         ],
                         official_routes: {},
                         rate_limit: 2,
+                        tls_impersonate: true,
                         use_browser: 'auto',
                         use_proxy: true
                     },
@@ -3123,6 +3154,7 @@ export const HotSettingsSchema = {
                         ],
                         official_routes: {},
                         rate_limit: 2,
+                        tls_impersonate: true,
                         use_browser: 'auto',
                         use_proxy: true
                     },
@@ -3135,6 +3167,7 @@ export const HotSettingsSchema = {
                         ],
                         official_routes: {},
                         rate_limit: 2,
+                        tls_impersonate: false,
                         use_browser: 'auto',
                         use_proxy: true
                     },
@@ -3147,6 +3180,46 @@ export const HotSettingsSchema = {
                         ],
                         official_routes: {},
                         rate_limit: 2,
+                        tls_impersonate: true,
+                        use_browser: 'auto',
+                        use_proxy: true
+                    },
+                    caribbeancom: {
+                        cookie: {},
+                        languages: [
+                            'zh',
+                            'ja',
+                            'en'
+                        ],
+                        official_routes: {},
+                        rate_limit: 2,
+                        tls_impersonate: true,
+                        use_browser: 'auto',
+                        use_proxy: true
+                    },
+                    caribbeancompr: {
+                        cookie: {},
+                        languages: [
+                            'zh',
+                            'ja',
+                            'en'
+                        ],
+                        official_routes: {},
+                        rate_limit: 2,
+                        tls_impersonate: true,
+                        use_browser: 'auto',
+                        use_proxy: true
+                    },
+                    d2pass: {
+                        cookie: {},
+                        languages: [
+                            'zh',
+                            'ja',
+                            'en'
+                        ],
+                        official_routes: {},
+                        rate_limit: 2,
+                        tls_impersonate: true,
                         use_browser: 'auto',
                         use_proxy: true
                     },
@@ -3159,6 +3232,7 @@ export const HotSettingsSchema = {
                         ],
                         official_routes: {},
                         rate_limit: 2,
+                        tls_impersonate: true,
                         use_browser: 'auto',
                         use_proxy: true
                     },
@@ -3171,6 +3245,7 @@ export const HotSettingsSchema = {
                         ],
                         official_routes: {},
                         rate_limit: 2,
+                        tls_impersonate: true,
                         use_browser: 'auto',
                         use_proxy: true
                     },
@@ -3183,6 +3258,7 @@ export const HotSettingsSchema = {
                         ],
                         official_routes: {},
                         rate_limit: 2,
+                        tls_impersonate: true,
                         use_browser: 'auto',
                         use_proxy: true
                     },
@@ -3195,6 +3271,7 @@ export const HotSettingsSchema = {
                         ],
                         official_routes: {},
                         rate_limit: 2,
+                        tls_impersonate: true,
                         use_browser: 'auto',
                         use_proxy: true
                     },
@@ -3207,6 +3284,7 @@ export const HotSettingsSchema = {
                         ],
                         official_routes: {},
                         rate_limit: 2,
+                        tls_impersonate: true,
                         use_browser: 'auto',
                         use_proxy: true
                     },
@@ -3219,6 +3297,7 @@ export const HotSettingsSchema = {
                         ],
                         official_routes: {},
                         rate_limit: 2,
+                        tls_impersonate: true,
                         use_browser: 'auto',
                         use_proxy: true
                     },
@@ -3231,6 +3310,7 @@ export const HotSettingsSchema = {
                         ],
                         official_routes: {},
                         rate_limit: 2,
+                        tls_impersonate: true,
                         use_browser: 'auto',
                         use_proxy: true
                     },
@@ -3243,6 +3323,7 @@ export const HotSettingsSchema = {
                         ],
                         official_routes: {},
                         rate_limit: 2,
+                        tls_impersonate: true,
                         use_browser: 'auto',
                         use_proxy: true
                     },
@@ -3255,6 +3336,7 @@ export const HotSettingsSchema = {
                         ],
                         official_routes: {},
                         rate_limit: 2,
+                        tls_impersonate: true,
                         use_browser: 'auto',
                         use_proxy: true
                     },
@@ -3267,6 +3349,7 @@ export const HotSettingsSchema = {
                         ],
                         official_routes: {},
                         rate_limit: 2,
+                        tls_impersonate: true,
                         use_browser: 'auto',
                         use_proxy: true
                     },
@@ -3279,6 +3362,7 @@ export const HotSettingsSchema = {
                         ],
                         official_routes: {},
                         rate_limit: 2,
+                        tls_impersonate: true,
                         use_browser: 'auto',
                         use_proxy: true
                     },
@@ -3291,6 +3375,7 @@ export const HotSettingsSchema = {
                         ],
                         official_routes: {},
                         rate_limit: 2,
+                        tls_impersonate: true,
                         use_browser: 'auto',
                         use_proxy: true
                     },
@@ -3303,6 +3388,7 @@ export const HotSettingsSchema = {
                         ],
                         official_routes: {},
                         rate_limit: 2,
+                        tls_impersonate: true,
                         use_browser: 'auto',
                         use_proxy: true
                     },
@@ -3315,6 +3401,7 @@ export const HotSettingsSchema = {
                         ],
                         official_routes: {},
                         rate_limit: 2,
+                        tls_impersonate: true,
                         use_browser: 'auto',
                         use_proxy: true
                     },
@@ -3327,6 +3414,7 @@ export const HotSettingsSchema = {
                         ],
                         official_routes: {},
                         rate_limit: 2,
+                        tls_impersonate: true,
                         use_browser: 'auto',
                         use_proxy: true
                     },
@@ -3339,6 +3427,7 @@ export const HotSettingsSchema = {
                         ],
                         official_routes: {},
                         rate_limit: 2,
+                        tls_impersonate: true,
                         use_browser: 'auto',
                         use_proxy: true
                     },
@@ -3351,6 +3440,7 @@ export const HotSettingsSchema = {
                         ],
                         official_routes: {},
                         rate_limit: 2,
+                        tls_impersonate: true,
                         use_browser: 'auto',
                         use_proxy: true
                     },
@@ -3363,6 +3453,7 @@ export const HotSettingsSchema = {
                         ],
                         official_routes: {},
                         rate_limit: 2,
+                        tls_impersonate: true,
                         use_browser: 'auto',
                         use_proxy: true
                     },
@@ -3375,6 +3466,20 @@ export const HotSettingsSchema = {
                         ],
                         official_routes: {},
                         rate_limit: 2,
+                        tls_impersonate: true,
+                        use_browser: 'auto',
+                        use_proxy: true
+                    },
+                    pacopacomama: {
+                        cookie: {},
+                        languages: [
+                            'zh',
+                            'ja',
+                            'en'
+                        ],
+                        official_routes: {},
+                        rate_limit: 2,
+                        tls_impersonate: true,
                         use_browser: 'auto',
                         use_proxy: true
                     },
@@ -3387,6 +3492,7 @@ export const HotSettingsSchema = {
                         ],
                         official_routes: {},
                         rate_limit: 2,
+                        tls_impersonate: true,
                         use_browser: 'auto',
                         use_proxy: true
                     },
@@ -3399,6 +3505,7 @@ export const HotSettingsSchema = {
                         ],
                         official_routes: {},
                         rate_limit: 2,
+                        tls_impersonate: true,
                         use_browser: 'auto',
                         use_proxy: true
                     },
@@ -3411,6 +3518,46 @@ export const HotSettingsSchema = {
                         ],
                         official_routes: {},
                         rate_limit: 2,
+                        tls_impersonate: true,
+                        use_browser: 'auto',
+                        use_proxy: true
+                    },
+                    tokyo_hot: {
+                        cookie: {},
+                        languages: [
+                            'zh',
+                            'ja',
+                            'en'
+                        ],
+                        official_routes: {},
+                        rate_limit: 2,
+                        tls_impersonate: true,
+                        use_browser: 'auto',
+                        use_proxy: true
+                    },
+                    tushy: {
+                        cookie: {},
+                        languages: [
+                            'zh',
+                            'ja',
+                            'en'
+                        ],
+                        official_routes: {},
+                        rate_limit: 2,
+                        tls_impersonate: true,
+                        use_browser: 'auto',
+                        use_proxy: true
+                    },
+                    tushy_raw: {
+                        cookie: {},
+                        languages: [
+                            'zh',
+                            'ja',
+                            'en'
+                        ],
+                        official_routes: {},
+                        rate_limit: 2,
+                        tls_impersonate: true,
                         use_browser: 'auto',
                         use_proxy: true
                     },
@@ -3423,6 +3570,7 @@ export const HotSettingsSchema = {
                         ],
                         official_routes: {},
                         rate_limit: 2,
+                        tls_impersonate: true,
                         use_browser: 'auto',
                         use_proxy: true
                     },
@@ -3435,6 +3583,7 @@ export const HotSettingsSchema = {
                         ],
                         official_routes: {},
                         rate_limit: 2,
+                        tls_impersonate: true,
                         use_browser: 'auto',
                         use_proxy: true
                     }
@@ -3452,7 +3601,9 @@ export const HotSettingsSchema = {
                     'avbase'
                 ],
                 image_sites: [
-                    'gfriends'
+                    'gfriends',
+                    'tushy',
+                    'tushy_raw'
                 ],
                 download_images: true,
                 auto_scrape: true,
@@ -4098,6 +4249,13 @@ export const LibraryCreateRequestSchema = {
             title: 'Video Template',
             default: '{studio}/{number}/{number}[-CD{cd?}][-{sub?}].{ext}'
         },
+        custom_placeholders: {
+            additionalProperties: {
+                type: 'string'
+            },
+            type: 'object',
+            title: 'Custom Placeholders'
+        },
         link_template: {
             anyOf: [
                 {
@@ -4331,6 +4489,13 @@ export const LibraryResponseSchema = {
         video_template: {
             type: 'string',
             title: 'Video Template'
+        },
+        custom_placeholders: {
+            additionalProperties: {
+                type: 'string'
+            },
+            type: 'object',
+            title: 'Custom Placeholders'
         },
         link_template: {
             anyOf: [
@@ -4602,6 +4767,20 @@ export const LibraryUpdateRequestSchema = {
             ],
             title: 'Video Template'
         },
+        custom_placeholders: {
+            anyOf: [
+                {
+                    additionalProperties: {
+                        type: 'string'
+                    },
+                    type: 'object'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Custom Placeholders'
+        },
         link_template: {
             anyOf: [
                 {
@@ -4859,6 +5038,34 @@ export const ManufacturerSchema = {
         'wanz_factory'
     ],
     title: 'Manufacturer'
+} as const;
+
+export const MappingUpdateSchema = {
+    properties: {
+        original: {
+            type: 'string',
+            maxLength: 300,
+            minLength: 1,
+            title: 'Original'
+        },
+        translation: {
+            anyOf: [
+                {
+                    type: 'string',
+                    maxLength: 300
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Translation'
+        }
+    },
+    type: 'object',
+    required: [
+        'original'
+    ],
+    title: 'MappingUpdate'
 } as const;
 
 export const MediaBatchDeleteRequestSchema = {
@@ -5374,10 +5581,11 @@ export const MetadataDetailResponseSchema = {
             title: 'Series Id'
         },
         series_ids: {
-            additionalProperties: { type: 'integer' },
+            additionalProperties: {
+                type: 'integer'
+            },
             type: 'object',
-            title: 'Series Ids',
-            default: {}
+            title: 'Series Ids'
         }
     },
     type: 'object',
@@ -5570,16 +5778,23 @@ export const MetadataPartialSchema = {
         },
         series_names: {
             anyOf: [
-                { items: { type: 'string' }, type: 'array' },
-                { type: 'null' }
+                {
+                    items: {
+                        type: 'string'
+                    },
+                    type: 'array'
+                },
+                {
+                    type: 'null'
+                }
             ],
-            title: 'Series Names',
-            default: []
+            title: 'Series Names'
         },
         plot: {
             anyOf: [
                 {
-                    type: 'string'
+                    type: 'string',
+                    'x-long': true
                 },
                 {
                     type: 'null'
@@ -5590,7 +5805,8 @@ export const MetadataPartialSchema = {
         original_plot: {
             anyOf: [
                 {
-                    type: 'string'
+                    type: 'string',
+                    'x-long': true
                 },
                 {
                     type: 'null'
@@ -5612,20 +5828,6 @@ export const MetadataPartialSchema = {
             ],
             title: 'Directors'
         },
-        original_poster_urls: {
-            anyOf: [
-                {
-                    items: {
-                        type: 'string'
-                    },
-                    type: 'array'
-                },
-                {
-                    type: 'null'
-                }
-            ],
-            title: 'Original Poster Urls'
-        },
         poster_urls: {
             anyOf: [
                 {
@@ -5639,6 +5841,20 @@ export const MetadataPartialSchema = {
                 }
             ],
             title: 'Poster Urls'
+        },
+        original_poster_urls: {
+            anyOf: [
+                {
+                    items: {
+                        type: 'string'
+                    },
+                    type: 'array'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Original Poster Urls'
         },
         thumb_urls: {
             anyOf: [
@@ -5746,17 +5962,6 @@ export const MetadataResponseSchema = {
         content_type: {
             $ref: '#/components/schemas/ContentType'
         },
-        theporndb_uuid: {
-            anyOf: [
-                {
-                    type: 'string'
-                },
-                {
-                    type: 'null'
-                }
-            ],
-            title: 'Theporndb Uuid'
-        },
         title: {
             anyOf: [
                 {
@@ -5851,7 +6056,9 @@ export const MetadataResponseSchema = {
             title: 'Series'
         },
         series_names: {
-            items: { type: 'string' },
+            items: {
+                type: 'string'
+            },
             type: 'array',
             title: 'Series Names',
             default: []
@@ -5884,14 +6091,6 @@ export const MetadataResponseSchema = {
             },
             type: 'array',
             title: 'Directors',
-            default: []
-        },
-        original_poster_urls: {
-            items: {
-                type: 'string'
-            },
-            type: 'array',
-            title: 'Original Poster Urls',
             default: []
         },
         poster_url: {
@@ -5951,6 +6150,14 @@ export const MetadataResponseSchema = {
             title: 'Vr',
             default: false
         },
+        original_poster_urls: {
+            items: {
+                type: 'string'
+            },
+            type: 'array',
+            title: 'Original Poster Urls',
+            default: []
+        },
         poster_urls: {
             items: {
                 type: 'string'
@@ -5994,6 +6201,17 @@ export const MetadataResponseSchema = {
             type: 'object',
             title: 'External Ids',
             default: {}
+        },
+        theporndb_uuid: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Theporndb Uuid'
         },
         source_urls: {
             additionalProperties: true,
@@ -6436,6 +6654,24 @@ export const PathTemplatePlaceholderSchema = {
             type: 'array',
             title: 'Map Keys',
             description: '有闭合取值时列出规范 key, 供 `{name|k=v}` 映射校验与 UI 提示. 空则不校验映射 key.'
+        },
+        custom: {
+            type: 'boolean',
+            title: 'Custom',
+            description: '库级自定义占位符, 可删除.',
+            default: false
+        },
+        literal: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Literal',
+            description: '自定义占位符匹配的字面串.'
         }
     },
     type: 'object',
@@ -7987,7 +8223,7 @@ export const ScrapeSubmissionSchema = {
                     type: 'null'
                 }
             ],
-            title: 'ThePornDB UUID',
+            title: 'Theporndb Uuid',
             description: 'WESTERN 手动指定的 ThePornDB UUID'
         },
         content_type: {
@@ -8050,7 +8286,7 @@ export const ScrapingConfigSchema = {
             maximum: 1,
             minimum: 0.3,
             title: 'Uncensored Poster Ratio',
-            default: 0.7
+            default: 0.87
         },
         poster_crop_skip_ratio: {
             type: 'number',
@@ -8077,6 +8313,7 @@ export const ScrapingConfigSchema = {
                         'aventertainments',
                         'avsox',
                         'dahlia',
+                        'd2pass',
                         'dmm',
                         'faleno',
                         'fc2',
@@ -8093,8 +8330,14 @@ export const ScrapingConfigSchema = {
                         'kin8',
                         'mgstage',
                         'official',
+                        '1pondo',
+                        'pacopacomama',
+                        'caribbeancom',
+                        'caribbeancompr',
                         'prestige',
                         'r18dev',
+                        '10musume',
+                        'tokyo_hot',
                         'theporndb',
                         'xcity'
                     ]
@@ -8119,6 +8362,7 @@ export const ScrapingConfigSchema = {
                         'aventertainments',
                         'avsox',
                         'dahlia',
+                        'd2pass',
                         'dmm',
                         'faleno',
                         'fc2',
@@ -8135,8 +8379,14 @@ export const ScrapingConfigSchema = {
                         'kin8',
                         'mgstage',
                         'official',
+                        '1pondo',
+                        'pacopacomama',
+                        'caribbeancom',
+                        'caribbeancompr',
                         'prestige',
                         'r18dev',
+                        '10musume',
+                        'tokyo_hot',
                         'theporndb',
                         'xcity'
                     ]
@@ -8161,6 +8411,7 @@ export const ScrapingConfigSchema = {
                         'aventertainments',
                         'avsox',
                         'dahlia',
+                        'd2pass',
                         'dmm',
                         'faleno',
                         'fc2',
@@ -8177,8 +8428,14 @@ export const ScrapingConfigSchema = {
                         'kin8',
                         'mgstage',
                         'official',
+                        '1pondo',
+                        'pacopacomama',
+                        'caribbeancom',
+                        'caribbeancompr',
                         'prestige',
                         'r18dev',
+                        '10musume',
+                        'tokyo_hot',
                         'theporndb',
                         'xcity'
                     ]
@@ -8771,6 +9028,11 @@ export const SiteConfigSchema = {
             title: 'Cookie',
             default: {}
         },
+        tls_impersonate: {
+            type: 'boolean',
+            title: 'Tls Impersonate',
+            default: true
+        },
         api_token: {
             anyOf: [
                 {
@@ -8839,6 +9101,7 @@ export const SiteNameSchema = {
         'aventertainments',
         'avsox',
         'dahlia',
+        'd2pass',
         'dmm',
         'faleno',
         'fc2',
@@ -8857,10 +9120,17 @@ export const SiteNameSchema = {
         'mgstage',
         'minnano',
         'official',
+        '1pondo',
+        'pacopacomama',
+        'caribbeancom',
+        'caribbeancompr',
         'prestige',
         'r18dev',
-        'theporndb',
+        '10musume',
         'tokyo_hot',
+        'theporndb',
+        'tushy',
+        'tushy_raw',
         'wikipedia',
         'xcity'
     ],
@@ -9121,6 +9391,25 @@ export const SrPresetSchema = {
         'waifu-photo-2x'
     ],
     title: 'SrPreset'
+} as const;
+
+export const SuggestRequestSchema = {
+    properties: {
+        originals: {
+            items: {
+                type: 'string'
+            },
+            type: 'array',
+            maxItems: 30,
+            minItems: 1,
+            title: 'Originals'
+        }
+    },
+    type: 'object',
+    required: [
+        'originals'
+    ],
+    title: 'SuggestRequest'
 } as const;
 
 export const TaskBatchActionSchema = {

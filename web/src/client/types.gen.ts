@@ -1346,7 +1346,7 @@ export type FacetSortField = 'name' | 'count';
  *
  * summary.json / task report 的 reason 字段.
  */
-export type FailureReason = 'http_error' | 'api_error' | 'not_found' | 'rate_limited' | 'server_error' | 'timeout' | 'network' | 'cloudflare_challenge' | 'cloudflare_blocked' | 'ip_banned' | 'geo_restricted' | 'age_verification' | 'login_required' | 'empty_response' | 'no_usable_metadata' | 'parse_error' | 'crawler_unavailable' | 'unexpected';
+export type FailureReason = 'http_error' | 'api_error' | 'not_found' | 'rate_limited' | 'server_error' | 'timeout' | 'network' | 'cloudflare_challenge' | 'cloudflare_blocked' | 'ip_banned' | 'geo_restricted' | 'age_verification' | 'captcha' | 'login_required' | 'empty_response' | 'no_usable_metadata' | 'parse_error' | 'crawler_unavailable' | 'unexpected';
 
 /**
  * FeedCreateRequest
@@ -2069,10 +2069,10 @@ export type LibraryCreateRequest = {
     video_template?: string;
     /**
      * Custom Placeholders
-     *
-     * 自定义占位符: 名字 → 文件名里要匹配的字面串. 名字须是合法标识符.
      */
-    custom_placeholders?: Record<string, string>;
+    custom_placeholders?: {
+        [key: string]: string;
+    };
     /**
      * Link Template
      */
@@ -2198,10 +2198,10 @@ export type LibraryResponse = {
     video_template: string;
     /**
      * Custom Placeholders
-     *
-     * 自定义占位符: 名字 → 文件名里要匹配的字面串. 名字须是合法标识符.
      */
-    custom_placeholders: Record<string, string>;
+    custom_placeholders?: {
+        [key: string]: string;
+    };
     /**
      * Link Template
      */
@@ -2303,7 +2303,9 @@ export type LibraryUpdateRequest = {
     /**
      * Custom Placeholders
      */
-    custom_placeholders?: Record<string, string> | null;
+    custom_placeholders?: {
+        [key: string]: string;
+    } | null;
     /**
      * Link Template
      */
@@ -2392,6 +2394,20 @@ export type LoggingConfig = {
  * Manufacturer
  */
 export type Manufacturer = 'attackers' | 'befree' | 'bi' | 'bibian' | 'das' | 'ebody' | 'fitch' | 'hajime_kikaku' | 'honnaka' | 'hunter' | 'idea_pocket' | 'kawaii' | 'kirakira' | 'madonna' | 'miman' | 'mko_labo' | 'moodyz' | 'muku' | 'mvg' | 'nanpa_japan' | 'oppai' | 'opera' | 'premium_beauty' | 'rookie' | 's1' | 'tameikegoro' | 'tosatsu' | 'v' | 'wanz_factory';
+
+/**
+ * MappingUpdate
+ */
+export type MappingUpdate = {
+    /**
+     * Original
+     */
+    original: string;
+    /**
+     * Translation
+     */
+    translation?: string | null;
+};
 
 /**
  * MediaBatchDeleteRequest
@@ -2679,7 +2695,12 @@ export type MetadataDetailResponse = {
      * Series Id
      */
     series_id?: number | null;
-    series_ids?: { [key: string]: number };
+    /**
+     * Series Ids
+     */
+    series_ids?: {
+        [key: string]: number;
+    };
 };
 
 /**
@@ -2727,6 +2748,9 @@ export type MetadataPartial = {
      * Title
      */
     title?: string | null;
+    /**
+     * Original Title
+     */
     original_title?: string | null;
     /**
      * Actors
@@ -2756,24 +2780,30 @@ export type MetadataPartial = {
      * Series
      */
     series?: string | null;
+    /**
+     * Series Names
+     */
     series_names?: Array<string> | null;
     /**
      * Plot
      */
     plot?: string | null;
+    /**
+     * Original Plot
+     */
     original_plot?: string | null;
     /**
      * Directors
      */
     directors?: Array<string> | null;
     /**
-     * Original Poster Urls
-     */
-    original_poster_urls?: Array<string> | null;
-    /**
      * Poster Urls
      */
     poster_urls?: Array<string> | null;
+    /**
+     * Original Poster Urls
+     */
+    original_poster_urls?: Array<string> | null;
     /**
      * Thumb Urls
      */
@@ -2822,13 +2852,12 @@ export type MetadataResponse = {
     number: string;
     content_type: ContentType;
     /**
-     * ThePornDB UUID, WESTERN only.
-     */
-    theporndb_uuid?: string | null;
-    /**
      * Title
      */
     title?: string | null;
+    /**
+     * Original Title
+     */
     original_title?: string | null;
     /**
      * Actors
@@ -2858,20 +2887,22 @@ export type MetadataResponse = {
      * Series
      */
     series?: string | null;
+    /**
+     * Series Names
+     */
     series_names?: Array<string>;
     /**
      * Plot
      */
     plot?: string | null;
+    /**
+     * Original Plot
+     */
     original_plot?: string | null;
     /**
      * Directors
      */
     directors?: Array<string>;
-    /**
-     * Original Poster Urls
-     */
-    original_poster_urls?: Array<string>;
     /**
      * Poster Url
      */
@@ -2896,6 +2927,10 @@ export type MetadataResponse = {
      * Vr
      */
     vr?: boolean;
+    /**
+     * Original Poster Urls
+     */
+    original_poster_urls?: Array<string>;
     /**
      * Poster Urls
      */
@@ -2926,6 +2961,10 @@ export type MetadataResponse = {
     external_ids?: {
         [key: string]: unknown;
     };
+    /**
+     * Theporndb Uuid
+     */
+    theporndb_uuid?: string | null;
     /**
      * Source Urls
      */
@@ -4155,6 +4194,8 @@ export type ScrapeSubmission = {
      */
     media_id?: number | null;
     /**
+     * Theporndb Uuid
+     *
      * WESTERN 手动指定的 ThePornDB UUID
      */
     theporndb_uuid?: string | null;
@@ -4208,19 +4249,19 @@ export type ScrapingConfig = {
      * Content Routes
      */
     content_routes?: {
-        [key in ContentType]?: Array<'airav' | 'avbase' | 'aventertainments' | 'avsox' | 'dahlia' | 'dmm' | 'faleno' | 'fc2' | 'fc2club' | 'fc2ppvdb' | 'freejavbt' | 'getchu' | 'giga' | 'iqqtv' | 'jav321' | 'javbus' | 'javdb' | 'javlibrary' | 'kin8' | 'mgstage' | 'official' | 'prestige' | 'r18dev' | 'theporndb' | 'xcity'>;
+        [key in ContentType]?: Array<'airav' | 'avbase' | 'aventertainments' | 'avsox' | 'dahlia' | 'd2pass' | 'dmm' | 'faleno' | 'fc2' | 'fc2club' | 'fc2ppvdb' | 'freejavbt' | 'getchu' | 'giga' | 'iqqtv' | 'jav321' | 'javbus' | 'javdb' | 'javlibrary' | 'kin8' | 'mgstage' | 'official' | '1pondo' | 'pacopacomama' | 'caribbeancom' | 'caribbeancompr' | 'prestige' | 'r18dev' | '10musume' | 'tokyo_hot' | 'theporndb' | 'xcity'>;
     };
     /**
      * Field Priority
      */
     field_priority?: {
-        [key in MetadataField]?: Array<'airav' | 'avbase' | 'aventertainments' | 'avsox' | 'dahlia' | 'dmm' | 'faleno' | 'fc2' | 'fc2club' | 'fc2ppvdb' | 'freejavbt' | 'getchu' | 'giga' | 'iqqtv' | 'jav321' | 'javbus' | 'javdb' | 'javlibrary' | 'kin8' | 'mgstage' | 'official' | 'prestige' | 'r18dev' | 'theporndb' | 'xcity'>;
+        [key in MetadataField]?: Array<'airav' | 'avbase' | 'aventertainments' | 'avsox' | 'dahlia' | 'd2pass' | 'dmm' | 'faleno' | 'fc2' | 'fc2club' | 'fc2ppvdb' | 'freejavbt' | 'getchu' | 'giga' | 'iqqtv' | 'jav321' | 'javbus' | 'javdb' | 'javlibrary' | 'kin8' | 'mgstage' | 'official' | '1pondo' | 'pacopacomama' | 'caribbeancom' | 'caribbeancompr' | 'prestige' | 'r18dev' | '10musume' | 'tokyo_hot' | 'theporndb' | 'xcity'>;
     };
     /**
      * Field Blacklist
      */
     field_blacklist?: {
-        [key in MetadataField]?: Array<'airav' | 'avbase' | 'aventertainments' | 'avsox' | 'dahlia' | 'dmm' | 'faleno' | 'fc2' | 'fc2club' | 'fc2ppvdb' | 'freejavbt' | 'getchu' | 'giga' | 'iqqtv' | 'jav321' | 'javbus' | 'javdb' | 'javlibrary' | 'kin8' | 'mgstage' | 'official' | 'prestige' | 'r18dev' | 'theporndb' | 'xcity'>;
+        [key in MetadataField]?: Array<'airav' | 'avbase' | 'aventertainments' | 'avsox' | 'dahlia' | 'd2pass' | 'dmm' | 'faleno' | 'fc2' | 'fc2club' | 'fc2ppvdb' | 'freejavbt' | 'getchu' | 'giga' | 'iqqtv' | 'jav321' | 'javbus' | 'javdb' | 'javlibrary' | 'kin8' | 'mgstage' | 'official' | '1pondo' | 'pacopacomama' | 'caribbeancom' | 'caribbeancompr' | 'prestige' | 'r18dev' | '10musume' | 'tokyo_hot' | 'theporndb' | 'xcity'>;
     };
     /**
      * Field Language
@@ -4603,6 +4644,10 @@ export type SiteConfig = {
         [key: string]: string;
     };
     /**
+     * Tls Impersonate
+     */
+    tls_impersonate?: boolean;
+    /**
      * Api Token
      */
     api_token?: string | null;
@@ -4629,7 +4674,7 @@ export type SiteConfig = {
  *
  * 爬虫站点名称 (影片与演员源共用).
  */
-export type SiteName = 'airav' | 'avbase' | 'aventertainments' | 'avsox' | 'dahlia' | 'dmm' | 'faleno' | 'fc2' | 'fc2club' | 'fc2ppvdb' | 'freejavbt' | 'getchu' | 'gfriends' | 'giga' | 'iqqtv' | 'jav321' | 'javbus' | 'javdb' | 'javlibrary' | 'kin8' | 'mgstage' | 'minnano' | 'official' | 'prestige' | 'r18dev' | 'theporndb' | 'tokyo_hot' | 'tushy' | 'tushy_raw' | 'wikipedia' | 'xcity';
+export type SiteName = 'airav' | 'avbase' | 'aventertainments' | 'avsox' | 'dahlia' | 'd2pass' | 'dmm' | 'faleno' | 'fc2' | 'fc2club' | 'fc2ppvdb' | 'freejavbt' | 'getchu' | 'gfriends' | 'giga' | 'iqqtv' | 'jav321' | 'javbus' | 'javdb' | 'javlibrary' | 'kin8' | 'mgstage' | 'minnano' | 'official' | '1pondo' | 'pacopacomama' | 'caribbeancom' | 'caribbeancompr' | 'prestige' | 'r18dev' | '10musume' | 'tokyo_hot' | 'theporndb' | 'tushy' | 'tushy_raw' | 'wikipedia' | 'xcity';
 
 /**
  * SiteOutcomeKind
@@ -4771,6 +4816,16 @@ export type SrConfig = {
  * SrPreset
  */
 export type SrPreset = 'realesr-photo-4x' | 'waifu-photo-2x';
+
+/**
+ * SuggestRequest
+ */
+export type SuggestRequest = {
+    /**
+     * Originals
+     */
+    originals: Array<string>;
+};
 
 /**
  * TaskBatchAction
@@ -8146,8 +8201,12 @@ export type ProxyImageData = {
          * External image URL to proxy
          */
         url: string;
-        /** Browser cache mode (original or SR/ETag). */
-        mode?: 'original' | 'sr';
+        /**
+         * Mode
+         *
+         * Browser cache mode
+         */
+        mode?: string | null;
     };
     url: '/api/resources/proxy';
 };
@@ -8177,8 +8236,12 @@ export type ServeResourceData = {
         url_hash: string;
     };
     query?: {
-        /** Browser cache mode (original or SR/ETag). */
-        mode?: 'original' | 'sr';
+        /**
+         * Mode
+         *
+         * Browser cache mode
+         */
+        mode?: string | null;
     };
     url: '/api/resources/{url_hash}';
 };
@@ -8760,6 +8823,172 @@ export type GetTaskRecordResponses = {
     200: unknown;
 };
 
+export type ListMappingsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Status
+         */
+        status?: 'all' | 'pending' | 'mapped';
+        /**
+         * Language
+         */
+        language?: 'all' | 'ja' | 'en' | 'zh' | 'other';
+        /**
+         * Frequency
+         */
+        frequency?: 'all' | 'high';
+        /**
+         * Search
+         */
+        search?: string;
+        /**
+         * Offset
+         */
+        offset?: number;
+        /**
+         * Limit
+         */
+        limit?: number;
+    };
+    url: '/api/tag-mappings';
+};
+
+export type ListMappingsErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListMappingsError = ListMappingsErrors[keyof ListMappingsErrors];
+
+export type ListMappingsResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
+export type SaveMappingData = {
+    body: MappingUpdate;
+    path?: never;
+    query?: never;
+    url: '/api/tag-mappings';
+};
+
+export type SaveMappingErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type SaveMappingError = SaveMappingErrors[keyof SaveMappingErrors];
+
+export type SaveMappingResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
+export type DeleteMappingData = {
+    body?: never;
+    path: {
+        /**
+         * Original
+         */
+        original: string;
+    };
+    query?: never;
+    url: '/api/tag-mappings/{original}';
+};
+
+export type DeleteMappingErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type DeleteMappingError = DeleteMappingErrors[keyof DeleteMappingErrors];
+
+export type DeleteMappingResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type DeleteMappingResponse = DeleteMappingResponses[keyof DeleteMappingResponses];
+
+export type ExportMappingsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/tag-mappings/export';
+};
+
+export type ExportMappingsResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
+export type ImportMappingsData = {
+    /**
+     * Payload
+     */
+    body: {
+        [key: string]: unknown;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/tag-mappings/import';
+};
+
+export type ImportMappingsErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ImportMappingsError = ImportMappingsErrors[keyof ImportMappingsErrors];
+
+export type ImportMappingsResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
+export type SuggestMappingsData = {
+    body: SuggestRequest;
+    path?: never;
+    query?: never;
+    url: '/api/tag-mappings/suggest';
+};
+
+export type SuggestMappingsErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type SuggestMappingsError = SuggestMappingsErrors[keyof SuggestMappingsErrors];
+
+export type SuggestMappingsResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
 export type GetToolCatalogData = {
     body?: never;
     path?: never;
@@ -8859,9 +9088,23 @@ export type GetDbSchemaResponse = GetDbSchemaResponses[keyof GetDbSchemaResponse
 export type GetPathTemplateSchemaData = {
     body?: never;
     path?: never;
-    query?: never;
+    query?: {
+        /**
+         * Library Id
+         */
+        library_id?: number | null;
+    };
     url: '/api/libraries/path-template-schema';
 };
+
+export type GetPathTemplateSchemaErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetPathTemplateSchemaError = GetPathTemplateSchemaErrors[keyof GetPathTemplateSchemaErrors];
 
 export type GetPathTemplateSchemaResponses = {
     /**
