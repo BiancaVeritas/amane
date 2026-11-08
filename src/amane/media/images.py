@@ -206,7 +206,7 @@ _SCALE_MAX = 0.25
 _STAMP_MIN_HEIGHT = 16
 
 _FIXED_KINDS: frozenset[str] = frozenset(
-    (WatermarkKind.SUBTITLE, WatermarkKind.UNCENSORED, WatermarkKind.CRACKED, WatermarkKind.LEAKED)
+    (WatermarkKind.SUBTITLE, WatermarkKind.UNCENSORED, WatermarkKind.CRACKED, WatermarkKind.LEAKED, WatermarkKind.LTX)
 )
 _RIGHT_CORNERS = frozenset((WatermarkCorner.TOP_RIGHT, WatermarkCorner.BOTTOM_RIGHT))
 _BOTTOM_CORNERS = frozenset((WatermarkCorner.BOTTOM_LEFT, WatermarkCorner.BOTTOM_RIGHT))
@@ -218,8 +218,9 @@ def _stamp_stems(
     uncensored: bool,
     mosaic: Mosaic | None,
     definition: str | None,
+    ltx: bool = False,
 ) -> list[str]:
-    """相位 → PNG 主干, 顺序: 中字 / 无码 / 破解 / 流出 / 分辨率."""
+    """相位 → PNG 主干, 顺序: 中字 / 无码 / 破解 / 流出 / LTX / 分辨率."""
     stems: list[str] = []
     if has_subtitle:
         stems.append("subtitle")
@@ -229,6 +230,8 @@ def _stamp_stems(
         stems.append("cracked")
     elif mosaic is Mosaic.LEAKED:
         stems.append("leaked")
+    if ltx:
+        stems.append("ltx")
     if definition:
         stems.append(definition.casefold())
     return stems
@@ -303,9 +306,12 @@ def apply_cover_watermarks(
     watermark_dir: Path | None = None,
     scale: float = _DEFAULT_SCALE,
     corners: Mapping[WatermarkKind, WatermarkCorner] | None = None,
+    ltx: bool = False,
 ) -> bool:
     """叠到库路径封面/海报. 无标记或无图则不动. 不修改 Resource 原图."""
-    stems = _stamp_stems(has_subtitle=has_subtitle, uncensored=uncensored, mosaic=mosaic, definition=definition)
+    stems = _stamp_stems(
+        has_subtitle=has_subtitle, uncensored=uncensored, mosaic=mosaic, definition=definition, ltx=ltx
+    )
     if not stems:
         return False
     try:
@@ -358,4 +364,5 @@ def apply_cover_watermarks_from_info(
         watermark_dir=watermark_dir,
         scale=scale,
         corners=corners,
+        ltx=info.ltx,
     )

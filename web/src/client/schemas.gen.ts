@@ -3669,6 +3669,7 @@ export const HotSettingsSchema = {
                     cracked: 'top_left',
                     definition: 'top_left',
                     leaked: 'top_left',
+                    ltx: 'top_left',
                     subtitle: 'top_left',
                     uncensored: 'top_left'
                 }
@@ -10845,6 +10846,7 @@ export const WatermarkKindSchema = {
         'uncensored',
         'cracked',
         'leaked',
+        'ltx',
         'definition'
     ],
     title: 'WatermarkKind',

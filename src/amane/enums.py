@@ -170,6 +170,7 @@ class WatermarkKind(StrEnum):
     UNCENSORED = "uncensored"
     CRACKED = "cracked"
     LEAKED = "leaked"
+    LTX = "ltx"
     DEFINITION = "definition"
 
 

@@ -63,6 +63,8 @@ class FileInfo:
     has_external_subtitle: bool = False
     mosaic: Mosaic | None = None
     definition: str | None = None
+    ltx: bool = False
+    """文件名含连续的 ``LTX`` 标记. 独立于 mosaic: 不表示破解或流出, 只作标签用."""
 
     @property
     def has_subtitle(self) -> bool:
@@ -339,6 +341,7 @@ def parse_file_info(
         has_external_subtitle=has_external_subtitle,
         mosaic=mosaic,
         definition=_detect_definition(basename),
+        ltx=_detect_ltx(basename),
     )
 
 
@@ -752,6 +755,18 @@ def _detect_mosaic(basename: str) -> Mosaic | None:
     if re.search(r"無碼|无码|UNCENSORED", basename):
         return Mosaic.UNCENSORED
     return None
+
+
+_LTX = re.compile(r"(?<![A-Z])LTX(?![A-Z])", re.IGNORECASE)
+
+
+def _detect_ltx(basename: str) -> bool:
+    """文件名里的独立 ``LTX`` 标记, 大小写不敏感.
+
+    须连续出现且前后不紧贴其它字母 (``SALTX`` 不算), 数字与分隔符相邻可以
+    (``SONE638LTX`` 算).
+    """
+    return _LTX.search(basename) is not None
 
 
 def _detect_mosaic_from_dirs(dir_names: tuple[str, ...]) -> Mosaic | None:
