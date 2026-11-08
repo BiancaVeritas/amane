@@ -46,8 +46,16 @@ def _load_index() -> dict[str, dict[str, object]]:
 def _index_page_id(number: str) -> str | None:
     """按番号查离线索引. 索引键统一 4 位补零 (HEYZO-0333 → 0333)."""
     digits = re.split(r"[-_ ]+", number.strip())[-1]
-    page_id = _load_index().get(digits.zfill(4), {}).get("id")
+    entry = _load_index().get(digits.zfill(4), {})
+    page_id = entry.get("id")
     return page_id if isinstance(page_id, str) else None
+
+
+def _title_override(number: str) -> str | None:
+    """索引里标注了真实标题时返回它, 用于覆盖站点上有误的标题."""
+    digits = re.split(r"[-_ ]+", number.strip())[-1]
+    title = _load_index().get(digits.zfill(4), {}).get("override_title")
+    return title if isinstance(title, str) and title else None
 _DETAIL_RE = re.compile(r"/moviepages/(\d{6}_\d{3})/index\.html(?:[?#].*)?$", re.IGNORECASE)
 _VOL_RE = re.compile(r"(?:vo[l]?\s*\.\s*0*(\d+)\b|\bvo[l]?\s*0*(\d+)\b|[（(]\s*0*(\d+)\s*[）)])", re.IGNORECASE)
 """续集序号. ``VO`` 是站点自用的缩写 (javbus 侧常写作 ``Vo.4``, 站点页写作 ``Vol.4``),
@@ -340,6 +348,9 @@ class CaribbeancomprCrawler(Crawler):
         if not data["title"]:
             self.logger.warning("Premium未找到候选商品", number=number, url=url, detail="详情页缺少标题")
             return None
+        # 少数条目的站点标题有误 (如 HAMEZO vol.8 实为 vol.38), 以人工核实的真实标题为准.
+        if override := _title_override(number):
+            data["title"] = override
         if not poster:
             self.logger.warning("Premium未找到候选商品", number=number, url=url, detail="详情页缺少播放器静态图")
             return None
