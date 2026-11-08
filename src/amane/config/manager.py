@@ -86,6 +86,7 @@ _DEFAULT_CONTENT_ROUTES: dict[ContentType, list[SiteName]] = {
     ],
     ContentType.UNCENSORED: [
         SiteName.AVENTERTAINMENTS,
+        SiteName.D2PASS,
         SiteName.TENMUSUME,
         SiteName.PONDO,
         SiteName.CARIBBEANCOM,
