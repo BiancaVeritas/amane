@@ -19,7 +19,9 @@ _BASE_URL = "https://www.caribbeancompr.com"
 _JAVBUS_URL = "https://www.javbus.com"
 _NUMBER_RE = re.compile(r"HEYZO-\d+", re.IGNORECASE)
 _DETAIL_RE = re.compile(r"/moviepages/(\d{6}_\d{3})/index\.html(?:[?#].*)?$", re.IGNORECASE)
-_VOL_RE = re.compile(r"(?:vol\s*\.?\s*0*(\d+)\b|[（(]\s*0*(\d+)\s*[）)])", re.IGNORECASE)
+_VOL_RE = re.compile(r"(?:vo[l]?\s*\.\s*0*(\d+)\b|\bvo[l]?\s*0*(\d+)\b|[（(]\s*0*(\d+)\s*[）)])", re.IGNORECASE)
+"""续集序号. ``VO`` 是站点自用的缩写 (javbus 侧常写作 ``Vo.4``, 站点页写作 ``Vol.4``),
+因此 ``l`` 必须可选, 否则两侧解析出的序号一个为空一个为 4, 比对必然失败."""
 _SEARCH_NOISE_RE = re.compile(r"アダルト動画|HEYZO", re.IGNORECASE)
 
 
@@ -37,7 +39,7 @@ def _split_title(value: str, number: str | None = None) -> tuple[str, int | None
     vol: int | None = None
     match = _VOL_RE.search(title)
     if match:
-        vol = int(match.group(1) or match.group(2))
+        vol = int(next(g for g in match.groups() if g))
         title = title[:match.start()] + title[match.end():]
     return title.strip(" \t-:：_、"), vol
 
@@ -203,12 +205,20 @@ class CaribbeancomprCrawler(Crawler):
             selected_url = candidates[0][0]
         else:
             source_key = _title_key(subject)
-            matching: list[tuple[str, int | None]] = []
+            parsed: list[tuple[str, str, int | None]] = []
             for url, candidate_title in candidates:
                 candidate_subject, candidate_vol = _split_title(candidate_title)
-                if _title_key(_clean_search_title(candidate_subject)) == source_key:
-                    matching.append((url, candidate_vol))
+                parsed.append((url, _clean_search_title(candidate_subject), candidate_vol))
+            matching = [(url, vol) for url, clean, vol in parsed if _title_key(clean) == source_key]
             if not matching:
+                # 主体对不上时退回序号: javbus 标题常带演员名/别名括注, 站点标题不含,
+                # 主体必然不等. 序号若在候选里唯一, 已足以定位同一部作品.
+                if source_vol is not None:
+                    same_vol = [(url, vol) for url, _, vol in parsed if vol == source_vol]
+                    if len(same_vol) == 1:
+                        selected_url = same_vol[0][0]
+                        self._lookup_cache[number] = (javbus_title, release, selected_url, source_vol)
+                        return selected_url
                 self.logger.warning("标题主体不一致", number=number, title=subject, candidates=[x[1] for x in candidates])
                 return None
             if source_vol is not None:

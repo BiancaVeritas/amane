@@ -25,6 +25,14 @@ def test_title_body_and_volume_normalization() -> None:
     assert _split_title("HEYZO-2766激烈ハードに3穴責め！！Vol.2", "HEYZO-2766") == ("激烈ハードに3穴責め！！", 2)
     assert _split_title("激烈ハードに3穴責め！！VOL.02") == ("激烈ハードに3穴責め！！", 2)
     assert _split_title("激烈ハードに3穴責め！！") == ("激烈ハードに3穴責め！！", None)
+    # javbus 侧把 Vol 写成 Vo, 站点页写全 Vol; 两侧必须解析出同一个序号, 否则比对必然失败.
+    assert _split_title("姫川ゆうな【ひめかわゆうな】 メイどーる Vo.4~ご主人様のいいなり性人形~") == (
+        "姫川ゆうな【ひめかわゆうな】 メイどーる ~ご主人様のいいなり性人形~",
+        4,
+    )
+    assert _split_title("メイどーる Vol.4~ご主人様のいいなり性人形~") == ("メイどーる ~ご主人様のいいなり性人形~", 4)
+    # 无点的写法同样要认.
+    assert _split_title("メイどーる Vol12 何か") == ("メイどーる 何か", 12)
 
 
 def test_search_candidates_reads_title_anchor_itself() -> None:
