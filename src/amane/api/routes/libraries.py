@@ -27,9 +27,17 @@ router = APIRouter(prefix="/libraries", tags=["libraries"])
 
 
 @router.get("/path-template-schema")
-async def get_path_template_schema() -> PathTemplateSchemaResponse:
-    """与 resolve_paths 同源."""
-    return path_template_schema()
+async def get_path_template_schema(
+    repo: RepoDep,
+    library_id: int | None = None,
+) -> PathTemplateSchemaResponse:
+    """与 resolve_paths 同源. 传 ``library_id`` 时一并下发该库的自定义占位符."""
+    custom: dict[str, str] | None = None
+    if library_id is not None:
+        library = await repo.get_library(library_id)
+        if library is not None:
+            custom = dict(library.custom_placeholders or {})
+    return path_template_schema(custom)
 
 
 @router.get("")
@@ -57,6 +65,7 @@ async def create_library(req: LibraryCreateRequest, repo: RepoDep, runtime: Runt
             patterns=req.patterns,
             move_mode=req.move_mode,
             video_template=req.video_template,
+            custom_placeholders=req.custom_placeholders,
             link_template=req.link_template,
             link_mode=req.link_mode,
             strm_content_template=req.strm_content_template,

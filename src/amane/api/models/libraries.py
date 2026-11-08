@@ -43,6 +43,8 @@ class LibraryCreateRequest(BaseModel):
     patterns: list[str] = []
     move_mode: MoveMode = MoveMode.MOVE
     video_template: PathTemplate = VIDEO_TEMPLATE_DEFAULT
+    custom_placeholders: dict[str, str] = Field(default_factory=dict)
+    """自定义占位符: 名字 → 文件名里要匹配的字面串. 名字须是合法标识符."""
     link_template: PathTemplate | None = None
     link_mode: LinkMode = LinkMode.STRM
     strm_content_template: StrmContentTemplate | None = None
@@ -140,6 +142,8 @@ class PathTemplatePlaceholder(BaseModel):
         default_factory=list,
         description="有闭合取值时列出规范 key, 供 `{name|k=v}` 映射校验与 UI 提示. 空则不校验映射 key.",
     )
+    custom: bool = Field(default=False, description="库级自定义占位符, 可删除.")
+    literal: str | None = Field(default=None, description="自定义占位符匹配的字面串.")
 
 
 class PathTemplateSchemaResponse(BaseModel):
@@ -151,13 +155,24 @@ class PathTemplateSchemaResponse(BaseModel):
     subtitle_extensions_default: list[str]
 
 
-def path_template_schema() -> PathTemplateSchemaResponse:
+def path_template_schema(
+    custom: Mapping[str, str] | None = None,
+) -> PathTemplateSchemaResponse:
+    """内置占位符 + 该库已配置的自定义占位符.
+
+    自定义项在 UI 上单独成组 (``custom=True``), 以便与内置项区分并支持删除.
+    """
+    builtin = [
+        PathTemplatePlaceholder(name=name, map_keys=list(PLACEHOLDER_MAP_KEYS.get(name, ())))
+        for name in PLACEHOLDERS
+    ]
+    extra = [
+        PathTemplatePlaceholder(name=name, custom=True, literal=literal)
+        for name, literal in (custom or {}).items()
+    ]
     return PathTemplateSchemaResponse(
         video_default=VIDEO_TEMPLATE_DEFAULT,
         optional_defaults=OPTIONAL_TEMPLATE_DEFAULTS,
-        placeholders=[
-            PathTemplatePlaceholder(name=name, map_keys=list(PLACEHOLDER_MAP_KEYS.get(name, ())))
-            for name in PLACEHOLDERS
-        ],
+        placeholders=[*builtin, *extra],
         subtitle_extensions_default=list(DEFAULT_SUBTITLE_EXTENSIONS),
     )

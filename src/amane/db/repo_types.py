@@ -327,6 +327,7 @@ class LibraryUpdates(TypedDict, total=False):
     patterns: list[str]
     move_mode: MoveMode
     video_template: str
+    custom_placeholders: dict[str, str]
     link_template: str | None
     link_mode: LinkMode
     strm_content_template: str | None

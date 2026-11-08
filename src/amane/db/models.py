@@ -446,10 +446,11 @@ class Library(SQLModel, table=True):
     custom_placeholders: dict[str, str] = Field(
         default_factory=dict, sa_column=Column(JSON, nullable=False, server_default=text("'{}'"))
     )
-    """库级自定义占位符: 占位符名 → 要匹配的字面串. 文件名里连续出现该串时, 模板中的
-    ``{名字}`` 取其大写形式, 否则为空. 名字须是合法标识符, 字面串大小写不敏感.
+    """库级自定义模板占位符: 占位符名 → 文件名里要匹配的字面串.
 
-    用于给归档名附加文件名里的标记 (如 ``SONE-638-LTX`` 的 ``LTX``).
+    模板里以 ``{名字}`` 引用. 原始文件名或所在目录名出现该字面串时取值, 否则为空
+    (配合 ``[...]`` 组即可做到「有标记才出现」). 匹配大小写不敏感, 输出强制大写;
+    须连续出现且前后不紧贴字母. 名字须是合法标识符.
     """
     link_template: PathTemplate | None = None
     """空则不创建链接. 非空时 ORGANIZE 在视频就位后按此模板写 strm 或符号链接, 必须在库外."""

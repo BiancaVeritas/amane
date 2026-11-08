@@ -60,6 +60,7 @@ class LibrariesRepoMixin(RepositoryMixinBase):
         patterns: list[str] | None = None,
         move_mode: MoveMode = MoveMode.MOVE,
         video_template: str = VIDEO_TEMPLATE_DEFAULT,
+        custom_placeholders: dict[str, str] | None = None,
         link_template: str | None = None,
         link_mode: LinkMode = LinkMode.STRM,
         strm_content_template: str | None = None,
@@ -103,6 +104,7 @@ class LibrariesRepoMixin(RepositoryMixinBase):
                 patterns=patterns if patterns is not None else [],
                 move_mode=move_mode,
                 video_template=video_template,
+                custom_placeholders=dict(custom_placeholders or {}),
                 link_template=normalize_link_template(link_template),
                 link_mode=link_mode,
                 strm_content_template=strm_content_template,
@@ -207,6 +209,8 @@ class LibrariesRepoMixin(RepositoryMixinBase):
                 lib.move_mode = updates["move_mode"]
             if "video_template" in updates:
                 lib.video_template = validate_path_template(updates["video_template"])
+            if "custom_placeholders" in updates:
+                lib.custom_placeholders = dict(updates["custom_placeholders"] or {})
             if "link_template" in updates:
                 lib.link_template = _path_template_or_none(normalize_link_template(updates["link_template"]))
             if "link_mode" in updates:

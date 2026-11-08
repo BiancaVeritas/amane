@@ -2068,6 +2068,12 @@ export type LibraryCreateRequest = {
      */
     video_template?: string;
     /**
+     * Custom Placeholders
+     *
+     * 自定义占位符: 名字 → 文件名里要匹配的字面串. 名字须是合法标识符.
+     */
+    custom_placeholders?: Record<string, string>;
+    /**
      * Link Template
      */
     link_template?: string | null;
@@ -2191,6 +2197,12 @@ export type LibraryResponse = {
      */
     video_template: string;
     /**
+     * Custom Placeholders
+     *
+     * 自定义占位符: 名字 → 文件名里要匹配的字面串. 名字须是合法标识符.
+     */
+    custom_placeholders: Record<string, string>;
+    /**
      * Link Template
      */
     link_template?: string | null;
@@ -2288,6 +2300,10 @@ export type LibraryUpdateRequest = {
      * Video Template
      */
     video_template?: string | null;
+    /**
+     * Custom Placeholders
+     */
+    custom_placeholders?: Record<string, string> | null;
     /**
      * Link Template
      */
@@ -3189,6 +3205,18 @@ export type PathTemplatePlaceholder = {
      * 有闭合取值时列出规范 key, 供 `{name|k=v}` 映射校验与 UI 提示. 空则不校验映射 key.
      */
     map_keys?: Array<string>;
+    /**
+     * Custom
+     *
+     * 库级自定义占位符, 可删除.
+     */
+    custom?: boolean;
+    /**
+     * Literal
+     *
+     * 自定义占位符匹配的字面串.
+     */
+    literal?: string | null;
 };
 
 /**

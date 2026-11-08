@@ -14,7 +14,7 @@ import {
   TextInput,
   Tooltip,
 } from "@mantine/core";
-import { IconChevronDown, IconChevronRight } from "@tabler/icons-react";
+import { IconChevronDown, IconChevronRight, IconPlus, IconX } from "@tabler/icons-react";
 import { useMemo, useState } from "react";
 import { notifications } from "@mantine/notifications";
 import { useQuery } from "@tanstack/react-query";
@@ -41,6 +41,7 @@ import {
   LIBRARY_INGESTS,
   LINK_MODES,
 } from "@/lib/exhaustive-maps";
+import { AddCustomPlaceholderDialog } from "./add-custom-placeholder-dialog";
 import classes from "./library-form.module.css";
 import { templateCatalogFromPlaceholders } from "./template-highlight";
 import { TemplateInput } from "./template-input";
@@ -100,6 +101,7 @@ export interface LibraryFormState {
   min_file_size: number;
   subtitle_extensions: string;
   video_template: string;
+  custom_placeholders: Record<string, string>;
   thumb_template: string;
   poster_template: string;
   fanart_template: string;
@@ -134,6 +136,7 @@ export function emptyLibraryForm(schema?: PathTemplateSchemaResponse | null): Li
       schema?.subtitle_extensions_default ?? [".srt", ".ass", ".ssa", ".vtt", ".sub"]
     ).join(", "),
     video_template: schema?.video_default ?? "{studio}/{number}/{number}[-CD{cd?}][-{sub?}].{ext}",
+    custom_placeholders: {},
     thumb_template: defaults?.thumb_template ?? "",
     poster_template: defaults?.poster_template ?? "",
     fanart_template: defaults?.fanart_template ?? "",
@@ -166,6 +169,7 @@ export function libraryFormFromResponse(lib: LibraryResponse): LibraryFormState 
     min_file_size: lib.min_file_size ?? 0,
     subtitle_extensions: lib.subtitle_extensions?.join(", ") ?? "",
     video_template: lib.video_template,
+    custom_placeholders: { ...lib.custom_placeholders },
     thumb_template: lib.thumb_template ?? "",
     poster_template: lib.poster_template ?? "",
     fanart_template: lib.fanart_template ?? "",
@@ -213,6 +217,7 @@ function libraryFormValues(form: LibraryFormState): Record<string, unknown> {
     min_file_size: form.min_file_size,
     subtitle_extensions: parseLibraryPatterns(form.subtitle_extensions),
     video_template: form.video_template.trim(),
+    custom_placeholders: form.custom_placeholders,
     thumb_template: form.thumb_template.trim(),
     poster_template: form.poster_template.trim(),
     fanart_template: form.fanart_template.trim(),
@@ -263,13 +268,27 @@ export function LibraryFormFields({ value, onChange, showCreateOnly }: LibraryFo
   const { t } = useTranslation("library");
   const { data: schema } = useQuery(getPathTemplateSchemaOptions());
   const [sidecarOpen, setSidecarOpen] = useState<string | null>(null);
+  const [customDialogOpened, setCustomDialogOpened] = useState(false);
 
-  const placeholders = schema?.placeholders ?? [];
-  const catalog = useMemo(
-    () => templateCatalogFromPlaceholders(schema?.placeholders ?? []),
-    [schema?.placeholders],
-  );
+  // 内置占位符来自服务端 schema; 自定义的那部分跟着表单当前值走, 新增后立即出现在列表里.
+  const placeholders = useMemo(() => {
+    const builtin = (schema?.placeholders ?? []).filter((item) => !item.custom);
+    const custom = Object.entries(value.custom_placeholders ?? {}).map(([name, literal]) => ({
+      name,
+      map_keys: [] as string[],
+      custom: true,
+      literal,
+    }));
+    return [...builtin, ...custom];
+  }, [schema?.placeholders, value.custom_placeholders]);
+  const catalog = useMemo(() => templateCatalogFromPlaceholders(placeholders), [placeholders]);
   const optionalDefaults = schema?.optional_defaults;
+
+  const removeCustomPlaceholder = (name: string) => {
+    const next = { ...value.custom_placeholders };
+    delete next[name];
+    onChange({ ...value, custom_placeholders: next });
+  };
 
   const copyPlaceholder = async (name: string) => {
     const text = `{${name}}`;
@@ -478,17 +497,32 @@ export function LibraryFormFields({ value, onChange, showCreateOnly }: LibraryFo
               const item = t(`placeholders.items.${p.name}`, { defaultValue: p.name });
               const keys = p.map_keys ?? [];
               const label =
-                keys.length > 0
-                  ? `${item} · ${t("placeholders.mapKeys", { keys: keys.join(", ") })}`
-                  : item;
+                p.custom && p.literal
+                  ? `${t("placeholders.customBadge")} · ${t("placeholders.customHint", { literal: p.literal })}`
+                  : keys.length > 0
+                    ? `${item} · ${t("placeholders.mapKeys", { keys: keys.join(", ") })}`
+                    : item;
               return (
                 <Tooltip key={p.name} label={label} multiline maw={280}>
                   <Badge
                     component="button"
                     type="button"
                     size="sm"
-                    variant="light"
+                    variant={p.custom ? "filled" : "light"}
+                    color={p.custom ? "orange" : undefined}
                     style={{ cursor: "pointer" }}
+                    rightSection={
+                      p.custom ? (
+                        <IconX
+                          size={10}
+                          style={{ cursor: "pointer" }}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            removeCustomPlaceholder(p.name);
+                          }}
+                        />
+                      ) : undefined
+                    }
                     onClick={() => void copyPlaceholder(p.name)}
                   >
                     {`{${p.name}}`}
@@ -496,9 +530,36 @@ export function LibraryFormFields({ value, onChange, showCreateOnly }: LibraryFo
                 </Tooltip>
               );
             })}
+            <Tooltip label={t("placeholders.addCustom")} multiline maw={260}>
+              <Badge
+                component="button"
+                type="button"
+                size="sm"
+                variant="outline"
+                color="orange"
+                leftSection={<IconPlus size={10} />}
+                style={{ cursor: "pointer" }}
+                onClick={() => setCustomDialogOpened(true)}
+              >
+                {t("placeholders.addCustomShort")}
+              </Badge>
+            </Tooltip>
           </Group>
         </Stack>
       )}
+
+      <AddCustomPlaceholderDialog
+        opened={customDialogOpened}
+        onClose={() => setCustomDialogOpened(false)}
+        existing={value.custom_placeholders}
+        onSubmit={(name, literal) => {
+          onChange({
+            ...value,
+            custom_placeholders: { ...value.custom_placeholders, [name]: literal },
+          });
+          setCustomDialogOpened(false);
+        }}
+      />
 
       <Accordion
         variant="contained"
