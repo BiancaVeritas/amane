@@ -39,8 +39,8 @@ export function PosterCard({
   );
   const showImage = posterUrl && !errored;
   const actors = item.actors ?? [];
-  // 间隔号比空格更清楚地划分多个名字, 又不像逗号那样抢眼.
-  const actorsLabel = actors.length > 0 ? actors.join("・") : null;
+  // 顿号作并列分隔, 中日文里本就常用, 比间隔号窄且不突兀.
+  const actorsLabel = actors.length > 0 ? actors.join("、") : null;
   const releaseLabel = formatReleaseYearMonth(item.release);
   const ageThen = ageAtRelease(actorBirthday, item.release);
 
