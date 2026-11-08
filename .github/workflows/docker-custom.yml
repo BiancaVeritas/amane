@@ -24,9 +24,6 @@ jobs:
       - name: Image name
         run: echo "IMAGE=${REGISTRY}/$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')/amane" >> "$GITHUB_ENV"
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v4
-
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
 
@@ -54,7 +51,9 @@ jobs:
           context: .
           file: ./Dockerfile
           push: true
-          platforms: linux/amd64,linux/arm64
+          # 只出 amd64: 目标服务器是 x86, 且 arm64 要靠 QEMU 模拟, 而 Python 3.14
+          # 在模拟环境下需从源码编译, 构建时间从数分钟涨到半小时以上且容易卡死.
+          platforms: linux/amd64
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
