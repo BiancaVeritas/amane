@@ -126,13 +126,14 @@ export function PosterCard({
           <Text size="sm" fw={600} ff="monospace" lineClamp={1}>
             {item.number}
           </Text>
-          {/* 无标题也占同样高度, 否则这一格比邻居矮, 整行底部不齐. */}
+          {/* 标题恒占两行高: 用 rem 而非 em —— em 相对自身字号, 换算后仍随字号变化.
+              固定高度 + 显式行高, 使 1 行与 2 行的标题占同样空间. */}
           <Text
             size="xs"
             c="dimmed"
             lineClamp={2}
             title={item.title ?? undefined}
-            style={{ minHeight: "2.5em" }}
+            style={{ height: "2.4rem", lineHeight: "1.2rem" }}
           >
             {item.title ?? ""}
           </Text>
