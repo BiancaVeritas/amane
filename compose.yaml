@@ -1,6 +1,6 @@
 services:
   amane:
-    image: ghcr.io/sqzw-x/amane:latest
+    image: ghcr.io/biancaveritas/amane:custom
     container_name: amane
     # 对齐宿主机 UID/GID, 避免挂载目录出现 root 属主文件
     user: "${UID:-1000}:${GID:-1000}"
