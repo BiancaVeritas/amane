@@ -40,22 +40,14 @@ def _number(value: str) -> str | None:
 
 
 def _cluster_search_term(subject: str, vol: int | None) -> str:
-    """拼出站点短语搜索词: 有续集序号时为 ``Vol.N~副标题~``, 去掉系列名与艺人名.
+    """拼出站点搜索词: 保留系列名, 去掉续集序号之外的修饰.
 
-    站点把系列名当模糊索引 —— 带上它必然返回同系列全部分卷, 精确的那条挑不出来.
-    只留序号与副标题时按短语匹配, 返回单条.
+    站点按系列名划索引范围 —— 带上系列名才返回该系列的全部分卷 (12 条), 去掉后
+    候选集残缺 (实测缺 Vol.1/2/10/12/17), 精确的那条反而不在结果里. 因此搜索词
+    保留系列名, 由 ``source_vol`` 与主体在候选内做精确选择.
     """
-    base = _clean_search_title(subject)
-    if vol is None:
-        # 无序号时无从区分分卷, 保留完整主体 (含系列名) 是唯一选择.
-        return base
-    # subject 是剥掉序号后的主体, 形如「系列名 ~副标题~」; 去掉第一个空白之前的部分.
-    tail = base
-    if (first_space := tail.find(" ")) > 0:
-        tail = tail[first_space + 1 :].lstrip()
-    if not tail.startswith("~"):
-        return base
-    return f"Vol.{vol}{tail}"
+    del vol  # 序号只用于候选内匹配, 不进搜索词
+    return _clean_search_title(subject)
 
 
 def _split_title(value: str, number: str | None = None) -> tuple[str, int | None]:

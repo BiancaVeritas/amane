@@ -57,12 +57,12 @@ def test_search_query_encodes_tilde() -> None:
     assert "~" not in encoded
 
 
-def test_cluster_search_term_drops_series_name() -> None:
-    """只留「序号 + 副标题」: 带系列名会返回整个系列, 精确分卷反而挑不出."""
-    title = "姫川ゆうな【ひめかわゆうな】 メイどーる Vo.4～ご主人様のいいなり性人形～"
-    subject, vol = _split_title(title, "HEYZO-1395")
+def test_cluster_search_term_keeps_series_name() -> None:
+    """搜索词保留系列名: 站点按它划索引范围, 去掉后候选集残缺."""
+    subject, vol = _split_title("姫川ゆうな【ひめかわゆうな】 メイどーる Vo.4～ご主人様のいいなり性人形～", "HEYZO-1395")
     assert vol == 4
-    assert _cluster_search_term(subject, vol) == "Vol.4~ご主人様のいいなり性人形~"
+    # 序号不进搜索词, 系列名保留.
+    assert _cluster_search_term(subject, vol) == "メイどーる ~ご主人様のいいなり性人形~"
 
 
 def test_search_candidates_reads_title_anchor_itself() -> None:
