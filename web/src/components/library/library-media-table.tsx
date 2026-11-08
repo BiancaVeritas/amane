@@ -393,7 +393,13 @@ export function LibraryMediaTable({
         <SelectionBar count={selected.size}>
           {/* 窄屏三个批量按钮分成多行, 占用表体高度: sm 以下改由菜单提供, 选中数仍由 Badge 常驻呈现. */}
           <Group gap="xs" wrap="wrap" visibleFrom="sm">
-            <Menu position="bottom-start" withinPortal>
+            <Menu
+              position="bottom-start"
+              withinPortal
+              trigger="hover"
+              openDelay={100}
+              closeDelay={200}
+            >
               <Menu.Target>
                 <Button
                   size="xs"
@@ -455,7 +461,13 @@ export function LibraryMediaTable({
             </Menu>
           </Group>
           <Box hiddenFrom="sm">
-            <Menu position="bottom-start" withinPortal>
+            <Menu
+              position="bottom-start"
+              withinPortal
+              trigger="hover"
+              openDelay={100}
+              closeDelay={200}
+            >
               <Menu.Target>
                 <Button size="xs" variant="light" loading={busy} disabled={selected.size === 0}>
                   {t("columns.actions")}

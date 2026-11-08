@@ -100,7 +100,14 @@ export const ActorCard = memo(function ActorCard({ item }: ActorCardProps) {
           </Text>
           {/* 生日与三围行常有缺失; 两行都固定 20px 并让内容垂直居中, 缺失时留空占位.
               两行必须同构, 否则图标行与纯文字行的基线对不齐. */}
-          <Group gap={5} wrap="nowrap" align="center" title={birthdayLabel ?? undefined} h={20}>
+          <Group
+            gap={5}
+            wrap="nowrap"
+            align="center"
+            title={birthdayLabel ?? undefined}
+            h={20}
+            style={{ lineHeight: "20px" }}
+          >
             {birthdayLabel && (
               <>
                 <Box
@@ -124,7 +131,7 @@ export const ActorCard = memo(function ActorCard({ item }: ActorCardProps) {
               </>
             )}
           </Group>
-          <Group gap={5} wrap="nowrap" align="center" h={20}>
+          <Group gap={5} wrap="nowrap" align="center" h={20} style={{ lineHeight: "20px" }}>
             <Text size="xs" c="dimmed" lineClamp={1} style={{ minWidth: 0, flex: 1 }}>
               {metaBits.length > 0 ? metaBits.join(" · ") : ""}
             </Text>

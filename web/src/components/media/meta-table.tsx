@@ -265,7 +265,13 @@ export function MetaTable({
         onChange={handlePageChange}
         header={
           <SelectionBar count={selected.size}>
-            <Menu position="bottom-start" withinPortal>
+            <Menu
+              position="bottom-start"
+              withinPortal
+              trigger="hover"
+              openDelay={100}
+              closeDelay={200}
+            >
               <Menu.Target>
                 <Button
                   size="xs"

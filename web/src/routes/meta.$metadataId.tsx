@@ -882,7 +882,13 @@ function TitleDetailPage() {
           )}
 
           <Group gap="xs" pt="xs">
-            <Menu shadow="md" position="bottom-start">
+            <Menu
+              shadow="md"
+              position="bottom-start"
+              trigger="hover"
+              openDelay={100}
+              closeDelay={200}
+            >
               <Menu.Target>
                 <Button
                   size="xs"
