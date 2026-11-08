@@ -37,7 +37,7 @@ _DETAIL_PATH = "/product/movies/{}"
 _IMAGE_URL = "https://images.d2pass.com/images/meta/movies/flash/{}.webp"
 
 #: 番号 → product_id 的离线索引. 由 amane-work/heyzo_map 的采集脚本生成.
-_INDEX_PATH = Path(__file__).with_name("heyzo_index.json")
+_INDEX_PATH = Path(__file__).with_name("d2pass_heyzo_index.json")
 _index: dict[str, dict[str, object]] | None = None
 
 
@@ -60,7 +60,7 @@ def _index_pid(number: str) -> int | None:
     digits = _digits(number)
     if digits is None:
         return None
-    pid = _load_index().get(digits.zfill(4), {}).get("d2pass_id")
+    pid = _load_index().get(digits.zfill(4), {}).get("id")
     return int(pid) if isinstance(pid, int) else None
 
 #: 只认官网已关停、别处查不到的片商. 本站每次刮削要 javbus + 搜索 + 若干详情页,

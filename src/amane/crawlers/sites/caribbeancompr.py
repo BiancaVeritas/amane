@@ -1,10 +1,13 @@
 """Caribbeancompr premium title-search crawler backed by JAVBUS title lookup."""
 from __future__ import annotations
 
+import json
 import re
 import unicodedata
+from pathlib import Path
 from urllib.parse import quote_from_bytes, urljoin
 
+import structlog
 from parsel import Selector
 
 from ...enums import SiteName
@@ -14,10 +17,37 @@ from ..http import RequestError
 from ..models import FetchOptions, MediaMetadata, SearchQuery, film_actors
 from .javbus import JavBusCrawler
 
+logger = structlog.get_logger(__name__)
+
 
 _BASE_URL = "https://www.caribbeancompr.com"
 _JAVBUS_URL = "https://www.javbus.com"
 _NUMBER_RE = re.compile(r"HEYZO-\d+", re.IGNORECASE)
+
+#: 番号 → moviepages id 的离线索引. 由 amane-work/heyzo_map 的采集脚本生成.
+_INDEX_PATH = Path(__file__).with_name("caribbeancompr_heyzo_index.json")
+_index: dict[str, dict[str, object]] | None = None
+
+
+def _load_index() -> dict[str, dict[str, object]]:
+    global _index
+    if _index is not None:
+        return _index
+    try:
+        raw = json.loads(_INDEX_PATH.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        logger.warning("heyzo index unavailable", path=str(_INDEX_PATH))
+        _index = {}
+        return _index
+    _index = {str(k): v for k, v in raw.items() if isinstance(v, dict)}
+    return _index
+
+
+def _index_page_id(number: str) -> str | None:
+    """按番号查离线索引. 索引键统一 4 位补零 (HEYZO-0333 → 0333)."""
+    digits = re.split(r"[-_ ]+", number.strip())[-1]
+    page_id = _load_index().get(digits.zfill(4), {}).get("id")
+    return page_id if isinstance(page_id, str) else None
 _DETAIL_RE = re.compile(r"/moviepages/(\d{6}_\d{3})/index\.html(?:[?#].*)?$", re.IGNORECASE)
 _VOL_RE = re.compile(r"(?:vo[l]?\s*\.\s*0*(\d+)\b|\bvo[l]?\s*0*(\d+)\b|[（(]\s*0*(\d+)\s*[）)])", re.IGNORECASE)
 """续集序号. ``VO`` 是站点自用的缩写 (javbus 侧常写作 ``Vo.4``, 站点页写作 ``Vol.4``),
@@ -184,7 +214,8 @@ def _detail(html_text: str, page_url: str) -> tuple[dict[str, object], list[str]
 class CaribbeancomprCrawler(Crawler):
     def __init__(self, client, config=None):
         super().__init__(client, config)
-        self._lookup_cache: dict[str, tuple[str, str | None, str, int | None]] = {}
+        # (javbus 标题, 发售日, 详情页 URL, 续集序号). 走离线索引时前两项与序号为 None.
+        self._lookup_cache: dict[str, tuple[str | None, str | None, str, int | None]] = {}
 
     @classmethod
     def profile(cls) -> CrawlerProfile:
@@ -218,6 +249,14 @@ class CaribbeancomprCrawler(Crawler):
         if not number:
             self.logger.warning("JAVBUS未找到原始番号", number=query.number)
             return None
+
+        # 离线索引优先: 表里存了番号 → moviepages id, 命中时直接用 id 拼详情页 URL,
+        # 免掉 javbus 取标题与站点搜索两次往返 (与 AVE 的做法一致).
+        if (page_id := _index_page_id(number)) is not None:
+            detail_url = f"{self.base_url}/moviepages/{page_id}/index.html"
+            self._lookup_cache[number] = (None, None, detail_url, None)
+            return detail_url
+
         lookup = await self._lookup_javbus(number)
         if lookup is None:
             return None
