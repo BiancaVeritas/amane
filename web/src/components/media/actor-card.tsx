@@ -98,7 +98,8 @@ export const ActorCard = memo(function ActorCard({ item }: ActorCardProps) {
           <Text size="sm" fw={600} lineClamp={1} title={item.name}>
             {item.name}
           </Text>
-          {/* 生日与三围/罩杯行常有缺失; 固定占位让同一行的卡片等高, 否则行内底部参差. */}
+          {/* 生日与三围行常有缺失; 两行都固定 20px 并让内容垂直居中, 缺失时留空占位.
+              两行必须同构, 否则图标行与纯文字行的基线对不齐. */}
           <Group gap={5} wrap="nowrap" align="center" title={birthdayLabel ?? undefined} h={20}>
             {birthdayLabel && (
               <>
@@ -123,9 +124,11 @@ export const ActorCard = memo(function ActorCard({ item }: ActorCardProps) {
               </>
             )}
           </Group>
-          <Text size="xs" c="dimmed" lineClamp={1} h={20}>
-            {metaBits.length > 0 ? metaBits.join(" · ") : ""}
-          </Text>
+          <Group gap={5} wrap="nowrap" align="center" h={20}>
+            <Text size="xs" c="dimmed" lineClamp={1} style={{ minWidth: 0, flex: 1 }}>
+              {metaBits.length > 0 ? metaBits.join(" · ") : ""}
+            </Text>
+          </Group>
         </Stack>
       </Card>
     </Link>

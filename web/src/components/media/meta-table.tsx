@@ -14,7 +14,7 @@ import {
   type MantineBreakpoint,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
-import { IconDots, IconRefresh, IconTag, IconTrash } from "@tabler/icons-react";
+import { IconChevronDown, IconDots, IconRefresh, IconTag, IconTrash } from "@tabler/icons-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
@@ -265,16 +265,37 @@ export function MetaTable({
         onChange={handlePageChange}
         header={
           <SelectionBar count={selected.size}>
-            <Button
-              size="xs"
-              variant="light"
-              leftSection={<IconRefresh size={14} />}
-              loading={busy}
-              disabled={selected.size === 0}
-              onClick={() => batchScrape.mutate({ body: { ids: selectedIds } })}
-            >
-              {t("actions.batchScrape")}
-            </Button>
+            <Menu position="bottom-start" withinPortal>
+              <Menu.Target>
+                <Button
+                  size="xs"
+                  variant="light"
+                  leftSection={<IconRefresh size={14} />}
+                  rightSection={<IconChevronDown size={12} />}
+                  loading={busy}
+                  disabled={selected.size === 0}
+                >
+                  {t("actions.batchScrape")}
+                </Button>
+              </Menu.Target>
+              <Menu.Dropdown>
+                <Menu.Item onClick={() => batchScrape.mutate({ body: { ids: selectedIds } })}>
+                  <Text size="sm">{t("common:actions.scrapeNormal")}</Text>
+                  <Text size="xs" c="dimmed">
+                    {t("common:actions.scrapeNormalDesc")}
+                  </Text>
+                </Menu.Item>
+                {/* 空 use_cache = 不读 DB 快照与既有译文, 全部重新抓取. */}
+                <Menu.Item
+                  onClick={() => batchScrape.mutate({ body: { ids: selectedIds, use_cache: [] } })}
+                >
+                  <Text size="sm">{t("common:actions.scrapeForce")}</Text>
+                  <Text size="xs" c="dimmed">
+                    {t("common:actions.scrapeForceDesc")}
+                  </Text>
+                </Menu.Item>
+              </Menu.Dropdown>
+            </Menu>
             <Button
               size="xs"
               variant="light"
