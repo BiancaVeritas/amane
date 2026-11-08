@@ -28,6 +28,16 @@ if TYPE_CHECKING:
 _BASE_URL = "https://www.aventertainments.com"
 _SEARCH_PATH = "/dvd/search"
 
+#: 该站的 VerifyBot 按「无 Referer 的浏览器请求」放行; 带上站内 Referer 反而落进挑战分支.
+_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/131.0.0.0 Safari/537.36"
+    ),
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "ja,en-US;q=0.9,en;q=0.8",
+}
+
 
 def _text(value: object) -> str:
     return value.strip() if isinstance(value, str) else ""
@@ -257,6 +267,7 @@ class AVEntertainmentsCrawler(Crawler):
             name=SiteName.AVENTERTAINMENTS,
             base_url=_BASE_URL,
             urls=["https://imgs02.aventertainments.com"],
+            headers=dict(_HEADERS),
         )
 
     async def _search(self, query: SearchQuery, options: FetchOptions | None = None) -> str | None:
@@ -266,14 +277,12 @@ class AVEntertainmentsCrawler(Crawler):
         target = _number_key(query.number)
         candidate_urls: list[str] = []
         for term in _search_terms(query.number):
-            params = urlencode({"lang": "2", "cat": "29", "keyword": term, "searchby": "keyword", "page": "1"})
+            # culture 与参数顺序对齐站点自己的表单提交: 缺 culture 时 ASP.NET 按默认区域建会话,
+            # 与浏览器访问落到不同分支.
+            params = urlencode({"lang": "2", "cat": "29", "culture": "ja-JP", "keyword": term, "searchby": "keyword"})
             search_url = f"{self.base_url.rstrip('/')}{_SEARCH_PATH}?{params}"
             try:
-                page = await self.client.get_html(
-                    search_url,
-                    cookies=self.cookies,
-                    headers={**self.headers, "Referer": f"{self.base_url.rstrip('/')}/"},
-                )
+                page = await self.client.get_html(search_url, cookies=self.cookies, headers=self.headers)
             except RequestError as exc:
                 if exc.http_status == 404:
                     continue
@@ -285,11 +294,7 @@ class AVEntertainmentsCrawler(Crawler):
         matched: list[tuple[int, str]] = []
         for candidate in candidate_urls[:10]:
             try:
-                detail_html = await self.client.get_html(
-                    candidate,
-                    cookies=self.cookies,
-                    headers={**self.headers, "Referer": f"{self.base_url.rstrip('/')}/"},
-                )
+                detail_html = await self.client.get_html(candidate, cookies=self.cookies, headers=self.headers)
             except RequestError as exc:
                 if exc.http_status == 404:
                     continue
@@ -310,11 +315,7 @@ class AVEntertainmentsCrawler(Crawler):
         initial_html = self._search_detail_pages.pop(url, None)
         if initial_html is None:
             try:
-                initial_html = await self.client.get_html(
-                    url,
-                    cookies=self.cookies,
-                    headers={**self.headers, "Referer": f"{self.base_url.rstrip('/')}/"},
-                )
+                initial_html = await self.client.get_html(url, cookies=self.cookies, headers=self.headers)
             except RequestError as exc:
                 if exc.http_status == 404:
                     return None
