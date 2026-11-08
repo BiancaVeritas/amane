@@ -39,8 +39,7 @@ export function PosterCard({
   );
   const showImage = posterUrl && !errored;
   const actors = item.actors ?? [];
-  // 全角空格分隔: 半角逗号在密集的演员名里太抢眼, 半角空格又不足以分开两个名字.
-  const actorsLabel = actors.length > 0 ? actors.join("\u3000") : null;
+  const actorsLabel = actors.length > 0 ? actors.join(" ") : null;
   const releaseLabel = formatReleaseYearMonth(item.release);
   const ageThen = ageAtRelease(actorBirthday, item.release);
 
@@ -137,37 +136,40 @@ export function PosterCard({
           >
             {item.title ?? ""}
           </Text>
-          {actorsLabel && (
-            <Group gap={5} wrap="nowrap" align="center" title={actorsLabel}>
-              <Box
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  flexShrink: 0,
-                  width: 18,
-                  height: 18,
-                  borderRadius: "var(--mantine-radius-sm)",
-                  background: "var(--mantine-color-grape-filled)",
-                  color: "var(--mantine-color-white)",
-                }}
-              >
-                <IconUser size={11} stroke={2.2} />
-              </Box>
-              <Text
-                size="xs"
-                fw={600}
-                lineClamp={1}
-                style={{
-                  minWidth: 0,
-                  flex: 1,
-                  color: "light-dark(var(--mantine-color-grape-7), var(--mantine-color-grape-3))",
-                }}
-              >
-                {actorsLabel}
-              </Text>
-            </Group>
-          )}
+          {/* 演员行恒占 20px: 没有演员的条目少这一行, 整行卡片底部就不齐. */}
+          <Group gap={5} wrap="nowrap" align="center" title={actorsLabel ?? undefined} h={20}>
+            {actorsLabel && (
+              <>
+                <Box
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    flexShrink: 0,
+                    width: 18,
+                    height: 18,
+                    borderRadius: "var(--mantine-radius-sm)",
+                    background: "var(--mantine-color-grape-filled)",
+                    color: "var(--mantine-color-white)",
+                  }}
+                >
+                  <IconUser size={11} stroke={2.2} />
+                </Box>
+                <Text
+                  size="xs"
+                  fw={600}
+                  lineClamp={1}
+                  style={{
+                    minWidth: 0,
+                    flex: 1,
+                    color: "light-dark(var(--mantine-color-grape-7), var(--mantine-color-grape-3))",
+                  }}
+                >
+                  {actorsLabel}
+                </Text>
+              </>
+            )}
+          </Group>
         </Stack>
       </Card>
     </Link>
