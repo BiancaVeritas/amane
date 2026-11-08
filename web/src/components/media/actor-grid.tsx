@@ -61,6 +61,8 @@ function ActorGridRow({ items, cols }: { items: ActorResponse[]; cols: number })
         columnGap: "var(--mantine-spacing-md)",
         paddingBottom: "var(--mantine-spacing-md)",
         gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
+        // 同一行各家字段有无不同, 卡片高度会参差; 拉伸让它们等高.
+        alignItems: "stretch",
       }}
     >
       {items.map((item) => (

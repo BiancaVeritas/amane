@@ -49,9 +49,9 @@ export const ActorCard = memo(function ActorCard({ item }: ActorCardProps) {
     <Link
       to="/actors/$actorId"
       params={{ actorId: String(item.id) }}
-      style={{ textDecoration: "none", color: "inherit", display: "block" }}
+      style={{ textDecoration: "none", color: "inherit", display: "block", height: "100%" }}
     >
-      <Card padding={0} radius="md" withBorder style={{ overflow: "hidden" }}>
+      <Card padding={0} radius="md" withBorder style={{ overflow: "hidden", height: "100%" }}>
         <Box pos="relative">
           <AspectRatio ratio={0.75}>
             {showImage ? (
@@ -98,33 +98,34 @@ export const ActorCard = memo(function ActorCard({ item }: ActorCardProps) {
           <Text size="sm" fw={600} lineClamp={1} title={item.name}>
             {item.name}
           </Text>
-          {birthdayLabel && (
-            <Group gap={5} wrap="nowrap" align="center" title={birthdayLabel}>
-              <Box
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  flexShrink: 0,
-                  width: 18,
-                  height: 18,
-                  borderRadius: "var(--mantine-radius-sm)",
-                  background: "var(--mantine-color-cyan-filled)",
-                  color: "var(--mantine-color-white)",
-                }}
-              >
-                <IconCalendar size={11} stroke={2.2} />
-              </Box>
-              <Text size="xs" fw={600} lineClamp={1} style={{ minWidth: 0, flex: 1 }} c="dimmed">
-                {birthdayLabel}
-              </Text>
-            </Group>
-          )}
-          {metaBits.length > 0 && (
-            <Text size="xs" c="dimmed" lineClamp={1}>
-              {metaBits.join(" · ")}
-            </Text>
-          )}
+          {/* 生日与三围/罩杯行常有缺失; 固定占位让同一行的卡片等高, 否则行内底部参差. */}
+          <Group gap={5} wrap="nowrap" align="center" title={birthdayLabel ?? undefined} h={20}>
+            {birthdayLabel && (
+              <>
+                <Box
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    flexShrink: 0,
+                    width: 18,
+                    height: 18,
+                    borderRadius: "var(--mantine-radius-sm)",
+                    background: "var(--mantine-color-cyan-filled)",
+                    color: "var(--mantine-color-white)",
+                  }}
+                >
+                  <IconCalendar size={11} stroke={2.2} />
+                </Box>
+                <Text size="xs" fw={600} lineClamp={1} style={{ minWidth: 0, flex: 1 }} c="dimmed">
+                  {birthdayLabel}
+                </Text>
+              </>
+            )}
+          </Group>
+          <Text size="xs" c="dimmed" lineClamp={1} h={20}>
+            {metaBits.length > 0 ? metaBits.join(" · ") : ""}
+          </Text>
         </Stack>
       </Card>
     </Link>
