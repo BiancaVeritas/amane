@@ -27,12 +27,11 @@ def test_title_body_and_volume_normalization() -> None:
     assert _split_title("HEYZO-2766激烈ハードに3穴責め！！Vol.2", "HEYZO-2766") == ("激烈ハードに3穴責め！！", 2)
     assert _split_title("激烈ハードに3穴責め！！VOL.02") == ("激烈ハードに3穴責め！！", 2)
     assert _split_title("激烈ハードに3穴責め！！") == ("激烈ハードに3穴責め！！", None)
-    # javbus 侧把 Vol 写成 Vo, 站点页写全 Vol; 两侧必须解析出同一个序号, 否则比对必然失败.
-    assert _split_title("姫川ゆうな【ひめかわゆうな】 メイどーる Vo.4~ご主人様のいいなり性人形~") == (
-        "姫川ゆうな【ひめかわゆうな】 メイどーる ~ご主人様のいいなり性人形~",
-        4,
-    )
-    assert _split_title("メイどーる Vol.4~ご主人様のいいなり性人形~") == ("メイどーる ~ご主人様のいいなり性人形~", 4)
+    # javbus 侧把 Vol 写成 Vo, 且标题以「艺人名【读音】」开头; 站点页写全 Vol 且不含艺人名.
+    # 两侧必须归一成同一个主体与序号, 否则比对必然失败 —— 剥掉艺人前缀正是为此.
+    javbus_title = "姫川ゆうな【ひめかわゆうな】 メイどーる Vo.4~ご主人様のいいなり性人形~"
+    site_title = "メイどーる Vol.4~ご主人様のいいなり性人形~"
+    assert _split_title(javbus_title) == _split_title(site_title) == ("メイどーる ~ご主人様のいいなり性人形~", 4)
     # 无点的写法同样要认.
     assert _split_title("メイどーる Vol12 何か") == ("メイどーる 何か", 12)
 
@@ -59,14 +58,16 @@ def test_search_query_encodes_tilde() -> None:
 
 def test_cluster_search_term_keeps_series_name() -> None:
     """搜索词保留系列名: 站点按它划索引范围, 去掉后候选集残缺."""
-    subject, vol = _split_title("姫川ゆうな【ひめかわゆうな】 メイどーる Vo.4～ご主人様のいいなり性人形～", "HEYZO-1395")
+    subject, vol = _split_title(
+        "姫川ゆうな【ひめかわゆうな】 メイどーる Vo.4～ご主人様のいいなり性人形～", "HEYZO-1395"
+    )
     assert vol == 4
     # 序号不进搜索词, 系列名保留.
     assert _cluster_search_term(subject, vol) == "メイどーる ~ご主人様のいいなり性人形~"
 
 
 def test_search_candidates_reads_title_anchor_itself() -> None:
-    html = '''<a class="meta-title" href="/moviepages/122122_701/index.html">激烈ハードに3穴責め！！Vol.2</a>'''
+    html = """<a class="meta-title" href="/moviepages/122122_701/index.html">激烈ハードに3穴責め！！Vol.2</a>"""
     assert _search_candidates(html, "https://www.caribbeancompr.com/search/?q=x") == [
         ("https://www.caribbeancompr.com/moviepages/122122_701/index.html", "激烈ハードに3穴責め！！Vol.2")
     ]
@@ -74,15 +75,14 @@ def test_search_candidates_reads_title_anchor_itself() -> None:
 
 def test_javbus_title_and_release_parser() -> None:
     title, release = _javbus_title_release(
-        '<h3>HEYZO-1234 激烈ハードに3穴責め！！Vol.2</h3>'
-        '<p><span class="header">發行日期:</span> 2026-07-01</p>'
+        '<h3>HEYZO-1234 激烈ハードに3穴責め！！Vol.2</h3><p><span class="header">發行日期:</span> 2026-07-01</p>'
     )
     assert title == "HEYZO-1234 激烈ハードに3穴責め！！Vol.2"
     assert release == "2026-07-01"
 
 
 def test_detail_only_reads_public_gallery_and_required_metadata() -> None:
-    html = '''
+    html = """
     <div class="movie-info"><div class="heading"><h1>激烈ハードに3穴責め！！Vol.2</h1></div>
     <p>Plot text</p>
     <ul>
@@ -97,7 +97,7 @@ def test_detail_only_reads_public_gallery_and_required_metadata() -> None:
     <a class="gallery-image-wrap" data-is_sample="1" href="/moviepages/122122_701/images/l/002.jpg"></a>
     <a class="gallery-image-wrap" data-is_sample="1" href="/moviepages/122122_701/images/l/003.jpg"></a>
     <a class="gallery-image-wrap is-disabled" data-is_sample="0" href="/member/moviepages/122122_701/images/l/004.jpg"></a>
-    '''
+    """
     data, gallery, poster = _detail(html, "https://www.caribbeancompr.com/moviepages/122122_701/index.html")
     assert data["title"] == "激烈ハードに3穴責め！！Vol.2"
     assert data["plot"] == "Plot text"
@@ -112,7 +112,7 @@ def test_detail_only_reads_public_gallery_and_required_metadata() -> None:
 class _FakeClient:
     async def get_html(self, url: str, **kwargs: object) -> str:
         assert kwargs.get("encoding") == "euc_jp"
-        return '''
+        return """
         <div class="movie-info"><div class="heading"><h1>Premium title Vol.2</h1></div><p>Premium plot</p>
         <ul>
           <li class="movie-spec"><span class="spec-title">出演</span><span class="spec-content"><a>Actor A</a></span></li>
@@ -126,7 +126,7 @@ class _FakeClient:
         <a class="gallery-image-wrap" data-is_sample="1" href="/moviepages/122122_701/images/l/002.jpg"></a>
         <a class="gallery-image-wrap" data-is_sample="1" href="/moviepages/122122_701/images/l/003.jpg"></a>
         <a class="gallery-image-wrap is-disabled" data-is_sample="0" href="/member/moviepages/122122_701/images/l/004.jpg"></a>
-        '''
+        """
 
 
 @pytest.mark.asyncio

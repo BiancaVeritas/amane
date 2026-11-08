@@ -1,4 +1,5 @@
 """Caribbeancompr premium title-search crawler backed by JAVBUS title lookup."""
+
 from __future__ import annotations
 
 import json
@@ -35,7 +36,7 @@ def _load_index() -> dict[str, dict[str, object]]:
         return _index
     try:
         raw = json.loads(_INDEX_PATH.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
+    except OSError, json.JSONDecodeError:
         logger.warning("heyzo index unavailable", path=str(_INDEX_PATH))
         _index = {}
         return _index
@@ -56,6 +57,8 @@ def _title_override(number: str) -> str | None:
     digits = re.split(r"[-_ ]+", number.strip())[-1]
     title = _load_index().get(digits.zfill(4), {}).get("override_title")
     return title if isinstance(title, str) and title else None
+
+
 _DETAIL_RE = re.compile(r"/moviepages/(\d{6}_\d{3})/index\.html(?:[?#].*)?$", re.IGNORECASE)
 _VOL_RE = re.compile(r"(?:vo[l]?\s*\.\s*0*(\d+)\b|\bvo[l]?\s*0*(\d+)\b|[（(]\s*0*(\d+)\s*[）)])", re.IGNORECASE)
 """续集序号. ``VO`` 是站点自用的缩写 (javbus 侧常写作 ``Vo.4``, 站点页写作 ``Vol.4``),
@@ -100,9 +103,9 @@ def _split_title(value: str, number: str | None = None) -> tuple[str, int | None
     match = _VOL_RE.search(title)
     if match:
         vol = int(next(g for g in match.groups() if g))
-        title = title[:match.start()] + title[match.end():]
-    return title.strip(" \t-:：_、"), vol
-
+        title = title[: match.start()] + title[match.end() :]
+    # 挖掉序号后两侧可能各留一个空格, 归一成单空格再裁边.
+    return re.sub(r"\s+", " ", title).strip(" \t-:：_、"), vol
 
 
 def _search_query(term: str) -> str:
@@ -158,7 +161,9 @@ def _javbus_title_release(html_text: str) -> tuple[str | None, str | None]:
 def _search_candidates(html_text: str, page_url: str) -> list[tuple[str, str]]:
     html = Selector(text=html_text)
     found: list[tuple[str, str]] = []
-    for anchor in html.xpath('//a[contains(concat(" ",normalize-space(@class)," ")," meta-title ") and contains(@href, "/moviepages/")]'):
+    for anchor in html.xpath(
+        '//a[contains(concat(" ",normalize-space(@class)," ")," meta-title ") and contains(@href, "/moviepages/")]'
+    ):
         href = anchor.xpath("./@href").get()
         candidate_title = re.sub(r"\s+", " ", "".join(anchor.xpath(".//text()").getall())).strip()
         if not href or not candidate_title:
@@ -171,8 +176,12 @@ def _search_candidates(html_text: str, page_url: str) -> list[tuple[str, str]]:
 
 def _detail(html_text: str, page_url: str) -> tuple[dict[str, object], list[str], str | None]:
     html = Selector(text=html_text)
-    title = html.xpath('normalize-space(//div[contains(concat(" ",normalize-space(@class)," ")," movie-info ")]//h1[1])').get()
-    plot = html.xpath('normalize-space(//div[contains(concat(" ",normalize-space(@class)," ")," movie-info ")]//p[1])').get()
+    title = html.xpath(
+        'normalize-space(//div[contains(concat(" ",normalize-space(@class)," ")," movie-info ")]//h1[1])'
+    ).get()
+    plot = html.xpath(
+        'normalize-space(//div[contains(concat(" ",normalize-space(@class)," ")," movie-info ")]//p[1])'
+    ).get()
 
     def spec(label: str) -> Selector:
         return html.xpath(
@@ -180,9 +189,15 @@ def _detail(html_text: str, page_url: str) -> tuple[dict[str, object], list[str]
             f'/span[contains(concat(" ",normalize-space(@class)," ")," spec-title ") and normalize-space()="{label}"]/following-sibling::span[contains(concat(" ",normalize-space(@class)," ")," spec-content ")][1]'
         )
 
-    actors = [re.sub(r"\s+", " ", x).strip() for x in spec("出演").xpath('.//a//text()').getall() if x.strip()]
+    actors = [re.sub(r"\s+", " ", x).strip() for x in spec("出演").xpath(".//a//text()").getall() if x.strip()]
     runtime_text = " ".join(spec("再生時間").xpath(".//text()").getall()).strip()
-    tags = [re.sub(r"\s+", " ", x).strip() for x in spec("タグ").xpath('.//a[contains(concat(" ",normalize-space(@class)," ")," spec-item ")]/text()').getall() if x.strip()]
+    tags = [
+        re.sub(r"\s+", " ", x).strip()
+        for x in spec("タグ")
+        .xpath('.//a[contains(concat(" ",normalize-space(@class)," ")," spec-item ")]/text()')
+        .getall()
+        if x.strip()
+    ]
 
     # Caribbeancompr builds the player poster URL in JavaScript:
     # posterImage = '/moviepages/' + movie_id + '/images/l_l.jpg'
@@ -205,7 +220,9 @@ def _detail(html_text: str, page_url: str) -> tuple[dict[str, object], list[str]
         poster = urljoin(page_url, css_poster_match.group(1)) if css_poster_match else None
 
     gallery = []
-    for href in html.xpath('//a[contains(concat(" ",normalize-space(@class)," ")," gallery-image-wrap ") and @data-is_sample="1"]/@href').getall():
+    for href in html.xpath(
+        '//a[contains(concat(" ",normalize-space(@class)," ")," gallery-image-wrap ") and @data-is_sample="1"]/@href'
+    ).getall():
         absolute = urljoin(page_url, href)
         if "/member/" not in absolute and absolute not in gallery:
             gallery.append(absolute)
@@ -279,7 +296,9 @@ class CaribbeancomprCrawler(Crawler):
         search_term = _cluster_search_term(subject, source_vol)
         search_url = f"{self.base_url}/search/?q={_search_query(search_term)}"
         try:
-            search_html = await self.client.get_html(search_url, headers={"Accept-Language": "ja,en;q=0.8"}, encoding="euc_jp")
+            search_html = await self.client.get_html(
+                search_url, headers={"Accept-Language": "ja,en;q=0.8"}, encoding="euc_jp"
+            )
         except RequestError as exc:
             self.logger.warning("Premium未找到候选商品", number=number, title=search_term, error=str(exc))
             return None
@@ -307,13 +326,17 @@ class CaribbeancomprCrawler(Crawler):
                         selected_url = same_vol[0][0]
                         self._lookup_cache[number] = (javbus_title, release, selected_url, source_vol)
                         return selected_url
-                self.logger.warning("标题主体不一致", number=number, title=subject, candidates=[x[1] for x in candidates])
+                self.logger.warning(
+                    "标题主体不一致", number=number, title=subject, candidates=[x[1] for x in candidates]
+                )
                 return None
             if source_vol is not None:
                 same_vol = [item for item in matching if item[1] == source_vol]
                 conflicting = [item for item in matching if item[1] is not None and item[1] != source_vol]
                 if not same_vol and conflicting:
-                    self.logger.warning("续集标记冲突", number=number, source_vol=source_vol, candidate_vols=[x[1] for x in matching])
+                    self.logger.warning(
+                        "续集标记冲突", number=number, source_vol=source_vol, candidate_vols=[x[1] for x in matching]
+                    )
                     return None
                 if len(same_vol) == 1:
                     selected_url = same_vol[0][0]
