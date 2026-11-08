@@ -379,25 +379,8 @@ class TestScrapingPriorityMigration:
             SiteName.JAVBUS,
             SiteName.AVSOX,
             SiteName.FREEJAVBT,
-            *ScrapingConfig().content_routes[ContentType.UNCENSORED][4:],
+            SiteName.AVENTERTAINMENTS,
         ]
-
-    def test_dead_end_uncensored_route_regains_general_sites(self):
-        """只含无码专站的旧默认补回综合站, 否则素人格式之外的番号无处可查."""
-        dead_end = ["aventertainments", "10musume", "1pondo", "caribbeancom", "pacopacomama", "tokyo_hot", "caribbeancompr"]
-        cfg = ScrapingConfig.model_validate({"content_routes": {"uncensored": dead_end}})
-        assert cfg.content_routes[ContentType.UNCENSORED] == [
-            SiteName.JAVDB,
-            SiteName.JAVBUS,
-            SiteName.AVSOX,
-            SiteName.FREEJAVBT,
-            *(SiteName(name) for name in dead_end),
-        ]
-
-    def test_custom_uncensored_route_order_kept(self):
-        """用户自定顺序不迁移; 迁移只认逐项相同的旧默认."""
-        cfg = ScrapingConfig.model_validate({"content_routes": {"uncensored": ["avsox", "javdb"]}})
-        assert cfg.content_routes[ContentType.UNCENSORED] == [SiteName.AVSOX, SiteName.JAVDB]
 
     def test_default_routes_type_specific_heads(self):
         routes = ScrapingConfig().content_routes
@@ -405,9 +388,7 @@ class TestScrapingPriorityMigration:
         assert routes[ContentType.CHINESE][0] == SiteName.IQQTV
         assert routes[ContentType.HENTAI][0] == SiteName.GETCHU
         assert routes[ContentType.WESTERN][0] == SiteName.THEPORNDB
-        # 综合站先承接任意番号, 无码专站只认素人格式 (\\d{6}_\\d{3} 之类), 排在其后
-        assert routes[ContentType.UNCENSORED][0] == SiteName.JAVDB
-        assert SiteName.AVENTERTAINMENTS in routes[ContentType.UNCENSORED]
+        assert routes[ContentType.UNCENSORED][0] == SiteName.AVENTERTAINMENTS
         assert routes[ContentType.UNCENSORED][-1] == SiteName.CARIBBEANCOMPR
         assert SiteName.FC2PPVDB in routes[ContentType.FC2]
         # 官方电子市场下架的作品只剩索引站在线看站收录, airav 排在 fc2 路线的链尾

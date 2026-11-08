@@ -212,6 +212,7 @@ class WebClient:
         max_clients: int = 50,
         limiters: RateLimiters,
         same_origin_referer_hosts: frozenset[str] = frozenset(),
+        native_tls_hosts: frozenset[str] = frozenset(),
         chunked_threshold: int = 2 * 1024**2,
         chunk_size: int = 1 * 1024**2,
         download_concurrency: int = 10,
@@ -222,6 +223,7 @@ class WebClient:
         self._max_retries = max_retries
         self._limiters = limiters
         self._same_origin_referer_hosts = same_origin_referer_hosts
+        self._native_tls_hosts = native_tls_hosts
         self._chunked_threshold = chunked_threshold
         self._chunk_size = chunk_size
         self._download_concurrency = download_concurrency
@@ -290,7 +292,8 @@ class WebClient:
         while True:
             sent += 1
             resp = None
-            impersonate = self._fingerprints.select(key)
+            native_tls = key in self._native_tls_hosts
+            impersonate = None if native_tls else self._fingerprints.select(key)
             should_retry = False
             try:
                 resp = await self._session.request(
@@ -331,7 +334,7 @@ class WebClient:
             except Exception as e:
                 failure = RequestFailure(kind=FailureKind.UNEXPECTED, message=f"unexpected: {type(e).__name__}: {e}")
 
-            if resp is not None and resp.status_code in _IMPERSONATE_REJECTED_STATUSES:
+            if resp is not None and resp.status_code in _IMPERSONATE_REJECTED_STATUSES and not native_tls:
                 # 先记录拒绝项并选出下一个: 预算用尽时它留给该 host 的下一次请求, 不重复试探同一个指纹.
                 rotated = self._fingerprints.rotate(key)
                 if rotated is None:

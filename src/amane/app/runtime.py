@@ -88,15 +88,22 @@ def build_network_stack(
     """
     site_urls: dict[str, list[str]] = {}
     referer_hosts: set[str] = set()
+    native_tls_hosts: set[str] = set()
     site_config = hot.scraping.site_config
 
     def _register_site(site: str, profile: CrawlerProfile) -> None:
         urls = [*profile.urls, profile.base_url]
         site_urls[site] = urls
+        configured = site_config.get(site)
+        if configured is not None and not configured.tls_impersonate:
+            # 该站点按「浏览器指纹与 UA 是否自洽」判定机器人, 伪装反而被拦.
+            for raw in (configured.base_url, *urls):
+                host = httpx.URL(raw).host if raw else None
+                if host is not None:
+                    native_tls_hosts.add(host)
         if not profile.same_origin_referer:
             return
         # 用户配置的镜像域同样纳入, 否则图片仍按裸请求发出.
-        configured = site_config.get(site)
         for raw in (configured.base_url if configured else None, *urls):
             host = httpx.URL(raw).host if raw else None
             if host is not None:
@@ -133,6 +140,7 @@ def build_network_stack(
         max_clients=hot.network.max_clients,
         limiters=limiters,
         same_origin_referer_hosts=frozenset(referer_hosts),
+        native_tls_hosts=frozenset(native_tls_hosts),
         chunked_threshold=hot.network.chunked_threshold,
         chunk_size=hot.network.chunk_size,
         download_concurrency=hot.network.concurrency,

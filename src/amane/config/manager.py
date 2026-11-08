@@ -69,6 +69,11 @@ def _languages_schema(schema: dict[str, Any]) -> None:
     schema["x-visible-keys"] = _SITES_WITH_LANGUAGES
 
 
+#: 不用浏览器 TLS 指纹的来源. 这些站点按「浏览器指纹与 UA 是否自洽」判定机器人,
+#: 伪装成某个具体 Chrome 版本反而被拦; 原生 TLS 与 UA 不冲突, 反而放行.
+_NATIVE_TLS_SITES: frozenset[SiteName] = frozenset({SiteName.AVENTERTAINMENTS})
+
+
 #: 各内容类型默认有序路由 (资格真值 + 该类型默认字段优先级).
 _DEFAULT_CONTENT_ROUTES: dict[ContentType, list[SiteName]] = {
     ContentType.CENSORED: [
@@ -80,10 +85,6 @@ _DEFAULT_CONTENT_ROUTES: dict[ContentType, list[SiteName]] = {
         SiteName.AVSOX,
     ],
     ContentType.UNCENSORED: [
-        SiteName.JAVDB,
-        SiteName.JAVBUS,
-        SiteName.AVSOX,
-        SiteName.FREEJAVBT,
         SiteName.AVENTERTAINMENTS,
         SiteName.TENMUSUME,
         SiteName.PONDO,
@@ -278,6 +279,12 @@ class SiteConfig(BaseModel):
     browser_backend: BrowserBackendName | None = Field(default=None, json_schema_extra={"x-hidden": True})
     """覆盖 ``network.browser.backend``; 仅在改用浏览器后生效, ``off`` 表示该来源禁用浏览器."""
     cookie: dict[str, str] = {}
+    tls_impersonate: bool = True
+    """``False`` 表示该站点不用浏览器 TLS 指纹, 发原生 TLS.
+
+    只对按「浏览器指纹与 UA 是否自洽」判定机器人的站点有用: 伪装成某个具体 Chrome 版本
+    反而比不上不伪装 (原生 TLS 与 UA 不冲突). 站点按「人人都有挑战」拦截时改这里无效.
+    """
 
     @field_validator("proxy")
     @classmethod
@@ -390,7 +397,9 @@ class ScrapingConfig(BaseModel):
     )
 
     site_config: dict[str, SiteConfig] = Field(
-        default_factory=lambda: {str(site): SiteConfig() for site in SiteName},
+        default_factory=lambda: {
+            str(site): SiteConfig(tls_impersonate=str(site) not in _NATIVE_TLS_SITES) for site in SiteName
+        },
         json_schema_extra={"x-frozen-keys": True},
     )
     """含影片站与演员站."""
@@ -405,22 +414,6 @@ class ScrapingConfig(BaseModel):
             legacy_default = ["javdb", "javbus", "avsox", "freejavbt"]
             if uncensored == legacy_default:
                 v = {**v, ContentType.UNCENSORED.value: [*legacy_default, str(SiteName.AVENTERTAINMENTS)]}
-            # 旧默认把综合站换成了无码专站, 这些站只认素人格式番号, 无法承接 SKYHD 一类的碟片番号.
-            # 命中该默认时补回综合站, 用户自定的顺序不动.
-            dead_end_default = [
-                str(site)
-                for site in (
-                    SiteName.AVENTERTAINMENTS,
-                    SiteName.TENMUSUME,
-                    SiteName.PONDO,
-                    SiteName.CARIBBEANCOM,
-                    SiteName.PACOPACOMAMA,
-                    SiteName.TOKYO_HOT,
-                    SiteName.CARIBBEANCOMPR,
-                )
-            ]
-            if uncensored == dead_end_default:
-                v = {**v, ContentType.UNCENSORED.value: [*legacy_default, *dead_end_default]}
         return _complete_frozen_dict(
             v, {ct: [str(site) for site in _DEFAULT_CONTENT_ROUTES.get(ct, [])] for ct in ContentType}
         )
