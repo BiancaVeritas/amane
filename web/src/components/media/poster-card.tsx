@@ -39,7 +39,8 @@ export function PosterCard({
   );
   const showImage = posterUrl && !errored;
   const actors = item.actors ?? [];
-  const actorsLabel = actors.length > 0 ? actors.join(", ") : null;
+  // 全角空格分隔: 半角逗号在密集的演员名里太抢眼, 半角空格又不足以分开两个名字.
+  const actorsLabel = actors.length > 0 ? actors.join("\u3000") : null;
   const releaseLabel = formatReleaseYearMonth(item.release);
   const ageThen = ageAtRelease(actorBirthday, item.release);
 
