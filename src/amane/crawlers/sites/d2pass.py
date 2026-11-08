@@ -27,6 +27,11 @@ _BASE_URL = "https://www.d2pass.com"
 _SEARCH_PATH = "/search?k={}"
 _IMAGE_URL = "https://images.d2pass.com/images/meta/movies/flash/{}.webp"
 
+#: 只认官网已关停、别处查不到的片商. 本站每次刮削要 javbus + 搜索 + 若干详情页,
+#: 对别的站能正常供给的番号做这些请求纯属浪费, 而且容易触发风控; 前缀不符直接返回.
+_NUMBER_PREFIX = re.compile(r"^(?P<prefix>HEYZO)[-_ ]?(?P<id>\d+)$", re.IGNORECASE)
+_D2PASS_PREFIXES = frozenset({"HEYZO"})
+
 #: 片商页 URL 里的番号段: ``/moviepages/0333/index.html`` → ``0333``.
 _PRODUCT_NUMBER_RE = re.compile(r"/moviepages/([0-9A-Za-z_-]+)/", re.IGNORECASE)
 #: 搜索结果里的商品链接.
@@ -66,10 +71,22 @@ def _catalog_number(product_url: str | None) -> str | None:
     return m.group(1) if m else None
 
 
+def _bare(digits: str) -> str:
+    """纯数字段归一到去掉前导零的形式, 两侧比对用 (``0333`` 与 ``333``)."""
+    return digits.lstrip("0") or "0"
+
+
 def _digits(value: str) -> str | None:
-    """番号的数字段, 用于与片商页 URL 比对 (HEYZO-0333 与 /moviepages/0333/)."""
-    tail = re.split(r"[-_ ]+", value.strip())[-1]
-    return tail.lstrip("0") or "0"
+    """番号的数字段, 去掉前导零; 前缀不符返回 None."""
+    if match := _NUMBER_PREFIX.match(value.strip()):
+        return _bare(match["id"])
+    return None
+
+
+def _supported(number: str) -> bool:
+    """只处理官网已关停的片商前缀; 其余番号本站帮不上忙, 也不必为它发请求."""
+    match = _NUMBER_PREFIX.match(number.strip())
+    return match is not None and match["prefix"].upper() in _D2PASS_PREFIXES
 
 
 class D2PassCrawler(Crawler):
@@ -99,6 +116,9 @@ class D2PassCrawler(Crawler):
     async def _search(self, query: SearchQuery, options: FetchOptions | None = None) -> str | None:
         del options
         self._pages = {}
+        if not _supported(query.number):
+            # 其余片商由各自的专站供给, 本站不为它们发任何请求.
+            return None
         target = _digits(query.number)
         title = await self._javbus_title(query.number)
         if not title:
@@ -113,7 +133,7 @@ class D2PassCrawler(Crawler):
                 if block is None:
                     continue
                 catalog = _catalog_number(_field(block, "product_url"))
-                if catalog is None or _digits(catalog) != target:
+                if catalog is None or _bare(catalog) != target:
                     continue
                 self._pages[detail_url] = html
                 return detail_url
