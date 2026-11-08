@@ -40,7 +40,10 @@ export function PosterGrid({
     xxl: 304,
   }[cardSize];
   const gridStyle = {
-    gridTemplateColumns: `repeat(auto-fill, minmax(min(100%, ${minCardWidth}px), 1fr))`,
+    // 固定列宽: 用 1fr 会按剩余空间拉伸, 同屏卡片宽窄不一; 固定宽度保证每张一致,
+    // 代价是右侧可能留一条不满列的空隙.
+    gridTemplateColumns: `repeat(auto-fill, minmax(min(100%, ${minCardWidth}px), ${minCardWidth}px))`,
+    justifyContent: "start",
   };
 
   if (loading) {
