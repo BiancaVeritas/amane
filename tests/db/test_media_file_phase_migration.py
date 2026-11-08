@@ -77,7 +77,7 @@ def test_media_file_phase_columns_backfill_from_path(tmp_path: Path) -> None:
     assert {"mosaic", "has_subtitle_in_name", "definition"} <= _columns(engine, "media_files")
     assert "content_type" not in _columns(engine, "media_files")
     assert _file_phase(engine) == {
-        "/media/MIDV-123-UC-4K.mp4": ("CRACKED", True, "4K"),
+        "/media/MIDV-123-UC-4K.mp4": ("CRACKED", True, "4k"),
         "/media/HEYZO-1234.mp4": (None, False, None),
     }
 

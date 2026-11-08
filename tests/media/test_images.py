@@ -359,7 +359,7 @@ class TestCoverWatermarks:
                 has_subtitle=True,
                 uncensored=True,
                 mosaic=Mosaic.CRACKED,
-                definition="4K",
+                definition="4k",
             )
             is True
         )

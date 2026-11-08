@@ -196,7 +196,7 @@ class TestMediaFileRepo:
         media = await repo.create_media_file(library_id=1, path="/media/MIDV-123-UC-4K.mp4")
         assert media.mosaic is Mosaic.CRACKED
         assert media.has_subtitle is True
-        assert media.definition == "4K"
+        assert media.definition == "4k"
 
         plain = await repo.create_media_file(library_id=1, path="/media/HEYZO-1234.mp4")
         assert plain.mosaic is None

@@ -88,7 +88,7 @@ RENDER_CASES: tuple[_RenderCase, ...] = (
     _RenderCase("MIDV-123.mp4", "{number}/{number}[-Part {cd?}].{ext}", "ABC-123/ABC-123.mp4"),
     _RenderCase("MIDV-123-C.mp4", "{number}/{number}[-{sub?}].{ext}", "ABC-123/ABC-123-C.mp4"),
     _RenderCase("MIDV-123.mp4", "{number}/{number}[-{sub?}].{ext}", "ABC-123/ABC-123.mp4"),
-    _RenderCase("ABC-123-4K.mp4", "{number}[[{def?}]].{ext}", "ABC-123[4K].mp4"),
+    _RenderCase("ABC-123-4K.mp4", "{number}[[{def?}]].{ext}", "ABC-123[4k].mp4"),
     _RenderCase("ABC-123.mp4", "{number}[[{def?}]].{ext}", "ABC-123.mp4"),
     # --- 同组多个可空: 有一个非空就渲染, 空的不输出 ---
     _RenderCase("MIDV-123-UC.mp4", "{number}[-{mosaic?|cracked=U}{sub?}].{ext}", "ABC-123-UC.mp4"),
@@ -103,7 +103,7 @@ RENDER_CASES: tuple[_RenderCase, ...] = (
     _RenderCase("MIDV-123-C.mp4", "{number}[-CD{cd?}{sub?}].{ext}", "ABC-123-CDC.mp4"),
     _RenderCase("MIDV-123-CD1-C.mp4", "{number}[-CD{cd?}{sub?}].{ext}", "ABC-123-CD1C.mp4"),
     # --- 嵌套组: 外层只看自己的直接占位符 ---
-    _RenderCase("MIDV-123-U-4K.mp4", "{number}[-{mosaic?|cracked=U}[-{def?}]].{ext}", "ABC-123-U-4K.mp4"),
+    _RenderCase("MIDV-123-U-4K.mp4", "{number}[-{mosaic?|cracked=U}[-{def?}]].{ext}", "ABC-123-U-4k.mp4"),
     _RenderCase("MIDV-123-U.mp4", "{number}[-{mosaic?|cracked=U}[-{def?}]].{ext}", "ABC-123-U.mp4"),
     _RenderCase("ABC-123-4K.mp4", "{number}[-{mosaic?|cracked=U}[-{def?}]].{ext}", "ABC-123.mp4"),
     # --- 值映射 ---
@@ -118,7 +118,7 @@ RENDER_CASES: tuple[_RenderCase, ...] = (
         "cracked/ABC-123-U.mp4",
     ),
     _RenderCase("MIDV-123-C.mp4", "{number}/{number}[-{sub?|C=中字}].{ext}", "ABC-123/ABC-123-中字.mp4"),
-    _RenderCase("ABC-123-4K.mp4", "{number}[[{def?|4K=2160p}]].{ext}", "ABC-123[2160p].mp4"),
+    _RenderCase("ABC-123-4K.mp4", "{number}[[{def?|4k=2160p}]].{ext}", "ABC-123[2160p].mp4"),
     _RenderCase("MIDV-123-CD1.mp4", "{number}/{number}[-第{cd?|1=一}集].{ext}", "ABC-123/ABC-123-第一集.mp4"),
     _RenderCase("MIDV-123-CD2.mp4", "{number}/{number}[-第{cd?|1=一}集].{ext}", "ABC-123/ABC-123-第2集.mp4"),
     _RenderCase("MIDV-123-無碼.mp4", "{number}[-{mosaic?|uncensored=}].{ext}", "ABC-123.mp4"),
@@ -306,7 +306,7 @@ class TestValidatePathTemplate:
             "{mosaic?|leaked=流出}",
             "{mosaic?|cracked=U}",
             "{sub?|C=中字}",
-            "{def?|4K=2160p,1080p=FHD}",
+            "{def?|4k=2160p,1080p=FHD}",
             "{cd?|1=一,2=二}",
             "{studio|Unknown=未分类}",
             "{studio|Unknown=}",

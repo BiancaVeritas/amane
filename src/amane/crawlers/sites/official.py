@@ -273,6 +273,16 @@ def _extract_series_prefix(number: str) -> str:
     return match.group(1).lower() if match else ""
 
 
+_THUMB_SUFFIX = "-pl.jpg"
+#: 「无」的占位写法: 部分厂牌把空导演写成 ``---``, 当成人名落库就是错的.
+_NO_VALUE = "---"
+
+
+def _values_without_placeholder(values: list[str]) -> list[str]:
+    """去掉空值占位: 占位不是字段值, 保留会变成名为 ``---`` 的导演."""
+    return [value for value in values if value != _NO_VALUE]
+
+
 class OfficialCrawler(Crawler):
     @classmethod
     def profile(cls) -> CrawlerProfile:
@@ -340,10 +350,24 @@ class OfficialCrawler(Crawler):
             '//a[contains(@href,"/works/list/genre/")]/text()',
         )
 
-        # 官网只提供横版封面, 无竖版海报; thumb 取作品轮播首图.
-        thumb_url = html.xpath(
-            '//div[contains(@class,"p-slider")]//img[contains(@class,"swiper-lazy")]/@data-src'
-        ).get()
+        # 作品页 slider 首张是横版封面, 其余是剧照. 只有一张图的条目不走懒加载 (BeFree 的总集编),
+        # 它把地址直接写在 img/@src 里, 缺这条回退就整部没有封面.
+        slides = extract_all_texts(
+            html, '//div[contains(@class,"p-slider")]//img[contains(@class,"swiper-lazy")]/@data-src'
+        )
+        if not slides:
+            slides = extract_all_texts(html, '//div[contains(@class,"p-slider")]//img/@src')
+        thumb_url = slides[0] if slides else None
+
+        directors = _values_without_placeholder(
+            extract_all_texts(
+                html,
+                '//div[@class="th"][normalize-space()="監督"]/following-sibling::div[@class="td"]//p/text()',
+            )
+        )
+
+        # 正文用 <br> 分段, 只取第一个文本节点会截断; 空行与多余空白由聚合输出统一归一.
+        plot = "\n".join(extract_all_texts(html, '//p[contains(@class,"p-workPage__text")]//text()'))
 
         series = extract_text(
             html, '//div[@class="th"][contains(text(),"シリーズ")]/following-sibling::div[@class="item"]//a/text()'
@@ -360,7 +384,12 @@ class OfficialCrawler(Crawler):
             runtime=runtime,
             tags=tags,
             series=series or None,
+            plot=plot or None,
+            directors=directors,
+            # 海报一律由封面裁: 站点竖版图 (-ps.jpg) 构图不受控, 用了就绕过人脸检测.
+            poster_urls=[],
             thumb_urls=[thumb_url] if thumb_url else [],
+            extrafanart=slides[1:],
             source_url=url,
         )
 

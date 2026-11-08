@@ -8,7 +8,7 @@ from typing import Annotated
 
 from fastapi import HTTPException, Query
 
-from ...parsing import DEFINITION_VALUES, ContentType, Mosaic
+from ...parsing import ContentType, Mosaic, canonical_definition
 
 
 @dataclass(frozen=True)
@@ -96,6 +96,8 @@ async def parse_metadata_filters(
 def require_known_definition(definition: str | None) -> str | None:
     if definition is None:
         return None
-    if definition not in DEFINITION_VALUES:
+    # 读侧接受旧写法: 库里可能还留着 4K / HD, 客户端也可能发旧值.
+    canonical = canonical_definition(definition)
+    if canonical is None:
         raise HTTPException(status_code=422, detail=f"未知分辨率: {definition}")
-    return definition
+    return canonical

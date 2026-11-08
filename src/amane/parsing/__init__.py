@@ -2,6 +2,7 @@ from .actor_name import split_actor_aliases
 from .file_info import (
     CONTENT_TYPE_VALUES,
     DEFINITION_VALUES,
+    canonical_definition,
     MOSAIC_NATURE_VALUES,
     MOSAIC_VALUES,
     VR_TAGS,
@@ -29,6 +30,7 @@ from .file_info import (
 __all__ = [
     "CONTENT_TYPE_VALUES",
     "DEFINITION_VALUES",
+    "canonical_definition",
     "MOSAIC_NATURE_VALUES",
     "MOSAIC_VALUES",
     "VR_TAGS",

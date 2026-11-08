@@ -267,20 +267,48 @@ CONTENT_TYPE_VALUES: tuple[ContentType, ...] = tuple(ContentType)
 # 匹配作用于 _normalize_markers 之后的 basename:
 # - 数字标记允许紧跟帧率 (1080p60); K/p 后不得再接字母 (4KS / HDTV 不命中)
 # - HD/SD 不得是番号前缀: HD-123 / HD_123 (下划线归一成点后同形) 不命中
+# 写入一律落到括号里的数字档位, 全小写: 同档的多种写法 (HD / 720P, 4K / 2160P)
+# 只区分识别, 不区分存储, 筛选与角标才不会因为写法不同分成两档.
 _DEFINITION_MARKERS: tuple[tuple[str, re.Pattern[str]], ...] = (
-    ("8K", re.compile(r"\b8K(?:\d+)?\b")),
-    ("4K", re.compile(r"\b4K(?:\d+)?\b")),
-    ("4K", re.compile(r"\b2160P(?:\d+)?\b")),
+    ("8k", re.compile(r"\b8K(?:\d+)?\b")),
+    ("8k", re.compile(r"\b4320P(?:\d+)?\b")),
+    ("4k", re.compile(r"\b4K(?:\d+)?\b")),
+    ("4k", re.compile(r"\b2160P(?:\d+)?\b")),
     ("1440p", re.compile(r"\b1440P(?:\d+)?\b")),
     ("1080p", re.compile(r"\b1080P(?:\d+)?\b")),
     # FHD 是 1080p 的常见别名, 归到同一档.
     ("1080p", re.compile(r"\bFHD\b(?![.-]\d)")),
     ("720p", re.compile(r"\b720P(?:\d+)?\b")),
+    ("720p", re.compile(r"\bHD\b(?![.-]\d)")),
     ("480p", re.compile(r"\b480P(?:\d+)?\b")),
-    ("HD", re.compile(r"\bHD\b(?![.-]\d)")),
-    ("SD", re.compile(r"\bSD\b(?![.-]\d)")),
+    ("480p", re.compile(r"\b576P(?:\d+)?\b")),
+    ("480p", re.compile(r"\bSD\b(?![.-]\d)")),
 )
 DEFINITION_VALUES: tuple[str, ...] = tuple(dict.fromkeys(value for value, _ in _DEFINITION_MARKERS))
+
+#: 旧档位名 → 现档位. 读侧 (筛选参数、角标文件名) 仍接受, 写入只落 DEFINITION_VALUES.
+LEGACY_DEFINITIONS: dict[str, str] = {
+    "8K": "8k",
+    "4K": "4k",
+    "2160P": "4k",
+    "4320P": "8k",
+    "1080P": "1080p",
+    "720P": "720p",
+    "480P": "480p",
+    "576P": "480p",
+    "1440P": "1440p",
+    "HD": "720p",
+    "SD": "480p",
+}
+
+_DEFINITION_BY_CASEFOLD: dict[str, str] = {value.casefold(): value for value in DEFINITION_VALUES} | {
+    alias.casefold(): value for alias, value in LEGACY_DEFINITIONS.items()
+}
+
+
+def canonical_definition(value: str) -> str | None:
+    """把任意写法的档位归一到现档位; 认不出返回 None."""
+    return _DEFINITION_BY_CASEFOLD.get(value.strip().casefold())
 
 
 # ---------------------------------------------------------------------------

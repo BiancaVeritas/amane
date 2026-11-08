@@ -77,8 +77,8 @@ def test_every_mosaic_marker_has_a_nature() -> None:
     [
         ((), "1080p"),
         ((None, None), "1080p"),
-        (("1080p", "4K", "720p"), "4K"),
-        (("HD", "1080p"), "1080p"),
+        (("1080p", "4k", "720p"), "4k"),
+        (("720p", "1080p"), "1080p"),
         (("unknown",), "1080p"),
     ],
 )
@@ -88,13 +88,13 @@ def test_max_definition(values: tuple[str | None, ...], expected: str | None) ->
 
 def test_summarize_file_phases_or_across_files() -> None:
     cracked: FilePhase = {"mosaic": Mosaic.CRACKED, "has_subtitle": True, "definition": "1080p"}
-    leaked: FilePhase = {"mosaic": Mosaic.LEAKED, "has_subtitle": False, "definition": "4K"}
+    leaked: FilePhase = {"mosaic": Mosaic.LEAKED, "has_subtitle": False, "definition": "4k"}
     summary = summarize_file_phases((cracked, leaked), ContentType.CENSORED)
     assert summary.censored is True
     assert summary.uncensored is False
     assert summary.has_subtitle is True
     assert summary.mosaics == (Mosaic.CRACKED, Mosaic.LEAKED)
-    assert summary.definition == "4K"
+    assert summary.definition == "4k"
 
 
 @pytest.mark.parametrize(

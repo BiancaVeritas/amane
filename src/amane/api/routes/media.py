@@ -6,7 +6,7 @@ from fastapi import APIRouter, HTTPException, Query, Response
 from pydantic import BaseModel, Field
 
 from ...db.models import MediaFile, MediaFileStatus, MediaSortField, SortOrder
-from ...parsing import DEFINITION_VALUES, ContentType, Mosaic
+from ...parsing import ContentType, Mosaic, canonical_definition
 from ..deps import RepoDep
 from ..models import (
     MediaBatchDeleteRequest,
@@ -29,9 +29,11 @@ router = APIRouter(prefix="/media", tags=["media"])
 def _require_known_definition(definition: str | None) -> str | None:
     if definition is None:
         return None
-    if definition not in DEFINITION_VALUES:
+    # 读侧接受旧写法: 库里可能还留着 4K / HD, 客户端也可能发旧值.
+    canonical = canonical_definition(definition)
+    if canonical is None:
         raise HTTPException(status_code=422, detail=f"未知分辨率: {definition}")
-    return definition
+    return canonical
 
 
 async def _phase_responses(repo: Repository, items: Sequence[MediaFile]) -> list[MediaFileResponse]:
