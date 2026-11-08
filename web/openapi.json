@@ -10649,6 +10649,14 @@
             "title": "Video Template",
             "default": "{studio}/{number}/{number}[-CD{cd?}][-{sub?}].{ext}"
           },
+          "custom_placeholders": {
+            "title": "Custom Placeholders",
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "自定义占位符: 名字 → 文件名里要匹配的字面串. 名字须是合法标识符."
+          },
           "link_template": {
             "anyOf": [
               {
@@ -10880,6 +10888,14 @@
             "type": "string",
             "title": "Video Template"
           },
+          "custom_placeholders": {
+            "title": "Custom Placeholders",
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "自定义占位符: 名字 → 文件名里要匹配的字面串. 名字须是合法标识符."
+          },
           "link_template": {
             "anyOf": [
               {
@@ -11033,7 +11049,8 @@
           "copy_resources",
           "trailer_pattern",
           "blacklist_patterns",
-          "min_file_size"
+          "min_file_size",
+          "custom_placeholders"
         ],
         "title": "LibraryResponse"
       },
@@ -11148,6 +11165,14 @@
               }
             ],
             "title": "Video Template"
+          },
+          "custom_placeholders": {
+            "title": "Custom Placeholders",
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "自定义占位符: 名字 → 文件名里要匹配的字面串. 名字须是合法标识符."
           },
           "link_template": {
             "anyOf": [
@@ -12098,10 +12123,14 @@
           "series_names": {
             "anyOf": [
               {
-                "items": { "type": "string" },
+                "items": {
+                  "type": "string"
+                },
                 "type": "array"
               },
-              { "type": "null" }
+              {
+                "type": "null"
+              }
             ],
             "title": "Series Names",
             "default": []
@@ -12369,7 +12398,9 @@
             "title": "Series"
           },
           "series_names": {
-            "items": { "type": "string" },
+            "items": {
+              "type": "string"
+            },
             "type": "array",
             "title": "Series Names",
             "default": []
@@ -12943,6 +12974,25 @@
             "type": "array",
             "title": "Map Keys",
             "description": "有闭合取值时列出规范 key, 供 `{name|k=v}` 映射校验与 UI 提示. 空则不校验映射 key."
+          },
+          "custom": {
+            "title": "Custom",
+            "type": "boolean",
+            "default": false,
+            "description": "库级自定义占位符, 可删除."
+          },
+          "literal": {
+            "title": "Literal",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "自定义占位符匹配的字面串."
           }
         },
         "type": "object",
