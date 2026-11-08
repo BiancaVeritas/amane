@@ -5,10 +5,21 @@ WebClient / 爬虫 / 插件 / Recorder 共用这一组类型, 避免 crawlers �
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from enum import StrEnum
 
 from pydantic import ValidationError
+
+_CAPTCHA_RE = re.compile(
+    r"""class=["'][^"']*\bg-recaptcha\b
+      | class=["'][^"']*\bh-captcha\b
+      | /cart/verifybot
+      | data-sitekey=["'][^"']+["'][^>]*>\s*</div>
+    """,
+    re.IGNORECASE | re.VERBOSE,
+)
+"""人机验证页特征: 验证码控件容器或站点自建的验证端点."""
 
 
 class FailureKind(StrEnum):
@@ -53,6 +64,8 @@ class FailureReason(StrEnum):
     IP_BANNED = "ip_banned"
     GEO_RESTRICTED = "geo_restricted"
     AGE_VERIFICATION = "age_verification"
+    CAPTCHA = "captcha"
+    """人机验证拦截页 (reCAPTCHA / hCaptcha / 自建 VerifyBot 等), 非 Cloudflare 挑战."""
     LOGIN_REQUIRED = "login_required"
     """站点要求登录而凭据缺失或已失效; 受限页面被重定向到登录页."""
     EMPTY_RESPONSE = "empty_response"
@@ -155,6 +168,10 @@ def _classify_text(text: str) -> FailureReason | None:
         return FailureReason.AGE_VERIFICATION
     if "年齢認証" in text or "age verification" in lower:
         return FailureReason.AGE_VERIFICATION
+    # 人机验证页: 须晚于年龄认证判定, 否则被更宽的条件抢先. 只认验证码控件与验证端点,
+    # 不匹配裸 "captcha" 字样 — 正常页面的脚本引用里也可能出现.
+    if _CAPTCHA_RE.search(text):
+        return FailureReason.CAPTCHA
     return None
 
 

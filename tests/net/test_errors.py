@@ -3,7 +3,14 @@
 import pytest
 from pydantic import BaseModel, ValidationError
 
-from amane.net.errors import FailureKind, FailureReason, RequestFailure, classify_request_error, parse_detail
+from amane.net.errors import (
+    FailureKind,
+    FailureReason,
+    RequestFailure,
+    classify_block,
+    classify_request_error,
+    parse_detail,
+)
 
 
 class _Leaf(BaseModel):
@@ -62,3 +69,30 @@ class TestClassifyRequestError:
     )
     def test_kind_and_status_mapping(self, failure: RequestFailure, expected: FailureReason):
         assert classify_request_error(failure) == expected
+
+
+class TestClassifyBlock:
+    """拦截页判定. 误判会让"被拦"显示成"没搜到", 排查时误导方向."""
+
+    @pytest.mark.parametrize(
+        ("text", "expected"),
+        [
+            # 人机验证页: 验证码控件容器或站点自建的验证端点
+            ('<div class="g-recaptcha" data-sitekey="6Lfw"></div>', FailureReason.CAPTCHA),
+            ('<form method="post" action="/cart/VerifyBot">', FailureReason.CAPTCHA),
+            ('<div class="h-captcha" data-sitekey="x"></div>', FailureReason.CAPTCHA),
+            # Cloudflare
+            ("<script>window._cf_chl_opt={}</script>", FailureReason.CLOUDFLARE_CHALLENGE),
+            ("Just a moment... Cloudflare", FailureReason.CLOUDFLARE_CHALLENGE),
+            # 正常的商品列表页与脚本引用不触发
+            ('<div class="single-slider-product grid-view-product">', None),
+            ('<script src="/js/app.js"></script>', None),
+            ("<p>captcha 只是一个出现在正文里的词</p>", None),
+        ],
+    )
+    def test_block_reason(self, text: str, expected: FailureReason | None):
+        assert classify_block(text) == expected
+
+    def test_empty_text_is_empty_response(self):
+        """空正文没有正文信号, 落到 EMPTY_RESPONSE 而非拦截类原因."""
+        assert classify_block("") is FailureReason.EMPTY_RESPONSE

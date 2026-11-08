@@ -80,6 +80,10 @@ _DEFAULT_CONTENT_ROUTES: dict[ContentType, list[SiteName]] = {
         SiteName.AVSOX,
     ],
     ContentType.UNCENSORED: [
+        SiteName.JAVDB,
+        SiteName.JAVBUS,
+        SiteName.AVSOX,
+        SiteName.FREEJAVBT,
         SiteName.AVENTERTAINMENTS,
         SiteName.TENMUSUME,
         SiteName.PONDO,
@@ -401,6 +405,22 @@ class ScrapingConfig(BaseModel):
             legacy_default = ["javdb", "javbus", "avsox", "freejavbt"]
             if uncensored == legacy_default:
                 v = {**v, ContentType.UNCENSORED.value: [*legacy_default, str(SiteName.AVENTERTAINMENTS)]}
+            # 旧默认把综合站换成了无码专站, 这些站只认素人格式番号, 无法承接 SKYHD 一类的碟片番号.
+            # 命中该默认时补回综合站, 用户自定的顺序不动.
+            dead_end_default = [
+                str(site)
+                for site in (
+                    SiteName.AVENTERTAINMENTS,
+                    SiteName.TENMUSUME,
+                    SiteName.PONDO,
+                    SiteName.CARIBBEANCOM,
+                    SiteName.PACOPACOMAMA,
+                    SiteName.TOKYO_HOT,
+                    SiteName.CARIBBEANCOMPR,
+                )
+            ]
+            if uncensored == dead_end_default:
+                v = {**v, ContentType.UNCENSORED.value: [*legacy_default, *dead_end_default]}
         return _complete_frozen_dict(
             v, {ct: [str(site) for site in _DEFAULT_CONTENT_ROUTES.get(ct, [])] for ct in ContentType}
         )
