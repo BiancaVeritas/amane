@@ -47,9 +47,9 @@ export function PosterCard({
     <Link
       to="/meta/$metadataId"
       params={{ metadataId: String(item.id) }}
-      style={{ textDecoration: "none", color: "inherit", display: "block" }}
+      style={{ textDecoration: "none", color: "inherit", display: "block", height: "100%" }}
     >
-      <Card padding={0} radius="md" withBorder style={{ overflow: "hidden" }}>
+      <Card padding={0} radius="md" withBorder style={{ overflow: "hidden", height: "100%" }}>
         <Box pos="relative">
           <AspectRatio ratio={imageRatio}>
             {showImage ? (
@@ -126,11 +126,16 @@ export function PosterCard({
           <Text size="sm" fw={600} ff="monospace" lineClamp={1}>
             {item.number}
           </Text>
-          {item.title && (
-            <Text size="xs" c="dimmed" lineClamp={2} title={item.title}>
-              {item.title}
-            </Text>
-          )}
+          {/* 无标题也占同样高度, 否则这一格比邻居矮, 整行底部不齐. */}
+          <Text
+            size="xs"
+            c="dimmed"
+            lineClamp={2}
+            title={item.title ?? undefined}
+            style={{ minHeight: "2.5em" }}
+          >
+            {item.title ?? ""}
+          </Text>
           {actorsLabel && (
             <Group gap={5} wrap="nowrap" align="center" title={actorsLabel}>
               <Box

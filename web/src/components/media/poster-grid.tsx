@@ -44,6 +44,8 @@ export function PosterGrid({
     // 代价是右侧可能留一条不满列的空隙.
     gridTemplateColumns: `repeat(auto-fill, minmax(min(100%, ${minCardWidth}px), ${minCardWidth}px))`,
     justifyContent: "start",
+    // 同一行内各卡片等高: 标题/演员行有无与长短不同会让卡片高度参差, 叠起来就上下不齐.
+    alignItems: "stretch",
   };
 
   if (loading) {
