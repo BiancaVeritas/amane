@@ -33,7 +33,7 @@ _ELLIPSIS_BYTES = len(PATH_FIELD_ELLIPSIS.encode("utf-8"))
 
 
 @dataclass(frozen=True, slots=True)
-class CustomToken:
+class CustomPlaceholder:
     """库级自定义占位符: 文件名里出现某段字面串时输出固定值.
 
     典型用途是给文件名加标记 (如 ``SONE-638-LTX`` 里的 ``LTX``). 匹配不区分大小写,
@@ -352,20 +352,20 @@ def actress_names(actors: Sequence[str], genders: Mapping[str, ActorGender] | No
 
 
 def custom_variable_values(
-    tokens: Mapping[str, CustomToken] | None,
+    placeholders: Mapping[str, CustomPlaceholder] | None,
     *filenames: str | None,
 ) -> dict[str, str]:
     """按文件名逐个检测自定义占位符; 任一候选名命中即取值, 输出大写.
 
     ``{LTX}`` 这类占位符在模板里的名字就是配置项的键, 因此返回值直接并入 variables.
     """
-    if not tokens:
+    if not placeholders:
         return {}
     names = [name for name in filenames if name]
     values: dict[str, str] = {}
-    for key, token in tokens.items():
-        if any(token.matches(name) for name in names):
-            values[key] = token.literal.upper()
+    for key, placeholder in placeholders.items():
+        if any(placeholder.matches(name) for name in names):
+            values[key] = placeholder.literal.upper()
     return values
 
 
@@ -377,7 +377,7 @@ def _build_variables(
     cd: int | None = None,
     actor_genders: Mapping[str, ActorGender] | None = None,
     library_root: Path | None = None,
-    custom_tokens: Mapping[str, CustomToken] | None = None,
+    custom_placeholders: Mapping[str, CustomPlaceholder] | None = None,
 ) -> TemplateVariables:
     year = metadata.release[:4] if metadata.release and len(metadata.release) >= 4 else None
     actor = metadata.actors[0] if metadata.actors else None
@@ -440,7 +440,7 @@ def _build_variables(
         **{
             key: value
             for key, value in custom_variable_values(
-                custom_tokens, source_path.name if source_path else None, raw_dir
+                custom_placeholders, source_path.name if source_path else None, raw_dir
             ).items()
         },
     }
@@ -469,10 +469,10 @@ class TemplateContext:
         cd: int | None = None,
         actor_genders: Mapping[str, ActorGender] | None = None,
         library_root: Path | None = None,
-        custom_tokens: Mapping[str, CustomToken] | None = None,
+        custom_placeholders: Mapping[str, CustomPlaceholder] | None = None,
     ) -> TemplateContext:
         built = _build_variables(
-            metadata, ext, source_path, file_info, cd, actor_genders, library_root, custom_tokens
+            metadata, ext, source_path, file_info, cd, actor_genders, library_root, custom_placeholders
         )
         variables = cast(dict[str, str], {**built})
         # {dir} 是 {raw_dir} 的别名, 不下发 schema.

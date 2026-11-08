@@ -443,7 +443,7 @@ class Library(SQLModel, table=True):
     patterns: list[str] = Field(default_factory=list, sa_column=Column(JSON, nullable=False))
     move_mode: MoveMode = Field(default=MoveMode.MOVE)
     video_template: PathTemplate = Field(default=VIDEO_TEMPLATE_DEFAULT)
-    custom_tokens: dict[str, str] = Field(
+    custom_placeholders: dict[str, str] = Field(
         default_factory=dict, sa_column=Column(JSON, nullable=False, server_default=text("'{}'"))
     )
     """库级自定义占位符: 占位符名 → 要匹配的字面串. 文件名里连续出现该串时, 模板中的
