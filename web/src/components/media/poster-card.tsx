@@ -39,7 +39,7 @@ export function PosterCard({
   );
   const showImage = posterUrl && !errored;
   const actors = item.actors ?? [];
-  const actorsLabel = actors.length > 0 ? actors.join(" / ") : null;
+  const actorsLabel = actors.length > 0 ? actors.join(", ") : null;
   const releaseLabel = formatReleaseYearMonth(item.release);
   const ageThen = ageAtRelease(actorBirthday, item.release);
 
