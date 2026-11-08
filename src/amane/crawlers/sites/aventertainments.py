@@ -11,9 +11,11 @@ import asyncio
 import json
 import re
 from datetime import datetime
+from pathlib import Path
 from typing import TYPE_CHECKING
 from urllib.parse import parse_qs, urlencode, urljoin, urlparse
 
+import structlog
 from parsel import Selector
 
 from ...enums import SiteName
@@ -24,10 +26,58 @@ from ..models import FetchOptions, MediaMetadata, SearchQuery, film_actors
 if TYPE_CHECKING:
     from ...config import SiteConfig
 
+logger = structlog.get_logger(__name__)
+
 
 _BASE_URL = "https://www.aventertainments.com"
 _SEARCH_PATH = "/dvd/search"
+_DETAIL_URL = "https://www.aventertainments.com/dvd/detail?pro={}"
 
+#: 站点 pro → 番号 的离线映射. 搜索页常被人机验证拦下, 详情页不设防, 因此优先用本地表
+#: 直接定位 pro, 命中时完全不发搜索请求. 表由外部爬取生成, 缺失时退回原搜索流程.
+_PRO_INDEX_PATH = Path(__file__).with_name("aventertainments_pro.json")
+_pro_index: dict[str, list[int]] | None = None
+
+
+def _load_pro_index() -> dict[str, list[int]]:
+    """惰性加载并缓存. 文件缺失或损坏时返回空表, 不影响既有搜索流程."""
+    global _pro_index
+    if _pro_index is not None:
+        return _pro_index
+    try:
+        raw = json.loads(_PRO_INDEX_PATH.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        logger.warning("pro index unavailable", path=str(_PRO_INDEX_PATH))
+        _pro_index = {}
+        return _pro_index
+    _pro_index = {str(k): [int(v) for v in vs] for k, vs in raw.items() if isinstance(vs, list)}
+    return _pro_index
+
+
+def lookup_pro(number: str) -> list[int]:
+    """按番号查 pro. 先精确匹配, 再退到「去掉分隔符后唯一」的宽松匹配.
+
+    站点把 ``JS-03`` 与 ``JS03`` 当作不同商品, 因此宽松匹配只在结果唯一时采用,
+    存在歧义时宁可不给结果, 交给搜索页兜底.
+    """
+    index = _load_pro_index()
+    if not index:
+        return []
+    key = number.strip().upper()
+    if exact := index.get(key):
+        return list(exact)
+
+    folded = re.sub(r"[^A-Z0-9]", "", key)
+    if not folded:
+        return []
+    loose: list[int] = []
+    for candidate, pros in index.items():
+        if re.sub(r"[^A-Z0-9]", "", candidate) == folded:
+            loose.extend(pros)
+    return list(dict.fromkeys(loose)) if len(loose) == 1 else []
+
+
+#: 该站的 VerifyBot 按「无 Referer 的浏览器请求」放行; 带上站内 Referer 反而落进挑战分支.
 #: 该站的 VerifyBot 按「无 Referer 的浏览器请求」放行; 带上站内 Referer 反而落进挑战分支.
 _HEADERS = {
     "User-Agent": (
@@ -275,6 +325,23 @@ class AVEntertainmentsCrawler(Crawler):
         self._search_dvd_fallback = None
         self._search_detail_pages = {}
         target = _number_key(query.number)
+
+        # 本地 pro 映射优先: 搜索页被人机验证拦死, 而详情页不设防. 命中映射时直接访问详情页,
+        # 完全不碰搜索页; 未命中才退回原搜索流程.
+        if local := lookup_pro(query.number):
+            for pro in local:
+                detail_url = _DETAIL_URL.format(pro) + "&lang=2&cat=29"
+                try:
+                    page = await self.client.get_html(detail_url, cookies=self.cookies, headers=self.headers)
+                except RequestError as exc:
+                    if exc.http_status == 404:
+                        continue
+                    raise
+                metadata = _metadata_from_page(detail_url, page)
+                if metadata is not None and _number_key(metadata.number) == target:
+                    self._search_detail_pages[detail_url] = page
+                    return detail_url
+
         candidate_urls: list[str] = []
         for term in _search_terms(query.number):
             # culture 与参数顺序对齐站点自己的表单提交: 缺 culture 时 ASP.NET 按默认区域建会话,
