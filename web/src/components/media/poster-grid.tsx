@@ -40,10 +40,9 @@ export function PosterGrid({
     xxl: 304,
   }[cardSize];
   const gridStyle = {
-    // 固定列宽: 用 1fr 会按剩余空间拉伸, 同屏卡片宽窄不一; 固定宽度保证每张一致.
-    // 列整体居中: 排不满时左右留白均分, 不会全堆在右侧.
-    gridTemplateColumns: `repeat(auto-fill, minmax(min(100%, ${minCardWidth}px), ${minCardWidth}px))`,
-    justifyContent: "center",
+    // 列宽用 1fr: 卡片按剩余空间均分放大, 始终铺满整行, 不留右侧空隙.
+    // 下限仍是 minCardWidth, 窄屏时卡片不会被压得过小.
+    gridTemplateColumns: `repeat(auto-fill, minmax(min(100%, ${minCardWidth}px), 1fr))`,
     // 同一行内各卡片等高: 标题/演员行有无与长短不同会让卡片高度参差, 叠起来就上下不齐.
     alignItems: "stretch",
   };
