@@ -27,11 +27,35 @@ _VOL_ABBREV_RE = re.compile(r"\bvo(?!l)\.", re.IGNORECASE)
 """``Vo.`` 是 javbus 侧的缩写, 补全成站点写法 ``Vol.`` 后再发往搜索框."""
 _VOL_CASE_RE = re.compile(r"\bvol\.", re.IGNORECASE)
 """统一小写成 ``Vol.``; 站点标题一律这个写法."""
+_ACTOR_PREFIX_RE = re.compile(r"^\S{0,30}?【[^】]{0,40}】\s*")
+"""javbus 标题常以「艺人名【读音】」开头, 站点标题不含这一段; 去掉后才能与站点标题对上.
+
+限制两段长度, 避免把真正以【】标记的标题内容 (如系列名后紧跟方括号) 误当艺人名剥掉.
+"""
 
 
 def _number(value: str) -> str | None:
     candidate = value.strip()
     return candidate.upper() if _NUMBER_RE.fullmatch(candidate) else None
+
+
+def _cluster_search_term(subject: str, vol: int | None) -> str:
+    """拼出站点短语搜索词: 有续集序号时为 ``Vol.N~副标题~``, 去掉系列名与艺人名.
+
+    站点把系列名当模糊索引 —— 带上它必然返回同系列全部分卷, 精确的那条挑不出来.
+    只留序号与副标题时按短语匹配, 返回单条.
+    """
+    base = _clean_search_title(subject)
+    if vol is None:
+        # 无序号时无从区分分卷, 保留完整主体 (含系列名) 是唯一选择.
+        return base
+    # subject 是剥掉序号后的主体, 形如「系列名 ~副标题~」; 去掉第一个空白之前的部分.
+    tail = base
+    if (first_space := tail.find(" ")) > 0:
+        tail = tail[first_space + 1 :].lstrip()
+    if not tail.startswith("~"):
+        return base
+    return f"Vol.{vol}{tail}"
 
 
 def _split_title(value: str, number: str | None = None) -> tuple[str, int | None]:
@@ -40,6 +64,8 @@ def _split_title(value: str, number: str | None = None) -> tuple[str, int | None
         prefix = re.compile(rf"^{re.escape(number)}(?:\s*[-:：_、]?)\s*", re.IGNORECASE)
         while prefix.match(title):
             title = prefix.sub("", title, count=1).lstrip()
+    # 艺人名前缀只从 javbus 侧带入, 站点标题里没有; 不剥掉会让主体比对必然失败.
+    title = _ACTOR_PREFIX_RE.sub("", title)
     vol: int | None = None
     match = _VOL_RE.search(title)
     if match:
@@ -47,6 +73,17 @@ def _split_title(value: str, number: str | None = None) -> tuple[str, int | None
         title = title[:match.start()] + title[match.end():]
     return title.strip(" \t-:：_、"), vol
 
+
+
+def _search_query(term: str) -> str:
+    """EUC-JP 百分号编码.
+
+    ``~`` 必须编成 ``%A1%C1``: urllib 把 ``~`` 当 unreserved 字符永不编码, 而站点
+    靠它划定短语边界. 不编码时查询退化成模糊匹配 —— 同一系列的分卷会一起返回,
+    精确的那一条反而挑不出来.
+    """
+    encoded = quote_from_bytes(term.encode("euc_jp"), safe="")
+    return encoded.replace("~", "%A1%C1")
 
 
 def _clean_search_title(value: str) -> str:
@@ -57,6 +94,8 @@ def _clean_search_title(value: str) -> str:
     # 序号写法对齐站点: javbus 侧常缩写为 ``Vo.4``, 站点数据一律 ``Vol.4``.
     title = _VOL_ABBREV_RE.sub("Vol.", title)
     title = _VOL_CASE_RE.sub("Vol.", title)
+    # 站点数据用半角 ~ 包住副标题; 全角 ～ 会让短语匹配失败.
+    title = title.replace("～", "~")
     return re.sub(r"\s+", " ", title).strip(" \t-:：_、")
 
 
@@ -192,19 +231,22 @@ class CaribbeancomprCrawler(Crawler):
             return None
         javbus_title, release = lookup
         subject, source_vol = _split_title(javbus_title, number)
-        subject = _clean_search_title(subject)
-        if not subject:
+        if not _clean_search_title(subject):
             self.logger.warning("标题主体不一致", number=number, javbus_title=javbus_title)
             return None
-        search_url = f"{self.base_url}/search/?q={quote_from_bytes(subject.encode('euc_jp'))}"
+        # 搜索词只取续集序号 + 副标题, 去掉艺人名与系列名: 站点把系列名当模糊索引,
+        # 带上它会返回同系列全部分卷 (12 条), 精确的那一条反而挑不出来; 只留序号与
+        # 副标题时站点按短语精确匹配, 返回单条.
+        search_term = _cluster_search_term(subject, source_vol)
+        search_url = f"{self.base_url}/search/?q={_search_query(search_term)}"
         try:
             search_html = await self.client.get_html(search_url, headers={"Accept-Language": "ja,en;q=0.8"}, encoding="euc_jp")
         except RequestError as exc:
-            self.logger.warning("Premium未找到候选商品", number=number, title=subject, error=str(exc))
+            self.logger.warning("Premium未找到候选商品", number=number, title=search_term, error=str(exc))
             return None
         candidates = _search_candidates(search_html, search_url)
         if not candidates:
-            self.logger.warning("Premium未找到候选商品", number=number, title=subject)
+            self.logger.warning("Premium未找到候选商品", number=number, title=search_term)
             return None
         if len(candidates) == 1:
             # Search returned exactly one detail page: use it directly. Title cleanup is

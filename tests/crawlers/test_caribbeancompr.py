@@ -4,10 +4,12 @@ from amane.crawlers import registry
 from amane.crawlers.sites.caribbeancompr import (
     CaribbeancomprCrawler,
     _clean_search_title,
+    _cluster_search_term,
     _detail,
     _javbus_title_release,
     _number,
     _search_candidates,
+    _search_query,
     _split_title,
 )
 from amane.enums import SiteName
@@ -44,6 +46,23 @@ def test_search_title_normalizes_volume_spelling() -> None:
     assert _clean_search_title("メイどーる VOL.4 x") == "メイどーる Vol.4 x"
     # 已经是全写的保持不变.
     assert _clean_search_title("メイどーる Vol.18 x") == "メイどーる Vol.18 x"
+    # 站点数据用半角 ~, 全角 ～ 要归一.
+    assert _clean_search_title("x Vol.4～副題～") == "x Vol.4~副題~"
+
+
+def test_search_query_encodes_tilde() -> None:
+    """``~`` 必须编成 ``%A1%C1``: 不编码时站点按模糊匹配, 同系列全部分卷一起返回."""
+    encoded = _search_query("Vol.4~x~")
+    assert "%A1%C1" in encoded
+    assert "~" not in encoded
+
+
+def test_cluster_search_term_drops_series_name() -> None:
+    """只留「序号 + 副标题」: 带系列名会返回整个系列, 精确分卷反而挑不出."""
+    title = "姫川ゆうな【ひめかわゆうな】 メイどーる Vo.4～ご主人様のいいなり性人形～"
+    subject, vol = _split_title(title, "HEYZO-1395")
+    assert vol == 4
+    assert _cluster_search_term(subject, vol) == "Vol.4~ご主人様のいいなり性人形~"
 
 
 def test_search_candidates_reads_title_anchor_itself() -> None:
