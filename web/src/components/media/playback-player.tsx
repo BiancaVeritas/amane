@@ -55,6 +55,7 @@ import { useTranslation } from "react-i18next";
 import type { PlaybackSubtitleItem } from "@/client/types.gen";
 import { useLatestRef } from "@/hooks/use-latest-ref";
 import i18n from "@/i18n";
+import { copyText } from "@/lib/clipboard";
 import { shellSystemLevels } from "@/lib/shell";
 
 import classes from "./playback-player.module.css";
@@ -312,10 +313,10 @@ function ContextMenu({
   }, [onClose]);
 
   const copy = async (text: string) => {
-    try {
-      await navigator.clipboard.writeText(text);
+    // HTTP + IP 访问时 navigator.clipboard 不可用, copyText 会退回 execCommand.
+    if (await copyText(text)) {
       notifications.show({ message: t("detail.playbackCopied"), color: "blue" });
-    } catch {
+    } else {
       notifications.show({ message: t("detail.playbackCopyFailed"), color: "red" });
     }
     onClose(true);

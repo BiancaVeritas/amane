@@ -41,6 +41,7 @@ import {
   LIBRARY_INGESTS,
   LINK_MODES,
 } from "@/lib/exhaustive-maps";
+import { copyText } from "@/lib/clipboard";
 import { AddCustomPlaceholderDialog } from "./add-custom-placeholder-dialog";
 import classes from "./library-form.module.css";
 import { templateCatalogFromPlaceholders } from "./template-highlight";
@@ -292,13 +293,13 @@ export function LibraryFormFields({ value, onChange, showCreateOnly }: LibraryFo
 
   const copyPlaceholder = async (name: string) => {
     const text = `{${name}}`;
-    try {
-      await navigator.clipboard.writeText(text);
+    // HTTP + IP 访问时 navigator.clipboard 不可用, copyText 会退回 execCommand.
+    if (await copyText(text)) {
       notifications.show({
         message: t("placeholders.copied", { placeholder: text }),
         color: "blue",
       });
-    } catch {
+    } else {
       notifications.show({ message: t("placeholders.copyFailed"), color: "red" });
     }
   };
