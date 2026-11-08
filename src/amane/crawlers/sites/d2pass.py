@@ -6,13 +6,19 @@ D2PASS 聚合多片商的商品条目, 每个条目带 ``product_url``, 指向�
 站点搜索只认标题与演员名, 不认番号, 所以先用 javbus 取标题, 再用标题搜本站,
 最后用 ``product_url`` 里的番号复核 —— 同系列不同分卷的标题往往只差续集序号,
 不复核会串。
+
+离线索引 ``heyzo_index.json`` 把该链路的结果固化下来 (番号 → product_id), 命中时
+直接访问详情页, 省掉 javbus 与搜索两次往返; 未命中才退回在线查找。
 """
 
 from __future__ import annotations
 
 import json
 import re
+from pathlib import Path
 from typing import TYPE_CHECKING
+
+import structlog
 
 from ...enums import SiteName
 from ..base import Crawler, CrawlerProfile
@@ -23,9 +29,39 @@ from .javbus import JavBusCrawler
 if TYPE_CHECKING:
     from ...config import SiteConfig
 
+logger = structlog.get_logger(__name__)
+
 _BASE_URL = "https://www.d2pass.com"
 _SEARCH_PATH = "/search?k={}"
+_DETAIL_PATH = "/product/movies/{}"
 _IMAGE_URL = "https://images.d2pass.com/images/meta/movies/flash/{}.webp"
+
+#: 番号 → product_id 的离线索引. 由 amane-work/heyzo_map 的采集脚本生成.
+_INDEX_PATH = Path(__file__).with_name("heyzo_index.json")
+_index: dict[str, dict[str, object]] | None = None
+
+
+def _load_index() -> dict[str, dict[str, object]]:
+    global _index
+    if _index is not None:
+        return _index
+    try:
+        raw = json.loads(_INDEX_PATH.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        logger.warning("heyzo index unavailable", path=str(_INDEX_PATH))
+        _index = {}
+        return _index
+    _index = {str(k): v for k, v in raw.items() if isinstance(v, dict)}
+    return _index
+
+
+def _index_pid(number: str) -> int | None:
+    """按番号查离线索引. 索引键统一 4 位补零, 番号数字段也照此补齐."""
+    digits = _digits(number)
+    if digits is None:
+        return None
+    pid = _load_index().get(digits.zfill(4), {}).get("d2pass_id")
+    return int(pid) if isinstance(pid, int) else None
 
 #: 只认官网已关停、别处查不到的片商. 本站每次刮削要 javbus + 搜索 + 若干详情页,
 #: 对别的站能正常供给的番号做这些请求纯属浪费, 而且容易触发风控; 前缀不符直接返回.
@@ -119,6 +155,18 @@ class D2PassCrawler(Crawler):
         if not _supported(query.number):
             # 其余片商由各自的专站供给, 本站不为它们发任何请求.
             return None
+
+        # 离线索引优先: 命中时省掉 javbus 与站点搜索两次往返, 直接进详情页.
+        if (pid := _index_pid(query.number)) is not None:
+            detail_url = f"{self.base_url.rstrip('/')}{_DETAIL_PATH.format(pid)}"
+            html = await self.client.get_html(detail_url)
+            block = _block(html)
+            catalog = _catalog_number(_field(block, "product_url")) if block else None
+            if catalog is not None and _bare(catalog) == _digits(query.number):
+                self._pages[detail_url] = html
+                return detail_url
+            self.logger.warning("离线索引番号不符, 退回在线查找", number=query.number, product_id=pid)
+
         target = _digits(query.number)
         title = await self._javbus_title(query.number)
         if not title:

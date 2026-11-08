@@ -70,6 +70,7 @@ packages = ["src/amane"]
 
 [tool.hatch.build.targets.wheel.force-include]
 "src/amane/crawlers/sites/aventertainments_pro.json" = "amane/crawlers/sites/aventertainments_pro.json"
+"src/amane/crawlers/sites/heyzo_index.json" = "amane/crawlers/sites/heyzo_index.json"
 "src/amane/utils/zhcdict.json" = "amane/utils/zhcdict.json"
 "src/amane/utils/zhconv_overrides.json" = "amane/utils/zhconv_overrides.json"
 "src/amane/media/watermarks/subtitle.png" = "amane/media/watermarks/subtitle.png"
