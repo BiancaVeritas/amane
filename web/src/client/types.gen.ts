@@ -2893,14 +2893,6 @@ export type MetadataPartial = {
      */
     thumb_urls?: Array<string> | null;
     /**
-     * Thumb Selected
-     */
-    thumb_selected?: string | null;
-    /**
-     * Poster Selected
-     */
-    poster_selected?: string | null;
-    /**
      * Trailer Urls
      */
     trailer_urls?: Array<string> | null;
@@ -3028,17 +3020,9 @@ export type MetadataResponse = {
      */
     poster_urls?: Array<string>;
     /**
-     * Poster Selected
-     */
-    poster_selected?: string | null;
-    /**
      * Thumb Urls
      */
     thumb_urls?: Array<string>;
-    /**
-     * Thumb Selected
-     */
-    thumb_selected?: string | null;
     /**
      * Trailer Urls
      */

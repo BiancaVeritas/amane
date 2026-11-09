@@ -358,10 +358,9 @@ class TestMetadataHttp:
 
 @pytest.mark.asyncio
 class TestImageSelection:
-    """选中项与删除: 顺序固定, 选中项落在独立字段上."""
+    """换图 = 替换, 与上游一致: thumb_urls 只存正在用的那张."""
 
-    async def test_adopt_records_selected_url_without_reordering(self, client, repo, app):
-        # 两个外链作候选; 站点图不可达时用本地生成的图代替.
+    async def test_adopt_replaces_thumb_urls(self, client, repo, app):
         first = "https://example.com/a.jpg"
         second = "https://example.com/b.jpg"
 
@@ -376,24 +375,19 @@ class TestImageSelection:
         app.state.runtime.web_client.download = fake_download  # type: ignore[method-assign]
         app.state.runtime.web_client.resolve_final_url = fake_resolve  # type: ignore[method-assign]
 
-        meta = await repo.upsert_metadata(number="SEL-001", thumb_urls=[first, second])
+        meta = await repo.upsert_metadata(number="SEL-001", thumb_urls=[first])
 
+        # 选另一张作封面: 列表被替换成那一张, 不留旧值.
         resp = await client.post(f"metadata/{meta.id}/adopt-thumb", params={"source_url": second})
 
         assert resp.status_code == 200
         data = resp.json()
-        # 顺序不变, 选中项记在独立字段上.
-        assert data["thumb_urls"] == [first, second]
-        assert data["thumb_selected"] == second
+        assert data["thumb_urls"] == [second]
         assert data["thumb_url"] == second
 
-    async def test_adopt_keeps_position_of_existing_candidate(self, client, repo, app):
-        """选已有的候选图不应改变它在列表中的位置 —— 编号是用户认图的依据."""
-        first, second, third = (
-            "https://example.com/1.jpg",
-            "https://example.com/2.jpg",
-            "https://example.com/3.jpg",
-        )
+    async def test_remove_clears_thumb(self, client, repo, app):
+        """删掉正在用的封面后列表为空, 而不是顺延到下一张."""
+        only = "https://example.com/only.jpg"
 
         async def fake_download(url: str, dest: Path, **kwargs: object) -> bool:
             dest.parent.mkdir(parents=True, exist_ok=True)
@@ -406,15 +400,16 @@ class TestImageSelection:
         app.state.runtime.web_client.download = fake_download  # type: ignore[method-assign]
         app.state.runtime.web_client.resolve_final_url = fake_resolve  # type: ignore[method-assign]
 
-        meta = await repo.upsert_metadata(number="SEL-002", thumb_urls=[first, second, third])
+        meta = await repo.upsert_metadata(number="SEL-002", thumb_urls=[only])
+        store = app.state.runtime.resource_store
+        local = await store.acquire(only, app.state.runtime.web_client)
+        internal = f"{RESOURCE_URL_PREFIX}/{ResourceStore.url_hash(only)}"
+        await repo.update_metadata(meta.id, thumb_urls=[internal])
 
-        # 选中间那张: 列表顺序保持原样, 选中项指向它.
-        resp = await client.post(f"metadata/{meta.id}/adopt-thumb", params={"source_url": second})
+        resp = await client.request("DELETE", f"metadata/{meta.id}/images", params={"url": internal, "target": "thumb"})
 
         assert resp.status_code == 200
-        data = resp.json()
-        assert data["thumb_urls"] == [first, second, third]
-        assert data["thumb_selected"] == second
+        assert resp.json()["thumb_urls"] == []
 
 
 class TestImageInfo:

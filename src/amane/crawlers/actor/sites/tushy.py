@@ -1,4 +1,5 @@
 """Tushy / Tushy Raw performer-list avatar sources."""
+
 from __future__ import annotations
 
 import json
@@ -105,12 +106,12 @@ def _name_key(value: str) -> str:
 
 
 def _listing_page_from_html(text: str) -> tuple[list[dict[str, Any]], int | None, int | None]:
-    match = re.search(r'<script[^>]+id=["\']__NEXT_DATA__["\'][^>]*>(.*?)</script>', text, re.S | re.I)
+    match = re.search(r'<script[^>]+id=["\']__NEXT_DATA__["\'][^>]*>(.*?)</script>', text, re.DOTALL | re.IGNORECASE)
     if not match:
         return [], None, None
     try:
         payload = json.loads(match.group(1))
-    except (json.JSONDecodeError, TypeError):
+    except json.JSONDecodeError, TypeError:
         return [], None, None
     props = payload.get("props", {}).get("pageProps", {}) if isinstance(payload, dict) else {}
     if not isinstance(props, dict):

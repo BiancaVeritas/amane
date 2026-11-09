@@ -112,8 +112,10 @@ async def write_nfo(metadata: Metadata, nfo_path: Path, *, tag_mapping_path: Pat
                     mapping_data = json.loads(tag_mapping_path.read_text(encoding="utf-8"))
                     entries = mapping_data.get("entries", {})
                     tags = list(dict.fromkeys(entries.get(tag, {}).get("translation") or tag for tag in tags))
-                except (OSError, ValueError, TypeError):
-                    logger.warning("tag mapping dictionary could not be read; writing original tags", path=str(tag_mapping_path))
+                except OSError, ValueError, TypeError:
+                    logger.warning(
+                        "tag mapping dictionary could not be read; writing original tags", path=str(tag_mapping_path)
+                    )
             for tag in tags:
                 code.write(f"  <genre>{_escape_xml(tag)}</genre>\n")
             for tag in tags:

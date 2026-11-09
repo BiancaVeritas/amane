@@ -1,4 +1,5 @@
 """1pondo JSON detail API crawler with public gallery extraction."""
+
 from __future__ import annotations
 
 import re
@@ -39,6 +40,7 @@ def _strings(value: Any) -> list[str]:
 
 class _PublicGalleryParser(HTMLParser):
     """Only accept gallery images carrying the site's public click-through attributes."""
+
     def __init__(self) -> None:
         super().__init__(convert_charrefs=True)
         self.urls: list[str] = []
@@ -69,7 +71,14 @@ def _sample_trailers(value: Any) -> list[str]:
         if isinstance(item, str):
             candidate = item.strip()
         elif isinstance(item, dict):
-            candidate = next((item.get(k) for k in ("URL", "Url", "url", "File", "file", "Src", "src") if isinstance(item.get(k), str)), "")
+            candidate = next(
+                (
+                    item.get(k)
+                    for k in ("URL", "Url", "url", "File", "file", "Src", "src")
+                    if isinstance(item.get(k), str)
+                ),
+                "",
+            )
         else:
             continue
         if candidate and candidate not in urls:
@@ -103,14 +112,26 @@ class PondoCrawler(Crawler):
             return None
         title = data.get("Title") or data.get("TitleEn")
         plot = data.get("Desc") or data.get("DescEn")
-        actors = _strings(data.get("ActressesList")) or _strings(data.get("ActressesJa")) or _strings(data.get("ActressesEn")) or _strings(data.get("Actor"))
+        actors = (
+            _strings(data.get("ActressesList"))
+            or _strings(data.get("ActressesJa"))
+            or _strings(data.get("ActressesEn"))
+            or _strings(data.get("Actor"))
+        )
         release = data.get("Release")
         if not isinstance(release, str) or not release.strip():
             year = data.get("Year")
             release = f"{year}-01-01" if isinstance(year, (int, str)) and str(year).isdigit() else None
         duration = data.get("Duration")
         runtime = int(round(duration / 60)) if isinstance(duration, (int, float)) and duration > 0 else None
-        poster = next((data.get(key) for key in ("ThumbUltra", "ThumbHigh", "ThumbMed", "ThumbLow") if isinstance(data.get(key), str) and data.get(key).strip()), None)
+        poster = next(
+            (
+                data.get(key)
+                for key in ("ThumbUltra", "ThumbHigh", "ThumbMed", "ThumbLow")
+                if isinstance(data.get(key), str) and data.get(key).strip()
+            ),
+            None,
+        )
         page_url = f"{self.base_url}/movies/{number}/"
         html = await self.client.get_html(page_url)
         extrafanart = _public_gallery(html, page_url)
@@ -119,11 +140,20 @@ class PondoCrawler(Crawler):
         if not series and isinstance(data.get("SeriesEn"), str):
             series = data.get("SeriesEn")
         return MediaMetadata(
-            number=number, studio="一本道", publisher="1pondo",
+            number=number,
+            studio="一本道",
+            publisher="1pondo",
             title=title if isinstance(title, str) and title.strip() else None,
             plot=plot if isinstance(plot, str) and plot.strip() else None,
-            actors=film_actors(actors), release=release, runtime=runtime, series=series,
-            tags=tags, poster_urls=[poster] if poster else [], thumb_urls=[poster] if poster else [],
-            extrafanart=extrafanart, trailer_urls=_sample_trailers(data.get("SampleFiles")),
-            source_url=page_url, external_id=number,
+            actors=film_actors(actors),
+            release=release,
+            runtime=runtime,
+            series=series,
+            tags=tags,
+            poster_urls=[poster] if poster else [],
+            thumb_urls=[poster] if poster else [],
+            extrafanart=extrafanart,
+            trailer_urls=_sample_trailers(data.get("SampleFiles")),
+            source_url=page_url,
+            external_id=number,
         )

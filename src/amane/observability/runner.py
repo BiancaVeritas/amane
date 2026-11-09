@@ -22,8 +22,8 @@ from ..db.repository import Repository
 from ..handlers import ScrapeHandler
 from ..handlers.models import CacheKind, ScrapePayload
 from ..media import ResourceStore
-from ..parsing import ContentType
 from ..net.http import WebClient
+from ..parsing import ContentType
 from .models import RecordManifest, TaskSnapshot
 from .replay import ReplayWebClient
 

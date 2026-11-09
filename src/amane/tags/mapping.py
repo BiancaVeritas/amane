@@ -21,7 +21,9 @@ def detect_language(value: str) -> LanguageCode:
     if re.search(r"[\u4e00-\u9fff]", value):
         # 纯汉字词条在日文/中文之间可能有歧义；仅凭字符无法可靠判断。
         # 只有包含常见简体字线索时才归为中文，其余放入“其他/未知”。
-        simplified_hints = set("这为与专业东丝两严丧个丰临丽举义乌乐习书买乱争云亚产亲亿仅从仓仪们价众优会伟传伤伦体余侠侣侥侦侧侨俭债倾偿儿党兰关兴养兽内冈册写军农冲决况冻净准凉减凤凭击刘则刚创删剂剑剧劝办务动励劳势区医华协单卖卫却厅历压厌县参双发变叙叠叶号叹吗听员呜响哑哗唤喷团园围国图圆场坏块坚坛坝坟垫墙声壳处备复头夹夺奋奖妆妇妈娇孙学宁宝实宠审宪宫宽宾对寻导寿将尔尘尝层岁岗岛岭峡币帅师帐带帮干并广庄庆库应废开异弃张弯弹强归当录忆忧怀总恋恶恼悦悬惊惧惨惯戏战户扑执扩扫扬扰抚抢护报担拟拢拣拥拦拨挠挡挣挤挥损捡换据掷揽搅携摄摆摇摊敌数斗断无旧时旷显晒晓暂术朴机杀杂权条来杨极构枪枫柜标栈栋栏树样桥档检楼欢欧残毁毕气汇汉汤沟没沪泪泷泸泻泼泽洁洒浇浊测济浑浓涛涝涟涡润涨涩渊渍渐渔湾湿溃溅滚滞满滤滥滨滩灭灯灵灾灿炉点炼烂烟烦烧热爱爷牵犹独狭狮狱猎猪猫献环现电画畅疗疯瘫皱盐监盖矿码砖础确碍祸离种积称稳穷窍竞笔筛筹签简篮类粮紧纠纤约级纪纯纱纲纳纵纷纸纹纽线练组细织终经绑绒结绕绘给络绝统绢绣继绩绪续绿缀缓编缘缝缠罗罚罢职联聪肃肠肤肾肿胀胆胜脏脑脚脱脸舰舱艰艳艺节药萝萧蓝虑虽虾蚀蚁蛮蝇补衬袜袭装裤见观规觅视览觉计订认讨让训议讯记讲论设访诀证评识诉诊词译试诗诚话诞询该详语误诱说请读课谁调谅谈谋谎谢谣贝负贡财责贤败账货质贩贪贫购贮贯贱贴贵贷贸费贺贼资赃赎赏赔赖赛赞赠赵赶趋跃践辉辑输辖辞辩边辽达迁过运还这进远违连选递遗邮邻郑钉针钓钙钝钞钟钢钥钦钧钩钮钱钳钻铁铃铅铜铝银铺链销锁锅锋锐错锡锚锤锦键锯镇镜长门闪闭问闯闲间闷闸闹闻阀阅队阳阴阵阶际陆陈险随隐难雾静顶项顺须顾顿颂预领频颗题颜额风飞饥饭饮饰饱饲饶饺饼饿馆馈马驭驮驯驰驱驳驴驶驻驼驾骂骄验骑骗骚骤鱼鲜鸟鸡鸣鸭鹅麦黄齐齿龙龟")
+        simplified_hints = set(
+            "这为与专业东丝两严丧个丰临丽举义乌乐习书买乱争云亚产亲亿仅从仓仪们价众优会伟传伤伦体余侠侣侥侦侧侨俭债倾偿儿党兰关兴养兽内冈册写军农冲决况冻净准凉减凤凭击刘则刚创删剂剑剧劝办务动励劳势区医华协单卖卫却厅历压厌县参双发变叙叠叶号叹吗听员呜响哑哗唤喷团园围国图圆场坏块坚坛坝坟垫墙声壳处备复头夹夺奋奖妆妇妈娇孙学宁宝实宠审宪宫宽宾对寻导寿将尔尘尝层岁岗岛岭峡币帅师帐带帮干并广庄庆库应废开异弃张弯弹强归当录忆忧怀总恋恶恼悦悬惊惧惨惯戏战户扑执扩扫扬扰抚抢护报担拟拢拣拥拦拨挠挡挣挤挥损捡换据掷揽搅携摄摆摇摊敌数斗断无旧时旷显晒晓暂术朴机杀杂权条来杨极构枪枫柜标栈栋栏树样桥档检楼欢欧残毁毕气汇汉汤沟没沪泪泷泸泻泼泽洁洒浇浊测济浑浓涛涝涟涡润涨涩渊渍渐渔湾湿溃溅滚滞满滤滥滨滩灭灯灵灾灿炉点炼烂烟烦烧热爱爷牵犹独狭狮狱猎猪猫献环现电画畅疗疯瘫皱盐监盖矿码砖础确碍祸离种积称稳穷窍竞笔筛筹签简篮类粮紧纠纤约级纪纯纱纲纳纵纷纸纹纽线练组细织终经绑绒结绕绘给络绝统绢绣继绩绪续绿缀缓编缘缝缠罗罚罢职联聪肃肠肤肾肿胀胆胜脏脑脚脱脸舰舱艰艳艺节药萝萧蓝虑虽虾蚀蚁蛮蝇补衬袜袭装裤见观规觅视览觉计订认讨让训议讯记讲论设访诀证评识诉诊词译试诗诚话诞询该详语误诱说请读课谁调谅谈谋谎谢谣贝负贡财责贤败账货质贩贪贫购贮贯贱贴贵贷贸费贺贼资赃赎赏赔赖赛赞赠赵赶趋跃践辉辑输辖辞辩边辽达迁过运还这进远违连选递遗邮邻郑钉针钓钙钝钞钟钢钥钦钧钩钮钱钳钻铁铃铅铜铝银铺链销锁锅锋锐错锡锚锤锦键锯镇镜长门闪闭问闯闲间闷闸闹闻阀阅队阳阴阵阶际陆陈险随隐难雾静顶项顺须顾顿颂预领频颗题颜额风飞饥饭饮饰饱饲饶饺饼饿馆馈马驭驮驯驰驱驳驴驶驻驼驾骂骄验骑骗骚骤鱼鲜鸟鸡鸣鸭鹅麦黄齐齿龙龟"
+        )
         if any(char in simplified_hints for char in value):
             return "zh"
         return "other"
@@ -59,7 +61,7 @@ class TagMappingStore:
                         usage_count=max(0, int(value.get("usage_count", 0))),
                         sources=list(value.get("sources") or []),
                     )
-        except (OSError, ValueError, TypeError):
+        except OSError, ValueError, TypeError:
             # 不覆盖损坏文件；让服务保持可用，后续保存时使用当前可解析数据。
             self._entries = {}
 
@@ -140,7 +142,14 @@ class TagMappingStore:
         return mapped
 
     def list(
-        self, *, status: str = "all", language: str = "all", frequency: str = "all", search: str = "", offset: int = 0, limit: int = 50
+        self,
+        *,
+        status: str = "all",
+        language: str = "all",
+        frequency: str = "all",
+        search: str = "",
+        offset: int = 0,
+        limit: int = 50,
     ) -> tuple[list[TagEntry], int]:
         with self._lock:
             values = list(self._entries.values())
@@ -154,9 +163,11 @@ class TagMappingStore:
                 values = [v for v in values if v.usage_count >= 5]
             if search:
                 needle = search.casefold()
-                values = [v for v in values if needle in v.original.casefold() or needle in (v.translation or "").casefold()]
+                values = [
+                    v for v in values if needle in v.original.casefold() or needle in (v.translation or "").casefold()
+                ]
             values.sort(key=lambda v: (-v.usage_count, v.original.casefold()))
-            return values[offset:offset + limit], len(values)
+            return values[offset : offset + limit], len(values)
 
     def counts(self) -> dict[str, int]:
         with self._lock:
@@ -201,7 +212,9 @@ class TagMappingStore:
                 if current is None:
                     current = TagEntry(original, language=detect_language(original), sources=[])
                     self._entries[original] = current
-                current.translation = translation.strip() if isinstance(translation, str) and translation.strip() else None
+                current.translation = (
+                    translation.strip() if isinstance(translation, str) and translation.strip() else None
+                )
                 language = value.get("language")
                 if language in {"ja", "en", "zh", "other"}:
                     current.language = language

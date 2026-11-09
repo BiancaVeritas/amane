@@ -54,10 +54,7 @@ class MetadataResponse(BaseModel):
     vr: bool = False
     original_poster_urls: list[str] = []
     poster_urls: list[str] = []
-    # 候选池里正在用的那一项; 为空时前端按 ``[0]`` 处理.
-    poster_selected: str | None = None
     thumb_urls: list[str] = []
-    thumb_selected: str | None = None
     trailer_urls: list[str] = []
     extrafanart_urls: dict = {}
     scores: dict[str, float] = {}

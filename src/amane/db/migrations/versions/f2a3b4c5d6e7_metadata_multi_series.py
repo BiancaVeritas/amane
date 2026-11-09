@@ -5,8 +5,8 @@ Revises: d31f8a6c2e90
 Create Date: 2026-11-07
 """
 
-from collections.abc import Sequence
 import json
+from collections.abc import Sequence
 
 import sqlalchemy as sa
 from alembic import op
@@ -51,8 +51,7 @@ def upgrade() -> None:
         )
         bind.execute(
             sa.text(
-                "INSERT INTO metadata_series (metadata_id, series_id, position) "
-                "VALUES (:metadata_id, :series_id, 0)"
+                "INSERT INTO metadata_series (metadata_id, series_id, position) VALUES (:metadata_id, :series_id, 0)"
             ),
             {"metadata_id": metadata_id, "series_id": series_id},
         )

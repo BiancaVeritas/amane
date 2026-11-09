@@ -125,7 +125,7 @@ class TokyoHotCrawler(Crawler):
 
         title = html.xpath('normalize-space((//div[contains(@class,"sentence")]/preceding-sibling::h2)[1])').get()
         if not title:
-            title = html.xpath('normalize-space((//h2)[1])').get()
+            title = html.xpath("normalize-space((//h2)[1])").get()
         plot_parts = html.xpath(
             '//div[contains(concat(" ", normalize-space(@class), " "), " sentence ")]//text()'
         ).getall()
@@ -141,8 +141,7 @@ class TokyoHotCrawler(Crawler):
         runtime = _parse_runtime(_label_text(html, "収録時間"))
 
         jacket = html.xpath(
-            '//ul[contains(@class,"control")]//li[contains(@class,"package")]'
-            '//a[contains(@href,"/jacket/")]/@href'
+            '//ul[contains(@class,"control")]//li[contains(@class,"package")]//a[contains(@href,"/jacket/")]/@href'
         ).get()
         jacket_url = urljoin(url, jacket) if jacket else None
         extrafanart = _dedupe(

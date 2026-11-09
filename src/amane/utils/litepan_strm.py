@@ -31,10 +31,8 @@ def parse_litepan_115_file_id(content: str) -> str | None:
             continue
         token = match.group(1)
         try:
-            decoded = base64.b64decode(
-                token + "=" * (-len(token) % 4), altchars=b"-_", validate=True
-            ).decode("ascii")
-        except (binascii.Error, UnicodeDecodeError, ValueError):
+            decoded = base64.b64decode(token + "=" * (-len(token) % 4), altchars=b"-_", validate=True).decode("ascii")
+        except binascii.Error, UnicodeDecodeError, ValueError:
             continue
         if decoded.isascii() and decoded.isdigit():
             return decoded
@@ -48,5 +46,5 @@ def read_litepan_115_file_id(path: Path) -> str | None:
         return None
     try:
         return parse_litepan_115_file_id(path.read_text(encoding="utf-8-sig"))
-    except (OSError, UnicodeError):
+    except OSError, UnicodeError:
         return None

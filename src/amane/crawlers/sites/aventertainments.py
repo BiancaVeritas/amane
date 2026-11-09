@@ -177,7 +177,7 @@ def _parse_date(value: str) -> str | None:
 
 
 def _parse_runtime(value: str) -> int | None:
-    match = re.search(r"(\d+)\s*(?:min|分)", value, re.I)
+    match = re.search(r"(\d+)\s*(?:min|分)", value, re.IGNORECASE)
     return int(match.group(1)) if match else None
 
 

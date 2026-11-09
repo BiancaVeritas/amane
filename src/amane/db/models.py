@@ -300,10 +300,6 @@ class Metadata(SQLModel, table=True):
     # 刮削来源的原始海报地址; 与可能被裁剪资源 URL 替换的 poster_urls 分离.
     original_poster_urls: list[str] = Field(default_factory=list, sa_column=Column(JSON))
     thumb_urls: list[str] = Field(default_factory=list, sa_column=Column(JSON))
-    # 候选池里正在使用的那一项. 独立于顺序: 换封面只改这个引用, 列表编号保持不变.
-    # 为空时退回 ``thumb_urls[0]`` (兼容旧数据).
-    thumb_selected: str | None = None
-    poster_selected: str | None = None
     trailer_urls: list[str] = Field(default_factory=list, sa_column=Column(JSON))
 
     # 按站点分组, 禁止扁平合并.
@@ -325,16 +321,10 @@ class Metadata(SQLModel, table=True):
 
     @property
     def poster_url(self) -> str | None:
-        """当前海报; 有显式选中项时用它, 否则退回第一张."""
-        if self.poster_selected and self.poster_selected in self.poster_urls:
-            return self.poster_selected
         return self.poster_urls[0] if self.poster_urls else None
 
     @property
     def thumb_url(self) -> str | None:
-        """当前封面; 有显式选中项时用它, 否则退回第一张."""
-        if self.thumb_selected and self.thumb_selected in self.thumb_urls:
-            return self.thumb_selected
         return self.thumb_urls[0] if self.thumb_urls else None
 
     @property

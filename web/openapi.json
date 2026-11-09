@@ -13194,28 +13194,6 @@
             ],
             "title": "Thumb Urls"
           },
-          "thumb_selected": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Thumb Selected"
-          },
-          "poster_selected": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Poster Selected"
-          },
           "trailer_urls": {
             "anyOf": [
               {
@@ -13511,17 +13489,6 @@
             "title": "Poster Urls",
             "default": []
           },
-          "poster_selected": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Poster Selected"
-          },
           "thumb_urls": {
             "items": {
               "type": "string"
@@ -13529,17 +13496,6 @@
             "type": "array",
             "title": "Thumb Urls",
             "default": []
-          },
-          "thumb_selected": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Thumb Selected"
           },
           "trailer_urls": {
             "items": {

@@ -3,8 +3,8 @@ from typing import Any, override
 from ...enums import ActorGender, SiteName
 from ...net.connectivity import ConnectivityOutcome, SkipReason, assess_response
 from ...net.errors import FailureReason, RequestError
-from ...plugins.models import SourceTrait
 from ...parsing.file_info import ContentType
+from ...plugins.models import SourceTrait
 from ..base import Crawler, CrawlerProfile
 from ..models import FetchOptions, FilmActor, MediaMetadata, SearchQuery
 from ..parsing import fold_number, fold_studio, is_same_number, parse_western_number
@@ -147,7 +147,9 @@ class ThePornDBCrawler(Crawler):
                 headers=headers,
             )
             search_results = _gql_field(search_data, "searchScene")
-            scenes = [item for item in search_results if isinstance(item, dict)] if isinstance(search_results, list) else []
+            scenes = (
+                [item for item in search_results if isinstance(item, dict)] if isinstance(search_results, list) else []
+            )
             if len(scenes) == 1:
                 return scenes[0]
             if len(scenes) > 1:
@@ -317,9 +319,7 @@ def pick_fingerprint_scene(results: object, number: str | None = None) -> dict[s
     western = parse_western_number(number)
     if western is None:
         hits = [
-            scene
-            for scene in scenes
-            if isinstance(scene.get("code"), str) and is_same_number(scene["code"], number)
+            scene for scene in scenes if isinstance(scene.get("code"), str) and is_same_number(scene["code"], number)
         ]
     else:
         hits = [

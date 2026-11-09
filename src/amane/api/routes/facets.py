@@ -136,7 +136,11 @@ async def get_facet(kind: FacetKind, facet_id: int, repo: RepoDep, runtime: Runt
     if item is None:
         raise HTTPException(status_code=404, detail="分类不存在")
     response = _facet_response(item)
-    return response.model_copy(update={"name": runtime.tag_mappings.map_tags([response.name])[0]}) if kind == FacetKind.TAG else response
+    return (
+        response.model_copy(update={"name": runtime.tag_mappings.map_tags([response.name])[0]})
+        if kind == FacetKind.TAG
+        else response
+    )
 
 
 @router.post("/{kind}/merge")
@@ -150,11 +154,17 @@ async def merge_facets(kind: FacetKind, req: FacetMergeRequest, repo: RepoDep, r
         raise HTTPException(status_code=404, detail="分类不存在")
     logger.info("facets merged", kind=kind, target_id=req.target_id, source_ids=req.source_ids)
     response = _facet_response(item)
-    return response.model_copy(update={"name": runtime.tag_mappings.map_tags([response.name])[0]}) if kind == FacetKind.TAG else response
+    return (
+        response.model_copy(update={"name": runtime.tag_mappings.map_tags([response.name])[0]})
+        if kind == FacetKind.TAG
+        else response
+    )
 
 
 @router.patch("/{kind}/{facet_id}")
-async def rename_facet(kind: FacetKind, facet_id: int, req: FacetRenameRequest, repo: RepoDep, runtime: RuntimeDep) -> FacetResponse:
+async def rename_facet(
+    kind: FacetKind, facet_id: int, req: FacetRenameRequest, repo: RepoDep, runtime: RuntimeDep
+) -> FacetResponse:
     """新名称与另一实体冲突时返回 409 (应使用合并)."""
     name = req.name.strip()
     if not name:

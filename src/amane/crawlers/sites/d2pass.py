@@ -47,7 +47,7 @@ def _load_index() -> dict[str, dict[str, object]]:
         return _index
     try:
         raw = json.loads(_INDEX_PATH.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
+    except OSError, json.JSONDecodeError:
         logger.warning("heyzo index unavailable", path=str(_INDEX_PATH))
         _index = {}
         return _index
@@ -62,6 +62,7 @@ def _index_pid(number: str) -> int | None:
         return None
     pid = _load_index().get(digits.zfill(4), {}).get("id")
     return int(pid) if isinstance(pid, int) else None
+
 
 #: 只认官网已关停、别处查不到的片商. 本站每次刮削要 javbus + 搜索 + 若干详情页,
 #: 对别的站能正常供给的番号做这些请求纯属浪费, 而且容易触发风控; 前缀不符直接返回.
@@ -144,7 +145,7 @@ class D2PassCrawler(Crawler):
         except RequestError as exc:
             self.logger.warning("JAVBUS未找到原始标题", number=number, error=str(exc))
             return None
-        m = re.search(r"<h3[^>]*>(.*?)</h3>", text, re.S)
+        m = re.search(r"<h3[^>]*>(.*?)</h3>", text, re.DOTALL)
         if not m:
             return None
         return re.sub(r"<[^>]+>", "", m.group(1)).strip() or None

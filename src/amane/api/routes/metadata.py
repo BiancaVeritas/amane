@@ -465,18 +465,14 @@ async def _dedupe_by_content(store: ResourceStore, urls: list[str], keep: str) -
 async def _apply_thumb(
     store: ResourceStore, repo: RepoDep, metadata_id: int, thumb_urls: list[str], url: str
 ) -> MetadataResponse:
-    """把 ``url`` 设为当前封面. 候选池顺序保持不变.
+    """把 ``url`` 设为当前封面.
 
-    ``thumb_url`` 只是指向某张图的引用: 换封面改引用即可. 列表顺序是用户认图的编号,
-    每换一次就重排会让人看不出改了什么.
+    与上游一致: ``thumb_urls`` 只存**正在用的那张**, 换图即替换。候选图 (剧照、上传件)
+    由各自的字段保存, 不往这里堆 —— 否则列表越换越长, 而 ``thumb_url`` 只取首项, 多出来的
+    条目既不影响显示也不参与选择.
     """
-    # 源图可能已在池里 (用户点的就是候选图), 这时必须沿用池中那条地址 —— 重新拼一遍
-    # 得到的字符串未必相同 (例如带查询串), 会被当成新图追加, 池子越点越长.
-    target = next((item for item in thumb_urls if item == url), url)
-    cleaned = await _dedupe_by_content(store, thumb_urls, target)
-    # 已在池中的保持原位; 新图追加到末尾.
-    ordered = cleaned if target in cleaned else [*cleaned, target]
-    updated = await repo.update_metadata(metadata_id, mode=WriteMode.MANUAL, thumb_urls=ordered, thumb_selected=target)
+    del store, thumb_urls  # 兼容签名; 替换语义不需要旧值
+    updated = await repo.update_metadata(metadata_id, mode=WriteMode.MANUAL, thumb_urls=[url])
     assert updated is not None
     return to_resp(MetadataResponse, updated)
 
@@ -484,10 +480,9 @@ async def _apply_thumb(
 async def _apply_poster(
     store: ResourceStore, repo: RepoDep, metadata_id: int, poster_urls: list[str], url: str
 ) -> MetadataResponse:
-    """把 ``url`` 设为当前海报. 候选池顺序保持不变, 理由同 ``_apply_thumb``."""
-    cleaned = await _dedupe_by_content(store, poster_urls, url)
-    ordered = cleaned if url in cleaned else [*cleaned, url]
-    updated = await repo.update_metadata(metadata_id, mode=WriteMode.MANUAL, poster_urls=ordered, poster_selected=url)
+    """把 ``url`` 设为当前海报. 替换语义, 理由同 ``_apply_thumb``."""
+    del store, poster_urls
+    updated = await repo.update_metadata(metadata_id, mode=WriteMode.MANUAL, poster_urls=[url])
     assert updated is not None
     return to_resp(MetadataResponse, updated)
 
@@ -651,20 +646,11 @@ async def remove_image(
     ):
         raise HTTPException(status_code=404, detail="该图片不在候选池中")
 
-    thumb_selected = metadata.thumb_selected
-    if thumb_selected == url:
-        thumb_selected = thumbs[0] if thumbs else None
-    poster_selected = metadata.poster_selected
-    if poster_selected == url:
-        poster_selected = posters[0] if posters else None
-
     updated = await repo.update_metadata(
         metadata_id,
         mode=WriteMode.MANUAL,
         thumb_urls=thumbs,
         poster_urls=posters,
-        thumb_selected=thumb_selected,
-        poster_selected=poster_selected,
     )
     assert updated is not None
 

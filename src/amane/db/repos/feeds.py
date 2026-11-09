@@ -3,7 +3,7 @@ from datetime import UTC, datetime
 from typing import Unpack
 
 from sqlalchemy import delete as sqla_delete
-from sqlalchemy import and_, func, or_
+from sqlalchemy import func, or_
 from sqlalchemy import update as sqla_update
 from sqlalchemy.sql.elements import ColumnElement
 from sqlalchemy.sql.functions import count

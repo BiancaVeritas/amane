@@ -64,9 +64,7 @@ def upgrade() -> None:
     for row in rows:
         urls = _raw_poster_urls(row["raw"])
         if urls:
-            bind.execute(
-                metadata.update().where(metadata.c.id == row["id"]).values(original_poster_urls=urls)
-            )
+            bind.execute(metadata.update().where(metadata.c.id == row["id"]).values(original_poster_urls=urls))
 
 
 def downgrade() -> None:
@@ -80,7 +78,5 @@ def downgrade() -> None:
         "metadata",
         [sa.text("lower(scene_id)")],
         unique=True,
-        sqlite_where=sa.text(
-            "content_type = 'WESTERN' AND scene_id IS NOT NULL"
-        ),
+        sqlite_where=sa.text("content_type = 'WESTERN' AND scene_id IS NOT NULL"),
     )

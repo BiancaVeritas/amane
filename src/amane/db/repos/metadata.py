@@ -352,9 +352,7 @@ class MetadataRepoMixin(RepositoryMixinBase):
         async with self._session() as session:
             return await session.get(Metadata, metadata_id)
 
-    async def get_metadata_by_number(
-        self, number: str, *, content_type: ContentType | None = None
-    ) -> Metadata | None:
+    async def get_metadata_by_number(self, number: str, *, content_type: ContentType | None = None) -> Metadata | None:
         """大小写不敏感查询番号. WESTERN 同番号可能有多条, 未指定类型且结果歧义时返回 None."""
         async with self._session() as session:
             stmt = select(Metadata).where(metadata_number_predicate(number))
@@ -375,9 +373,7 @@ class MetadataRepoMixin(RepositoryMixinBase):
             result = await session.exec(stmt)
             return result.first()
 
-    async def get_metadata_by_identity(
-        self, identity_type: MediaIdentityType, identity_value: str
-    ) -> Metadata | None:
+    async def get_metadata_by_identity(self, identity_type: MediaIdentityType, identity_value: str) -> Metadata | None:
         """通过稳定媒体身份定位 WESTERN Metadata。"""
         value = identity_value.strip().casefold()
         if not value:
@@ -481,12 +477,16 @@ class MetadataRepoMixin(RepositoryMixinBase):
         if "series_names" not in fields and "series" in fields:
             fields["series_names"] = [fields["series"]] if fields["series"] else []
         elif "series_names" in fields:
-            fields["series_names"] = list(dict.fromkeys(n.strip() for n in fields["series_names"] if isinstance(n, str) and n.strip()))
+            fields["series_names"] = list(
+                dict.fromkeys(n.strip() for n in fields["series_names"] if isinstance(n, str) and n.strip())
+            )
             fields["series"] = fields["series_names"][0] if fields["series_names"] else None
         # WESTERN 的 ThePornDB UUID 只存放在专用列；external_ids 仅保留其他来源 ID。
         external_ids = fields.get("external_ids")
         if isinstance(external_ids, dict):
-            fields["external_ids"] = {key: value for key, value in external_ids.items() if key.casefold() != "theporndb"}
+            fields["external_ids"] = {
+                key: value for key, value in external_ids.items() if key.casefold() != "theporndb"
+            }
         stmt = select(Metadata).where(
             Metadata.content_type == ContentType.WESTERN, Metadata.theporndb_uuid == theporndb_uuid
         )
@@ -646,7 +646,9 @@ class MetadataRepoMixin(RepositoryMixinBase):
         if "series_names" not in fields and "series" in fields:
             fields["series_names"] = [fields["series"]] if fields["series"] else []
         elif "series_names" in fields:
-            fields["series_names"] = list(dict.fromkeys(n.strip() for n in fields["series_names"] if isinstance(n, str) and n.strip()))
+            fields["series_names"] = list(
+                dict.fromkeys(n.strip() for n in fields["series_names"] if isinstance(n, str) and n.strip())
+            )
             fields["series"] = fields["series_names"][0] if fields["series_names"] else None
         async with self._session() as session:
             # pysqlite 只在 DML 之前发出 BEGIN; 判定与写入必须处于同一写事务.
@@ -738,7 +740,8 @@ class MetadataRepoMixin(RepositoryMixinBase):
                             raise ValueError(f"ThePornDB UUID {normalized_uuid} is already linked to another Metadata")
                     metadata.theporndb_uuid = normalized_uuid or None
                 updates["external_ids"] = {
-                    key: value for key, value in external_ids.items()
+                    key: value
+                    for key, value in external_ids.items()
                     if not isinstance(key, str) or key.casefold() != "theporndb"
                 }
             # 显式赋值, 禁止 setattr; 字段集由 MetadataFields 与 Metadata 静态对齐.
@@ -776,12 +779,8 @@ class MetadataRepoMixin(RepositoryMixinBase):
                 metadata.original_poster_urls = updates["original_poster_urls"]
             if "poster_urls" in updates:
                 metadata.poster_urls = updates["poster_urls"]
-            if "poster_selected" in updates:
-                metadata.poster_selected = updates["poster_selected"]
             if "thumb_urls" in updates:
                 metadata.thumb_urls = updates["thumb_urls"]
-            if "thumb_selected" in updates:
-                metadata.thumb_selected = updates["thumb_selected"]
             if "trailer_urls" in updates:
                 metadata.trailer_urls = updates["trailer_urls"]
             if "extrafanart_urls" in updates:

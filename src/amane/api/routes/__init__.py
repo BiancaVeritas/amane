@@ -22,8 +22,8 @@ from .saved_queries import router as saved_queries_router
 from .schedules import router as schedules_router
 from .semantic import router as semantic_router
 from .system import router as system_router
-from .tasks import router as tasks_router
 from .tag_mappings import router as tag_mappings_router
+from .tasks import router as tasks_router
 from .tools import router as tools_router
 from .webhooks import router as webhooks_router
 from .ws import router as ws_router

@@ -10,11 +10,11 @@ from ..crawlers.site_roles import builtin_descriptors
 from ..db.models import MediaIdentityType, TaskType
 from ..enums import ActorGender, MetadataField, SiteName
 from ..media import materialize_images
-from ..utils.litepan_strm import read_litepan_115_file_id
 from ..observability import current
 from ..observability.models import SiteOutcomeKind
 from ..parsing import ContentType
 from ..plugins.models import SourceDescriptor, SourceTrait
+from ..utils.litepan_strm import read_litepan_115_file_id
 from ._common import ensure_oshash, finalize_media_file
 from .models import ActorScrapePayload, CacheKind, OrganizePayload, ScrapePayload, ScrapeResult
 from .protocol import FollowupTask, TaskHandler, TaskResult
@@ -109,7 +109,11 @@ class ScrapeHandler(TaskHandler[ScrapePayload, ScrapeResult]):
             if identity_metadata.content_type != content_type:
                 return TaskResult(success=False, error="重新刮削的内容类型与原 Metadata 不一致")
             stored_theporndb_uuid = identity_metadata.theporndb_uuid
-            if payload.theporndb_uuid and stored_theporndb_uuid and payload.theporndb_uuid.casefold() != stored_theporndb_uuid.casefold():
+            if (
+                payload.theporndb_uuid
+                and stored_theporndb_uuid
+                and payload.theporndb_uuid.casefold() != stored_theporndb_uuid.casefold()
+            ):
                 return TaskResult(success=False, error="手动指定的 ThePornDB UUID 与目标 Metadata 的身份不一致")
 
         # 当前文件先读取出来; WESTERN 的缓存身份不能仅凭番号确定.
@@ -123,7 +127,9 @@ class ScrapeHandler(TaskHandler[ScrapePayload, ScrapeResult]):
             rec.warning("no eligible crawlers for content type", content_type=content_type)
             return TaskResult(success=False, error=f"内容类型 {content_type} 没有可用来源")
         if content_type == ContentType.WESTERN and str(SiteName.THEPORNDB) not in {str(site) for site in route}:
-            return TaskResult(success=False, error="WESTERN 作品身份依赖 ThePornDB UUID，请在欧美来源路由中启用 ThePornDB")
+            return TaskResult(
+                success=False, error="WESTERN 作品身份依赖 ThePornDB UUID，请在欧美来源路由中启用 ThePornDB"
+            )
         if (
             content_type == ContentType.WESTERN
             and file is None
@@ -179,7 +185,9 @@ class ScrapeHandler(TaskHandler[ScrapePayload, ScrapeResult]):
             else []
         )
         if len(oshash_matches) > 1:
-            return TaskResult(success=False, error="当前 OSHASH 已关联到多条 WESTERN Metadata，存在身份冲突，拒绝自动刮削")
+            return TaskResult(
+                success=False, error="当前 OSHASH 已关联到多条 WESTERN Metadata，存在身份冲突，拒绝自动刮削"
+            )
         oshash_metadata = oshash_matches[0] if oshash_matches else None
         if (
             payload.content_type == ContentType.WESTERN
@@ -209,9 +217,7 @@ class ScrapeHandler(TaskHandler[ScrapePayload, ScrapeResult]):
             elif payload.theporndb_uuid:
                 db_data = await self._repo.get_metadata_by_theporndb_uuid(payload.theporndb_uuid)
             else:
-                db_data = await self._repo.get_metadata_by_number(
-                    payload.number, content_type=payload.content_type
-                )
+                db_data = await self._repo.get_metadata_by_number(payload.number, content_type=payload.content_type)
         if db_data is not None and db_data.raw:
             rec.write_raw_cache(db_data.raw)
 
@@ -222,13 +228,11 @@ class ScrapeHandler(TaskHandler[ScrapePayload, ScrapeResult]):
             theporndb_uuid = oshash_metadata.theporndb_uuid
         if theporndb_uuid is None and db_data is not None:
             theporndb_uuid = db_data.theporndb_uuid
-        linked_theporndb_uuid = (
-            oshash_metadata.theporndb_uuid
-            if oshash_metadata is not None
-            else None
-        )
+        linked_theporndb_uuid = oshash_metadata.theporndb_uuid if oshash_metadata is not None else None
         if theporndb_uuid and linked_theporndb_uuid and theporndb_uuid.casefold() != linked_theporndb_uuid.casefold():
-            return TaskResult(success=False, error="当前文件 OSHASH 已关联到另一条 WESTERN 作品, 拒绝跨 ThePornDB UUID 绑定")
+            return TaskResult(
+                success=False, error="当前文件 OSHASH 已关联到另一条 WESTERN 作品, 拒绝跨 ThePornDB UUID 绑定"
+            )
         q = SearchQuery(
             payload.number,
             file.path if file else None,
@@ -356,14 +360,20 @@ class ScrapeHandler(TaskHandler[ScrapePayload, ScrapeResult]):
         )
         if payload.content_type == ContentType.WESTERN:
             returned_theporndb_uuid = result.metadata.external_ids.get("theporndb")
-            if theporndb_uuid and returned_theporndb_uuid and returned_theporndb_uuid.casefold() != theporndb_uuid.casefold():
+            if (
+                theporndb_uuid
+                and returned_theporndb_uuid
+                and returned_theporndb_uuid.casefold() != theporndb_uuid.casefold()
+            ):
                 return TaskResult(
                     success=False,
                     error=f"ThePornDB UUID 不匹配：预期 {theporndb_uuid}，实际 {returned_theporndb_uuid}",
                 )
             theporndb_uuid = returned_theporndb_uuid or theporndb_uuid
             if not theporndb_uuid or not returned_theporndb_uuid:
-                return TaskResult(success=False, error="ThePornDB 未验证并返回有效 ThePornDB UUID，无法建立欧美作品身份")
+                return TaskResult(
+                    success=False, error="ThePornDB 未验证并返回有效 ThePornDB UUID，无法建立欧美作品身份"
+                )
             meta = await self._repo.finalize_western_scrape(
                 theporndb_uuid=theporndb_uuid,
                 number=payload.number,

@@ -11,7 +11,12 @@ from fastapi import APIRouter, HTTPException, Query, Request, Response
 from fastapi.responses import FileResponse
 
 from ..deps import RuntimeDep
-from ..support.http_cache import ORIGINAL_RESOURCE_CACHE_HEADERS, RESOURCE_CACHE_HEADERS, format_etag, maybe_not_modified
+from ..support.http_cache import (
+    ORIGINAL_RESOURCE_CACHE_HEADERS,
+    RESOURCE_CACHE_HEADERS,
+    format_etag,
+    maybe_not_modified,
+)
 
 logger = structlog.get_logger()
 
@@ -57,8 +62,10 @@ def _cache_mode(runtime: object, requested: str | None) -> str:
 
 @router.get("/proxy")
 async def proxy_image(
-    runtime: RuntimeDep, request: Request, url: Annotated[str, Query(description="External image URL to proxy")],
-    mode: Annotated[str | None, Query(description="Browser cache mode")]=None,
+    runtime: RuntimeDep,
+    request: Request,
+    url: Annotated[str, Query(description="External image URL to proxy")],
+    mode: Annotated[str | None, Query(description="Browser cache mode")] = None,
 ) -> Response:
     """上游失败记入进程内负缓存 (15 分钟), 窗口内同 URL 直接 502.
     同 URL 进行中请求合并为一次 acquire.
@@ -96,7 +103,12 @@ async def proxy_image(
 
 
 @router.get("/{url_hash}")
-async def serve_resource(url_hash: str, request: Request, runtime: RuntimeDep, mode: Annotated[str | None, Query(description="Browser cache mode")]=None) -> Response:
+async def serve_resource(
+    url_hash: str,
+    request: Request,
+    runtime: RuntimeDep,
+    mode: Annotated[str | None, Query(description="Browser cache mode")] = None,
+) -> Response:
     found = await runtime.resource_store.get_by_url_hash(url_hash)
     if found is None:
         raise HTTPException(status_code=404, detail="资源不存在")

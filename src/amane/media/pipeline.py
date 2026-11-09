@@ -195,11 +195,7 @@ async def materialize_images(
     out = MaterializedImages(
         poster_urls=result_poster_urls,
         thumb_urls=_success_first(thumb_urls, thumb_ok),
-        trailer_urls=(
-            _success_first(trailer_urls, trailer_ok)
-            if DownloadableResource.trailer in kinds
-            else []
-        ),
+        trailer_urls=(_success_first(trailer_urls, trailer_ok) if DownloadableResource.trailer in kinds else []),
     )
     logger.debug(
         "images materialized",
