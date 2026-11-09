@@ -445,22 +445,28 @@ async def _apply_poster(repo: RepoDep, metadata_id: int, poster_urls: list[str],
     return to_resp(MetadataResponse, updated)
 
 
-async def _crop_upload_to_poster(stored: StoredUpload, ratio: float, store: ResourceStore, runtime: RuntimeDep) -> str:
-    """把上传图按海报比例裁一次 (人脸优先), 返回内部 URL."""
-    source_url = _resource_url(store, stored.url)
+async def _crop_source_to_poster(
+    locator: str, path: Path, ratio: float, store: ResourceStore, runtime: RuntimeDep
+) -> str:
+    """把 ``locator`` 指向的图按海报比例裁一次 (人脸优先), 返回内部 URL.
+
+    ``acquire_derived`` 以 (源, op, 参数) 为键, 同一源反复调用只会得到同一份裁剪结果,
+    不会堆积.
+    """
+    source_url = _resource_url(store, locator)
 
     async def producer(dest: Path) -> bool:
         return crop_poster(
-            stored.path,
+            path,
             dest,
             poster_ratio=ratio,
             jpeg_quality=runtime.config.hot.scraping.jpeg_quality,
             detect_face=runtime.config.hot.scraping.poster_crop_detect_face,
         )
 
-    crop_res = await store.acquire_derived(stored.url, "crop", f"upload:{ratio:.4f}", producer)
+    crop_res = await store.acquire_derived(locator, "crop", f"upload:{ratio:.4f}", producer)
     if crop_res is None:
-        # 裁剪失败就退回原图, 不让上传直接失败.
+        # 裁剪失败就退回原图, 不让操作直接失败.
         return source_url
     return _resource_url(store, crop_res.url)
 
@@ -504,7 +510,7 @@ async def upload_poster(
     store = runtime.resource_store
     stored = await _store_upload_or_400(store, file, kind="poster")
     ratio = _poster_ratio(runtime, metadata.content_type)
-    url = await _crop_upload_to_poster(stored, ratio, store, runtime)
+    url = await _crop_source_to_poster(stored.url, stored.path, ratio, store, runtime)
     updated = await _apply_poster(repo, metadata_id, metadata.poster_urls, url)
     logger.info("poster uploaded", metadata_id=metadata_id, url=url, ratio=ratio)
     return updated.model_copy(update={"tags": runtime.tag_mappings.map_tags(updated.tags)})
@@ -517,9 +523,10 @@ async def adopt_thumb(
     runtime: RuntimeDep,
     source_url: Annotated[str, Query(description="要采用的图地址 (剧照或候选图)")],
 ) -> MetadataResponse:
-    """把一张已有图 (剧照 / 候选图) 设为封面.
+    """把一张已有图 (剧照 / 候选图) 设为封面. **只换引用, 不复制文件**.
 
-    由**服务端**下载那张图 —— 站点图片不带 CORS 头, 前端直接 fetch 会被浏览器拦下.
+    源图可能还没本地化, 先确保它在 Resource 里落地, 然后把它 join 到 ``thumb_urls`` 头部.
+    复制一份会让来回切换不断堆积内容相同的副本, 列表越切越长.
     """
     metadata = await repo.get_metadata(metadata_id)
     if metadata is None:
@@ -531,10 +538,8 @@ async def adopt_thumb(
     resolved = await store.resolve_source(source_url, runtime.web_client)
     if resolved is None:
         raise HTTPException(status_code=400, detail="无法获取该图片")
-    path = resolved.path
 
-    stored = await _store_upload_or_400(store, path.read_bytes(), kind="thumb")
-    url = _resource_url(store, stored.url)
+    url = _resource_url(store, resolved.locator)
     updated = await _apply_thumb(repo, metadata_id, metadata.thumb_urls, url)
     logger.info("thumb adopted", metadata_id=metadata_id, source_url=source_url)
     return updated.model_copy(update={"tags": runtime.tag_mappings.map_tags(updated.tags)})
@@ -547,7 +552,10 @@ async def adopt_poster(
     runtime: RuntimeDep,
     source_url: Annotated[str, Query(description="要采用的图地址 (剧照或候选图)")],
 ) -> MetadataResponse:
-    """把一张已有图 (剧照 / 候选图) 直接作为海报, 不裁剪. 由服务端取图, 理由同 ``adopt-thumb``."""
+    """把一张已有图 (剧照 / 候选图) 按海报比例裁剪后作为海报.
+
+    直接从源图派生裁剪结果, **不另存一份原图** —— 否则来回切换会不断堆积副本.
+    """
     metadata = await repo.get_metadata(metadata_id)
     if metadata is None:
         raise HTTPException(status_code=404, detail="影片不存在")
@@ -558,11 +566,9 @@ async def adopt_poster(
     resolved = await store.resolve_source(source_url, runtime.web_client)
     if resolved is None:
         raise HTTPException(status_code=400, detail="无法获取该图片")
-    path = resolved.path
 
-    stored = await _store_upload_or_400(store, path.read_bytes(), kind="poster")
     ratio = _poster_ratio(runtime, metadata.content_type)
-    url = await _crop_upload_to_poster(stored, ratio, store, runtime)
+    url = await _crop_source_to_poster(resolved.locator, resolved.path, ratio, store, runtime)
     updated = await _apply_poster(repo, metadata_id, metadata.poster_urls, url)
     logger.info("poster adopted", metadata_id=metadata_id, source_url=source_url, ratio=ratio)
     return updated.model_copy(update={"tags": runtime.tag_mappings.map_tags(updated.tags)})

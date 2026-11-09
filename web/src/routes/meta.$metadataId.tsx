@@ -442,6 +442,15 @@ function TitleDetailPage() {
   }
 
   const item: MetadataResponse = data.metadata;
+  // 换图后必须清掉上一张的失败标记: 否则新图明明可读, 也会因为沿用旧的 ``thumbBroken``
+  // 而不显示 (上传封面后看不到新图就是这么来的).
+  const [loadedImageKey, setLoadedImageKey] = useState("");
+  const imageKey = `${item.thumb_url ?? ""}|${item.poster_url ?? ""}`;
+  if (imageKey !== loadedImageKey) {
+    setLoadedImageKey(imageKey);
+    if (thumbBroken) setThumbBroken(false);
+    if (posterBroken) setPosterBroken(false);
+  }
   // 详情只展示一张主图: 优先横版封面 (thumb), 失败或不存在时回退竖版海报.
   const thumbSrc = item.thumb_url ?? item.thumb_urls?.[0] ?? null;
   const posterSrc = item.poster_url ?? item.poster_urls?.[0] ?? null;
