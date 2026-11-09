@@ -34,6 +34,9 @@ class ActorCrawler(ABC):
         self.base_url = self._profile.base_url
         self.cookies = dict(self._profile.cookies)
         self.headers = dict(self._profile.headers)
+        # 强制刷新: 站点自带离线索引时 (如 minnano) 据此跳过查表, 直接抓线上.
+        # 由刮削任务按 ``use_cache`` 是否为空设置.
+        self.refresh = False
         self._resolve_config()
 
     def _resolve_config(self) -> None:

@@ -218,7 +218,8 @@ class MinnanoActorCrawler(ActorCrawler):
         if match := _ACTRESS_HREF_RE.search(url):
             actress_id = re.sub(r"\D", "", match.group(0))
             local = metadata_from_index(actress_id, base_url=self.base_url)
-            if local is not None and _index_is_complete(local):
+            # 强制刷新时连完整的也不认, 一律以线上为准.
+            if local is not None and _index_is_complete(local) and not self.refresh:
                 return local
 
         text = await self.client.get_html(url, cookies=self.cookies)

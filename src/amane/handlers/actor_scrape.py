@@ -5,7 +5,7 @@ from pydantic import ValidationError
 from structlog.contextvars import bind_contextvars
 
 from ..aggregate import first_known_gender, merge_actor_metadata, merge_actor_scrape_result
-from ..crawlers.actor import ActorFetcher, ActorMetadata, filter_sites_for_gender
+from ..crawlers.actor import ActorCrawler, ActorFetcher, ActorMetadata, filter_sites_for_gender
 from ..crawlers.site_roles import is_actor_image_site, is_actor_profile_site
 from ..db.actor_person import (
     actor_to_aggregated,
@@ -131,6 +131,11 @@ class ActorScrapeHandler(TaskHandler[ActorScrapePayload, ActorScrapeResult]):
         async def _fetch_phase(phase: Sequence[SiteName]) -> None:
             nonlocal done
             crawlers = await self._factory.get_actor_crawlers(phase)
+            # 强制刷新 (use_cache 为空) 时让站点跳过自带离线索引, 一律抓线上.
+            force_refresh = not payload.use_cache
+            for crawler in crawlers.values():
+                if isinstance(crawler, ActorCrawler):
+                    crawler.refresh = force_refresh
 
             async def _one(site: SiteName) -> tuple[SiteName, ActorMetadata | None]:
                 nonlocal done

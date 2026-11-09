@@ -121,3 +121,25 @@ async def test_scrape_fetches_when_index_missing_fields() -> None:
     assert meta.height == 155  # 索引仍在的字段保留
     assert "あやのかをる" in meta.aliases  # 别名不因网站缺失而丢
     client.get_html.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_refresh_flag_bypasses_complete_index() -> None:
+    """强制刷新时连完整的资料也不认, 一律以线上为准 —— 网站修正过的值要靠这条路拿到."""
+    client = AsyncMock()
+    client.get_html = AsyncMock(
+        return_value="""
+        <div class="act-profile"><table>
+          <tr><td><h2>竹内咲奈 （たけうちさな / Takeuchi Sana）</h2></td></tr>
+          <tr><td><span>生年月日</span><p>2008年2月3日</p></td></tr>
+        </table></div>
+        """
+    )
+    crawler = MinnanoActorCrawler(client=client, config=None)
+    crawler.refresh = True
+
+    meta = await crawler._scrape(f"{BASE}/actress551014.html")
+
+    assert meta is not None
+    assert meta.birthday == "2008-02-03"  # 线上值覆盖索引
+    client.get_html.assert_called_once()
