@@ -216,13 +216,15 @@ class MinnanoActorCrawler(ActorCrawler):
 
         省请求的前提是「索引里该有的都有」; 缺字段说明抓取那个格子时它就是空的, 值得再问
         一次网站. 两者都有时以网站为准, 索引补网站没有的.
+
+        索引与「是否复用上次刮削结果」无关: 它省的是定位详情页与读资料这两步网络请求,
+        所以缓存开关不参与这里的判断.
         """
         local: ActorMetadata | None = None
         if match := _ACTRESS_HREF_RE.search(url):
             actress_id = re.sub(r"\D", "", match.group(0))
             local = metadata_from_index(actress_id, base_url=self.base_url)
-            # 强制刷新时连完整的也不认, 一律以线上为准.
-            if local is not None and _index_is_complete(local) and not self.refresh:
+            if local is not None and _index_is_complete(local):
                 return local
 
         text = await self.client.get_html(url, cookies=self.cookies)

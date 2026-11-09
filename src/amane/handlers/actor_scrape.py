@@ -5,7 +5,7 @@ from pydantic import ValidationError
 from structlog.contextvars import bind_contextvars
 
 from ..aggregate import first_known_gender, merge_actor_metadata, merge_actor_scrape_result
-from ..crawlers.actor import ActorCrawler, ActorFetcher, ActorMetadata, filter_sites_for_gender
+from ..crawlers.actor import ActorFetcher, ActorMetadata, filter_sites_for_gender
 from ..crawlers.site_roles import is_actor_image_site, is_actor_profile_site
 from ..db.actor_person import (
     actor_to_aggregated,
@@ -131,12 +131,10 @@ class ActorScrapeHandler(TaskHandler[ActorScrapePayload, ActorScrapeResult]):
         async def _fetch_phase(phase: Sequence[SiteName]) -> None:
             nonlocal done
             crawlers = await self._factory.get_actor_crawlers(phase)
-            # 强制刷新 (use_cache 为空) 时让站点跳过自带离线索引, 一律抓线上.
-            force_refresh = not payload.use_cache
-            for crawler in crawlers.values():
-                if isinstance(crawler, ActorCrawler):
-                    crawler.refresh = force_refresh
 
+            # 站点自带的离线索引 (名字→ID、详情表) 始终参与: 它省的是「定位详情页」和
+            # 「读资料」的网络请求, 与是否复用上次刮削结果无关.
+            # 缓存开关只管 Actor.raw 快照, 不要把它伸进索引.
             async def _one(site: SiteName) -> tuple[SiteName, ActorMetadata | None]:
                 nonlocal done
                 meta, cache_hit = await _fetch_site(site, crawlers.get(site), names, raw_cache)

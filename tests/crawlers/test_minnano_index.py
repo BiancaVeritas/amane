@@ -124,22 +124,18 @@ async def test_scrape_fetches_when_index_missing_fields() -> None:
 
 
 @pytest.mark.asyncio
-async def test_refresh_flag_bypasses_complete_index() -> None:
-    """强制刷新时连完整的资料也不认, 一律以线上为准 —— 网站修正过的值要靠这条路拿到."""
+async def test_complete_index_skips_network_regardless_of_cache_flag() -> None:
+    """索引资料齐全时直接返回, 不再请求详情页.
+
+    索引省的是「定位详情页 + 读资料」这两步网络请求, 与是否复用上次刮削结果无关 ——
+    缓存开关不该把它伸进索引里.
+    """
     client = AsyncMock()
-    client.get_html = AsyncMock(
-        return_value="""
-        <div class="act-profile"><table>
-          <tr><td><h2>竹内咲奈 （たけうちさな / Takeuchi Sana）</h2></td></tr>
-          <tr><td><span>生年月日</span><p>2008年2月3日</p></td></tr>
-        </table></div>
-        """
-    )
     crawler = MinnanoActorCrawler(client=client, config=None)
-    crawler.refresh = True
 
     meta = await crawler._scrape(f"{BASE}/actress551014.html")
 
     assert meta is not None
-    assert meta.birthday == "2008-02-03"  # 线上值覆盖索引
-    client.get_html.assert_called_once()
+    assert meta.birthday == "2007-11-30"  # 索引值
+    assert meta.height == 158
+    client.get_html.assert_not_called()
