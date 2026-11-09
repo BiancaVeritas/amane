@@ -82,18 +82,9 @@ export function PosterCropDialog({
 
   return (
     <>
-      <ImagePickerDialog
-        opened={pickerOpen}
-        onClose={() => setPickerOpen(false)}
-        images={sources}
-        title={t("detail.cropPoster.selectSource")}
-        onPick={(url) => {
-          setSourceIndex(Math.max(0, sources.indexOf(url)));
-          setPickerOpen(false);
-        }}
-      />
+      {/* 选图框与裁剪框互斥: 同时开两个 Modal 会叠在一起, 底下的画布点不到. */}
       <ImageCropDialog
-        opened={opened}
+        opened={opened && !pickerOpen}
         onClose={onClose}
         imageUrl={activeSource}
         defaultAspect={configRatio}
@@ -132,6 +123,17 @@ export function PosterCropDialog({
           rotateLeft: t("detail.cropPoster.rotateLeft"),
           rotateRight: t("detail.cropPoster.rotateRight"),
           resetRotation: t("detail.cropPoster.resetRotation"),
+        }}
+      />
+      {/* 选图完成后关闭自身, 裁剪框随即重新打开并换成新基准. */}
+      <ImagePickerDialog
+        opened={pickerOpen}
+        onClose={() => setPickerOpen(false)}
+        images={sources}
+        title={t("detail.cropPoster.selectSource")}
+        onPick={(url) => {
+          setSourceIndex(Math.max(0, sources.indexOf(url)));
+          setPickerOpen(false);
         }}
       />
     </>

@@ -30,7 +30,15 @@ export function ImagePickerDialog({
   const { t } = useTranslation(["metadata", "common"]);
 
   return (
-    <Modal opened={opened} onClose={onClose} title={title} size="xl" centered>
+    <Modal
+      opened={opened}
+      onClose={onClose}
+      title={title}
+      size="xl"
+      centered
+      // 选图框可能从另一个 Modal (裁切) 里打开, 需要压在上面才能点到图.
+      zIndex={400}
+    >
       <Stack gap="sm">
         {images.length === 0 ? (
           <Text size="sm" c="dimmed">
