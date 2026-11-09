@@ -287,7 +287,22 @@ class ResourceStore:
                 full_path = self._base_dir / record.file_path
                 if full_path.exists():
                     return record, full_path
-            return None
+            # 早期上传件按内容哈希命名 (``thumb_xxx`` / ``poster_xxx``), 与 url hash 不一致,
+            # 上面两条模式都命中不了; 这里按内容哈希兜底, 让那批旧文件仍能显示.
+            return await self._legacy_upload_by_content_hash(session, url_hash)
+
+    async def _legacy_upload_by_content_hash(
+        self, session: AsyncSession, url_hash: str
+    ) -> tuple[Resource, Path] | None:
+        """旧命名的上传件: 用 url 反查内容哈希, 再按内容哈希找文件."""
+        result = await session.exec(select(Resource).where(Resource.url.like("upload:%")))
+        for record in result.all():
+            if _url_hash(record.url) != url_hash:
+                continue
+            full_path = self._base_dir / record.file_path
+            if full_path.exists():
+                return record, full_path
+        return None
 
     @staticmethod
     def url_hash(url: str) -> str:

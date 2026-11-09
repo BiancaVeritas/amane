@@ -595,3 +595,34 @@ class TestUploadedResource:
         first = await store_upload(resource_store, data, kind="thumb")
         second = await store_upload(resource_store, data, kind="thumb")
         assert first.path == second.path
+
+    @pytest.mark.asyncio
+    async def test_legacy_upload_name_still_resolves(self, resource_store: ResourceStore):
+        """早期上传件按内容哈希命名, 与 url hash 不同; 仍要能反查到."""
+        from amane.db.models import Resource
+
+        data = _jpeg_bytes()
+        locator = "upload:legacy123:thumb"
+        # 旧命名的文件: 名字不是 url hash.
+        legacy_dir = resource_store.data_dir / "uploads"
+        legacy_dir.mkdir(parents=True, exist_ok=True)
+        legacy_path = legacy_dir / "thumb_abcdef1234567890.jpg"
+        legacy_path.write_bytes(data)
+        await resource_store.register(
+            Resource(
+                url=locator,
+                file_path="../uploads/thumb_abcdef1234567890.jpg",
+                content_hash="deadbeef",
+                size=len(data),
+                mime_type="image/jpeg",
+                meta={"op": "upload"},
+            )
+        )
+
+        h = ResourceStore.url_hash(locator)
+        found = await resource_store.get_by_url_hash(h)
+        assert found is not None
+        assert found[0].url == locator
+        # 路径带 ../ 前缀, 比内容而非字面量.
+        assert found[1].resolve() == legacy_path.resolve()
+        assert found[1].read_bytes() == data
