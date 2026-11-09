@@ -57,7 +57,7 @@ import {
   submitTaskMutation,
   updateMetadataMutation,
 } from "@/client/@tanstack/react-query.gen";
-import { getMetadataSchema } from "@/client/sdk.gen";
+import { getMetadataSchema, imageInfo } from "@/client/sdk.gen";
 import type { MetadataField, MetadataResponse } from "@/client/types.gen";
 import { FacetBadge } from "@/components/media/facet-badge";
 import { LockChip, LockToggle, type LockProps } from "@/components/media/field-lock";
@@ -67,7 +67,7 @@ import { FanartLightbox, FanartStrip } from "@/components/media/fanart-lightbox"
 import { FilePhaseBadges, FilePhaseOverlay } from "@/components/media/file-phase-badges";
 import { OverlayChip, OverlayChipLabel } from "@/components/media/overlay-chip";
 import { VrOverlayChip } from "@/components/media/vr-badge";
-import { ImagePickerDialog } from "@/components/media/image-picker-dialog";
+import { type ImageInfoItem, ImagePickerDialog } from "@/components/media/image-picker-dialog";
 import { PosterCropDialog } from "@/components/media/poster-crop-dialog";
 import { useUploadMetaImage } from "@/components/media/use-upload-meta-image";
 import { MergeDialog } from "@/components/metadata/merge-dialog";
@@ -418,6 +418,26 @@ function TitleDetailPage() {
     }
     return out;
   }, [data?.metadata]);
+
+  // 候选图的来源与分辨率: 需要查库 (内部地址要溯源), 后端一次算好.
+  // 放在提前 return 之前 —— 否则首屏少跑一次 hook, 数据到达后 hook 数量变化.
+  const { data: imageInfos } = useQuery({
+    queryKey: ["image-info", id, coverCandidates],
+    queryFn: async () => {
+      if (coverCandidates.length === 0) return new Map<string, ImageInfoItem>();
+      const resp = await imageInfo({
+        path: { metadata_id: id },
+        body: { urls: coverCandidates },
+      });
+      const map = new Map<string, ImageInfoItem>();
+      for (const item of resp.data?.items ?? []) {
+        map.set(item.url, item);
+      }
+      return map;
+    },
+    enabled: validId && coverCandidates.length > 0,
+    staleTime: 60_000,
+  });
 
   if (!validId) {
     return (
@@ -1221,6 +1241,7 @@ function TitleDetailPage() {
             opened={pickerTarget !== null}
             onClose={() => setPickerTarget(null)}
             images={coverCandidates}
+            infos={imageInfos}
             onRemove={pickerTarget === null ? undefined : (url) => removeImage(url, pickerTarget)}
             title={
               pickerTarget === "poster"

@@ -154,6 +154,25 @@ class MetadataLocksRequest(BaseModel):
     fields: list[MetadataField] = Field(default_factory=list, description="锁定的字段集合; 空集解除全部锁定")
 
 
+class ImageInfoRequest(BaseModel):
+    """查询一批候选图的来源与分辨率."""
+
+    urls: list[str] = Field(default_factory=list, description="候选图地址 (内部或外链)")
+
+
+class ImageInfo(BaseModel):
+    """一张候选图的展示信息."""
+
+    url: str = Field(description="原样返回的地址")
+    source: str = Field(default="", description="来源名; 认不出时为空")
+    width: int | None = Field(default=None, description="像素宽; 未本地化或损坏时为空")
+    height: int | None = Field(default=None, description="像素高")
+
+
+class ImageInfoResponse(BaseModel):
+    items: list[ImageInfo] = Field(default_factory=list)
+
+
 class CropPosterRequest(CropBoxRequest):
     """按像素框裁切海报.
 

@@ -190,7 +190,7 @@
       "pick": "Pick image {{index}}",
       "current": "Current",
       "empty": "No candidate images available",
-      "remove": "Remove this image"
+      "remove": "Delete"
     }
   },
   "browse": {

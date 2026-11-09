@@ -1990,6 +1990,59 @@
         }
       }
     },
+    "/api/metadata/{metadata_id}/image-info": {
+      "post": {
+        "tags": [
+          "metadata"
+        ],
+        "summary": "Image Info",
+        "description": "候选图的来源与分辨率, 供选图框展示.\n\n内部地址会溯源到原始站点 (裁切件的 ``meta.src``、上传件的 ``meta.kind``), 拿不到就按\n大类标注. 分辨率只对已本地化的图有效, 未下载的返回空.",
+        "operationId": "image_info",
+        "parameters": [
+          {
+            "name": "metadata_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Metadata Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImageInfoRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImageInfoResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/network/browser": {
       "get": {
         "tags": [
@@ -10958,6 +11011,79 @@
         "type": "object",
         "title": "HotSettings",
         "description": "运行时可更新, 持久化到 TOML. extra=forbid, 未知字段须校验失败."
+      },
+      "ImageInfo": {
+        "properties": {
+          "url": {
+            "type": "string",
+            "title": "Url",
+            "description": "原样返回的地址"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source",
+            "description": "来源名; 认不出时为空",
+            "default": ""
+          },
+          "width": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Width",
+            "description": "像素宽; 未本地化或损坏时为空"
+          },
+          "height": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Height",
+            "description": "像素高"
+          }
+        },
+        "type": "object",
+        "required": [
+          "url"
+        ],
+        "title": "ImageInfo",
+        "description": "一张候选图的展示信息."
+      },
+      "ImageInfoRequest": {
+        "properties": {
+          "urls": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Urls",
+            "description": "候选图地址 (内部或外链)"
+          }
+        },
+        "type": "object",
+        "title": "ImageInfoRequest",
+        "description": "查询一批候选图的来源与分辨率."
+      },
+      "ImageInfoResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ImageInfo"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "title": "ImageInfoResponse"
       },
       "Interrupt": {
         "properties": {

@@ -1794,6 +1794,62 @@ export type HotSettings = {
 };
 
 /**
+ * ImageInfo
+ *
+ * 一张候选图的展示信息.
+ */
+export type ImageInfo = {
+    /**
+     * Url
+     *
+     * 原样返回的地址
+     */
+    url: string;
+    /**
+     * Source
+     *
+     * 来源名; 认不出时为空
+     */
+    source?: string;
+    /**
+     * Width
+     *
+     * 像素宽; 未本地化或损坏时为空
+     */
+    width?: number | null;
+    /**
+     * Height
+     *
+     * 像素高
+     */
+    height?: number | null;
+};
+
+/**
+ * ImageInfoRequest
+ *
+ * 查询一批候选图的来源与分辨率.
+ */
+export type ImageInfoRequest = {
+    /**
+     * Urls
+     *
+     * 候选图地址 (内部或外链)
+     */
+    urls?: Array<string>;
+};
+
+/**
+ * ImageInfoResponse
+ */
+export type ImageInfoResponse = {
+    /**
+     * Items
+     */
+    items?: Array<ImageInfo>;
+};
+
+/**
  * Interrupt
  *
  * A pause carried inside ``RunFinishedEvent.outcome`` when the outcome is
@@ -6811,6 +6867,36 @@ export type MergeMetadataResponses = {
 };
 
 export type MergeMetadataResponse = MergeMetadataResponses[keyof MergeMetadataResponses];
+
+export type ImageInfoData = {
+    body: ImageInfoRequest;
+    path: {
+        /**
+         * Metadata Id
+         */
+        metadata_id: number;
+    };
+    query?: never;
+    url: '/api/metadata/{metadata_id}/image-info';
+};
+
+export type ImageInfoErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ImageInfoError = ImageInfoErrors[keyof ImageInfoErrors];
+
+export type ImageInfoResponses = {
+    /**
+     * Successful Response
+     */
+    200: ImageInfoResponse;
+};
+
+export type ImageInfoResponse2 = ImageInfoResponses[keyof ImageInfoResponses];
 
 export type BrowserBackendsData = {
     body?: never;

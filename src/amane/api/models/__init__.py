@@ -60,6 +60,9 @@ from .media import (
 from .metadata import (
     CropPosterRequest,
     FilePhaseSummary,
+    ImageInfo,
+    ImageInfoRequest,
+    ImageInfoResponse,
     MergeRequest,
     MetadataBatchDeleteResponse,
     MetadataBatchIdsRequest,

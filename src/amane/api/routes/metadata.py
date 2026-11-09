@@ -15,7 +15,7 @@ from ...enums import MetadataField
 from ...handlers import ScrapePayload
 from ...llm import build_translator
 from ...media import manual_crop_image
-from ...media.images import crop_poster
+from ...media.images import crop_poster, probe_oriented_size
 from ...media.resource_store import RESOURCE_URL_PREFIX, ResourceStore, internal_url_hash
 from ...media.upload import StoredUpload, UploadRejected, store_upload
 from ...parsing import ContentType, summarize_file_phases
@@ -28,6 +28,9 @@ from ..models import (
     CommentResponse,
     CropPosterRequest,
     FilePhaseSummary,
+    ImageInfo,
+    ImageInfoRequest,
+    ImageInfoResponse,
     MergeRequest,
     MetadataBatchDeleteResponse,
     MetadataBatchIdsRequest,
@@ -747,3 +750,106 @@ async def merge_metadata(metadata_id: int, req: MergeRequest, repo: RepoDep, run
     assert updated is not None
     logger.info("metadata merged", metadata_id=metadata_id, selections=req.selections)
     return to_resp(MetadataResponse, updated).model_copy(update={"tags": runtime.tag_mappings.map_tags(updated.tags)})
+
+
+#: 站点域名片段 → 展示名. 顺序敏感: 更具体的域名放前面.
+_SOURCE_LABELS: tuple[tuple[str, str], ...] = (
+    ("caribbeancompr", "Caribbeancom"),
+    ("caribbeancom", "Caribbeancom"),
+    ("1pondo", "1Pondo"),
+    ("10musume", "10Musume"),
+    ("pacopacomama", "Pacopacomama"),
+    ("tokyo-hot", "Tokyo-Hot"),
+    ("tokyohot", "Tokyo-Hot"),
+    ("heyzo", "HEYZO"),
+    ("d2pass", "D2Pass"),
+    ("aventertainments", "AVEntertainments"),
+    ("javbus", "JavBus"),
+    ("javdb", "JavDb"),
+    ("jdbstatic", "JavDb"),
+    ("dmm.co.jp", "DMM"),
+    ("airav", "Airav"),
+    ("themoviedb", "TheMovieDb"),
+    ("gfriends", "GFriends"),
+    ("tushyraw", "TushyRaw"),
+    ("tushy", "Tushy"),
+    ("theporndb", "ThePornDB"),
+    ("wikipedia", "Wikipedia"),
+    ("wikimedia", "Wikipedia"),
+    ("minnano", "Minnano"),
+)
+
+
+def _source_label(url: str, *, origin: str | None, raw_url: str | None = None) -> str:
+    """图片来源名.
+
+    优先看溯源地址 (裁切件的 ``meta.src``); 没有就看记录本身的 url —— 刮削缓存下来的原图,
+    其 url 就是站点地址. 两者都认不出时按大类标注.
+    """
+    for candidate in (origin, raw_url, url):
+        if not candidate:
+            continue
+        lower = candidate.casefold()
+        for needle, label in _SOURCE_LABELS:
+            if needle in lower:
+                return label
+
+    if raw_url is not None and raw_url.startswith("upload:"):
+        return "自定义"
+    if origin is not None:
+        return "裁切"
+    if url.startswith("/api/resources/"):
+        return "自定义"
+    return ""
+
+
+@router.post("/{metadata_id}/image-info")
+async def image_info(
+    metadata_id: int,
+    req: ImageInfoRequest,
+    repo: RepoDep,
+    runtime: RuntimeDep,
+) -> ImageInfoResponse:
+    """候选图的来源与分辨率, 供选图框展示.
+
+    内部地址会溯源到原始站点 (裁切件的 ``meta.src``、上传件的 ``meta.kind``), 拿不到就按
+    大类标注. 分辨率只对已本地化的图有效, 未下载的返回空.
+    """
+    metadata = await repo.get_metadata(metadata_id)
+    if metadata is None:
+        raise HTTPException(status_code=404, detail="影片不存在")
+
+    store = runtime.resource_store
+    items: list[ImageInfo] = []
+    for url in req.urls:
+        origin, raw_url, size = await _resolve_image_origin(store, url)
+        width, height = size if size is not None else (None, None)
+        items.append(
+            ImageInfo(
+                url=url,
+                source=_source_label(url, origin=origin, raw_url=raw_url),
+                width=width,
+                height=height,
+            )
+        )
+    return ImageInfoResponse(items=items)
+
+
+async def _resolve_image_origin(
+    store: ResourceStore, url: str
+) -> tuple[str | None, str | None, tuple[int, int] | None]:
+    """内部地址 → (溯源地址, 记录原 url, 像素尺寸).
+
+    外链没有本地记录, 三个值都是 None; 内部地址若尚未缓存, 同样拿不到尺寸.
+    """
+    url_hash = internal_url_hash(url)
+    if url_hash is None:
+        return (None, None, None)
+    found = await store.get_by_url_hash(url_hash)
+    if found is None:
+        return (None, None, None)
+    record, path = found
+    size = probe_oriented_size(path)
+    meta = record.meta or {}
+    origin = meta.get("src") if isinstance(meta, dict) else None
+    return (origin if isinstance(origin, str) else None, record.url, size)

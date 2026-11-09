@@ -3766,6 +3766,82 @@ export const HotSettingsSchema = {
     description: '运行时可更新, 持久化到 TOML. extra=forbid, 未知字段须校验失败.'
 } as const;
 
+export const ImageInfoSchema = {
+    properties: {
+        url: {
+            type: 'string',
+            title: 'Url',
+            description: '原样返回的地址'
+        },
+        source: {
+            type: 'string',
+            title: 'Source',
+            description: '来源名; 认不出时为空',
+            default: ''
+        },
+        width: {
+            anyOf: [
+                {
+                    type: 'integer'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Width',
+            description: '像素宽; 未本地化或损坏时为空'
+        },
+        height: {
+            anyOf: [
+                {
+                    type: 'integer'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Height',
+            description: '像素高'
+        }
+    },
+    type: 'object',
+    required: [
+        'url'
+    ],
+    title: 'ImageInfo',
+    description: '一张候选图的展示信息.'
+} as const;
+
+export const ImageInfoRequestSchema = {
+    properties: {
+        urls: {
+            items: {
+                type: 'string'
+            },
+            type: 'array',
+            title: 'Urls',
+            description: '候选图地址 (内部或外链)'
+        }
+    },
+    type: 'object',
+    title: 'ImageInfoRequest',
+    description: '查询一批候选图的来源与分辨率.'
+} as const;
+
+export const ImageInfoResponseSchema = {
+    properties: {
+        items: {
+            items: {
+                $ref: '#/components/schemas/ImageInfo'
+            },
+            type: 'array',
+            title: 'Items'
+        }
+    },
+    type: 'object',
+    title: 'ImageInfoResponse'
+} as const;
+
 export const InterruptSchema = {
     properties: {
         id: {

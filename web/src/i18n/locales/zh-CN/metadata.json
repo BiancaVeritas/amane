@@ -187,7 +187,7 @@
       "pick": "选择第 {{index}} 张",
       "current": "当前",
       "empty": "没有可用的候选图",
-      "remove": "移除这张图"
+      "remove": "删除"
     }
   },
   "browse": {

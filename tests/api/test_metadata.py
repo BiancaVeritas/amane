@@ -8,6 +8,7 @@ from PIL import Image
 
 from amane.db.models import MediaFileStatus, Metadata
 from amane.enums import ActorGender
+from amane.media.resource_store import RESOURCE_URL_PREFIX, ResourceStore
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -414,3 +415,62 @@ class TestImageSelection:
         data = resp.json()
         assert data["thumb_urls"] == [first, second, third]
         assert data["thumb_selected"] == second
+
+
+class TestImageInfo:
+    """候选图的来源与分辨率, 供选图框展示."""
+
+    def test_source_label_from_external_url(self) -> None:
+        from amane.api.routes.metadata import _source_label
+
+        assert _source_label("https://www.caribbeancompr.com/x.jpg", origin=None, raw_url=None) == "Caribbeancom"
+        assert _source_label("https://www.1pondo.tv/x.jpg", origin=None, raw_url=None) == "1Pondo"
+        assert _source_label("https://unknown.example/x.jpg", origin=None, raw_url=None) == ""
+
+    def test_source_label_prefers_traced_origin(self) -> None:
+        """裁切派生件的内部地址要溯源到原始站点, 而不是标成「自定义」."""
+        from amane.api.routes.metadata import _source_label
+
+        assert (
+            _source_label(
+                "/api/resources/abc123",
+                origin="https://www.caribbeancom.com/x.jpg",
+                raw_url="derived:abc123",
+            )
+            == "Caribbeancom"
+        )
+
+    def test_source_label_marks_upload_as_custom(self) -> None:
+        from amane.api.routes.metadata import _source_label
+
+        assert _source_label("/api/resources/abc123", origin=None, raw_url="upload:abc:thumb") == "自定义"
+
+    @pytest.mark.asyncio
+    async def test_image_info_returns_size_and_source(self, client, repo, app):
+        first = "https://www.caribbeancom.com/x.jpg"
+
+        async def fake_download(url: str, dest: Path, **kwargs: object) -> bool:
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            Image.new("RGB", (640, 360), "blue").save(dest)
+            return True
+
+        async def fake_resolve(url: str, **kwargs: object) -> str:
+            return url
+
+        app.state.runtime.web_client.download = fake_download  # type: ignore[method-assign]
+        app.state.runtime.web_client.resolve_final_url = fake_resolve  # type: ignore[method-assign]
+
+        # 端点按内部地址查库, 所以候选要用 /api/resources/{hash} 形式.
+        store = app.state.runtime.resource_store
+        await store.acquire(first, app.state.runtime.web_client)
+        internal = f"{RESOURCE_URL_PREFIX}/{ResourceStore.url_hash(first)}"
+        meta = await repo.upsert_metadata(number="INFO-001", thumb_urls=[internal])
+
+        resp = await client.post(f"metadata/{meta.id}/image-info", json={"urls": [internal]})
+
+        assert resp.status_code == 200
+        items = resp.json()["items"]
+        assert len(items) == 1
+        # 记录本身存的是原始站点地址, 溯源后应认出来源.
+        assert items[0]["source"] == "Caribbeancom"
+        assert (items[0]["width"], items[0]["height"]) == (640, 360)
