@@ -6623,6 +6623,49 @@ export type UploadImageResponses = {
 
 export type UploadImageResponse = UploadImageResponses[keyof UploadImageResponses];
 
+export type AdoptImageData = {
+    body?: never;
+    path: {
+        /**
+         * Metadata Id
+         */
+        metadata_id: number;
+    };
+    query: {
+        /**
+         * Source Url
+         *
+         * 要采用的图地址 (剧照或其它候选图)
+         */
+        source_url: string;
+        /**
+         * Target
+         *
+         * 作为海报还是封面
+         */
+        target?: 'poster' | 'thumb';
+    };
+    url: '/api/metadata/{metadata_id}/adopt-image';
+};
+
+export type AdoptImageErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type AdoptImageError = AdoptImageErrors[keyof AdoptImageErrors];
+
+export type AdoptImageResponses = {
+    /**
+     * Successful Response
+     */
+    200: MetadataResponse;
+};
+
+export type AdoptImageResponse = AdoptImageResponses[keyof AdoptImageResponses];
+
 export type MergeMetadataData = {
     body: MergeRequest;
     path: {

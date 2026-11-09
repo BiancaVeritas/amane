@@ -1721,6 +1721,76 @@
         }
       }
     },
+    "/api/metadata/{metadata_id}/adopt-image": {
+      "post": {
+        "tags": [
+          "metadata"
+        ],
+        "summary": "Adopt Image",
+        "description": "把一张已有图 (剧照 / 其它候选图) 设为封面或海报.\n\n由**服务端**下载那张图再按上传流程处理 —— 站点图片不带 CORS 头, 前端直接 fetch 会被\n浏览器拦下 (Failed to fetch).",
+        "operationId": "adopt_image",
+        "parameters": [
+          {
+            "name": "metadata_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Metadata Id"
+            }
+          },
+          {
+            "name": "source_url",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "要采用的图地址 (剧照或其它候选图)",
+              "title": "Source Url"
+            },
+            "description": "要采用的图地址 (剧照或其它候选图)"
+          },
+          {
+            "name": "target",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "poster",
+                "thumb"
+              ],
+              "type": "string",
+              "description": "作为海报还是封面",
+              "default": "thumb",
+              "title": "Target"
+            },
+            "description": "作为海报还是封面"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MetadataResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/metadata/{metadata_id}/merge": {
       "post": {
         "tags": [

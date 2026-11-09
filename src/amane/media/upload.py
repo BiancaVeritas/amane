@@ -81,18 +81,24 @@ async def store_upload(store: ResourceStore, data: bytes, *, kind: str) -> Store
 
     existing = await store.get_by_url(locator)
     if existing is not None:
-        path = store.full_path(existing)
+        # resolve() 归一掉 ``resources/../uploads``, 否则同一文件两次返回的路径不相等.
+        path = store.full_path(existing).resolve()
         if path.exists():
             return StoredUpload(url=locator, path=path)
 
     directory = uploads_dir(store)
-    directory.mkdir(parents=True, exist_ok=True)
+    # 目录形状与 ``resources`` 一致 (前两位散列 / 全名): 图标端点按 url hash 反查时靠
+    # file_path 的 LIKE 匹配命中, 文件名必须正是 ``_url_hash(locator)``, 不能用内容哈希.
+    file_hash = store.url_hash(locator)
+    bucket = file_hash[:2]
+    (directory / bucket).mkdir(parents=True, exist_ok=True)
     suffix = _MIME_TO_EXT[mime]
-    path = directory / f"{kind}_{digest[:16]}{suffix}"
-    path.write_bytes(data)
+    path = directory / bucket / f"{file_hash}{suffix}"
+    if not path.exists():
+        path.write_bytes(data)
 
     # file_path 相对 resources 目录; ../uploads 指回 data_dir/uploads.
-    relative = f"../uploads/{path.name}"
+    relative = f"../uploads/{bucket}/{path.name}"
     record = Resource(
         url=locator,
         file_path=relative,

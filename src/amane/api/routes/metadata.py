@@ -487,6 +487,53 @@ async def _crop_upload_to_poster(stored: StoredUpload, ratio: float, store: Reso
     return _resource_url(store, crop_res.url)
 
 
+@router.post("/{metadata_id}/adopt-image")
+async def adopt_image(
+    metadata_id: int,
+    repo: RepoDep,
+    runtime: RuntimeDep,
+    source_url: Annotated[str, Query(description="要采用的图地址 (剧照或其它候选图)")],
+    target: Annotated[Literal["poster", "thumb"], Query(description="作为海报还是封面")] = "thumb",
+) -> MetadataResponse:
+    """把一张已有图 (剧照 / 其它候选图) 设为封面或海报.
+
+    由**服务端**下载那张图再按上传流程处理 —— 站点图片不带 CORS 头, 前端直接 fetch 会被
+    浏览器拦下 (Failed to fetch).
+    """
+    metadata = await repo.get_metadata(metadata_id)
+    if metadata is None:
+        raise HTTPException(status_code=404, detail="影片不存在")
+
+    store = runtime.resource_store
+    path = await store.acquire(source_url, runtime.web_client)
+    if path is None:
+        raise HTTPException(status_code=400, detail="无法获取该图片")
+    data = path.read_bytes()
+
+    try:
+        stored = await store_upload(store, data, kind=target)
+    except UploadRejected as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+    if target == UPLOAD_KIND_THUMB:
+        internal = _resource_url(store, stored.url)
+        existing = [url for url in metadata.thumb_urls if url != internal]
+        updated = await repo.update_metadata(metadata_id, mode=WriteMode.MANUAL, thumb_urls=[internal, *existing])
+    else:
+        ratio = (
+            runtime.config.hot.scraping.uncensored_poster_ratio
+            if metadata.content_type == ContentType.UNCENSORED
+            else runtime.config.hot.scraping.poster_ratio
+        )
+        poster_url = await _crop_upload_to_poster(stored, ratio, store, runtime)
+        existing = [url for url in metadata.poster_urls if url != poster_url]
+        updated = await repo.update_metadata(metadata_id, mode=WriteMode.MANUAL, poster_urls=[poster_url, *existing])
+
+    assert updated is not None
+    logger.info("image adopted", metadata_id=metadata_id, source_url=source_url, target=target)
+    return to_resp(MetadataResponse, updated).model_copy(update={"tags": runtime.tag_mappings.map_tags(updated.tags)})
+
+
 async def _translate_selected_text(updates: dict[str, object], runtime: RuntimeDep, content_type: ContentType) -> None:
     """Source picks refresh original text and re-run configured LLM translation; manual edits do not use this path."""
     if content_type == ContentType.WESTERN:

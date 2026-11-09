@@ -277,16 +277,17 @@ class ResourceStore:
 
     async def get_by_url_hash(self, url_hash: str) -> tuple[Resource, Path] | None:
         # 文件名即 _url_hash(url); 按前缀匹配定位, 无需在 DB 存 hash 列.
+        # 上传图放在 ../uploads 下, file_path 带该前缀, 因此两种形状都要认.
         async with self._session() as session:
-            pattern = f"{url_hash[:2]}/{url_hash}.%"
-            result = await session.exec(select(Resource).where(col(Resource.file_path).like(pattern)))
-            record = result.first()
-            if record is None:
-                return None
-            full_path = self._base_dir / record.file_path
-            if not full_path.exists():
-                return None
-            return record, full_path
+            for pattern in (f"{url_hash[:2]}/{url_hash}.%", f"../uploads/{url_hash[:2]}/{url_hash}.%"):
+                result = await session.exec(select(Resource).where(col(Resource.file_path).like(pattern)))
+                record = result.first()
+                if record is None:
+                    continue
+                full_path = self._base_dir / record.file_path
+                if full_path.exists():
+                    return record, full_path
+            return None
 
     @staticmethod
     def url_hash(url: str) -> str:

@@ -45,6 +45,7 @@ import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "rea
 import { useTranslation } from "react-i18next";
 import { z } from "zod";
 import {
+  adoptImageMutation,
   batchMetadataUserTagsMutation,
   createUserTagsMutation,
   deleteMetadataMutation,
@@ -220,23 +221,32 @@ function TitleDetailPage() {
     onSuccess: invalidateDetail,
   });
 
-  /** 把某张已有图 (剧照/海报) 直接设为封面; 服务端只前置地址, 原封面保留. */
-  const applyImageSource = async (url: string, target: "poster" | "thumb") => {
-    if (!url) return;
-    try {
-      const resp = await fetch(url);
-      if (!resp.ok) throw new Error(String(resp.status));
-      const blob = await resp.blob();
-      const type = blob.type || "image/jpeg";
-      const ext = type === "image/png" ? "png" : type === "image/webp" ? "webp" : "jpg";
-      const file = new File([blob], `from-src.${ext}`, { type });
-      upload(file, target);
-    } catch (err) {
+  // 采用已有图 (剧照/候选图): 由后端下载, 避免前端 fetch 撞上 CORS.
+  const adoptMutation = useMutation({
+    ...adoptImageMutation(),
+    onSuccess: () => {
+      notifications.show({ message: t("detail.upload.success"), color: "blue" });
+      invalidateDetail();
+    },
+    onError: (err) =>
       notifications.show({
         message: extractErrorMessage(err, t("common:toast.operationFailed")),
         color: "red",
-      });
-    }
+      }),
+  });
+
+  /**
+   * 把某张已有图 (剧照/海报) 直接设为封面.
+   *
+   * 由**后端**去取那张图再存成上传件 —— 前端直接 ``fetch`` 外部图片会被 CORS 拦下
+   * (站点的图不返回 ``Access-Control-Allow-Origin``), 报 "Failed to fetch".
+   */
+  const applyImageSource = async (url: string, target: "poster" | "thumb") => {
+    if (!url) return;
+    await adoptMutation.mutateAsync({
+      path: { metadata_id: id },
+      query: { target, source_url: url },
+    });
   };
 
   const scrapeMutation = useMutation({

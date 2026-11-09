@@ -554,3 +554,44 @@ class TestAcquireConcurrency:
         finally:
             released.set()
             await asyncio.gather(first, second, return_exceptions=True)
+
+
+def _jpeg_bytes() -> bytes:
+    """最小合法 JPEG, 供上传路径用."""
+    import io
+
+    from PIL import Image
+
+    buf = io.BytesIO()
+    Image.new("RGB", (8, 8), "red").save(buf, format="JPEG")
+    return buf.getvalue()
+
+
+class TestUploadedResource:
+    """上传图放在 ../uploads 下, 但必须仍能按 url hash 反查到."""
+
+    @pytest.mark.asyncio
+    async def test_uploaded_image_resolves_by_url_hash(self, resource_store: ResourceStore):
+        from amane.media.upload import store_upload
+
+        data = _jpeg_bytes()
+        stored = await store_upload(resource_store, data, kind="thumb")
+
+        h = ResourceStore.url_hash(stored.url)
+        found = await resource_store.get_by_url_hash(h)
+        assert found is not None
+        record, path = found
+        assert record.url == stored.url
+        assert path.exists()
+        assert path.read_bytes() == data
+        # 落在独立目录, 不进 resources 散列树.
+        assert "uploads" in path.as_posix()
+
+    @pytest.mark.asyncio
+    async def test_same_bytes_reuse_one_file(self, resource_store: ResourceStore):
+        from amane.media.upload import store_upload
+
+        data = _jpeg_bytes()
+        first = await store_upload(resource_store, data, kind="thumb")
+        second = await store_upload(resource_store, data, kind="thumb")
+        assert first.path == second.path
