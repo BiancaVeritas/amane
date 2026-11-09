@@ -159,8 +159,9 @@ function TitleDetailPage() {
   const [playingTrailer, setPlayingTrailer] = useState(false);
   // 播放失败的预告片地址: 只对该地址有效, 记录之外 (条目切换或重新刮削换了地址) 一律不算失败.
   const [failedTrailerUrl, setFailedTrailerUrl] = useState<string | null>(null);
-  const [thumbBroken, setThumbBroken] = useState(false);
-  const [posterBroken, setPosterBroken] = useState(false);
+  // 记录「哪张地址加载失败」而不是布尔值: 地址一换标记自然失效, 不必手动清.
+  const [thumbBrokenFor, setThumbBrokenFor] = useState<string | null>(null);
+  const [posterBrokenFor, setPosterBrokenFor] = useState<string | null>(null);
   // 评论时间戳的跳转: 本地请求负责即时响应 (同一秒连点也要重新触发), 地址栏的 `t` 负责分享与刷新定位.
   const [seekRequest, setSeekRequest] = useState<SeekRequest | null>(null);
   const [canSeek, setCanSeek] = useState(false);
@@ -203,8 +204,8 @@ function TitleDetailPage() {
   if (id !== prevId) {
     setPrevId(id);
     setPlayingTrailer(false);
-    setThumbBroken(false);
-    setPosterBroken(false);
+    setThumbBrokenFor(null);
+    setPosterBrokenFor(null);
   }
 
   const { data, isLoading, isError } = useQuery({
@@ -442,20 +443,13 @@ function TitleDetailPage() {
   }
 
   const item: MetadataResponse = data.metadata;
-  // 换图后必须清掉上一张的失败标记: 否则新图明明可读, 也会因为沿用旧的 ``thumbBroken``
-  // 而不显示 (上传封面后看不到新图就是这么来的).
-  const [loadedImageKey, setLoadedImageKey] = useState("");
-  const imageKey = `${item.thumb_url ?? ""}|${item.poster_url ?? ""}`;
-  if (imageKey !== loadedImageKey) {
-    setLoadedImageKey(imageKey);
-    if (thumbBroken) setThumbBroken(false);
-    if (posterBroken) setPosterBroken(false);
-  }
   // 详情只展示一张主图: 优先横版封面 (thumb), 失败或不存在时回退竖版海报.
   const thumbSrc = item.thumb_url ?? item.thumb_urls?.[0] ?? null;
   const posterSrc = item.poster_url ?? item.poster_urls?.[0] ?? null;
-  const coverSrc =
-    thumbSrc && !thumbBroken ? thumbSrc : posterSrc && !posterBroken ? posterSrc : null;
+  // 失败标记只对「当时那张图」有效: 地址一换就自动失效, 不必手动清.
+  const thumbOk = thumbSrc !== null && thumbBrokenFor !== thumbSrc;
+  const posterOk = posterSrc !== null && posterBrokenFor !== posterSrc;
+  const coverSrc = thumbOk ? thumbSrc : posterOk ? posterSrc : null;
   const coverUrl = proxyImageUrl(coverSrc);
   const coverFailed = Boolean((thumbSrc || posterSrc) && !coverUrl);
   // 取成局部量, 供播放分支在回调里引用 (属性访问的收窄不进闭包).
@@ -512,11 +506,11 @@ function TitleDetailPage() {
 
   function handleCoverError() {
     if (coverSrc && coverSrc === thumbSrc) {
-      setThumbBroken(true);
+      setThumbBrokenFor(thumbSrc);
       return;
     }
     if (coverSrc && coverSrc === posterSrc) {
-      setPosterBroken(true);
+      setPosterBrokenFor(posterSrc);
     }
   }
 

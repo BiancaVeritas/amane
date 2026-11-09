@@ -16,7 +16,7 @@ from ...handlers import ScrapePayload
 from ...llm import build_translator
 from ...media import manual_crop_image
 from ...media.images import crop_poster
-from ...media.resource_store import RESOURCE_URL_PREFIX, ResourceStore
+from ...media.resource_store import RESOURCE_URL_PREFIX, ResourceStore, internal_url_hash
 from ...media.upload import StoredUpload, UploadRejected, store_upload
 from ...parsing import ContentType, summarize_file_phases
 from ...parsing import FilePhaseSummary as ParsedFilePhase
@@ -429,9 +429,38 @@ async def _store_upload_or_400(store: ResourceStore, data: bytes, *, kind: str) 
         raise HTTPException(status_code=400, detail=str(e)) from e
 
 
-async def _apply_thumb(repo: RepoDep, metadata_id: int, thumb_urls: list[str], url: str) -> MetadataResponse:
-    """把 ``url`` 前置到封面列表, 旧图保留在后面."""
-    existing = [item for item in thumb_urls if item != url]
+async def _content_hash_of(store: ResourceStore, url: str) -> str | None:
+    """内部图片地址 → 该资源的内容哈希; 外链或尚未缓存时返回 None."""
+    url_hash = internal_url_hash(url)
+    if url_hash is None:
+        return None
+    found = await store.get_by_url_hash(url_hash)
+    return None if found is None else found[0].content_hash
+
+
+async def _dedupe_by_content(store: ResourceStore, urls: list[str], keep: str) -> list[str]:
+    """去掉 ``urls`` 中与 ``keep`` 内容相同的条目.
+
+    早期版本的「采用剧照」会把同一张图各存一份, 列表里于是堆积了内容相同、地址不同的副本;
+    只按地址去重清不掉它们. 读不到内容的条目原样保留, 不误删.
+    """
+    rest = [item for item in urls if item != keep]
+    keep_hash = await _content_hash_of(store, keep)
+    if keep_hash is None:
+        return rest
+    out: list[str] = []
+    for url in rest:
+        if await _content_hash_of(store, url) == keep_hash:
+            continue
+        out.append(url)
+    return out
+
+
+async def _apply_thumb(
+    store: ResourceStore, repo: RepoDep, metadata_id: int, thumb_urls: list[str], url: str
+) -> MetadataResponse:
+    """把 ``url`` 前置到封面列表; 清掉与它内容相同的旧副本."""
+    existing = await _dedupe_by_content(store, thumb_urls, url)
     updated = await repo.update_metadata(metadata_id, mode=WriteMode.MANUAL, thumb_urls=[url, *existing])
     assert updated is not None
     return to_resp(MetadataResponse, updated)
@@ -486,7 +515,7 @@ async def upload_thumb(
     store = runtime.resource_store
     stored = await _store_upload_or_400(store, file, kind="thumb")
     url = _resource_url(store, stored.url)
-    updated = await _apply_thumb(repo, metadata_id, metadata.thumb_urls, url)
+    updated = await _apply_thumb(store, repo, metadata_id, metadata.thumb_urls, url)
     logger.info("thumb uploaded", metadata_id=metadata_id, url=url)
     return updated.model_copy(update={"tags": runtime.tag_mappings.map_tags(updated.tags)})
 
@@ -511,7 +540,7 @@ async def upload_poster(
     stored = await _store_upload_or_400(store, file, kind="poster")
     ratio = _poster_ratio(runtime, metadata.content_type)
     url = await _crop_source_to_poster(stored.url, stored.path, ratio, store, runtime)
-    updated = await _apply_poster(repo, metadata_id, metadata.poster_urls, url)
+    updated = await _apply_poster(store, repo, metadata_id, metadata.poster_urls, url)
     logger.info("poster uploaded", metadata_id=metadata_id, url=url, ratio=ratio)
     return updated.model_copy(update={"tags": runtime.tag_mappings.map_tags(updated.tags)})
 
@@ -540,7 +569,7 @@ async def adopt_thumb(
         raise HTTPException(status_code=400, detail="无法获取该图片")
 
     url = _resource_url(store, resolved.locator)
-    updated = await _apply_thumb(repo, metadata_id, metadata.thumb_urls, url)
+    updated = await _apply_thumb(store, repo, metadata_id, metadata.thumb_urls, url)
     logger.info("thumb adopted", metadata_id=metadata_id, source_url=source_url)
     return updated.model_copy(update={"tags": runtime.tag_mappings.map_tags(updated.tags)})
 
@@ -569,7 +598,7 @@ async def adopt_poster(
 
     ratio = _poster_ratio(runtime, metadata.content_type)
     url = await _crop_source_to_poster(resolved.locator, resolved.path, ratio, store, runtime)
-    updated = await _apply_poster(repo, metadata_id, metadata.poster_urls, url)
+    updated = await _apply_poster(store, repo, metadata_id, metadata.poster_urls, url)
     logger.info("poster adopted", metadata_id=metadata_id, source_url=source_url, ratio=ratio)
     return updated.model_copy(update={"tags": runtime.tag_mappings.map_tags(updated.tags)})
 

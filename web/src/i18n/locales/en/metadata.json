@@ -173,7 +173,7 @@
     },
     "upload": {
       "fromFile": "Upload image",
-      "fromStill": "Use a still as cover",
+      "fromStill": "Replace cover",
       "success": "Image updated",
       "unsupported": "Only JPG / PNG / WEBP are supported",
       "tooLarge": "Image must be under 20 MB",
