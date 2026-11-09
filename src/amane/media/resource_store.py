@@ -20,14 +20,15 @@ from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from ..db.models import Resource
-from .file_type import detect_media_type
+from .file_type import detect_media_type, is_image_mime
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator, Awaitable, Callable
 
     from sqlalchemy.ext.asyncio import AsyncEngine
 
-    from ..net.http import WebClient
+    from ..net.egress import EgressPolicy
+from ..net.http import WebClient
 
 logger = structlog.get_logger()
 
@@ -189,23 +190,37 @@ class ResourceStore:
         found = await self.resolve_record(url)
         return found[1] if found is not None else None
 
-    async def acquire_with_record(self, url: str, client: WebClient) -> tuple[Resource, Path] | None:
+    async def acquire(
+        self,
+        url: str,
+        client: WebClient,
+        *,
+        egress: EgressPolicy | None = None,
+        max_bytes: int | None = None,
+        image_only: bool = False,
+    ) -> Path | None:
+        """``egress`` / ``max_bytes`` 原样交给下载通道: URL 来自第三方数据时由调用方给出策略.
+        ``image_only`` 只约束本次下载: 内容不是图片时丢弃下载结果, 不写入记录; 缓存命中照常返回."""
         # 内部 URL 是对既有 Resource 的引用: 直接解析本地文件, 不下载也不写记录.
         internal = internal_url_hash(url)
         if internal is not None:
             return await self.get_by_url_hash(internal)
         # 同 URL 串行, 保留就地超分覆盖时的写入顺序.
         async with self._serialized(url):
-            return await self._acquire_locked_with_record(url, client)
+            return await self._acquire_locked(url, client, egress=egress, max_bytes=max_bytes, image_only=image_only)
 
-    async def acquire(self, url: str, client: WebClient) -> Path | None:
-        found = await self.acquire_with_record(url, client)
-        return found[1] if found is not None else None
-
-    async def _acquire_locked_with_record(self, url: str, client: WebClient) -> tuple[Resource, Path] | None:
-        # 命中时记录与路径一次查询取回; 不看哈希, 因为超分会就地覆盖并更新哈希.
-        cached = await self.resolve_record(url)
-        if cached is not None:
+    async def _acquire_locked(
+        self,
+        url: str,
+        client: WebClient,
+        *,
+        egress: EgressPolicy | None,
+        max_bytes: int | None,
+        image_only: bool,
+    ) -> Path | None:
+        # 缓存命中且文件存在则直出. 判据是记录 + 文件存在, 不看哈希: 超分是就地覆盖, 哈希每次都会变.
+        cached = await self.resolve(url)
+        if cached:
             return cached
 
         # 上游改派占位图时跳过, 不占用 dest 也不写记录.
@@ -228,12 +243,15 @@ class ResourceStore:
             if not await client.download(url, tmp):
                 logger.warning("resource download failed", url=url, host=urlsplit(url).hostname)
                 return None
+            mime = detect_media_type(tmp)
+            if image_only and not is_image_mime(mime):
+                logger.warning("resource is not an image", url=url, mime=mime)
+                return None
             tmp.replace(dest)
         finally:
             tmp.unlink(missing_ok=True)
 
         size = dest.stat().st_size
-        mime = detect_media_type(dest)
         content_hash = self._hash_file(dest)
 
         # 写入记录.

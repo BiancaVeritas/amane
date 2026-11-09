@@ -34,7 +34,7 @@ async def test_serve_resource_etag(app: FastAPI, client: AsyncClient):
     h, content_hash = await _make_derived(store)
     etag = f'"{content_hash}"'
 
-    resp = await client.get(f"resources/{h}?mode=sr")
+    resp = await client.get(f"resources/{h}")
     assert resp.status_code == 200
     assert resp.headers["content-type"] == "image/jpeg"
     assert resp.headers["etag"] == etag
@@ -44,13 +44,13 @@ async def test_serve_resource_etag(app: FastAPI, client: AsyncClient):
     assert "max-age" not in cache_control
     assert resp.content[:2] == b"\xff\xd8"  # JPEG magic
 
-    cached = await client.get(f"resources/{h}?mode=sr", headers={"If-None-Match": etag})
+    cached = await client.get(f"resources/{h}", headers={"If-None-Match": etag})
     assert cached.status_code == 304
     assert cached.headers["etag"] == etag
     assert "no-cache" in cached.headers.get("cache-control", "")
     assert cached.content == b""
 
-    stale = await client.get(f"resources/{h}?mode=sr", headers={"If-None-Match": '"stale-hash"'})
+    stale = await client.get(f"resources/{h}", headers={"If-None-Match": '"stale-hash"'})
     assert stale.status_code == 200
     assert len(stale.content) > 0
 
@@ -71,24 +71,27 @@ class TestProxyImage:
         assert "仅支持 http/https" in resp.json()["detail"]
 
     @pytest.mark.asyncio(loop_scope="function")
-    async def test_upstream_error_and_negative_cache(self, client: AsyncClient, app, monkeypatch):
+    async def test_upstream_error_and_negative_cache(self, client: AsyncClient, app, monkeypatch, public_dns: None):
         """上游失败 → 502 + 负缓存, 二次请求不再打 acquire."""
         mock_store = AsyncMock()
-        mock_store.acquire_with_record = AsyncMock(return_value=None)
+        mock_store.resolve = AsyncMock(return_value=None)
+        mock_store.acquire = AsyncMock(return_value=None)
         monkeypatch.setattr(app.state.runtime, "resource_store", mock_store)
 
         url = "http://example.com/notfound.png"
-        first = await client.get(f"resources/proxy?url={url}&mode=sr")
+        first = await client.get(f"resources/proxy?url={url}")
         assert first.status_code == 502
-        assert mock_store.acquire_with_record.await_count == 1
+        assert mock_store.acquire.await_count == 1
         assert app.state.runtime.proxy_failure_cache.is_blocked(url)
 
-        second = await client.get(f"resources/proxy?url={url}&mode=sr")
+        second = await client.get(f"resources/proxy?url={url}")
         assert second.status_code == 502
-        assert mock_store.acquire_with_record.await_count == 1
+        assert mock_store.acquire.await_count == 1
 
     @pytest.mark.asyncio(loop_scope="function")
-    async def test_proxy_image_success_and_etag(self, client: AsyncClient, app, monkeypatch, tmp_path):
+    async def test_proxy_image_success_and_etag(
+        self, client: AsyncClient, app, monkeypatch, tmp_path, public_dns: None
+    ):
         """代理成功返回图片 (no-cache + ETag); If-None-Match 命中 → 304."""
         png_data = (
             b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01"
@@ -102,22 +105,138 @@ class TestProxyImage:
         record.content_hash = "abc123hash"
 
         mock_store = AsyncMock()
-        mock_store.acquire_with_record = AsyncMock(return_value=(record, img_path))
+        mock_store.resolve = AsyncMock(return_value=None)
+        mock_store.acquire = AsyncMock(return_value=img_path)
+        mock_store.get_by_url = AsyncMock(return_value=record)
         monkeypatch.setattr(app.state.runtime, "resource_store", mock_store)
 
         url = "http://example.com/image.png"
-        resp = await client.get(f"resources/proxy?url={url}&mode=sr")
+        resp = await client.get(f"resources/proxy?url={url}")
         assert resp.status_code == 200
         assert resp.content == png_data
         assert "no-cache" in resp.headers.get("cache-control", "")
         assert resp.headers["etag"] == '"abc123hash"'
+        assert resp.headers["x-content-type-options"] == "nosniff"
         assert not app.state.runtime.proxy_failure_cache.is_blocked(url)
 
-        cached = await client.get(f"resources/proxy?url={url}&mode=sr", headers={"If-None-Match": '"abc123hash"'})
+        cached = await client.get(f"resources/proxy?url={url}", headers={"If-None-Match": '"abc123hash"'})
         assert cached.status_code == 304
         assert cached.content == b""
         assert cached.headers["etag"] == '"abc123hash"'
         assert "no-cache" in cached.headers.get("cache-control", "")
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_cached_private_url_served_without_egress(
+        self, client: AsyncClient, app, monkeypatch: pytest.MonkeyPatch, tmp_path
+    ):
+        """缓存命中不发起对外请求: 已入库的私网图片直接返回, 不解析地址也不进入下载通道."""
+        img_path = tmp_path / "cached.png"
+        img_path.write_bytes(b"\x89PNG\r\n\x1a\n")
+        record = AsyncMock()
+        record.content_hash = "cachedhash"
+
+        store = AsyncMock()
+        store.resolve = AsyncMock(return_value=img_path)
+        store.get_by_url = AsyncMock(return_value=record)
+        store.acquire = AsyncMock()
+        monkeypatch.setattr(app.state.runtime, "resource_store", store)
+
+        async def _resolve(host: str, port: int) -> set[str]:
+            raise AssertionError("缓存命中不应解析地址")
+
+        monkeypatch.setattr("amane.net.egress.resolve_addresses", _resolve)
+
+        for url in ("http://127.0.0.1:52119/x/1.jpg", "http://10.0.0.5/a.png"):
+            resp = await client.get("resources/proxy", params={"url": url})
+            assert resp.status_code == 200
+            assert resp.headers["etag"] == '"cachedhash"'
+
+        assert store.acquire.await_count == 0
+
+    @pytest.mark.asyncio(loop_scope="function")
+    @pytest.mark.parametrize(
+        ("url", "detail"),
+        [
+            ("http://127.0.0.1:8000/api/config", "不支持内网地址"),
+            ("http://169.254.169.254/latest/meta-data/", "不支持内网地址"),
+            ("http://10.0.0.5/a.png", "不支持内网地址"),
+            ("http://[::1]/a.png", "不支持内网地址"),
+            # 数值写法与非法端口不是「地址指向内网」, 错误信息要能区分
+            ("http://2130706433/a.png", "URL 不受支持"),
+            ("http://0177.0.0.1/a.png", "URL 不受支持"),
+            ("http://example.com:99999/a.png", "URL 不受支持"),
+        ],
+    )
+    async def test_internal_target_rejected(
+        self, client: AsyncClient, app, monkeypatch: pytest.MonkeyPatch, url: str, detail: str
+    ):
+        """私网 / 回环 / 元数据地址与不合法目标都在出站前被拒, 不进入下载通道."""
+        mock_store = AsyncMock()
+        mock_store.resolve = AsyncMock(return_value=None)
+        monkeypatch.setattr(app.state.runtime, "resource_store", mock_store)
+
+        resp = await client.get("resources/proxy", params={"url": url})
+
+        assert resp.status_code == 400
+        assert resp.json()["detail"] == detail
+        assert mock_store.acquire.await_count == 0
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_malformed_url_rejected(self, client: AsyncClient):
+        """解析不了的 URL 回 400, 不能落到未捕获异常变成 500."""
+        resp = await client.get("resources/proxy", params={"url": "http://[::1/a.png"})
+
+        assert resp.status_code == 400
+        assert resp.json()["detail"] == "URL 无法解析"
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_resolution_failure_is_upstream_error(
+        self, client: AsyncClient, app, monkeypatch: pytest.MonkeyPatch
+    ):
+        """公网域名解析失败属于上游不可达: 回 502 并进入负缓存, 不说成地址不合规."""
+        url = "https://pics.example/a.png"
+
+        async def _resolve(host: str, port: int) -> set[str]:
+            raise OSError("resolver down")
+
+        monkeypatch.setattr("amane.net.egress.resolve_addresses", _resolve)
+
+        resp = await client.get("resources/proxy", params={"url": url})
+
+        assert resp.status_code == 502
+        # 解析失败多为瞬态: 不进 15 分钟负缓存, 网络恢复后同一地址还能重试
+        assert not app.state.runtime.proxy_failure_cache.is_blocked(url)
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_non_image_content_never_replayed(
+        self, client: AsyncClient, app, monkeypatch: pytest.MonkeyPatch, public_dns: None
+    ):
+        """地址判定被绕过时的兜底: 下载到的非图片不写入资源记录并进入负缓存, 已缓存的非图片也不回放."""
+        secret = b'{"AccessKeyId": "secret"}'
+        store = app.state.runtime.resource_store
+        web_client = AsyncMock()
+        web_client.resolve_final_url = AsyncMock(side_effect=lambda url, **_: url)
+
+        async def download(_url: str, dest: Path, **_kwargs: object) -> bool:
+            dest.write_bytes(secret)
+            return True
+
+        web_client.download = AsyncMock(side_effect=download)
+        monkeypatch.setattr(app.state.runtime, "web_client", web_client)
+
+        fetched = "http://rebind.example/a.jpg"
+        resp = await client.get("resources/proxy", params={"url": fetched})
+        assert resp.status_code == 502
+        assert secret not in resp.content
+        assert await store.get_by_url(fetched) is None
+        assert app.state.runtime.proxy_failure_cache.is_blocked(fetched)
+
+        # 刮削下载不限制内容类型, 同一 URL 的非图片可能已经缓存
+        cached = "http://scraped.example/b.jpg"
+        assert await store.acquire(cached, web_client) is not None
+        resp = await client.get("resources/proxy", params={"url": cached})
+        assert resp.status_code == 502
+        assert secret not in resp.content
 
 
 class TestImageToken:
@@ -131,22 +250,23 @@ class TestImageToken:
         record.content_hash = "cachedhash"
 
         store = AsyncMock()
-        store.resolve_record = AsyncMock(return_value=(record, img_path))
-        store.acquire_with_record = AsyncMock()
+        store.resolve = AsyncMock(return_value=img_path)
+        store.get_by_url = AsyncMock(return_value=record)
+        store.acquire = AsyncMock()
         monkeypatch.setattr(app.state.runtime, "resource_store", store)
         monkeypatch.setattr(app.state.runtime, "api_token", "main-token")
         monkeypatch.setattr(app.state.runtime, "image_token", "img-token")
 
         url = "http://example.com/cached.png"
-        resp = await client.get("resources/proxy", params={"url": url, "token": "img-token", "mode": "sr"})
+        resp = await client.get("resources/proxy", params={"url": url, "token": "img-token"})
         assert resp.status_code == 200
         assert resp.headers["etag"] == '"cachedhash"'
-        assert store.acquire_with_record.await_count == 0
+        assert store.acquire.await_count == 0
         assert not app.state.runtime.proxy_failure_cache.is_blocked(url)
 
         cached = await client.get(
             "resources/proxy",
-            params={"url": url, "token": "img-token", "mode": "sr"},
+            params={"url": url, "token": "img-token"},
             headers={"If-None-Match": '"cachedhash"'},
         )
         assert cached.status_code == 304
@@ -155,17 +275,17 @@ class TestImageToken:
     @pytest.mark.asyncio(loop_scope="function")
     async def test_proxy_miss_does_not_fetch(self, client: AsyncClient, app, monkeypatch):
         store = AsyncMock()
-        store.resolve_record = AsyncMock(return_value=None)
-        store.acquire_with_record = AsyncMock()
+        store.resolve = AsyncMock(return_value=None)
+        store.acquire = AsyncMock()
         monkeypatch.setattr(app.state.runtime, "resource_store", store)
         monkeypatch.setattr(app.state.runtime, "api_token", "main-token")
         monkeypatch.setattr(app.state.runtime, "image_token", "img-token")
 
         url = "http://example.com/missing.png"
-        resp = await client.get("resources/proxy", params={"url": url, "token": "img-token", "mode": "sr"})
+        resp = await client.get("resources/proxy", params={"url": url, "token": "img-token"})
         assert resp.status_code == 404
         assert "本地缓存" in resp.json()["detail"]
-        assert store.acquire_with_record.await_count == 0
+        assert store.acquire.await_count == 0
         assert not app.state.runtime.proxy_failure_cache.is_blocked(url)
 
     @pytest.mark.asyncio(loop_scope="function")
@@ -176,7 +296,9 @@ class TestImageToken:
         record.content_hash = "fetchedhash"
 
         store = AsyncMock()
-        store.acquire_with_record = AsyncMock(return_value=(record, img_path))
+        store.resolve = AsyncMock(return_value=None)
+        store.get_by_url = AsyncMock(return_value=record)
+        store.acquire = AsyncMock(return_value=img_path)
         monkeypatch.setattr(app.state.runtime, "resource_store", store)
         monkeypatch.setattr(app.state.runtime, "api_token", "main-token")
         monkeypatch.setattr(app.state.runtime, "image_token", "img-token")
@@ -184,33 +306,31 @@ class TestImageToken:
         url = "http://example.com/fetched.png"
         resp = await client.get(
             "resources/proxy",
-            params={"url": url, "token": "img-token", "mode": "sr"},
+            params={"url": url, "token": "img-token"},
             headers={"Authorization": "Bearer main-token"},
         )
         assert resp.status_code == 200
-        assert store.acquire_with_record.await_count == 1
-        assert store.resolve_record.await_count == 0
-
-@pytest.mark.asyncio(loop_scope="function")
-async def test_serve_resource_derived_never_gets_long_cache(app: FastAPI, client: AsyncClient):
-    """派生件即使请求 original 模式, 也不给 30 天强缓存.
-
-    派生件的地址只由「源 + 操作 + 参数」决定, 裁切或超分算法升级后内容会变而同址. 长缓存
-    会让浏览器拿着旧图不放, 表现为「重刮了但图没变」.
-    """
-    store = app.state.runtime.resource_store
-    h, content_hash = await _make_derived(store)
-    response = await client.get(f"resources/{h}?mode=original")
-    assert response.status_code == 200
-    assert response.headers["cache-control"] == "public, no-cache"
-    assert response.headers["etag"] == f'"{content_hash}"'
+        assert store.acquire.await_count == 1
+        assert store.resolve.await_count == 1
 
 
 @pytest.mark.asyncio(loop_scope="function")
-async def test_serve_resource_sr_mode_uses_etag_validation(app: FastAPI, client: AsyncClient):
+async def test_resource_text_served_as_attachment(app: FastAPI, client: AsyncClient):
+    """资源字节来自第三方: 记录里的 MIME 是 text/html 时也不能按该类型回放."""
     store = app.state.runtime.resource_store
-    h, content_hash = await _make_derived(store)
-    response = await client.get(f"resources/{h}?mode=sr")
-    assert response.status_code == 200
-    assert response.headers["cache-control"] == "public, no-cache"
-    assert response.headers["etag"] == f'"{content_hash}"'
+    payload = b"<html><script>alert(1)</script></html>"
+
+    async def producer(dest: Path) -> bool:
+        dest.write_bytes(payload)
+        return True
+
+    res = await store.acquire_derived("https://evil.example/x.html", "crop", "0", producer, ext=".html")
+    assert res is not None
+
+    resp = await client.get(f"resources/{ResourceStore.url_hash(res.url)}")
+
+    assert resp.status_code == 200
+    assert resp.headers["content-type"] == "application/octet-stream"
+    assert resp.headers["x-content-type-options"] == "nosniff"
+    assert resp.headers["content-disposition"] == "attachment"
+    assert resp.content == payload

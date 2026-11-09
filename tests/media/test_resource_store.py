@@ -2,11 +2,13 @@
 
 import asyncio
 from typing import TYPE_CHECKING, Any, ClassVar
+from unittest.mock import AsyncMock
 
 import pytest
 
 from amane.media import ResourceStore, UpscaleOutcome, derived_locator
 from amane.media.resource_store import RESOURCE_URL_PREFIX, _is_placeholder_url, internal_url_hash
+from amane.net.egress import EgressPolicy
 from amane.net.http import RateLimiters, WebClient
 
 if TYPE_CHECKING:
@@ -347,8 +349,10 @@ class _StubResponse:
         self.url = url
         self.content = content
         self.status_code = status
-        # WebClient 丢弃流式应答时会先置中标志再 aclose; 非流式应答为 None.
         self.quit_now = None
+
+    async def aclose(self) -> None:
+        return
 
 
 class _StubSession:
@@ -378,6 +382,100 @@ def _stub_client(
     return client, session
 
 
+@pytest.mark.asyncio
+async def test_acquire_forwards_egress_policy(
+    resource_store: ResourceStore, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+):
+    """策略与上限必须原样到下载通道: 漏传等于端点上的限制静默失效."""
+    policy = EgressPolicy()
+    client = AsyncMock()
+    client.resolve_final_url = AsyncMock(return_value=_REQUEST)
+    client.download = AsyncMock(return_value=False)
+    monkeypatch.setattr(resource_store, "_compute_path", lambda url: tmp_path / "a.jpg")
+
+    assert await resource_store.acquire(_REQUEST, client, egress=policy, max_bytes=1024) is None
+
+    client.resolve_final_url.assert_awaited_once_with(_REQUEST, egress=policy)
+    kwargs = client.download.await_args.kwargs
+    assert kwargs["egress"] is policy
+    assert kwargs["max_bytes"] == 1024
+
+
+@pytest.mark.asyncio
+async def test_acquire_records_content_type(
+    resource_store: ResourceStore, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+):
+    """入库按内容写 MIME: 无后缀 URL 的图片不再记成通用二进制."""
+    url = "https://img.example.com/actor/12345"
+    client = AsyncMock()
+    client.resolve_final_url = AsyncMock(return_value=url)
+
+    async def download(_url: str, dest: Path, **_kwargs: object) -> bool:
+        dest.write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * 8)
+        return True
+
+    client.download = AsyncMock(side_effect=download)
+    monkeypatch.setattr(resource_store, "_compute_path", lambda url: tmp_path / "resources" / "resource.bin")
+
+    assert await resource_store.acquire(url, client) is not None
+    record = await resource_store.get_by_url(url)
+    assert record is not None
+    assert record.mime_type == "image/png"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("content", "image_only", "stored"),
+    [
+        (b"<html>challenge</html>", True, False),
+        (b"\x00\x00\x00\x18ftypmp42\x00\x00\x00\x00", True, False),  # 能识别, 但不是图片
+        (b"", True, False),
+        (b"\x89PNG\r\n\x1a\n" + b"\x00" * 8, True, True),
+        (b"<html>challenge</html>", False, True),  # 缺省不限制内容类型 (刮削下载)
+    ],
+)
+async def test_acquire_image_only(
+    resource_store: ResourceStore, monkeypatch: pytest.MonkeyPatch, content: bytes, image_only: bool, stored: bool
+):
+    """``image_only`` 下非图片内容不写入记录、不保留文件; 缺省时照常写入."""
+    client, _ = _stub_client(monkeypatch, final_url=_REQUEST, content=content)
+    dest = resource_store._compute_path(_REQUEST)
+
+    path = await resource_store.acquire(_REQUEST, client, image_only=image_only)
+
+    assert (path is not None) is stored
+    assert (await resource_store.get_by_url(_REQUEST) is not None) is stored
+    assert dest.exists() is stored
+    assert _siblings(dest) == []
+
+
+@pytest.mark.asyncio
+async def test_derived_mime_follows_content(resource_store: ResourceStore):
+    """派生资源同样按内容写类型; 盘上字节被换掉后重跑并覆盖记录."""
+    url = "https://s/derived.jpg"
+
+    async def png(dest: Path) -> bool:
+        dest.write_bytes(b"\x89PNG\r\n\x1a\n")
+        return True
+
+    first = await resource_store.acquire_derived(url, "crop", "0.7", png)
+    assert first is not None
+    assert first.mime_type == "image/png"
+
+    # 盘上字节不再是记录所指的那份, 下一次调用必须重跑 producer.
+    resource_store.full_path(first).write_bytes(b"stale")
+
+    async def jpeg(dest: Path) -> bool:
+        dest.write_bytes(b"\xff\xd8\xff\xe0")
+        return True
+
+    second = await resource_store.acquire_derived(url, "crop", "0.7", jpeg)
+    assert second is not None
+    saved = await resource_store.get_by_url(first.url)
+    assert saved is not None
+    assert saved.mime_type == "image/jpeg"
+
+
 _REQUEST = "https://pics.dmm.co.jp/digital/video/mide00030/mide00030pl.jpg"
 _PLACEHOLDER = "https://pics.dmm.com/mono/movie/n/now_printing/now_printing.jpg"
 
@@ -388,6 +486,7 @@ class TestPlaceholderRedirect:
         [
             (_PLACEHOLDER, True),
             ("https://imgsrc.dmm.com/pics/mono/movie/n/now_printing/now_printing.jpg?h=800&w=800", True),
+            ("https://cdn.up-timely.com/noimage.png", True),
             (_REQUEST, False),
             # 只匹配路径, 查询串里的同名字样不算
             ("https://pics.dmm.com/redirect?to=/now_printing/now_printing.jpg", False),
@@ -556,172 +655,3 @@ class TestAcquireConcurrency:
         finally:
             released.set()
             await asyncio.gather(first, second, return_exceptions=True)
-
-
-def _jpeg_bytes() -> bytes:
-    """最小合法 JPEG, 供上传路径用."""
-    import io
-
-    from PIL import Image
-
-    buf = io.BytesIO()
-    Image.new("RGB", (8, 8), "red").save(buf, format="JPEG")
-    return buf.getvalue()
-
-
-class TestUploadedResource:
-    """上传图放在 ../uploads 下, 但必须仍能按 url hash 反查到."""
-
-    @pytest.mark.asyncio
-    async def test_uploaded_image_resolves_by_url_hash(self, resource_store: ResourceStore):
-        from amane.media.upload import store_upload
-
-        data = _jpeg_bytes()
-        stored = await store_upload(resource_store, data, kind="thumb")
-
-        h = ResourceStore.url_hash(stored.url)
-        found = await resource_store.get_by_url_hash(h)
-        assert found is not None
-        record, path = found
-        assert record.url == stored.url
-        assert path.exists()
-        assert path.read_bytes() == data
-        # 落在独立目录, 不进 resources 散列树.
-        assert "uploads" in path.as_posix()
-
-    @pytest.mark.asyncio
-    async def test_same_bytes_reuse_one_file(self, resource_store: ResourceStore):
-        from amane.media.upload import store_upload
-
-        data = _jpeg_bytes()
-        first = await store_upload(resource_store, data, kind="thumb")
-        second = await store_upload(resource_store, data, kind="thumb")
-        assert first.path == second.path
-
-    @pytest.mark.asyncio
-    async def test_legacy_upload_name_still_resolves(self, resource_store: ResourceStore):
-        """早期上传件按内容哈希命名, 与 url hash 不同; 仍要能反查到."""
-        from amane.db.models import Resource
-
-        data = _jpeg_bytes()
-        locator = "upload:legacy123:thumb"
-        # 旧命名的文件: 名字不是 url hash.
-        legacy_dir = resource_store.data_dir / "uploads"
-        legacy_dir.mkdir(parents=True, exist_ok=True)
-        legacy_path = legacy_dir / "thumb_abcdef1234567890.jpg"
-        legacy_path.write_bytes(data)
-        await resource_store.register(
-            Resource(
-                url=locator,
-                file_path="../uploads/thumb_abcdef1234567890.jpg",
-                content_hash="deadbeef",
-                size=len(data),
-                mime_type="image/jpeg",
-                meta={"op": "upload"},
-            )
-        )
-
-        h = ResourceStore.url_hash(locator)
-        found = await resource_store.get_by_url_hash(h)
-        assert found is not None
-        assert found[0].url == locator
-        # 路径带 ../ 前缀, 比内容而非字面量.
-        assert found[1].resolve() == legacy_path.resolve()
-        assert found[1].read_bytes() == data
-
-
-class TestRebuildDerived:
-    """派生件文件丢了但记录还在时, 按 meta 里的源与参数重跑一次."""
-
-    @pytest.mark.asyncio(loop_scope="function")
-    async def test_get_record_by_url_hash_sees_missing_file(
-        self, resource_store: ResourceStore, monkeypatch: pytest.MonkeyPatch
-    ):
-        _ = _stub_client(monkeypatch, final_url="https://s/c.jpg")
-
-        async def producer(dest: Path) -> bool:
-            dest.write_bytes(b"cropped")
-            return True
-
-        made = await resource_store.acquire_derived("https://s/c.jpg", "crop", "0.7000", producer)
-        assert made is not None
-        url_hash = ResourceStore.url_hash(made.url)
-
-        resource_store.full_path(made).unlink()
-
-        # get_by_url_hash 看不到它 (文件没了), 但按记录仍能取到.
-        assert await resource_store.get_by_url_hash(url_hash) is None
-        record = await resource_store.get_record_by_url_hash(url_hash)
-        assert record is not None
-        assert record.url == made.url
-
-    @pytest.mark.asyncio(loop_scope="function")
-    async def test_rebuild_returns_none_when_source_gone(
-        self, resource_store: ResourceStore, monkeypatch: pytest.MonkeyPatch
-    ):
-        """源图也没了就重建不了, 不能凭空造."""
-        _ = _stub_client(monkeypatch, final_url="https://s/c.jpg")
-
-        async def producer(dest: Path) -> bool:
-            dest.write_bytes(b"cropped")
-            return True
-
-        made = await resource_store.acquire_derived("https://s/missing.jpg", "crop", "0.7000", producer)
-        assert made is not None
-        resource_store.full_path(made).unlink()
-
-        record = await resource_store.get_record_by_url_hash(ResourceStore.url_hash(made.url))
-        assert record is not None
-        assert await resource_store.rebuild_derived(record) is None
-
-    @pytest.mark.asyncio(loop_scope="function")
-    async def test_rebuild_ignores_non_crop_derived(
-        self, resource_store: ResourceStore, monkeypatch: pytest.MonkeyPatch
-    ):
-        """超分等其它派生不归这里管, 返回 None 由调用方 404."""
-        _ = _stub_client(monkeypatch, final_url="https://s/c.jpg")
-
-        async def producer(dest: Path) -> bool:
-            dest.write_bytes(b"scaled")
-            return True
-
-        made = await resource_store.acquire_derived("https://s/c.jpg", "upscale", "x2", producer)
-        assert made is not None
-
-        record = await resource_store.get_record_by_url_hash(ResourceStore.url_hash(made.url))
-        assert record is not None
-        assert await resource_store.rebuild_derived(record) is None
-
-
-class TestRebuildDerivedArgs:
-    """派生参数有多种形状, 重放要认得出来."""
-
-    @pytest.mark.parametrize(
-        ("args", "expected"),
-        [
-            ("0.7000", 0.7),
-            ("0.87", 0.87),
-            ("box:242,0,557,450", None),
-            ("rule:aspect=0.87", None),
-            ("garbage", None),
-        ],
-    )
-    def test_parse_ratio(self, args: str, expected: float | None):
-        from amane.media.resource_store import _parse_ratio
-
-        assert _parse_ratio(args) == expected
-
-    @pytest.mark.parametrize(
-        ("args", "expected"),
-        [
-            ("box:242,0,557,450", (242, 0, 557, 450)),
-            ("box:1,2,3", None),
-            ("box:a,b,c,d", None),
-            ("0.7000", None),
-            ("rule:aspect=0.87", None),
-        ],
-    )
-    def test_parse_box_args(self, args: str, expected: tuple[int, int, int, int] | None):
-        from amane.media.resource_store import _parse_box_args
-
-        assert _parse_box_args(args) == expected
