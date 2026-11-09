@@ -248,6 +248,28 @@ class ResourceStore:
             result = await session.exec(select(Resource).where(Resource.url == url))
             return result.first()
 
+    async def register(self, record: Resource) -> Resource:
+        """登记一条已落盘的记录.
+
+        供上传图这类**文件不由本类生成**的资源使用: 文件位置由调用方决定,
+        这里只负责入库, 让 ``resolve`` / 图片端点能按 url 找到它.
+        """
+        async with self._session() as session:
+            existing = await session.exec(select(Resource).where(Resource.url == record.url))
+            found = existing.first()
+            if found is not None:
+                found.file_path = record.file_path
+                found.content_hash = record.content_hash
+                found.size = record.size
+                found.mime_type = record.mime_type
+                found.meta = record.meta
+                session.add(found)
+                await session.commit()
+                return found
+            session.add(record)
+            await session.commit()
+            return record
+
     async def list_all(self) -> list[Resource]:
         async with self._session() as session:
             result = await session.exec(select(Resource))

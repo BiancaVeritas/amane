@@ -1789,6 +1789,18 @@ export const CropPosterRequestSchema = {
             title: 'Rotation',
             description: '裁切前顺时针旋转的角度 (仅 90° 整数倍); 90° / 270° 后宽高互换',
             default: 0
+        },
+        source_url: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Source Url',
+            description: '裁切基准图地址; 缺省用封面. 可传剧照或已上传图的地址'
         }
     },
     type: 'object',
@@ -1799,7 +1811,7 @@ export const CropPosterRequestSchema = {
         'bottom'
     ],
     title: 'CropPosterRequest',
-    description: '从封面图按像素框裁切海报 (相对 thumb 当前本地文件像素; 含就地超分后尺寸).'
+    description: '按像素框裁切海报.\n\n默认基准是封面 (``thumb_urls[0]``) 的当前本地文件像素; ``source_url`` 可指定其他图源\n(另一张封面、剧照或已上传的图). 两者都含就地超分后的尺寸.'
 } as const;
 
 export const DeleteResultSchema = {
@@ -3050,6 +3062,7 @@ export const HotSettingsSchema = {
                 poster_ratio: 0.7,
                 uncensored_poster_ratio: 0.87,
                 poster_crop_skip_ratio: 0.9,
+                poster_crop_detect_face: true,
                 jpeg_quality: 95,
                 content_routes: {
                     amateur: [
@@ -8305,6 +8318,11 @@ export const ScrapingConfigSchema = {
             minimum: 0.5,
             title: 'Poster Crop Skip Ratio',
             default: 0.9
+        },
+        poster_crop_detect_face: {
+            type: 'boolean',
+            title: 'Poster Crop Detect Face',
+            default: true
         },
         jpeg_quality: {
             type: 'integer',

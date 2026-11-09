@@ -152,7 +152,16 @@ class MetadataLocksRequest(BaseModel):
 
 
 class CropPosterRequest(CropBoxRequest):
-    """从封面图按像素框裁切海报 (相对 thumb 当前本地文件像素; 含就地超分后尺寸)."""
+    """按像素框裁切海报.
+
+    默认基准是封面 (``thumb_urls[0]``) 的当前本地文件像素; ``source_url`` 可指定其他图源
+    (另一张封面、剧照或已上传的图). 两者都含就地超分后的尺寸.
+    """
+
+    source_url: str | None = Field(
+        default=None,
+        description="裁切基准图地址; 缺省用封面. 可传剧照或已上传图的地址",
+    )
 
 
 class MetadataBatchIdsRequest(BaseModel):

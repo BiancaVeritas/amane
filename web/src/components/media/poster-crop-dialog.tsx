@@ -1,5 +1,7 @@
+import { Select } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { useMutation } from "@tanstack/react-query";
+import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { cropPosterFromThumbMutation } from "@/client/@tanstack/react-query.gen";
 import type { ContentType } from "@/client/types.gen";
@@ -15,6 +17,8 @@ export interface PosterCropDialogProps {
   metadataId: number;
   thumbUrl: string;
   contentType: ContentType;
+  /** 其它可用作裁切基准的图 (海报、剧照); 提供时对话框内可切换. */
+  alternativeSources?: string[];
   onSuccess?: () => void;
 }
 
@@ -25,6 +29,7 @@ export function PosterCropDialog({
   metadataId,
   thumbUrl,
   contentType,
+  alternativeSources = [],
   onSuccess,
 }: PosterCropDialogProps) {
   const { t } = useTranslation(["metadata", "common"]);
@@ -33,6 +38,27 @@ export function PosterCropDialog({
     (contentType === "uncensored"
       ? config?.scraping?.uncensored_poster_ratio
       : config?.scraping?.poster_ratio) ?? DEFAULT_POSTER_RATIO;
+
+  // 可选基准图: 当前封面在最前, 其后是海报与剧照; 切换只影响本次裁切的基准.
+  const sources = useMemo(() => {
+    const seen = new Set<string>();
+    const out: string[] = [];
+    for (const url of [thumbUrl, ...alternativeSources]) {
+      if (!url || seen.has(url)) continue;
+      seen.add(url);
+      out.push(url);
+    }
+    return out;
+  }, [thumbUrl, alternativeSources]);
+  const [sourceIndex, setSourceIndex] = useState(0);
+  // 换图或重新打开时把下标归零: 在渲染期派生, 避免 effect 里同步 setState 触发额外一轮渲染.
+  const [prevKey, setPrevKey] = useState(`${String(opened)}:${thumbUrl}`);
+  const currentKey = `${String(opened)}:${thumbUrl}`;
+  if (currentKey !== prevKey) {
+    setPrevKey(currentKey);
+    setSourceIndex(0);
+  }
+  const activeSource = sources[Math.min(sourceIndex, sources.length - 1)] ?? thumbUrl;
 
   const mutation = useMutation({
     ...cropPosterFromThumbMutation(),
@@ -55,12 +81,33 @@ export function PosterCropDialog({
     <ImageCropDialog
       opened={opened}
       onClose={onClose}
-      imageUrl={thumbUrl}
+      imageUrl={activeSource}
       defaultAspect={configRatio}
       initialAnchor="right"
       submitting={mutation.isPending}
+      headerExtra={
+        sources.length > 1 ? (
+          <Select
+            size="xs"
+            data={sources.map((_url, index) => ({
+              value: String(index),
+              label:
+                index === 0
+                  ? t("detail.cropPoster.sourceCover")
+                  : t("detail.cropPoster.sourceOther", { index }),
+            }))}
+            value={String(sourceIndex)}
+            onChange={(value) => setSourceIndex(Number(value ?? 0))}
+            allowDeselect={false}
+            w={160}
+          />
+        ) : undefined
+      }
       onSubmit={(box, rotation) =>
-        mutation.mutate({ path: { metadata_id: metadataId }, body: { ...box, rotation } })
+        mutation.mutate({
+          path: { metadata_id: metadataId },
+          body: { ...box, rotation, source_url: activeSource === thumbUrl ? null : activeSource },
+        })
       }
       labels={{
         title: t("detail.cropPoster.title"),

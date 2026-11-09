@@ -257,8 +257,10 @@ class TestMetadataHttp:
         )
         assert resp.status_code == 200
         data = resp.json()
-        assert len(data["poster_urls"]) == 1
+        # 新裁的海报插到首位, 原有地址保留在后面 (不删数据, 用户可切回).
+        assert len(data["poster_urls"]) == 2
         assert data["poster_urls"][0].startswith("/api/resources/")
+        assert data["poster_urls"][1] == "https://example.com/old-p.jpg"
         assert data["thumb_urls"] == ["https://example.com/t.jpg"]
         # 裁切写入 poster_urls 并自动锁定.
         assert data["locked_fields"] == ["poster_urls"]

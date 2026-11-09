@@ -1,22 +1,25 @@
 from collections.abc import Sequence
+from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, Literal, cast
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from pydantic import TypeAdapter
 
 from ...aggregate import compute_merge_updates
 from ...db.embeddings import EmbeddingKind
 from ...db.models import Metadata, MetadataSortField, SavedQueryEntity, SortOrder, TaskType
 from ...db.repo_types import WriteMode
-from ...enums import MetadataField
-from ...llm import build_translator
 from ...db.repos.media import file_phase_of
+from ...enums import MetadataField
 from ...handlers import ScrapePayload
+from ...llm import build_translator
 from ...media import manual_crop_image
-from ...parsing import ContentType
+from ...media.images import crop_poster
+from ...media.resource_store import RESOURCE_URL_PREFIX, ResourceStore
+from ...media.upload import StoredUpload, UploadRejected, store_upload
+from ...parsing import ContentType, summarize_file_phases
 from ...parsing import FilePhaseSummary as ParsedFilePhase
-from ...parsing import summarize_file_phases
 from ...semantic import SemanticUnavailable
 from ...utils.dates import normalize_calendar_date
 from ...utils.model import to_resp
@@ -365,44 +368,123 @@ async def crop_poster_from_thumb(
     repo: RepoDep,
     runtime: RuntimeDep,
 ) -> MetadataResponse:
-    """从封面 (thumb) 按像素框裁切海报, 写入派生 Resource 并更新 poster_urls.
+    """按像素框裁切海报, 写入派生 Resource 并更新 poster_urls.
 
-    先按 EXIF 转正、再顺时针旋转 ``req.rotation``, 框相对旋转后的图像.
+    基准图默认取封面 (``thumb_urls[0]``); 传入 ``source_url`` 时用那张 (另一张封面、剧照
+    或上传图). 先按 EXIF 转正、再顺时针旋转 ``req.rotation``, 框相对旋转后的图像.
     """
     metadata = await repo.get_metadata(metadata_id)
     if metadata is None:
         raise HTTPException(status_code=404, detail="影片不存在")
-    if not metadata.thumb_urls:
+
+    source_url = req.source_url or (metadata.thumb_urls[0] if metadata.thumb_urls else None)
+    if not source_url:
         raise HTTPException(status_code=400, detail="无封面图可裁切")
 
-    # 按像素框裁切封面, 写入派生 Resource
-    thumb_url = metadata.thumb_urls[0]
     box = (req.left, req.top, req.right, req.bottom)
     try:
         poster_url = await manual_crop_image(
-            thumb_url,
+            source_url,
             box,
             runtime.resource_store,
             runtime.web_client,
             runtime.config.hot,
             runtime.config.cold.data_dir,
-            subject="封面图",
+            subject="封面" if req.source_url is None else "图源",
             rotation=req.rotation,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
 
-    # 写回 poster_urls
-    updated = await repo.update_metadata(metadata_id, mode=WriteMode.MANUAL, poster_urls=[poster_url])
+    # 写回 poster_urls, 原有条目保留在后面.
+    existing = [url for url in metadata.poster_urls if url != poster_url]
+    updated = await repo.update_metadata(metadata_id, mode=WriteMode.MANUAL, poster_urls=[poster_url, *existing])
     assert updated is not None
     logger.info(
         "poster cropped",
         metadata_id=metadata_id,
         box=box,
         rotation=req.rotation,
+        source_url=source_url,
         poster_url=poster_url,
     )
     return to_resp(MetadataResponse, updated).model_copy(update={"tags": runtime.tag_mappings.map_tags(updated.tags)})
+
+
+def _resource_url(store: ResourceStore, locator: str) -> str:
+    """locator → 前端可访问的内部图片地址."""
+    return f"{RESOURCE_URL_PREFIX}/{store.url_hash(locator)}"
+
+
+#: 上传图落到 data_dir/uploads, 与刮削下载的 Resource 分开; 原图与旧地址都保留.
+UPLOAD_KIND_POSTER = "poster"
+UPLOAD_KIND_THUMB = "thumb"
+
+
+@router.post("/{metadata_id}/upload-image")
+async def upload_image(
+    metadata_id: int,
+    repo: RepoDep,
+    runtime: RuntimeDep,
+    file: Annotated[bytes, Body(media_type="application/octet-stream")],
+    target: Annotated[Literal["poster", "thumb"], Query(description="作为海报还是封面")] = "poster",
+) -> MetadataResponse:
+    """上传自定义图片, 作为海报或封面.
+
+    海报: 存好后按当前比例**自动裁剪一次**, 结果插到 ``poster_urls`` 头部; 用户不满意可以
+    再调 ``crop-poster`` 手工调整. 封面: 保持原图与原比例, 直接插到 ``thumb_urls`` 头部.
+
+    **不删除**原有地址, 只把新地址放到最前面; 想退回原来的图, 删掉首项即可.
+    """
+    metadata = await repo.get_metadata(metadata_id)
+    if metadata is None:
+        raise HTTPException(status_code=404, detail="影片不存在")
+
+    store = runtime.resource_store
+    try:
+        stored = await store_upload(store, file, kind=target)
+    except UploadRejected as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+    if target == UPLOAD_KIND_THUMB:
+        internal = _resource_url(store, stored.url)
+        existing = [url for url in metadata.thumb_urls if url != internal]
+        updated = await repo.update_metadata(metadata_id, mode=WriteMode.MANUAL, thumb_urls=[internal, *existing])
+        assert updated is not None
+        logger.info("thumb uploaded", metadata_id=metadata_id, url=internal)
+    else:
+        ratio = (
+            runtime.config.hot.scraping.uncensored_poster_ratio
+            if metadata.content_type == ContentType.UNCENSORED
+            else runtime.config.hot.scraping.poster_ratio
+        )
+        poster_url = await _crop_upload_to_poster(stored, ratio, store, runtime)
+        existing = [url for url in metadata.poster_urls if url != poster_url]
+        updated = await repo.update_metadata(metadata_id, mode=WriteMode.MANUAL, poster_urls=[poster_url, *existing])
+        assert updated is not None
+        logger.info("poster uploaded", metadata_id=metadata_id, url=poster_url, ratio=ratio)
+
+    return to_resp(MetadataResponse, updated).model_copy(update={"tags": runtime.tag_mappings.map_tags(updated.tags)})
+
+
+async def _crop_upload_to_poster(stored: StoredUpload, ratio: float, store: ResourceStore, runtime: RuntimeDep) -> str:
+    """把上传图按海报比例裁一次 (人脸优先), 返回内部 URL."""
+    source_url = _resource_url(store, stored.url)
+
+    async def producer(dest: Path) -> bool:
+        return crop_poster(
+            stored.path,
+            dest,
+            poster_ratio=ratio,
+            jpeg_quality=runtime.config.hot.scraping.jpeg_quality,
+            detect_face=runtime.config.hot.scraping.poster_crop_detect_face,
+        )
+
+    crop_res = await store.acquire_derived(stored.url, "crop", f"upload:{ratio:.4f}", producer)
+    if crop_res is None:
+        # 裁剪失败就退回原图, 不让上传直接失败.
+        return source_url
+    return _resource_url(store, crop_res.url)
 
 
 async def _translate_selected_text(updates: dict[str, object], runtime: RuntimeDep, content_type: ContentType) -> None:

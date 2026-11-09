@@ -11,7 +11,15 @@ import {
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { IconArrowBackUp, IconRotate } from "@tabler/icons-react";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import ReactCrop, { type Crop, type PixelCrop } from "react-image-crop";
 import "react-image-crop/dist/ReactCrop.css";
 import { apiFetch } from "@/lib/api-token";
@@ -61,6 +69,8 @@ export interface ImageCropDialogProps {
   /** 提交自然像素框与旋转角度; 提交后保持打开, 由调用方在成功后关闭. */
   onSubmit: (box: CropBox, rotation: CropRotation) => void;
   submitting: boolean;
+  /** 标题栏右侧的附加控件, 例如切换裁切基准图. */
+  headerExtra?: ReactNode;
 }
 
 interface DecodedImage {
@@ -145,6 +155,31 @@ function fromNaturalBox(box: CropBox, canvas: HTMLCanvasElement): PixelCrop {
     width: (box.right - box.left) * scale.x,
     height: (box.bottom - box.top) * scale.y,
   };
+}
+
+/**
+ * 把选区夹回画布内. 库自身在拖动结束时会收敛, 但 ``onChange`` 期间给出的中间值可能越界,
+ * 直接渲染会看到框跑出图片外.
+ */
+function containCropInImage(crop: PixelCrop, canvas: HTMLCanvasElement | null): PixelCrop {
+  if (canvas === null || crop.width <= 0 || crop.height <= 0) {
+    return crop;
+  }
+  // 显示尺寸取渲染后的 CSS 像素, 选区坐标也在这一坐标系.
+  const box = canvas.getBoundingClientRect();
+  const maxX = box.width;
+  const maxY = box.height;
+  if (maxX <= 0 || maxY <= 0) {
+    return crop;
+  }
+  const x = Math.min(Math.max(0, crop.x), maxX);
+  const y = Math.min(Math.max(0, crop.y), maxY);
+  const width = Math.min(crop.width, maxX - x);
+  const height = Math.min(crop.height, maxY - y);
+  if (x === crop.x && y === crop.y && width === crop.width && height === crop.height) {
+    return crop;
+  }
+  return { unit: "px", x, y, width: Math.max(1, width), height: Math.max(1, height) };
 }
 
 /** 默认选区: 符合 aspect (w/h) 的最大内接框; 高度受限时打满高度, 宽度受限时打满宽度靠上. */
@@ -251,6 +286,7 @@ export function ImageCropDialog({
   labels,
   onSubmit,
   submitting,
+  headerExtra,
 }: ImageCropDialogProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [source, setSource] = useState<DecodedImage | null>(null);
@@ -445,7 +481,18 @@ export function ImageCropDialog({
   };
 
   return (
-    <Modal opened={opened} onClose={onClose} title={labels.title} size="min(92vw, 64rem)" centered>
+    <Modal
+      opened={opened}
+      onClose={onClose}
+      title={
+        <Group gap="sm" wrap="nowrap">
+          <span>{labels.title}</span>
+          {headerExtra}
+        </Group>
+      }
+      size="min(92vw, 64rem)"
+      centered
+    >
       <Stack gap="md">
         {/* 舞台随视口缩放并居中; 画布 maxHeight 保证整图可见, 小屏时仍可滚动兜底. */}
         <div style={{ maxHeight: "64vh", overflow: "auto", textAlign: "center" }}>
@@ -461,11 +508,12 @@ export function ImageCropDialog({
             <div style={{ position: "relative", display: "inline-block", maxWidth: "100%" }}>
               <ReactCrop
                 crop={crop}
-                onChange={(c) => setCrop(c)}
+                onChange={(c) => setCrop(containCropInImage(c, canvasRef.current))}
                 onComplete={(c) => {
-                  setCompletedCrop(c);
-                  if (canvasRef.current && c.width > 0 && c.height > 0) {
-                    syncBoxFromCrop(c, canvasRef.current);
+                  const contained = containCropInImage(c, canvasRef.current);
+                  setCompletedCrop(contained);
+                  if (canvasRef.current && contained.width > 0 && contained.height > 0) {
+                    syncBoxFromCrop(contained, canvasRef.current);
                   }
                 }}
                 aspect={lockAspect ? aspectRatio : undefined}

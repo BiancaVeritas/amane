@@ -29,11 +29,13 @@ import {
   IconLock,
   IconLockOpen,
   IconPencil,
+  IconPhoto,
   IconPhotoOff,
   IconPlayerPlay,
   IconRefresh,
   IconStar,
   IconTrash,
+  IconUpload,
   IconX,
 } from "@tabler/icons-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -66,6 +68,7 @@ import { FilePhaseBadges, FilePhaseOverlay } from "@/components/media/file-phase
 import { OverlayChip, OverlayChipLabel } from "@/components/media/overlay-chip";
 import { VrOverlayChip } from "@/components/media/vr-badge";
 import { PosterCropDialog } from "@/components/media/poster-crop-dialog";
+import { useUploadMetaImage } from "@/components/media/use-upload-meta-image";
 import { MergeDialog } from "@/components/metadata/merge-dialog";
 import { type JSONSchemaObject, resolveSchema } from "@/components/schema-form/schema";
 import { SchemaForm } from "@/components/schema-form/schema-form";
@@ -146,6 +149,9 @@ function TitleDetailPage() {
   const [editOpen, setEditOpen] = useState(false);
   const [mergeOpen, setMergeOpen] = useState(false);
   const [cropOpen, setCropOpen] = useState(false);
+  // 上传选图用的隐藏 input; 菜单项点击时转交给它们.
+  const thumbPickerRef = useRef<HTMLInputElement>(null);
+  const posterPickerRef = useRef<HTMLInputElement>(null);
   const [coverLightboxOpen, coverLightbox] = useDisclosure(false);
   const [playingTrailer, setPlayingTrailer] = useState(false);
   // 播放失败的预告片地址: 只对该地址有效, 记录之外 (条目切换或重新刮削换了地址) 一律不算失败.
@@ -207,6 +213,30 @@ function TitleDetailPage() {
     void queryClient.invalidateQueries({
       queryKey: getMetadataQueryKey({ path: { metadata_id: id } }),
     });
+  };
+
+  const { upload, pending: uploadPending } = useUploadMetaImage({
+    metadataId: id,
+    onSuccess: invalidateDetail,
+  });
+
+  /** 把某张已有图 (剧照/海报) 直接设为封面; 服务端只前置地址, 原封面保留. */
+  const applyImageSource = async (url: string, target: "poster" | "thumb") => {
+    if (!url) return;
+    try {
+      const resp = await fetch(url);
+      if (!resp.ok) throw new Error(String(resp.status));
+      const blob = await resp.blob();
+      const type = blob.type || "image/jpeg";
+      const ext = type === "image/png" ? "png" : type === "image/webp" ? "webp" : "jpg";
+      const file = new File([blob], `from-src.${ext}`, { type });
+      upload(file, target);
+    } catch (err) {
+      notifications.show({
+        message: extractErrorMessage(err, t("common:toast.operationFailed")),
+        color: "red",
+      });
+    }
   };
 
   const scrapeMutation = useMutation({
@@ -406,6 +436,22 @@ function TitleDetailPage() {
   const trailerUrl = item.trailer_url ?? null;
   const hasExtrafanart = item.extrafanart && item.extrafanart.length > 0;
   const runtime = formatRuntime(item.runtime);
+
+  // 可当作封面/海报基准的图: 现有封面、海报与剧照, 去重后按出现顺序.
+  const coverCandidates = useMemo(() => {
+    const seen = new Set<string>();
+    const out: string[] = [];
+    for (const url of [
+      ...(item.thumb_urls ?? []),
+      ...(item.poster_urls ?? []),
+      ...(item.extrafanart ?? []),
+    ]) {
+      if (!url || seen.has(url)) continue;
+      seen.add(url);
+      out.push(url);
+    }
+    return out;
+  }, [item.thumb_urls, item.poster_urls, item.extrafanart]);
   // 中日文成对字段共享一个锁控件; 写入时仍展开为后端现有的两个字段锁.
   const pairedLockFields = (field: MetadataField): MetadataField[] => {
     if (field === "title" || field === "original_title") return ["title", "original_title"];
@@ -682,6 +728,72 @@ function TitleDetailPage() {
                 </Button>
               </Box>
             </Tooltip>
+            {/* 上传与选图放在一个菜单里: 两者都是「换掉当前显示的图」, 分开放会让这一行过长. */}
+            <Menu
+              shadow="md"
+              position="bottom-start"
+              trigger="hover"
+              openDelay={100}
+              closeDelay={200}
+            >
+              <Menu.Target>
+                <Button
+                  size="xs"
+                  variant="light"
+                  leftSection={<IconUpload size={14} />}
+                  loading={uploadPending}
+                >
+                  {t("detail.upload.action")}
+                </Button>
+              </Menu.Target>
+              <Menu.Dropdown>
+                <Menu.Label>{t("detail.upload.replaceCover")}</Menu.Label>
+                <Menu.Item
+                  leftSection={<IconUpload size={14} />}
+                  onClick={() => thumbPickerRef.current?.click()}
+                >
+                  {t("detail.upload.fromFile")}
+                </Menu.Item>
+                {coverCandidates.length > 0 && (
+                  <Menu.Item
+                    leftSection={<IconPhoto size={14} />}
+                    onClick={() => void applyImageSource(coverCandidates[0] ?? "", "thumb")}
+                  >
+                    {t("detail.upload.fromStill")}
+                  </Menu.Item>
+                )}
+                <Menu.Divider />
+                <Menu.Label>{t("detail.upload.replacePoster")}</Menu.Label>
+                <Menu.Item
+                  leftSection={<IconUpload size={14} />}
+                  onClick={() => posterPickerRef.current?.click()}
+                >
+                  {t("detail.upload.fromFile")}
+                </Menu.Item>
+              </Menu.Dropdown>
+            </Menu>
+            <input
+              ref={thumbPickerRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              hidden
+              onChange={(e) => {
+                const file = e.currentTarget.files?.[0];
+                e.currentTarget.value = "";
+                if (file) upload(file, "thumb");
+              }}
+            />
+            <input
+              ref={posterPickerRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              hidden
+              onChange={(e) => {
+                const file = e.currentTarget.files?.[0];
+                e.currentTarget.value = "";
+                if (file) upload(file, "poster");
+              }}
+            />
             <LockChip label={t("detail.fields.thumb")} {...lockProps("thumb_urls")} />
             <LockChip label={t("detail.fields.poster")} {...lockProps("poster_urls")} />
             <LockChip label={t("detail.fields.trailer")} {...lockProps("trailer_urls")} />
@@ -1108,6 +1220,7 @@ function TitleDetailPage() {
           metadataId={id}
           thumbUrl={thumbSrc}
           contentType={item.content_type}
+          alternativeSources={coverCandidates.filter((url) => url !== thumbSrc)}
           onSuccess={() => {
             invalidateDetail();
             void queryClient.invalidateQueries({ queryKey: listMetadataQueryKey() });

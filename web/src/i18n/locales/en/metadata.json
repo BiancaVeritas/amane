@@ -167,7 +167,19 @@
       "confirm": "Crop & save",
       "needSelection": "Select a valid region first",
       "success": "Poster updated",
-      "noThumb": "A cover image is required to crop a poster"
+      "noThumb": "A cover image is required to crop a poster",
+      "sourceCover": "Current cover",
+      "sourceOther": "Candidate {{index}}"
+    },
+    "upload": {
+      "action": "Replace image",
+      "replaceCover": "Cover",
+      "replacePoster": "Poster",
+      "fromFile": "Upload image",
+      "fromStill": "Use a still as cover",
+      "success": "Image updated",
+      "unsupported": "Only JPG / PNG / WEBP are supported",
+      "tooLarge": "Image must be under 20 MB"
     },
     "playbackCopyTimestamp": "Copy timestamp",
     "playbackCopyLink": "Copy link to current time",

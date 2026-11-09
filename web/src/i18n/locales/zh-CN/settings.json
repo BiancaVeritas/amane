@@ -58,6 +58,10 @@
         "label": "海报裁切跳过阈值比例",
         "description": "已有海报与封面高度之比超过此值则不裁切"
       },
+      "poster_crop_detect_face": {
+        "label": "按人脸定位海报裁切",
+        "description": "裁切前检测人脸并以女性主体居中；关闭则固定取封面右侧"
+      },
       "poster_ratio": {
         "label": "常规海报裁剪比例",
         "description": "非无码影片从封面裁切海报的宽高比；日本有码沿用此设置。"

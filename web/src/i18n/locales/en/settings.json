@@ -58,6 +58,10 @@
         "label": "Poster crop skip threshold",
         "description": "Skip cropping when the existing poster's height exceeds this fraction of the cover height"
       },
+      "poster_crop_detect_face": {
+        "label": "Center poster crop on face",
+        "description": "Detect faces and center on the female subject; when off, always crop from the right side"
+      },
       "poster_ratio": {
         "label": "Default Poster Crop Ratio",
         "description": "Width-to-height ratio for non-uncensored titles; Japanese censored titles use this setting."

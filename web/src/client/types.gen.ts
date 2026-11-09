@@ -994,7 +994,10 @@ export type CropAvatarRequest = {
 /**
  * CropPosterRequest
  *
- * 从封面图按像素框裁切海报 (相对 thumb 当前本地文件像素; 含就地超分后尺寸).
+ * 按像素框裁切海报.
+ *
+ * 默认基准是封面 (``thumb_urls[0]``) 的当前本地文件像素; ``source_url`` 可指定其他图源
+ * (另一张封面、剧照或已上传的图). 两者都含就地超分后的尺寸.
  */
 export type CropPosterRequest = {
     /**
@@ -1027,6 +1030,12 @@ export type CropPosterRequest = {
      * 裁切前顺时针旋转的角度 (仅 90° 整数倍); 90° / 270° 后宽高互换
      */
     rotation?: 0 | 90 | 180 | 270;
+    /**
+     * Source Url
+     *
+     * 裁切基准图地址; 缺省用封面. 可传剧照或已上传图的地址
+     */
+    source_url?: string | null;
 };
 
 /**
@@ -4250,6 +4259,10 @@ export type ScrapingConfig = {
      */
     poster_crop_skip_ratio?: number;
     /**
+     * Poster Crop Detect Face
+     */
+    poster_crop_detect_face?: boolean;
+    /**
      * Jpeg Quality
      */
     jpeg_quality?: number;
@@ -6569,6 +6582,46 @@ export type CropPosterFromThumbResponses = {
 };
 
 export type CropPosterFromThumbResponse = CropPosterFromThumbResponses[keyof CropPosterFromThumbResponses];
+
+export type UploadImageData = {
+    /**
+     * File
+     */
+    body: Blob | File;
+    path: {
+        /**
+         * Metadata Id
+         */
+        metadata_id: number;
+    };
+    query?: {
+        /**
+         * Target
+         *
+         * 作为海报还是封面
+         */
+        target?: 'poster' | 'thumb';
+    };
+    url: '/api/metadata/{metadata_id}/upload-image';
+};
+
+export type UploadImageErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type UploadImageError = UploadImageErrors[keyof UploadImageErrors];
+
+export type UploadImageResponses = {
+    /**
+     * Successful Response
+     */
+    200: MetadataResponse;
+};
+
+export type UploadImageResponse = UploadImageResponses[keyof UploadImageResponses];
 
 export type MergeMetadataData = {
     body: MergeRequest;
