@@ -439,18 +439,19 @@ async def _content_hash_of(store: ResourceStore, url: str) -> str | None:
 
 
 async def _dedupe_by_content(store: ResourceStore, urls: list[str], keep: str) -> list[str]:
-    """去掉 ``urls`` 中与 ``keep`` 内容相同的条目.
+    """去掉 ``urls`` 里与 ``keep`` **内容相同**的条目, 但保留 ``keep`` 自身原位.
 
-    早期版本的「采用剧照」会把同一张图各存一份, 列表里于是堆积了内容相同、地址不同的副本;
+    早期版本的「采用剧照」把同一张图各存一份, 列表里于是堆积了内容相同、地址不同的副本;
     只按地址去重清不掉它们. 读不到内容的条目原样保留, 不误删.
+
+    返回值保持原顺序; ``keep`` 在列表中则留在原位置, 不在则不出现在结果里 (由调用方决定
+    追加到末尾).
     """
-    rest = [item for item in urls if item != keep]
     keep_hash = await _content_hash_of(store, keep)
-    if keep_hash is None:
-        return rest
     out: list[str] = []
-    for url in rest:
-        if await _content_hash_of(store, url) == keep_hash:
+    for url in urls:
+        if url != keep and keep_hash is not None and await _content_hash_of(store, url) == keep_hash:
+            # 内容相同的另一份副本: 去掉.
             continue
         out.append(url)
     return out
@@ -468,11 +469,9 @@ async def _apply_thumb(
     # 得到的字符串未必相同 (例如带查询串), 会被当成新图追加, 池子越点越长.
     target = next((item for item in thumb_urls if item == url), url)
     cleaned = await _dedupe_by_content(store, thumb_urls, target)
-    # 不在池里的才追加到末尾 (既有的保持原位), 既有编号不动.
+    # 已在池中的保持原位; 新图追加到末尾.
     ordered = cleaned if target in cleaned else [*cleaned, target]
-    updated = await repo.update_metadata(
-        metadata_id, mode=WriteMode.MANUAL, thumb_urls=ordered, thumb_selected=target
-    )
+    updated = await repo.update_metadata(metadata_id, mode=WriteMode.MANUAL, thumb_urls=ordered, thumb_selected=target)
     assert updated is not None
     return to_resp(MetadataResponse, updated)
 
@@ -640,7 +639,11 @@ async def remove_image(
     thumbs = [item for item in metadata.thumb_urls if item != url]
     posters = [item for item in metadata.poster_urls if item != url]
     fanart = [item for item in metadata.extrafanart if item != url]
-    if len(thumbs) == len(metadata.thumb_urls) and len(posters) == len(metadata.poster_urls) and len(fanart) == len(metadata.extrafanart):
+    if (
+        len(thumbs) == len(metadata.thumb_urls)
+        and len(posters) == len(metadata.poster_urls)
+        and len(fanart) == len(metadata.extrafanart)
+    ):
         raise HTTPException(status_code=404, detail="该图片不在候选池中")
 
     thumb_selected = metadata.thumb_selected

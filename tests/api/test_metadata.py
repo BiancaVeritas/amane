@@ -128,9 +128,7 @@ class TestMetadataHttp:
         assert (await client.delete("metadata/9999")).status_code == 404
 
     @pytest.mark.asyncio(loop_scope="function")
-    async def test_western_external_id_editor_roundtrips_theporndb_uuid(
-        self, client: AsyncClient, repo: Repository
-    ):
+    async def test_western_external_id_editor_roundtrips_theporndb_uuid(self, client: AsyncClient, repo: Repository):
         metadata = await repo.upsert_western_metadata(
             theporndb_uuid="5ad1967c-5cef-4020-8256-50227acf985b",
             number="LANCELOT-001",
@@ -387,3 +385,32 @@ class TestImageSelection:
         assert data["thumb_urls"] == [first, second]
         assert data["thumb_selected"] == second
         assert data["thumb_url"] == second
+
+    async def test_adopt_keeps_position_of_existing_candidate(self, client, repo, app):
+        """选已有的候选图不应改变它在列表中的位置 —— 编号是用户认图的依据."""
+        first, second, third = (
+            "https://example.com/1.jpg",
+            "https://example.com/2.jpg",
+            "https://example.com/3.jpg",
+        )
+
+        async def fake_download(url: str, dest: Path, **kwargs: object) -> bool:
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            Image.new("RGB", (800, 538), "blue").save(dest)
+            return True
+
+        async def fake_resolve(url: str, **kwargs: object) -> str:
+            return url
+
+        app.state.runtime.web_client.download = fake_download  # type: ignore[method-assign]
+        app.state.runtime.web_client.resolve_final_url = fake_resolve  # type: ignore[method-assign]
+
+        meta = await repo.upsert_metadata(number="SEL-002", thumb_urls=[first, second, third])
+
+        # 选中间那张: 列表顺序保持原样, 选中项指向它.
+        resp = await client.post(f"metadata/{meta.id}/adopt-thumb", params={"source_url": second})
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["thumb_urls"] == [first, second, third]
+        assert data["thumb_selected"] == second

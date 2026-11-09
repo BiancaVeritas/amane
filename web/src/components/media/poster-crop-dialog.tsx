@@ -82,9 +82,9 @@ export function PosterCropDialog({
 
   return (
     <>
-      {/* 选图框与裁剪框互斥: 同时开两个 Modal 会叠在一起, 底下的画布点不到. */}
+      {/* 选图框压在裁切框之上 (zIndex), 裁切框保持打开 —— 选完新基准继续裁. */}
       <ImageCropDialog
-        opened={opened && !pickerOpen}
+        opened={opened}
         onClose={onClose}
         imageUrl={activeSource}
         defaultAspect={configRatio}
