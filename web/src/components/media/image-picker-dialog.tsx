@@ -97,12 +97,12 @@ export function ImagePickerDialog({
                   </Button>
                   {onRemove && (
                     <ActionIcon
-                      variant="filled"
+                      variant="light"
                       color="red"
                       size="md"
                       radius="md"
-                      // 叠在缩略图上, 必须不透明: light 变体只有 10% 底色, 图会透上来.
-                      style={{ position: "absolute", top: 4, right: 4, opacity: 1 }}
+                      // light 变体底色默认只有 10%, 叠在缩略图上几乎看不见; 提到 65%.
+                      style={{ position: "absolute", top: 4, right: 4, opacity: 0.65 }}
                       aria-label={String(t("detail.imagePicker.remove"))}
                       onClick={(e) => {
                         // 只删图, 不触发选中.
@@ -110,7 +110,7 @@ export function ImagePickerDialog({
                         onRemove(url);
                       }}
                     >
-                      <IconTrash size={14} color="white" />
+                      <IconTrash size={14} />
                     </ActionIcon>
                   )}
                   <Stack gap={0} px={6} py={4} align="center">

@@ -191,7 +191,9 @@ class TestScrapeHandler:
         assert metadata.title == "Mock Title"
 
     @pytest.mark.asyncio(loop_scope="function")
-    async def test_missing_poster_does_not_fall_back_to_thumb_for_japanese_content(self, repo: Repository, resource_store):
+    async def test_missing_poster_does_not_fall_back_to_thumb_for_japanese_content(
+        self, repo: Repository, resource_store
+    ):
         class ThumbOnlyCrawler(MockCrawler):
             async def fetch(self, query, options=None) -> MediaMetadata | None:
                 return MediaMetadata.model_validate(
@@ -246,15 +248,17 @@ class TestScrapeHandler:
     async def test_western_uses_cover_for_all_three_image_fields(self, repo: Repository, resource_store):
         class WesternCoverCrawler(WesternMockCrawler):
             async def fetch(self, query, options=None) -> MediaMetadata | None:
-                return MediaMetadata.model_validate({
-                    "number": query.number,
-                    "title": "Western Cover",
-                    "external_id": "scene-cover-test",
-                    "theporndb_uuid": "scene-cover-test",
-                    "thumb_urls": ["https://example.com/western-cover.jpg"],
-                    "poster_urls": ["https://example.com/old-poster.jpg"],
-                    "original_poster_urls": ["https://example.com/old-original.jpg"],
-                })
+                return MediaMetadata.model_validate(
+                    {
+                        "number": query.number,
+                        "title": "Western Cover",
+                        "external_id": "scene-cover-test",
+                        "theporndb_uuid": "scene-cover-test",
+                        "thumb_urls": ["https://example.com/western-cover.jpg"],
+                        "poster_urls": ["https://example.com/old-poster.jpg"],
+                        "original_poster_urls": ["https://example.com/old-original.jpg"],
+                    }
+                )
 
         config = _config_with({ContentType.WESTERN: [SiteName.THEPORNDB]})
         h = ScrapeHandler(
@@ -319,9 +323,7 @@ class TestScrapeHandler:
         assert await repo.get_metadata_by_theporndb_uuid("scene-test-1") is not None
 
     @pytest.mark.asyncio(loop_scope="function")
-    async def test_western_oshash_cannot_be_manually_rebound_to_another_scene(
-        self, repo: Repository, resource_store
-    ):
+    async def test_western_oshash_cannot_be_manually_rebound_to_another_scene(self, repo: Repository, resource_store):
         number = "Lancelotstylesevolution.26.10.16"
         metadata = await repo.upsert_western_metadata("scene-original", number)
         media = await repo.create_media_file(
@@ -348,7 +350,9 @@ class TestScrapeHandler:
         assert "另一条 WESTERN 作品" in (result.error or "")
 
     @pytest.mark.asyncio(loop_scope="function")
-    async def test_western_rescrape_backfills_theporndb_uuid_on_original_metadata(self, repo: Repository, resource_store):
+    async def test_western_rescrape_backfills_theporndb_uuid_on_original_metadata(
+        self, repo: Repository, resource_store
+    ):
         number = "Lancelotstylesevolution.26.10.16"
         legacy = await repo.upsert_metadata(number=number)
         media = await repo.create_media_file(
@@ -666,6 +670,69 @@ class TestScrapeHandler:
         assert metadata.poster_urls is not None and len(metadata.poster_urls) == 1
         assert metadata.poster_urls[0].startswith(RESOURCE_URL_PREFIX)  # 内部派生 (裁剪)
         assert metadata.thumb_urls == ["https://s/t.jpg"]  # 外部原样
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_materializes_cropped_poster_when_poster_equals_thumb(self, repo: Repository, resource_store):
+        """海报与封面同源时也要裁.
+
+        站点没给独立竖版海报时会拿横版大图两处都用, 尺寸比是 1.0, 按「候选够高」的规则会被
+        跳过, 片库里于是长期显示那张横版图.
+        """
+        from typing import ClassVar, cast
+
+        from PIL import Image
+
+        from amane.media.pipeline import RESOURCE_URL_PREFIX
+        from amane.net.http import WebClient
+
+        shared = "https://s/same.jpg"
+
+        class ImgCrawler:
+            name = SiteName.JAVDB
+
+            def __init__(self, client=None):
+                pass
+
+            async def fetch(self, query, options=None) -> MediaMetadata | None:
+                return MediaMetadata(
+                    number="093014-701",
+                    title="T",
+                    thumb_urls=[shared],
+                    poster_urls=[shared],
+                )
+
+        class FakeWebClient:
+            sizes: ClassVar = {shared: (800, 538)}
+
+            async def download(self, url, dest, **kwargs) -> bool:
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                Image.new("RGB", self.sizes[url], "blue").save(dest)
+                return True
+
+            async def get_filesize(self, url, **kwargs):
+                return None
+
+            async def resolve_final_url(self, url, **kwargs) -> str:
+                return url
+
+        h = ScrapeHandler(
+            repo=repo,
+            factory=FakeFactory({"javdb": ImgCrawler()}),
+            resource_store=resource_store,
+            pipeline_config=HotSettings(),
+            web_client=cast("WebClient", FakeWebClient()),
+        )
+        media = await repo.create_media_file(library_id=1, path="/media/093014-701.mp4")
+        result = await h.handle(
+            ScrapePayload(media_file_id=media.id, number="093014-701", content_type=ContentType.CENSORED)
+        )
+        assert result.success is True
+        metadata = await repo.get_metadata_by_number("093014-701")
+        assert metadata is not None
+        assert metadata.poster_urls is not None
+        # 裁成内部派生件, 不再是原横版大图.
+        assert metadata.poster_urls[0].startswith(RESOURCE_URL_PREFIX)
+        assert metadata.poster_urls[0] != shared
 
 
 # --- content_routes 资格真值 + 有序路由 ---

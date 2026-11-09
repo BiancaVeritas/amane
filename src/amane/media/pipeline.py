@@ -142,9 +142,17 @@ async def materialize_images(
         thumb_size = probe_size(thumb_local) if thumb_local else None
         cand_size = probe_size(poster_candidate_local) if poster_candidate_local else None
 
+        # 海报与封面是同一张图时也要裁: 这说明站点没给独立的竖版海报, 拿横版大图两边都用
+        # (caribbeancom / 1pondo 这类). 尺寸比自然是 1.0, 交给 should_crop_poster 会被判成
+        # 「候选够高」而跳过, 结果片库里的海报就一直是那张横版图.
+        same_as_thumb = bool(poster_urls) and bool(thumb_urls) and poster_urls[0] == thumb_urls[0]
+
         if (
             config.scraping.crop_poster
-            and should_crop_poster(thumb_size, cand_size, skip_ratio=config.scraping.poster_crop_skip_ratio)
+            and (
+                same_as_thumb
+                or should_crop_poster(thumb_size, cand_size, skip_ratio=config.scraping.poster_crop_skip_ratio)
+            )
             and thumb_local
         ):
             ratio = (
