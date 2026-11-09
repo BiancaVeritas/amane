@@ -16,6 +16,10 @@ from ...base import CrawlerProfile
 from ..base import ActorCrawler
 from ..models import ActorMetadata
 
+#: 演员列表翻页上限. 站点对越界页仍返回 200 时, 单靠 ``totalCount`` 判不出终点,
+#: 这道硬上限兜底: 按每页 24 条算, 300 页已覆盖七千余名演员, 远超站点实际规模.
+_MAX_LISTING_PAGES = 300
+
 
 class _TushyActorCrawler(ActorCrawler):
     host: str
@@ -38,7 +42,8 @@ class _TushyActorCrawler(ActorCrawler):
         if not wanted:
             return None
         page = 1
-        while True:
+        last_page_num = 0
+        while page <= _MAX_LISTING_PAGES:
             url = self._listing_url(page)
             text = await self.client.get_html(url, cookies=self.cookies, headers=self.headers)
             models, page_num, total_count = _listing_page_from_html(text)
@@ -59,13 +64,19 @@ class _TushyActorCrawler(ActorCrawler):
                     provider_ids={str(self.name): str(slug)},
                     source_url=f"https://www.{self.host}/performers/{slug.strip('/')}",
                 )
-            # 列表响应提供当前页与总条数；用本页实际条数推导末页，避免无界翻页。
-            # 缺少分页元数据时不猜测下一页，防止站点改版后持续请求。
+            # 列表响应提供当前页与总条数；用本页实际条数推导末页, 避免无界翻页.
+            # 缺少分页元数据时不猜测下一页, 防止站点改版后持续请求.
             if page_num is None or total_count is None or total_count <= 0:
                 return None
+            # 越界页仍返回 200 且照抄最后一页时, 页码不再前进 —— 到此为止, 别把请求打到底.
+            if page_num <= last_page_num:
+                return None
+            last_page_num = page_num
             if page_num * len(models) >= total_count:
                 return None
             page += 1
+        # 翻到上限仍未命中: 该演员不在本站在售名单里.
+        return None
 
     @override
     async def check_connectivity(self) -> ConnectivityOutcome:
