@@ -35,11 +35,12 @@ _DETAIL_URL = "https://www.aventertainments.com/dvd/detail?pro={}"
 
 #: 站点 pro → 番号 的离线映射. 搜索页常被人机验证拦下, 详情页不设防, 因此优先用本地表
 #: 直接定位 pro, 命中时完全不发搜索请求. 表由外部爬取生成, 缺失时退回原搜索流程.
+#: 形状与 heyzo 的两个索引一致: ``番号 → {id: pro, title, actor}``.
 _PRO_INDEX_PATH = Path(__file__).with_name("aventertainments_pro.json")
-_pro_index: dict[str, list[int]] | None = None
+_pro_index: dict[str, int] | None = None
 
 
-def _load_pro_index() -> dict[str, list[int]]:
+def _load_pro_index() -> dict[str, int]:
     """惰性加载并缓存. 文件缺失或损坏时返回空表, 不影响既有搜索流程."""
     global _pro_index
     if _pro_index is not None:
@@ -50,11 +51,18 @@ def _load_pro_index() -> dict[str, list[int]]:
         logger.warning("pro index unavailable", path=str(_PRO_INDEX_PATH))
         _pro_index = {}
         return _pro_index
-    _pro_index = {str(k): [int(v) for v in vs] for k, vs in raw.items() if isinstance(vs, list)}
+    index: dict[str, int] = {}
+    for key, entry in raw.items():
+        if isinstance(entry, dict) and isinstance(pro := entry.get("id"), int):
+            index[str(key)] = pro
+        elif isinstance(entry, list) and len(entry) == 1 and isinstance(entry[0], int):
+            # 兼容旧的数组形状, 免得上一个镜像的索引文件读不出来.
+            index[str(key)] = entry[0]
+    _pro_index = index
     return _pro_index
 
 
-def lookup_pro(number: str) -> list[int]:
+def lookup_pro(number: str) -> int | None:
     """按番号查 pro. 先精确匹配, 再退到「去掉分隔符后唯一」的宽松匹配.
 
     站点把 ``JS-03`` 与 ``JS03`` 当作不同商品, 因此宽松匹配只在结果唯一时采用,
@@ -62,19 +70,16 @@ def lookup_pro(number: str) -> list[int]:
     """
     index = _load_pro_index()
     if not index:
-        return []
+        return None
     key = number.strip().upper()
     if exact := index.get(key):
-        return list(exact)
+        return exact
 
     folded = re.sub(r"[^A-Z0-9]", "", key)
     if not folded:
-        return []
-    loose: list[int] = []
-    for candidate, pros in index.items():
-        if re.sub(r"[^A-Z0-9]", "", candidate) == folded:
-            loose.extend(pros)
-    return list(dict.fromkeys(loose)) if len(loose) == 1 else []
+        return None
+    loose = [pro for candidate, pro in index.items() if re.sub(r"[^A-Z0-9]", "", candidate) == folded]
+    return loose[0] if len(loose) == 1 else None
 
 
 #: 该站的 VerifyBot 按「无 Referer 的浏览器请求」放行; 带上站内 Referer 反而落进挑战分支.
@@ -341,15 +346,14 @@ class AVEntertainmentsCrawler(Crawler):
 
         # 本地 pro 映射优先: 搜索页被人机验证拦死, 而详情页不设防. 命中映射时直接访问详情页,
         # 完全不碰搜索页; 未命中才退回原搜索流程.
-        if local := lookup_pro(query.number):
-            for pro in local:
-                detail_url = _DETAIL_URL.format(pro) + "&lang=2&cat=29"
-                try:
-                    page = await self.client.get_html(detail_url, cookies=self.cookies, headers=self.headers)
-                except RequestError as exc:
-                    if exc.http_status == 404:
-                        continue
+        if pro := lookup_pro(query.number):
+            detail_url = _DETAIL_URL.format(pro) + "&lang=2&cat=29"
+            try:
+                page = await self.client.get_html(detail_url, cookies=self.cookies, headers=self.headers)
+            except RequestError as exc:
+                if exc.http_status != 404:
                     raise
+            else:
                 metadata = _metadata_from_page(detail_url, page)
                 if metadata is not None and _number_key(metadata.number) == target:
                     self._search_detail_pages[detail_url] = page
