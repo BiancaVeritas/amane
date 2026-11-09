@@ -179,9 +179,9 @@ def _poster_crop_left(img: Image.Image, target_w: int, *, detect_face: bool) -> 
     if not detect_face:
         return fallback
 
-    from .face_detect import largest_face
+    from .face_detect import main_subject_face
 
-    face = largest_face(img)
+    face = main_subject_face(img)
     if face is None:
         return fallback
     x1, _, x2, _ = face

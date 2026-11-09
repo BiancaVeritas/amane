@@ -20,6 +20,7 @@ from PIL import Image
 logger = structlog.get_logger()
 
 _MODEL_PATH = Path(__file__).with_name("face_detect_scrfd.onnx")
+_GENDER_MODEL_PATH = Path(__file__).with_name("face_detect_genderage.onnx")
 #: 输出按 stride 分组, 每组依次是 score / bbox / kps.
 _STRIDES_3 = (8, 16, 32)
 _STRIDES_5 = (8, 16, 32, 64, 128)
@@ -180,4 +181,79 @@ def largest_face(
     if not faces:
         return None
     x1, y1, x2, y2, _ = max(faces, key=lambda f: (f[2] - f[0]) * (f[3] - f[1]))
+    return (x1, y1, x2, y2)
+
+
+class _GenderModel:
+    """性别年龄模型; 输入按 bbox 中心缩放裁剪, 与 insightface ``Attribute`` 一致."""
+
+    def __init__(self, model_path: Path) -> None:
+        import onnxruntime as ort
+
+        self._session = ort.InferenceSession(str(model_path), providers=["CPUExecutionProvider"])
+        self._input_name = self._session.get_inputs()[0].name
+        shape = self._session.get_inputs()[0].shape
+        self._size = int(shape[2]) if isinstance(shape[2], int) else 96
+
+    def is_female(self, rgb: np.ndarray, bbox: tuple[float, float, float, float]) -> bool | None:
+        """True=女, False=男, None=无法判断."""
+        import cv2
+
+        x1, y1, x2, y2 = bbox
+        w, h = x2 - x1, y2 - y1
+        if w <= 0 or h <= 0:
+            return None
+        center = ((x1 + x2) / 2, (y1 + y2) / 2)
+        # 留 1.5 倍余量, 与官方一致: 裁剪范围比人脸框宽.
+        scale = self._size / (max(w, h) * 1.5)
+        matrix = np.array(
+            [[scale, 0, -center[0] * scale + self._size / 2], [0, scale, -center[1] * scale + self._size / 2]],
+            dtype=np.float32,
+        )
+        aligned = cv2.warpAffine(rgb, matrix, (self._size, self._size), borderValue=0.0)
+        blob = cv2.dnn.blobFromImage(aligned, 1.0 / 128.0, (self._size, self._size), (127.5, 127.5, 127.5), swapRB=True)
+        pred = self._session.run(None, {self._input_name: blob})[0][0]
+        if len(pred) < 2:
+            return None
+        # 前两位是性别对数, 取大者: 0=女, 1=男.
+        return int(np.argmax(pred[:2])) == 0
+
+
+@lru_cache(maxsize=1)
+def _gender_model() -> _GenderModel | None:
+    if not _GENDER_MODEL_PATH.is_file():
+        return None
+    try:
+        return _GenderModel(_GENDER_MODEL_PATH)
+    except Exception as e:  # 模型缺失或损坏只是「不做性别过滤」
+        logger.warning("gender model unavailable", error=str(e))
+        return None
+
+
+def main_subject_face(
+    image: Image.Image, *, conf: float = DEFAULT_CONF, max_side: int = 640
+) -> tuple[float, float, float, float] | None:
+    """海报主体人脸: 优先最大的女性脸, 没有女性则退回最大的脸.
+
+    封面上男性脸常常更清晰更大, 单看面积会选错人; 性别模型可过滤掉.
+    """
+    detector = _detector()
+    if detector is None:
+        return None
+    faces = detector.detect(image, conf=conf, max_side=max_side)
+    if not faces:
+        return None
+
+    def area(face: tuple[float, float, float, float, float]) -> float:
+        return (face[2] - face[0]) * (face[3] - face[1])
+
+    faces.sort(key=lambda f: area(f), reverse=True)
+    gender = _gender_model()
+    if gender is not None:
+        rgb = np.asarray(image.convert("RGB"))
+        for face in faces:
+            if gender.is_female(rgb, (face[0], face[1], face[2], face[3])):
+                return (face[0], face[1], face[2], face[3])
+    # 没有性别模型, 或没有一张判为女性: 退回最大脸.
+    x1, y1, x2, y2, _ = faces[0]
     return (x1, y1, x2, y2)
