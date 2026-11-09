@@ -29,13 +29,11 @@ import {
   IconLock,
   IconLockOpen,
   IconPencil,
-  IconPhoto,
   IconPhotoOff,
   IconPlayerPlay,
   IconRefresh,
   IconStar,
   IconTrash,
-  IconUpload,
   IconX,
 } from "@tabler/icons-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -57,7 +55,7 @@ import {
   submitTaskMutation,
   updateMetadataMutation,
 } from "@/client/@tanstack/react-query.gen";
-import { getMetadataSchema, imageInfo } from "@/client/sdk.gen";
+import { getMetadataSchema } from "@/client/sdk.gen";
 import type { MetadataField, MetadataResponse } from "@/client/types.gen";
 import { FacetBadge } from "@/components/media/facet-badge";
 import { LockChip, LockToggle, type LockProps } from "@/components/media/field-lock";
@@ -67,9 +65,7 @@ import { FanartLightbox, FanartStrip } from "@/components/media/fanart-lightbox"
 import { FilePhaseBadges, FilePhaseOverlay } from "@/components/media/file-phase-badges";
 import { OverlayChip, OverlayChipLabel } from "@/components/media/overlay-chip";
 import { VrOverlayChip } from "@/components/media/vr-badge";
-import { type ImageInfoItem, ImagePickerDialog } from "@/components/media/image-picker-dialog";
 import { PosterCropDialog } from "@/components/media/poster-crop-dialog";
-import { useUploadMetaImage } from "@/components/media/use-upload-meta-image";
 import { MergeDialog } from "@/components/metadata/merge-dialog";
 import { type JSONSchemaObject, resolveSchema } from "@/components/schema-form/schema";
 import { SchemaForm } from "@/components/schema-form/schema-form";
@@ -150,11 +146,6 @@ function TitleDetailPage() {
   const [editOpen, setEditOpen] = useState(false);
   const [mergeOpen, setMergeOpen] = useState(false);
   const [cropOpen, setCropOpen] = useState(false);
-  // 挑图对话框: 有目标时才打开, 同时决定选中的图落到封面还是海报.
-  const [pickerTarget, setPickerTarget] = useState<"thumb" | "poster" | null>(null);
-  // 上传选图用的隐藏 input; 菜单项点击时转交给它们.
-  const thumbPickerRef = useRef<HTMLInputElement>(null);
-  const posterPickerRef = useRef<HTMLInputElement>(null);
   const [coverLightboxOpen, coverLightbox] = useDisclosure(false);
   const [playingTrailer, setPlayingTrailer] = useState(false);
   // 播放失败的预告片地址: 只对该地址有效, 记录之外 (条目切换或重新刮削换了地址) 一律不算失败.
@@ -217,26 +208,6 @@ function TitleDetailPage() {
     void queryClient.invalidateQueries({
       queryKey: getMetadataQueryKey({ path: { metadata_id: id } }),
     });
-  };
-
-  const {
-    upload,
-    adopt,
-    remove: removeImage,
-    pending: imagePending,
-  } = useUploadMetaImage({
-    metadataId: id,
-    onSuccess: invalidateDetail,
-  });
-
-  /**
-   * 把某张已有图 (剧照/海报) 直接设为封面.
-   *
-   * 由**后端**去取那张图再存成上传件 —— 前端直接 ``fetch`` 外部图片会被 CORS 拦下
-   * (站点的图不返回 ``Access-Control-Allow-Origin``), 报 "Failed to fetch".
-   */
-  const applyImageSource = (url: string, target: "poster" | "thumb") => {
-    adopt(url, target);
   };
 
   const scrapeMutation = useMutation({
@@ -418,26 +389,6 @@ function TitleDetailPage() {
     }
     return out;
   }, [data?.metadata]);
-
-  // 候选图的来源与分辨率: 需要查库 (内部地址要溯源), 后端一次算好.
-  // 放在提前 return 之前 —— 否则首屏少跑一次 hook, 数据到达后 hook 数量变化.
-  const { data: imageInfos } = useQuery({
-    queryKey: ["image-info", id, coverCandidates],
-    queryFn: async () => {
-      if (coverCandidates.length === 0) return new Map<string, ImageInfoItem>();
-      const resp = await imageInfo({
-        path: { metadata_id: id },
-        body: { urls: coverCandidates },
-      });
-      const map = new Map<string, ImageInfoItem>();
-      for (const item of resp.data?.items ?? []) {
-        map.set(item.url, item);
-      }
-      return map;
-    },
-    enabled: validId && coverCandidates.length > 0,
-    staleTime: 60_000,
-  });
 
   if (!validId) {
     return (
@@ -750,72 +701,6 @@ function TitleDetailPage() {
                 </Button>
               </Box>
             </Tooltip>
-            {/* 一个入口换图: 分行列出封面与海报, 避免按钮挤满一行. */}
-            <Menu
-              shadow="md"
-              position="bottom-start"
-              trigger="hover"
-              openDelay={100}
-              closeDelay={200}
-            >
-              <Menu.Target>
-                <Button
-                  size="xs"
-                  variant="light"
-                  leftSection={<IconUpload size={14} />}
-                  loading={imagePending !== null}
-                >
-                  {t("detail.upload.action")}
-                </Button>
-              </Menu.Target>
-              <Menu.Dropdown>
-                <Menu.Label>{t("detail.upload.cover")}</Menu.Label>
-                <Menu.Item
-                  leftSection={<IconUpload size={14} />}
-                  onClick={() => thumbPickerRef.current?.click()}
-                >
-                  {t("detail.upload.fromFile")}
-                </Menu.Item>
-                {coverCandidates.length > 0 && (
-                  <Menu.Item
-                    leftSection={<IconPhoto size={14} />}
-                    onClick={() => setPickerTarget("thumb")}
-                  >
-                    {t("detail.upload.fromStill")}
-                  </Menu.Item>
-                )}
-                <Menu.Divider />
-                <Menu.Label>{t("detail.upload.poster")}</Menu.Label>
-                <Menu.Item
-                  leftSection={<IconUpload size={14} />}
-                  onClick={() => posterPickerRef.current?.click()}
-                >
-                  {t("detail.upload.fromFile")}
-                </Menu.Item>
-              </Menu.Dropdown>
-            </Menu>
-            <input
-              ref={thumbPickerRef}
-              type="file"
-              accept="image/jpeg,image/png,image/webp"
-              hidden
-              onChange={(e) => {
-                const file = e.currentTarget.files?.[0];
-                e.currentTarget.value = "";
-                if (file) upload(file, "thumb");
-              }}
-            />
-            <input
-              ref={posterPickerRef}
-              type="file"
-              accept="image/jpeg,image/png,image/webp"
-              hidden
-              onChange={(e) => {
-                const file = e.currentTarget.files?.[0];
-                e.currentTarget.value = "";
-                if (file) upload(file, "poster");
-              }}
-            />
             <LockChip label={t("detail.fields.thumb")} {...lockProps("thumb_urls")} />
             <LockChip label={t("detail.fields.poster")} {...lockProps("poster_urls")} />
             <LockChip label={t("detail.fields.trailer")} {...lockProps("trailer_urls")} />
@@ -1237,23 +1122,6 @@ function TitleDetailPage() {
 
       {thumbSrc && (
         <>
-          <ImagePickerDialog
-            opened={pickerTarget !== null}
-            onClose={() => setPickerTarget(null)}
-            images={coverCandidates}
-            infos={imageInfos}
-            onRemove={pickerTarget === null ? undefined : (url) => removeImage(url, pickerTarget)}
-            title={
-              pickerTarget === "poster"
-                ? t("detail.imagePicker.pickPoster")
-                : t("detail.imagePicker.pickCover")
-            }
-            onPick={(url) => {
-              const target = pickerTarget ?? "thumb";
-              setPickerTarget(null);
-              applyImageSource(url, target);
-            }}
-          />
           <PosterCropDialog
             opened={cropOpen}
             onClose={() => setCropOpen(false)}

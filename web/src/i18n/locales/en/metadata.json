@@ -167,31 +167,12 @@
       "confirm": "Crop & save",
       "needSelection": "Select a valid region first",
       "success": "Poster updated",
-      "noThumb": "A cover image is required to crop a poster",
-      "selectSource": "Choose source"
-    },
-    "upload": {
-      "fromFile": "Upload image",
-      "fromStill": "Replace cover",
-      "success": "Image updated",
-      "unsupported": "Only JPG / PNG / WEBP are supported",
-      "tooLarge": "Image must be under 20 MB",
-      "cover": "Replace cover",
-      "poster": "Replace poster",
-      "action": "Replace image"
+      "noThumb": "A cover image is required to crop a poster"
     },
     "playbackCopyTimestamp": "Copy timestamp",
     "playbackCopyLink": "Copy link to current time",
     "playbackCopied": "Copied to clipboard",
-    "playbackCopyFailed": "Copy failed",
-    "imagePicker": {
-      "pickCover": "Choose a cover image",
-      "pickPoster": "Choose a poster image",
-      "pick": "Pick image {{index}}",
-      "current": "Current",
-      "empty": "No candidate images available",
-      "remove": "Delete"
-    }
+    "playbackCopyFailed": "Copy failed"
   },
   "browse": {
     "title": "Browse",

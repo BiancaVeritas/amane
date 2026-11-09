@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<movie>
+  <num>SERIES-2</num>
+  <mpaa>JP-18+</mpaa>
+  <series>Series A</series>
+  <set>
+    <name>Series A</name>
+  </set>
+</movie>

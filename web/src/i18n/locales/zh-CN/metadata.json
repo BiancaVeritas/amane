@@ -164,31 +164,12 @@
       "confirm": "裁切并保存",
       "needSelection": "请先框选有效区域",
       "success": "海报已更新",
-      "noThumb": "需要封面图才能裁切海报",
-      "selectSource": "选择图源"
-    },
-    "upload": {
-      "fromFile": "上传图片",
-      "fromStill": "更换封面",
-      "success": "图片已更新",
-      "unsupported": "仅支持 JPG / PNG / WEBP",
-      "tooLarge": "图片不能超过 20 MB",
-      "cover": "更换封面",
-      "poster": "更换海报",
-      "action": "更换图片"
+      "noThumb": "需要封面图才能裁切海报"
     },
     "playbackCopyTimestamp": "复制时间戳",
     "playbackCopyLink": "复制当前时间的链接",
     "playbackCopied": "已复制到剪贴板",
-    "playbackCopyFailed": "复制失败",
-    "imagePicker": {
-      "pickCover": "选择封面图",
-      "pickPoster": "选择海报图",
-      "pick": "选择第 {{index}} 张",
-      "current": "当前",
-      "empty": "没有可用的候选图",
-      "remove": "删除"
-    }
+    "playbackCopyFailed": "复制失败"
   },
   "browse": {
     "title": "分类浏览",

@@ -1,9 +1,8 @@
 from collections.abc import Sequence
-from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, Literal, cast
 
 import structlog
-from fastapi import APIRouter, Body, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import TypeAdapter
 
 from ...aggregate import compute_merge_updates
@@ -15,9 +14,6 @@ from ...enums import MetadataField
 from ...handlers import ScrapePayload
 from ...llm import build_translator
 from ...media import manual_crop_image
-from ...media.images import crop_poster, probe_oriented_size
-from ...media.resource_store import RESOURCE_URL_PREFIX, ResourceStore, internal_url_hash
-from ...media.upload import StoredUpload, UploadRejected, store_upload
 from ...parsing import ContentType, summarize_file_phases
 from ...parsing import FilePhaseSummary as ParsedFilePhase
 from ...semantic import SemanticUnavailable
@@ -28,10 +24,6 @@ from ..models import (
     CommentResponse,
     CropPosterRequest,
     FilePhaseSummary,
-    ImageInfo,
-    ImageInfoRequest,
-    ImageInfoResponse,
-    ImageKind,
     MergeRequest,
     MetadataBatchDeleteResponse,
     MetadataBatchIdsRequest,
@@ -53,7 +45,6 @@ from .saved_queries import resolve_saved_query_id_subquery
 
 if TYPE_CHECKING:
     from ...db.repo_types import MetadataFields
-    from ...net.http import WebClient
 
 logger = structlog.get_logger()
 
@@ -416,262 +407,6 @@ async def crop_poster_from_thumb(
     return to_resp(MetadataResponse, updated).model_copy(update={"tags": runtime.tag_mappings.map_tags(updated.tags)})
 
 
-def _resource_url(store: ResourceStore, locator: str) -> str:
-    """locator → 前端可访问的内部图片地址."""
-    return f"{RESOURCE_URL_PREFIX}/{store.url_hash(locator)}"
-
-
-def _poster_ratio(runtime: RuntimeDep, content_type: ContentType) -> float:
-    """海报比例按内容类型分别配置."""
-    hot = runtime.config.hot.scraping
-    return hot.uncensored_poster_ratio if content_type == ContentType.UNCENSORED else hot.poster_ratio
-
-
-async def _store_upload_or_400(store: ResourceStore, data: bytes, *, kind: str) -> StoredUpload:
-    try:
-        return await store_upload(store, data, kind=kind)
-    except UploadRejected as e:
-        raise HTTPException(status_code=400, detail=str(e)) from e
-
-
-async def _content_hash_of(store: ResourceStore, url: str) -> str | None:
-    """内部图片地址 → 该资源的内容哈希; 外链或尚未缓存时返回 None."""
-    url_hash = internal_url_hash(url)
-    if url_hash is None:
-        return None
-    found = await store.get_by_url_hash(url_hash)
-    return None if found is None else found[0].content_hash
-
-
-async def _dedupe_by_content(store: ResourceStore, urls: list[str], keep: str) -> list[str]:
-    """去掉 ``urls`` 里与 ``keep`` **内容相同**的条目, 但保留 ``keep`` 自身原位.
-
-    早期版本的「采用剧照」把同一张图各存一份, 列表里于是堆积了内容相同、地址不同的副本;
-    只按地址去重清不掉它们. 读不到内容的条目原样保留, 不误删.
-
-    返回值保持原顺序; ``keep`` 在列表中则留在原位置, 不在则不出现在结果里 (由调用方决定
-    追加到末尾).
-    """
-    keep_hash = await _content_hash_of(store, keep)
-    out: list[str] = []
-    for url in urls:
-        if url != keep and keep_hash is not None and await _content_hash_of(store, url) == keep_hash:
-            # 内容相同的另一份副本: 去掉.
-            continue
-        out.append(url)
-    return out
-
-
-async def _apply_thumb(
-    store: ResourceStore, repo: RepoDep, metadata_id: int, thumb_urls: list[str], url: str
-) -> MetadataResponse:
-    """把 ``url`` 设为当前封面.
-
-    与上游一致: ``thumb_urls`` 只存**正在用的那张**, 换图即替换。候选图 (剧照、上传件)
-    由各自的字段保存, 不往这里堆 —— 否则列表越换越长, 而 ``thumb_url`` 只取首项, 多出来的
-    条目既不影响显示也不参与选择.
-    """
-    del store, thumb_urls  # 兼容签名; 替换语义不需要旧值
-    updated = await repo.update_metadata(metadata_id, mode=WriteMode.MANUAL, thumb_urls=[url])
-    assert updated is not None
-    return to_resp(MetadataResponse, updated)
-
-
-async def _apply_poster(
-    store: ResourceStore, repo: RepoDep, metadata_id: int, poster_urls: list[str], url: str
-) -> MetadataResponse:
-    """把 ``url`` 设为当前海报. 替换语义, 理由同 ``_apply_thumb``."""
-    del store, poster_urls
-    updated = await repo.update_metadata(metadata_id, mode=WriteMode.MANUAL, poster_urls=[url])
-    assert updated is not None
-    return to_resp(MetadataResponse, updated)
-
-
-async def _crop_source_to_poster(
-    locator: str, path: Path, ratio: float, store: ResourceStore, runtime: RuntimeDep
-) -> str:
-    """把 ``locator`` 指向的图按海报比例裁一次 (人脸优先), 返回内部 URL.
-
-    ``acquire_derived`` 以 (源, op, 参数) 为键, 同一源反复调用只会得到同一份裁剪结果,
-    不会堆积.
-    """
-    source_url = _resource_url(store, locator)
-
-    async def producer(dest: Path) -> bool:
-        return crop_poster(
-            path,
-            dest,
-            poster_ratio=ratio,
-            jpeg_quality=runtime.config.hot.scraping.jpeg_quality,
-            detect_face=runtime.config.hot.scraping.poster_crop_detect_face,
-        )
-
-    crop_res = await store.acquire_derived(locator, "crop", f"upload:{ratio:.4f}", producer)
-    if crop_res is None:
-        # 裁剪失败就退回原图, 不让操作直接失败.
-        return source_url
-    return _resource_url(store, crop_res.url)
-
-
-@router.post("/{metadata_id}/upload-thumb")
-async def upload_thumb(
-    metadata_id: int,
-    repo: RepoDep,
-    runtime: RuntimeDep,
-    file: Annotated[bytes, Body(media_type="application/octet-stream")],
-) -> MetadataResponse:
-    """上传自定义封面. 原样使用, 不裁剪. 旧封面保留在列表后面."""
-    metadata = await repo.get_metadata(metadata_id)
-    if metadata is None:
-        raise HTTPException(status_code=404, detail="影片不存在")
-
-    store = runtime.resource_store
-    stored = await _store_upload_or_400(store, file, kind="thumb")
-    url = _resource_url(store, stored.url)
-    updated = await _apply_thumb(store, repo, metadata_id, metadata.thumb_urls, url)
-    logger.info("thumb uploaded", metadata_id=metadata_id, url=url)
-    return updated.model_copy(update={"tags": runtime.tag_mappings.map_tags(updated.tags)})
-
-
-@router.post("/{metadata_id}/upload-poster")
-async def upload_poster(
-    metadata_id: int,
-    repo: RepoDep,
-    runtime: RuntimeDep,
-    file: Annotated[bytes, Body(media_type="application/octet-stream")],
-) -> MetadataResponse:
-    """上传自定义图片作为海报.
-
-    存好后按当前比例**自动裁剪一次** (人脸优先定位主体); 不满意可以再调 ``crop-poster``
-    手工调整. 旧海报保留在列表后面.
-    """
-    metadata = await repo.get_metadata(metadata_id)
-    if metadata is None:
-        raise HTTPException(status_code=404, detail="影片不存在")
-
-    store = runtime.resource_store
-    stored = await _store_upload_or_400(store, file, kind="poster")
-    ratio = _poster_ratio(runtime, metadata.content_type)
-    url = await _crop_source_to_poster(stored.url, stored.path, ratio, store, runtime)
-    updated = await _apply_poster(store, repo, metadata_id, metadata.poster_urls, url)
-    logger.info("poster uploaded", metadata_id=metadata_id, url=url, ratio=ratio)
-    return updated.model_copy(update={"tags": runtime.tag_mappings.map_tags(updated.tags)})
-
-
-@router.post("/{metadata_id}/adopt-thumb")
-async def adopt_thumb(
-    metadata_id: int,
-    repo: RepoDep,
-    runtime: RuntimeDep,
-    source_url: Annotated[str, Query(description="要采用的图地址 (剧照或候选图)")],
-) -> MetadataResponse:
-    """把一张已有图 (剧照 / 候选图) 设为封面. **只换引用, 不复制文件**.
-
-    源图可能还没本地化, 先确保它在 Resource 里落地, 然后把它 join 到 ``thumb_urls`` 头部.
-    复制一份会让来回切换不断堆积内容相同的副本, 列表越切越长.
-    """
-    metadata = await repo.get_metadata(metadata_id)
-    if metadata is None:
-        raise HTTPException(status_code=404, detail="影片不存在")
-
-    store = runtime.resource_store
-    # 候选图可能是外链, 也可能是已缓存的内部地址 (`/api/resources/{hash}`); 后者只有
-    # `resolve_source` 认, `acquire` 只处理 http(s). 这一步只是确认图能拿到。
-    resolved = await store.resolve_source(source_url, runtime.web_client)
-    if resolved is None:
-        raise HTTPException(status_code=400, detail="无法获取该图片")
-
-    # 直接引用用户点的那条地址, 不重新拼: 重拼得到的字符串未必与池中一致 (查询串、
-    # 外部 URL vs 内部地址), 会被当成新图追加, 池子越点越长.
-    updated = await _apply_thumb(store, repo, metadata_id, metadata.thumb_urls, source_url)
-    logger.info("thumb adopted", metadata_id=metadata_id, source_url=source_url)
-    return updated.model_copy(update={"tags": runtime.tag_mappings.map_tags(updated.tags)})
-
-
-@router.post("/{metadata_id}/adopt-poster")
-async def adopt_poster(
-    metadata_id: int,
-    repo: RepoDep,
-    runtime: RuntimeDep,
-    source_url: Annotated[str, Query(description="要采用的图地址 (剧照或候选图)")],
-) -> MetadataResponse:
-    """把一张已有图 (剧照 / 候选图) 按海报比例裁剪后作为海报.
-
-    直接从源图派生裁剪结果, **不另存一份原图** —— 否则来回切换会不断堆积副本.
-    """
-    metadata = await repo.get_metadata(metadata_id)
-    if metadata is None:
-        raise HTTPException(status_code=404, detail="影片不存在")
-
-    store = runtime.resource_store
-    # 候选图可能是外链, 也可能是已缓存的内部地址 (`/api/resources/{hash}`); 后者只有
-    # `resolve_source` 认, `acquire` 只处理 http(s).
-    resolved = await store.resolve_source(source_url, runtime.web_client)
-    if resolved is None:
-        raise HTTPException(status_code=400, detail="无法获取该图片")
-
-    ratio = _poster_ratio(runtime, metadata.content_type)
-    url = await _crop_source_to_poster(resolved.locator, resolved.path, ratio, store, runtime)
-    updated = await _apply_poster(store, repo, metadata_id, metadata.poster_urls, url)
-    logger.info("poster adopted", metadata_id=metadata_id, source_url=source_url, ratio=ratio)
-    return updated.model_copy(update={"tags": runtime.tag_mappings.map_tags(updated.tags)})
-
-
-@router.delete("/{metadata_id}/images")
-async def remove_image(
-    metadata_id: int,
-    repo: RepoDep,
-    runtime: RuntimeDep,
-    url: Annotated[str, Query(description="要移除的图片地址")],
-    target: Annotated[Literal["thumb", "poster"], Query(description="封面还是海报候选池")] = "thumb",
-) -> MetadataResponse:
-    """从候选池移除一张图, 并**删掉本地文件**.
-
-    只删这一张: 其它条目可能引用同一份文件 (裁剪派生以源为键), 所以删之前先确认没有别的
-    条目还在用. 文件丢了不影响后续刮削 —— 重新刮削会重新下载.
-    """
-    metadata = await repo.get_metadata(metadata_id)
-    if metadata is None:
-        raise HTTPException(status_code=404, detail="影片不存在")
-
-    # 选图框把封面、海报、剧照并列显示, 用户点的可能是任一来源; 因此从**所有**候选池里
-    # 一并移除, 否则删完它还会在框里出现.
-    thumbs = [item for item in metadata.thumb_urls if item != url]
-    posters = [item for item in metadata.poster_urls if item != url]
-    fanart = [item for item in metadata.extrafanart if item != url]
-    if (
-        len(thumbs) == len(metadata.thumb_urls)
-        and len(posters) == len(metadata.poster_urls)
-        and len(fanart) == len(metadata.extrafanart)
-    ):
-        raise HTTPException(status_code=404, detail="该图片不在候选池中")
-
-    updated = await repo.update_metadata(
-        metadata_id,
-        mode=WriteMode.MANUAL,
-        thumb_urls=thumbs,
-        poster_urls=posters,
-    )
-    assert updated is not None
-
-    # 真正删盘: 文件丢了不影响后续, 重新刮削会重新下载.
-    await _purge_image(runtime, url)
-
-    logger.info("image removed", metadata_id=metadata_id, url=url, target=target)
-    return to_resp(MetadataResponse, updated).model_copy(update={"tags": runtime.tag_mappings.map_tags(updated.tags)})
-
-
-async def _purge_image(runtime: RuntimeDep, url: str) -> None:
-    """删掉这张图对应的本地文件与记录; 找不到就当作已清理."""
-    store = runtime.resource_store
-    url_hash = internal_url_hash(url)
-    if url_hash is None:
-        return
-    found = await store.get_by_url_hash(url_hash)
-    if found is not None:
-        await store.invalidate(found[0].url)
-
-
 async def _translate_selected_text(updates: dict[str, object], runtime: RuntimeDep, content_type: ContentType) -> None:
     """Source picks refresh original text and re-run configured LLM translation; manual edits do not use this path."""
     if content_type == ContentType.WESTERN:
@@ -766,98 +501,3 @@ _SOURCE_LABELS: tuple[tuple[str, str], ...] = (
     ("wikimedia", "Wikipedia"),
     ("minnano", "Minnano"),
 )
-
-
-def _source_label(url: str, *, origin: str | None, raw_url: str | None = None) -> str:
-    """图片来源名.
-
-    优先看溯源地址 (裁切件的 ``meta.src``); 没有就看记录本身的 url —— 刮削缓存下来的原图,
-    其 url 就是站点地址. 两者都认不出时按大类标注.
-    """
-    for candidate in (origin, raw_url, url):
-        if not candidate:
-            continue
-        lower = candidate.casefold()
-        for needle, label in _SOURCE_LABELS:
-            if needle in lower:
-                return label
-
-    if raw_url is not None and raw_url.startswith("upload:"):
-        return "自定义"
-    if origin is not None:
-        return "裁切"
-    if url.startswith("/api/resources/"):
-        return "自定义"
-    return ""
-
-
-@router.post("/{metadata_id}/image-info")
-async def image_info(
-    metadata_id: int,
-    req: ImageInfoRequest,
-    repo: RepoDep,
-    runtime: RuntimeDep,
-) -> ImageInfoResponse:
-    """候选图的来源与分辨率, 供选图框展示.
-
-    内部地址会溯源到原始站点 (裁切件的 ``meta.src``、上传件的 ``meta.kind``), 拿不到就按
-    大类标注. 分辨率只对已本地化的图有效, 未下载的返回空.
-    """
-    metadata = await repo.get_metadata(metadata_id)
-    if metadata is None:
-        raise HTTPException(status_code=404, detail="影片不存在")
-
-    store = runtime.resource_store
-    items: list[ImageInfo] = []
-    for url in req.urls:
-        origin, raw_url, size = await _resolve_image_origin(store, url, runtime.web_client)
-        width, height = size if size is not None else (None, None)
-        items.append(
-            ImageInfo(
-                url=url,
-                source=_source_label(url, origin=origin, raw_url=raw_url),
-                width=width,
-                height=height,
-                kind=_image_kind(url, metadata, raw_url=raw_url),
-            )
-        )
-    return ImageInfoResponse(items=items)
-
-
-def _image_kind(url: str, metadata: Metadata, *, raw_url: str | None) -> ImageKind:
-    """候选图归类: 上传件 → 自定义; 剧照池里的 → 剧照; 其余刮削封面."""
-    if raw_url is not None and raw_url.startswith("upload:"):
-        return ImageKind.CUSTOM
-    if url in metadata.extrafanart:
-        return ImageKind.STILL
-    if url in metadata.thumb_urls or url in metadata.poster_urls:
-        return ImageKind.COVER
-    return ImageKind.OTHER
-
-
-async def _resolve_image_origin(
-    store: ResourceStore, url: str, client: WebClient | None = None
-) -> tuple[str | None, str | None, tuple[int, int] | None]:
-    """候选图 → (溯源地址, 记录原 url, 像素尺寸).
-
-    外链会先**下载到本地**再量尺寸 —— 站点图在浏览器里读 ``naturalWidth`` 会被跨域拦,
-    统一在服务端落地后两边都能用, 之后显示也走本地地址.
-    """
-    url_hash = internal_url_hash(url)
-    if url_hash is None:
-        # 外链: 先落地再读尺寸; 失败就当没有尺寸, 不影响展示.
-        if client is None or not url.startswith(("http://", "https://")):
-            return (None, None, None)
-        local = await store.acquire(url, client)
-        if local is None:
-            return (None, None, None)
-        return (None, url, probe_oriented_size(local))
-
-    found = await store.get_by_url_hash(url_hash)
-    if found is None:
-        return (None, None, None)
-    record, path = found
-    size = probe_oriented_size(path)
-    meta = record.meta or {}
-    origin = meta.get("src") if isinstance(meta, dict) else None
-    return (origin if isinstance(origin, str) else None, record.url, size)

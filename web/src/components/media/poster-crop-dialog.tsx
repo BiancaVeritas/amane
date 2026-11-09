@@ -1,13 +1,10 @@
-import { Button } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
-import { IconPhoto } from "@tabler/icons-react";
 import { useMutation } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { cropPosterFromThumbMutation } from "@/client/@tanstack/react-query.gen";
 import type { ContentType } from "@/client/types.gen";
 import { ImageCropDialog } from "@/components/media/image-crop-dialog";
-import { ImagePickerDialog } from "@/components/media/image-picker-dialog";
 import { useConfig } from "@/hooks/use-config";
 import { extractErrorMessage } from "@/lib/api-error";
 
@@ -61,7 +58,6 @@ export function PosterCropDialog({
     setSourceIndex(0);
   }
   const activeSource = sources[Math.min(sourceIndex, sources.length - 1)] ?? thumbUrl;
-  const [pickerOpen, setPickerOpen] = useState(false);
 
   const mutation = useMutation({
     ...cropPosterFromThumbMutation(),
@@ -81,61 +77,35 @@ export function PosterCropDialog({
   });
 
   return (
-    <>
-      {/* 选图框压在裁切框之上 (zIndex), 裁切框保持打开 —— 选完新基准继续裁. */}
-      <ImageCropDialog
-        opened={opened}
-        onClose={onClose}
-        imageUrl={activeSource}
-        defaultAspect={configRatio}
-        initialAnchor="right"
-        submitting={mutation.isPending}
-        headerExtra={
-          sources.length > 1 ? (
-            <Button
-              size="compact-xs"
-              variant="light"
-              leftSection={<IconPhoto size={12} />}
-              onClick={() => setPickerOpen(true)}
-            >
-              {t("detail.cropPoster.selectSource")}
-            </Button>
-          ) : undefined
-        }
-        onSubmit={(box, rotation) =>
-          mutation.mutate({
-            path: { metadata_id: metadataId },
-            body: { ...box, rotation, source_url: activeSource === thumbUrl ? null : activeSource },
-          })
-        }
-        labels={{
-          title: t("detail.cropPoster.title"),
-          confirm: t("detail.cropPoster.confirm"),
-          needSelection: t("detail.cropPoster.needSelection"),
-          operationFailed: t("common:toast.operationFailed"),
-          aspect: t("detail.cropPoster.aspect"),
-          lockAspect: t("detail.cropPoster.lockAspect"),
-          left: t("detail.cropPoster.left"),
-          top: t("detail.cropPoster.top"),
-          width: t("detail.cropPoster.width"),
-          height: t("detail.cropPoster.height"),
-          cancel: t("common:actions.cancel"),
-          rotateLeft: t("detail.cropPoster.rotateLeft"),
-          rotateRight: t("detail.cropPoster.rotateRight"),
-          resetRotation: t("detail.cropPoster.resetRotation"),
-        }}
-      />
-      {/* 选图完成后关闭自身, 裁剪框随即重新打开并换成新基准. */}
-      <ImagePickerDialog
-        opened={pickerOpen}
-        onClose={() => setPickerOpen(false)}
-        images={sources}
-        title={t("detail.cropPoster.selectSource")}
-        onPick={(url) => {
-          setSourceIndex(Math.max(0, sources.indexOf(url)));
-          setPickerOpen(false);
-        }}
-      />
-    </>
+    <ImageCropDialog
+      opened={opened}
+      onClose={onClose}
+      imageUrl={activeSource}
+      defaultAspect={configRatio}
+      initialAnchor="right"
+      submitting={mutation.isPending}
+      onSubmit={(box, rotation) =>
+        mutation.mutate({
+          path: { metadata_id: metadataId },
+          body: { ...box, rotation, source_url: activeSource === thumbUrl ? null : activeSource },
+        })
+      }
+      labels={{
+        title: t("detail.cropPoster.title"),
+        confirm: t("detail.cropPoster.confirm"),
+        needSelection: t("detail.cropPoster.needSelection"),
+        operationFailed: t("common:toast.operationFailed"),
+        aspect: t("detail.cropPoster.aspect"),
+        lockAspect: t("detail.cropPoster.lockAspect"),
+        left: t("detail.cropPoster.left"),
+        top: t("detail.cropPoster.top"),
+        width: t("detail.cropPoster.width"),
+        height: t("detail.cropPoster.height"),
+        cancel: t("common:actions.cancel"),
+        rotateLeft: t("detail.cropPoster.rotateLeft"),
+        rotateRight: t("detail.cropPoster.rotateRight"),
+        resetRotation: t("detail.cropPoster.resetRotation"),
+      }}
+    />
   );
 }
