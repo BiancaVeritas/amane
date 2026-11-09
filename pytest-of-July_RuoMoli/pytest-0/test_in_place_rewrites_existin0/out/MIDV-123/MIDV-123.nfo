@@ -1,8 +1,0 @@
-<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<movie>
-  <num>MIDV-123</num>
-  <title>MIDV-123 新标题</title>
-  <mpaa>JP-18+</mpaa>
-  <cover>https://s/t.jpg</cover>
-  <trailer>https://s/trailer.mp4</trailer>
-</movie>
