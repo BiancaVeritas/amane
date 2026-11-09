@@ -144,8 +144,13 @@ def crop_poster(
     *,
     poster_ratio: float = _DEFAULT_POSTER_RATIO,
     jpeg_quality: int = _DEFAULT_JPEG_QUALITY,
+    detect_face: bool = True,
 ) -> bool:
-    """海报取封面右侧, 宽度 = height × poster_ratio."""
+    """从封面裁出海报, 宽度 = height × poster_ratio, 高度不变.
+
+    ``detect_face`` 开启时先找最大的脸, 把裁切窗口滑到它上面居中; 检测不到人脸则退回封面
+    右侧 —— 日式封面右半通常就是竖版海报.
+    """
     try:
         img = Image.open(thumb_path)
         w, h = img.size
@@ -156,15 +161,33 @@ def crop_poster(
             _save_jpeg(img, poster_path, jpeg_quality)
             return True
 
-        # 从右侧裁剪.
-        left = w - target_w
-        cropped = img.crop((left, 0, w, h))
+        left = _poster_crop_left(img, target_w, detect_face=detect_face)
+        with Image.open(thumb_path) as src:
+            cropped = src.convert("RGB").crop((left, 0, left + target_w, h))
         poster_path.parent.mkdir(parents=True, exist_ok=True)
         _save_jpeg(cropped, poster_path, jpeg_quality)
         return True
     except Exception as e:
         logger.warning("poster crop failed", path=str(thumb_path), error=str(e))
         return False
+
+
+def _poster_crop_left(img: Image.Image, target_w: int, *, detect_face: bool) -> int:
+    """裁切窗口的左边距; 人脸居中优先, 未知则取右侧."""
+    w, _ = img.size
+    fallback = w - target_w
+    if not detect_face:
+        return fallback
+
+    from .face_detect import largest_face
+
+    face = largest_face(img)
+    if face is None:
+        return fallback
+    x1, _, x2, _ = face
+    face_cx = (x1 + x2) / 2
+    # 夹在 [0, 右边距] 内: 窗口始终完整落在封面内, 脸靠边时停在边界而不裁出画面.
+    return round(min(max(0.0, face_cx - target_w / 2), float(fallback)))
 
 
 def crop_box(

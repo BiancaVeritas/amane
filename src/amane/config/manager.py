@@ -357,6 +357,13 @@ class ScrapingConfig(BaseModel):
     """海报裁剪跳过阈值. 当 poster 候选高度已达 thumb 高度的此比例以上时, 视为候选够用, 不再从 thumb 裁剪
     (裁剪有错位风险, 非必要不做). 默认 0.9."""
 
+    poster_crop_detect_face: bool = True
+    """从封面裁海报时先检测人脸定位.
+
+    关闭则固定取封面右侧 —— 日式封面右半通常是竖版海报, 但人物布局不标准时 (多人合照、
+    人物居中) 会裁偏. 检测不到人脸时同样退回取右侧.
+    """
+
     jpeg_quality: int = Field(default=95, ge=50, le=100, json_schema_extra={"x-hidden": True})
 
     content_routes: dict[ContentType, list[str]] = Field(

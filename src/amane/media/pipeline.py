@@ -156,7 +156,13 @@ async def materialize_images(
             local_thumb = thumb_local
 
             async def crop_producer(dest: Path) -> bool:
-                return crop_poster(local_thumb, dest, poster_ratio=ratio, jpeg_quality=config.scraping.jpeg_quality)
+                return crop_poster(
+                    local_thumb,
+                    dest,
+                    poster_ratio=ratio,
+                    jpeg_quality=config.scraping.jpeg_quality,
+                    detect_face=config.scraping.poster_crop_detect_face,
+                )
 
             crop_res = await store.acquire_derived(thumb_src or "", "crop", args, crop_producer)
             if crop_res:
