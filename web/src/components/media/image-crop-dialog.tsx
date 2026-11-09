@@ -492,8 +492,6 @@ export function ImageCropDialog({
                 }}
                 aspect={lockAspect ? aspectRatio : undefined}
                 keepSelection
-                minWidth={20}
-                minHeight={20}
               >
                 <canvas
                   ref={canvasRef}
