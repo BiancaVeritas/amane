@@ -222,6 +222,7 @@ function TitleDetailPage() {
   const {
     upload,
     adopt,
+    remove: removeImage,
     pending: imagePending,
   } = useUploadMetaImage({
     metadataId: id,
@@ -1224,7 +1225,8 @@ function TitleDetailPage() {
             opened={pickerTarget !== null}
             onClose={() => setPickerTarget(null)}
             images={coverCandidates}
-            currentUrl={pickerTarget === "poster" ? posterSrc : thumbSrc}
+            selectedUrl={pickerTarget === "poster" ? posterSrc : thumbSrc}
+            onRemove={pickerTarget === null ? undefined : (url) => removeImage(url, pickerTarget)}
             title={
               pickerTarget === "poster"
                 ? t("detail.imagePicker.pickPoster")

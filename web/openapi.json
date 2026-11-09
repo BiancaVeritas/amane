@@ -1766,7 +1766,7 @@
           "metadata"
         ],
         "summary": "Adopt Thumb",
-        "description": "把一张已有图 (剧照 / 候选图) 设为封面.\n\n由**服务端**下载那张图 —— 站点图片不带 CORS 头, 前端直接 fetch 会被浏览器拦下.",
+        "description": "把一张已有图 (剧照 / 候选图) 设为封面. **只换引用, 不复制文件**.\n\n源图可能还没本地化, 先确保它在 Resource 里落地, 然后把它 join 到 ``thumb_urls`` 头部.\n复制一份会让来回切换不断堆积内容相同的副本, 列表越切越长.",
         "operationId": "adopt_thumb",
         "parameters": [
           {
@@ -1820,7 +1820,7 @@
           "metadata"
         ],
         "summary": "Adopt Poster",
-        "description": "把一张已有图 (剧照 / 候选图) 直接作为海报, 不裁剪. 由服务端取图, 理由同 ``adopt-thumb``.",
+        "description": "把一张已有图 (剧照 / 候选图) 按海报比例裁剪后作为海报.\n\n直接从源图派生裁剪结果, **不另存一份原图** —— 否则来回切换会不断堆积副本.",
         "operationId": "adopt_poster",
         "parameters": [
           {
@@ -1842,6 +1842,76 @@
               "title": "Source Url"
             },
             "description": "要采用的图地址 (剧照或候选图)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MetadataResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/metadata/{metadata_id}/images": {
+      "delete": {
+        "tags": [
+          "metadata"
+        ],
+        "summary": "Remove Image",
+        "description": "从候选池移除一张图. 只是去掉引用, **不删除磁盘文件** —— 裁切派生结果可能仍被其它条目共享.\n\n移除的若正是当前选中的那张, 顺延到池里的下一张 (池空则为无).",
+        "operationId": "remove_image",
+        "parameters": [
+          {
+            "name": "metadata_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Metadata Id"
+            }
+          },
+          {
+            "name": "url",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "要从候选池移除的图片地址",
+              "title": "Url"
+            },
+            "description": "要从候选池移除的图片地址"
+          },
+          {
+            "name": "target",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "thumb",
+                "poster"
+              ],
+              "type": "string",
+              "description": "封面还是海报候选池",
+              "default": "thumb",
+              "title": "Target"
+            },
+            "description": "封面还是海报候选池"
           }
         ],
         "responses": {
@@ -12981,6 +13051,28 @@
               }
             ],
             "title": "Thumb Urls"
+          },
+          "thumb_selected": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Thumb Selected"
+          },
+          "poster_selected": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Poster Selected"
           },
           "trailer_urls": {
             "anyOf": [

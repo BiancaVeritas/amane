@@ -5894,6 +5894,28 @@ export const MetadataPartialSchema = {
             ],
             title: 'Thumb Urls'
         },
+        thumb_selected: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Thumb Selected'
+        },
+        poster_selected: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Poster Selected'
+        },
         trailer_urls: {
             anyOf: [
                 {

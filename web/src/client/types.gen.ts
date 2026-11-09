@@ -2826,6 +2826,14 @@ export type MetadataPartial = {
      */
     thumb_urls?: Array<string> | null;
     /**
+     * Thumb Selected
+     */
+    thumb_selected?: string | null;
+    /**
+     * Poster Selected
+     */
+    poster_selected?: string | null;
+    /**
      * Trailer Urls
      */
     trailer_urls?: Array<string> | null;
@@ -6722,6 +6730,49 @@ export type AdoptPosterResponses = {
 };
 
 export type AdoptPosterResponse = AdoptPosterResponses[keyof AdoptPosterResponses];
+
+export type RemoveImageData = {
+    body?: never;
+    path: {
+        /**
+         * Metadata Id
+         */
+        metadata_id: number;
+    };
+    query: {
+        /**
+         * Url
+         *
+         * 要从候选池移除的图片地址
+         */
+        url: string;
+        /**
+         * Target
+         *
+         * 封面还是海报候选池
+         */
+        target?: 'thumb' | 'poster';
+    };
+    url: '/api/metadata/{metadata_id}/images';
+};
+
+export type RemoveImageErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type RemoveImageError = RemoveImageErrors[keyof RemoveImageErrors];
+
+export type RemoveImageResponses = {
+    /**
+     * Successful Response
+     */
+    200: MetadataResponse;
+};
+
+export type RemoveImageResponse = RemoveImageResponses[keyof RemoveImageResponses];
 
 export type MergeMetadataData = {
     body: MergeRequest;

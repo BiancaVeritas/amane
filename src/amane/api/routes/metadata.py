@@ -459,17 +459,26 @@ async def _dedupe_by_content(store: ResourceStore, urls: list[str], keep: str) -
 async def _apply_thumb(
     store: ResourceStore, repo: RepoDep, metadata_id: int, thumb_urls: list[str], url: str
 ) -> MetadataResponse:
-    """把 ``url`` 前置到封面列表; 清掉与它内容相同的旧副本."""
-    existing = await _dedupe_by_content(store, thumb_urls, url)
-    updated = await repo.update_metadata(metadata_id, mode=WriteMode.MANUAL, thumb_urls=[url, *existing])
+    """把 ``url`` 设为当前封面. 候选池顺序保持不变.
+
+    ``thumb_url`` 只是指向某张图的引用: 换封面改引用即可. 列表顺序是用户认图的编号,
+    每换一次就重排会让人看不出改了什么.
+    """
+    cleaned = await _dedupe_by_content(store, thumb_urls, url)
+    # 新图追加到末尾 (已在池中则保持原位), 既有编号不动.
+    ordered = cleaned if url in cleaned else [*cleaned, url]
+    updated = await repo.update_metadata(metadata_id, mode=WriteMode.MANUAL, thumb_urls=ordered, thumb_selected=url)
     assert updated is not None
     return to_resp(MetadataResponse, updated)
 
 
-async def _apply_poster(repo: RepoDep, metadata_id: int, poster_urls: list[str], url: str) -> MetadataResponse:
-    """把 ``url`` 前置到海报列表, 旧图保留在后面."""
-    existing = [item for item in poster_urls if item != url]
-    updated = await repo.update_metadata(metadata_id, mode=WriteMode.MANUAL, poster_urls=[url, *existing])
+async def _apply_poster(
+    store: ResourceStore, repo: RepoDep, metadata_id: int, poster_urls: list[str], url: str
+) -> MetadataResponse:
+    """把 ``url`` 设为当前海报. 候选池顺序保持不变, 理由同 ``_apply_thumb``."""
+    cleaned = await _dedupe_by_content(store, poster_urls, url)
+    ordered = cleaned if url in cleaned else [*cleaned, url]
+    updated = await repo.update_metadata(metadata_id, mode=WriteMode.MANUAL, poster_urls=ordered, poster_selected=url)
     assert updated is not None
     return to_resp(MetadataResponse, updated)
 
@@ -601,6 +610,63 @@ async def adopt_poster(
     updated = await _apply_poster(store, repo, metadata_id, metadata.poster_urls, url)
     logger.info("poster adopted", metadata_id=metadata_id, source_url=source_url, ratio=ratio)
     return updated.model_copy(update={"tags": runtime.tag_mappings.map_tags(updated.tags)})
+
+
+@router.delete("/{metadata_id}/images")
+async def remove_image(
+    metadata_id: int,
+    repo: RepoDep,
+    runtime: RuntimeDep,
+    url: Annotated[str, Query(description="要移除的图片地址")],
+    target: Annotated[Literal["thumb", "poster"], Query(description="封面还是海报候选池")] = "thumb",
+) -> MetadataResponse:
+    """从候选池移除一张图, 并**删掉本地文件**.
+
+    只删这一张: 其它条目可能引用同一份文件 (裁剪派生以源为键), 所以删之前先确认没有别的
+    条目还在用. 文件丢了不影响后续刮削 —— 重新刮削会重新下载.
+    """
+    metadata = await repo.get_metadata(metadata_id)
+    if metadata is None:
+        raise HTTPException(status_code=404, detail="影片不存在")
+
+    is_thumb = target == "thumb"
+    pool = list(metadata.thumb_urls if is_thumb else metadata.poster_urls)
+    selected = metadata.thumb_selected if is_thumb else metadata.poster_selected
+    if url not in pool:
+        raise HTTPException(status_code=404, detail="该图片不在候选池中")
+
+    # 去掉后按剩余顺序重排, 编号保持连续 (删掉第 4 张, 原来的第 5 张顺位成第 4 张).
+    remaining = [item for item in pool if item != url]
+    new_selected = selected
+    if selected == url:
+        new_selected = remaining[0] if remaining else None
+
+    if is_thumb:
+        updated = await repo.update_metadata(
+            metadata_id, mode=WriteMode.MANUAL, thumb_urls=remaining, thumb_selected=new_selected
+        )
+    else:
+        updated = await repo.update_metadata(
+            metadata_id, mode=WriteMode.MANUAL, poster_urls=remaining, poster_selected=new_selected
+        )
+    assert updated is not None
+
+    # 真正删盘: 文件丢了不影响后续, 重新刮削会重新下载.
+    await _purge_image(runtime, url)
+
+    logger.info("image removed", metadata_id=metadata_id, url=url, target=target)
+    return to_resp(MetadataResponse, updated).model_copy(update={"tags": runtime.tag_mappings.map_tags(updated.tags)})
+
+
+async def _purge_image(runtime: RuntimeDep, url: str) -> None:
+    """删掉这张图对应的本地文件与记录; 找不到就当作已清理."""
+    store = runtime.resource_store
+    url_hash = internal_url_hash(url)
+    if url_hash is None:
+        return
+    found = await store.get_by_url_hash(url_hash)
+    if found is not None:
+        await store.invalidate(found[0].url)
 
 
 async def _translate_selected_text(updates: dict[str, object], runtime: RuntimeDep, content_type: ContentType) -> None:

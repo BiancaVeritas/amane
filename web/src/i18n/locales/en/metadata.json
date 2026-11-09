@@ -190,7 +190,8 @@
       "pickPoster": "Choose a poster image",
       "pick": "Pick image {{index}}",
       "current": "Current",
-      "empty": "No candidate images available"
+      "empty": "No candidate images available",
+      "remove": "Remove this image"
     }
   },
   "browse": {

@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 import {
   adoptPosterMutation,
   adoptThumbMutation,
+  removeImageMutation,
   uploadPosterMutation,
   uploadThumbMutation,
 } from "@/client/@tanstack/react-query.gen";
@@ -99,5 +100,15 @@ export function useUploadMetaImage({ metadataId, onSuccess }: UploadMetaImageOpt
     else adoptPoster.mutate(options, done);
   };
 
-  return { upload, adopt, pending };
+  const removeImage = useMutation({
+    ...removeImageMutation(),
+    onSuccess: notifySuccess,
+    onError: notifyError,
+  });
+
+  const remove = (url: string, target: ImageTarget) => {
+    removeImage.mutate({ path: { metadata_id: metadataId }, query: { url, target } });
+  };
+
+  return { upload, adopt, remove, pending };
 }
