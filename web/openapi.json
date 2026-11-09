@@ -1650,6 +1650,294 @@
         }
       }
     },
+    "/api/metadata/{metadata_id}/upload-thumb": {
+      "post": {
+        "tags": [
+          "metadata"
+        ],
+        "summary": "Upload Thumb",
+        "description": "上传自定义封面. 原样使用, 不裁剪. 旧封面保留在列表后面.",
+        "operationId": "upload_thumb",
+        "parameters": [
+          {
+            "name": "metadata_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Metadata Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/octet-stream": {
+              "schema": {
+                "type": "string",
+                "contentMediaType": "application/octet-stream",
+                "title": "File"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MetadataResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/metadata/{metadata_id}/upload-poster": {
+      "post": {
+        "tags": [
+          "metadata"
+        ],
+        "summary": "Upload Poster",
+        "description": "上传自定义图片作为海报.\n\n存好后按当前比例**自动裁剪一次** (人脸优先定位主体); 不满意可以再调 ``crop-poster``\n手工调整. 旧海报保留在列表后面.",
+        "operationId": "upload_poster",
+        "parameters": [
+          {
+            "name": "metadata_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Metadata Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/octet-stream": {
+              "schema": {
+                "type": "string",
+                "contentMediaType": "application/octet-stream",
+                "title": "File"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MetadataResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/metadata/{metadata_id}/adopt-thumb": {
+      "post": {
+        "tags": [
+          "metadata"
+        ],
+        "summary": "Adopt Thumb",
+        "description": "把一张已有图 (剧照 / 候选图) 设为封面. **只换引用, 不复制文件**.\n\n源图可能还没本地化, 先确保它在 Resource 里落地, 然后把它 join 到 ``thumb_urls`` 头部.\n复制一份会让来回切换不断堆积内容相同的副本, 列表越切越长.",
+        "operationId": "adopt_thumb",
+        "parameters": [
+          {
+            "name": "metadata_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Metadata Id"
+            }
+          },
+          {
+            "name": "source_url",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "要采用的图地址 (剧照或候选图)",
+              "title": "Source Url"
+            },
+            "description": "要采用的图地址 (剧照或候选图)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MetadataResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/metadata/{metadata_id}/adopt-poster": {
+      "post": {
+        "tags": [
+          "metadata"
+        ],
+        "summary": "Adopt Poster",
+        "description": "把一张已有图 (剧照 / 候选图) 按海报比例裁剪后作为海报.\n\n直接从源图派生裁剪结果, **不另存一份原图** —— 否则来回切换会不断堆积副本.",
+        "operationId": "adopt_poster",
+        "parameters": [
+          {
+            "name": "metadata_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Metadata Id"
+            }
+          },
+          {
+            "name": "source_url",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "要采用的图地址 (剧照或候选图)",
+              "title": "Source Url"
+            },
+            "description": "要采用的图地址 (剧照或候选图)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MetadataResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/metadata/{metadata_id}/images": {
+      "delete": {
+        "tags": [
+          "metadata"
+        ],
+        "summary": "Remove Image",
+        "description": "从候选池移除一张图, 并**删掉本地文件**.\n\n只删这一张: 其它条目可能引用同一份文件 (裁剪派生以源为键), 所以删之前先确认没有别的\n条目还在用. 文件丢了不影响后续刮削 —— 重新刮削会重新下载.",
+        "operationId": "remove_image",
+        "parameters": [
+          {
+            "name": "metadata_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Metadata Id"
+            }
+          },
+          {
+            "name": "url",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "要移除的图片地址",
+              "title": "Url"
+            },
+            "description": "要移除的图片地址"
+          },
+          {
+            "name": "target",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "thumb",
+                "poster"
+              ],
+              "type": "string",
+              "description": "封面还是海报候选池",
+              "default": "thumb",
+              "title": "Target"
+            },
+            "description": "封面还是海报候选池"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MetadataResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/metadata/{metadata_id}/merge": {
       "post": {
         "tags": [
@@ -1685,6 +1973,59 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/MetadataResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/metadata/{metadata_id}/image-info": {
+      "post": {
+        "tags": [
+          "metadata"
+        ],
+        "summary": "Image Info",
+        "description": "候选图的来源与分辨率, 供选图框展示.\n\n内部地址会溯源到原始站点 (裁切件的 ``meta.src``、上传件的 ``meta.kind``), 拿不到就按\n大类标注. 分辨率只对已本地化的图有效, 未下载的返回空.",
+        "operationId": "image_info",
+        "parameters": [
+          {
+            "name": "metadata_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Metadata Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImageInfoRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImageInfoResponse"
                 }
               }
             }
@@ -10670,6 +11011,95 @@
         "type": "object",
         "title": "HotSettings",
         "description": "运行时可更新, 持久化到 TOML. extra=forbid, 未知字段须校验失败."
+      },
+      "ImageInfo": {
+        "properties": {
+          "url": {
+            "type": "string",
+            "title": "Url",
+            "description": "原样返回的地址"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source",
+            "description": "来源名; 认不出时为空",
+            "default": ""
+          },
+          "width": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Width",
+            "description": "像素宽; 未本地化或损坏时为空"
+          },
+          "height": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Height",
+            "description": "像素高"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/ImageKind",
+            "description": "用于排序: 封面 → 剧照 → 自定义",
+            "default": "other"
+          }
+        },
+        "type": "object",
+        "required": [
+          "url"
+        ],
+        "title": "ImageInfo",
+        "description": "一张候选图的展示信息."
+      },
+      "ImageInfoRequest": {
+        "properties": {
+          "urls": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Urls",
+            "description": "候选图地址 (内部或外链)"
+          }
+        },
+        "type": "object",
+        "title": "ImageInfoRequest",
+        "description": "查询一批候选图的来源与分辨率."
+      },
+      "ImageInfoResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ImageInfo"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "title": "ImageInfoResponse"
+      },
+      "ImageKind": {
+        "type": "string",
+        "enum": [
+          "cover",
+          "still",
+          "custom",
+          "other"
+        ],
+        "title": "ImageKind",
+        "description": "候选图的来源类别; 决定选图框里的排列顺序."
       },
       "Interrupt": {
         "properties": {

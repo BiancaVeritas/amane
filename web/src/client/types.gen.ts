@@ -1794,6 +1794,73 @@ export type HotSettings = {
 };
 
 /**
+ * ImageInfo
+ *
+ * 一张候选图的展示信息.
+ */
+export type ImageInfo = {
+    /**
+     * Url
+     *
+     * 原样返回的地址
+     */
+    url: string;
+    /**
+     * Source
+     *
+     * 来源名; 认不出时为空
+     */
+    source?: string;
+    /**
+     * Width
+     *
+     * 像素宽; 未本地化或损坏时为空
+     */
+    width?: number | null;
+    /**
+     * Height
+     *
+     * 像素高
+     */
+    height?: number | null;
+    /**
+     * 用于排序: 封面 → 剧照 → 自定义
+     */
+    kind?: ImageKind;
+};
+
+/**
+ * ImageInfoRequest
+ *
+ * 查询一批候选图的来源与分辨率.
+ */
+export type ImageInfoRequest = {
+    /**
+     * Urls
+     *
+     * 候选图地址 (内部或外链)
+     */
+    urls?: Array<string>;
+};
+
+/**
+ * ImageInfoResponse
+ */
+export type ImageInfoResponse = {
+    /**
+     * Items
+     */
+    items?: Array<ImageInfo>;
+};
+
+/**
+ * ImageKind
+ *
+ * 候选图的来源类别; 决定选图框里的排列顺序.
+ */
+export type ImageKind = 'cover' | 'still' | 'custom' | 'other';
+
+/**
  * Interrupt
  *
  * A pause carried inside ``RunFinishedEvent.outcome`` when the outcome is
@@ -6583,6 +6650,189 @@ export type CropPosterFromThumbResponses = {
 
 export type CropPosterFromThumbResponse = CropPosterFromThumbResponses[keyof CropPosterFromThumbResponses];
 
+export type UploadThumbData = {
+    /**
+     * File
+     */
+    body: Blob | File;
+    path: {
+        /**
+         * Metadata Id
+         */
+        metadata_id: number;
+    };
+    query?: never;
+    url: '/api/metadata/{metadata_id}/upload-thumb';
+};
+
+export type UploadThumbErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type UploadThumbError = UploadThumbErrors[keyof UploadThumbErrors];
+
+export type UploadThumbResponses = {
+    /**
+     * Successful Response
+     */
+    200: MetadataResponse;
+};
+
+export type UploadThumbResponse = UploadThumbResponses[keyof UploadThumbResponses];
+
+export type UploadPosterData = {
+    /**
+     * File
+     */
+    body: Blob | File;
+    path: {
+        /**
+         * Metadata Id
+         */
+        metadata_id: number;
+    };
+    query?: never;
+    url: '/api/metadata/{metadata_id}/upload-poster';
+};
+
+export type UploadPosterErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type UploadPosterError = UploadPosterErrors[keyof UploadPosterErrors];
+
+export type UploadPosterResponses = {
+    /**
+     * Successful Response
+     */
+    200: MetadataResponse;
+};
+
+export type UploadPosterResponse = UploadPosterResponses[keyof UploadPosterResponses];
+
+export type AdoptThumbData = {
+    body?: never;
+    path: {
+        /**
+         * Metadata Id
+         */
+        metadata_id: number;
+    };
+    query: {
+        /**
+         * Source Url
+         *
+         * 要采用的图地址 (剧照或候选图)
+         */
+        source_url: string;
+    };
+    url: '/api/metadata/{metadata_id}/adopt-thumb';
+};
+
+export type AdoptThumbErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type AdoptThumbError = AdoptThumbErrors[keyof AdoptThumbErrors];
+
+export type AdoptThumbResponses = {
+    /**
+     * Successful Response
+     */
+    200: MetadataResponse;
+};
+
+export type AdoptThumbResponse = AdoptThumbResponses[keyof AdoptThumbResponses];
+
+export type AdoptPosterData = {
+    body?: never;
+    path: {
+        /**
+         * Metadata Id
+         */
+        metadata_id: number;
+    };
+    query: {
+        /**
+         * Source Url
+         *
+         * 要采用的图地址 (剧照或候选图)
+         */
+        source_url: string;
+    };
+    url: '/api/metadata/{metadata_id}/adopt-poster';
+};
+
+export type AdoptPosterErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type AdoptPosterError = AdoptPosterErrors[keyof AdoptPosterErrors];
+
+export type AdoptPosterResponses = {
+    /**
+     * Successful Response
+     */
+    200: MetadataResponse;
+};
+
+export type AdoptPosterResponse = AdoptPosterResponses[keyof AdoptPosterResponses];
+
+export type RemoveImageData = {
+    body?: never;
+    path: {
+        /**
+         * Metadata Id
+         */
+        metadata_id: number;
+    };
+    query: {
+        /**
+         * Url
+         *
+         * 要移除的图片地址
+         */
+        url: string;
+        /**
+         * Target
+         *
+         * 封面还是海报候选池
+         */
+        target?: 'thumb' | 'poster';
+    };
+    url: '/api/metadata/{metadata_id}/images';
+};
+
+export type RemoveImageErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type RemoveImageError = RemoveImageErrors[keyof RemoveImageErrors];
+
+export type RemoveImageResponses = {
+    /**
+     * Successful Response
+     */
+    200: MetadataResponse;
+};
+
+export type RemoveImageResponse = RemoveImageResponses[keyof RemoveImageResponses];
+
 export type MergeMetadataData = {
     body: MergeRequest;
     path: {
@@ -6612,6 +6862,36 @@ export type MergeMetadataResponses = {
 };
 
 export type MergeMetadataResponse = MergeMetadataResponses[keyof MergeMetadataResponses];
+
+export type ImageInfoData = {
+    body: ImageInfoRequest;
+    path: {
+        /**
+         * Metadata Id
+         */
+        metadata_id: number;
+    };
+    query?: never;
+    url: '/api/metadata/{metadata_id}/image-info';
+};
+
+export type ImageInfoErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ImageInfoError = ImageInfoErrors[keyof ImageInfoErrors];
+
+export type ImageInfoResponses = {
+    /**
+     * Successful Response
+     */
+    200: ImageInfoResponse;
+};
+
+export type ImageInfoResponse2 = ImageInfoResponses[keyof ImageInfoResponses];
 
 export type BrowserBackendsData = {
     body?: never;
