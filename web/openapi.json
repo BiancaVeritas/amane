@@ -1650,14 +1650,14 @@
         }
       }
     },
-    "/api/metadata/{metadata_id}/upload-image": {
+    "/api/metadata/{metadata_id}/upload-thumb": {
       "post": {
         "tags": [
           "metadata"
         ],
-        "summary": "Upload Image",
-        "description": "上传自定义图片, 作为海报或封面.\n\n海报: 存好后按当前比例**自动裁剪一次**, 结果插到 ``poster_urls`` 头部; 用户不满意可以\n再调 ``crop-poster`` 手工调整. 封面: 保持原图与原比例, 直接插到 ``thumb_urls`` 头部.\n\n**不删除**原有地址, 只把新地址放到最前面; 想退回原来的图, 删掉首项即可.",
-        "operationId": "upload_image",
+        "summary": "Upload Thumb",
+        "description": "上传自定义封面. 原样使用, 不裁剪. 旧封面保留在列表后面.",
+        "operationId": "upload_thumb",
         "parameters": [
           {
             "name": "metadata_id",
@@ -1667,22 +1667,6 @@
               "type": "integer",
               "title": "Metadata Id"
             }
-          },
-          {
-            "name": "target",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "enum": [
-                "poster",
-                "thumb"
-              ],
-              "type": "string",
-              "description": "作为海报还是封面",
-              "default": "poster",
-              "title": "Target"
-            },
-            "description": "作为海报还是封面"
           }
         ],
         "requestBody": {
@@ -1721,14 +1705,69 @@
         }
       }
     },
-    "/api/metadata/{metadata_id}/adopt-image": {
+    "/api/metadata/{metadata_id}/upload-poster": {
       "post": {
         "tags": [
           "metadata"
         ],
-        "summary": "Adopt Image",
-        "description": "把一张已有图 (剧照 / 其它候选图) 设为封面或海报.\n\n由**服务端**下载那张图再按上传流程处理 —— 站点图片不带 CORS 头, 前端直接 fetch 会被\n浏览器拦下 (Failed to fetch).",
-        "operationId": "adopt_image",
+        "summary": "Upload Poster",
+        "description": "上传自定义图片作为海报.\n\n存好后按当前比例**自动裁剪一次** (人脸优先定位主体); 不满意可以再调 ``crop-poster``\n手工调整. 旧海报保留在列表后面.",
+        "operationId": "upload_poster",
+        "parameters": [
+          {
+            "name": "metadata_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Metadata Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/octet-stream": {
+              "schema": {
+                "type": "string",
+                "contentMediaType": "application/octet-stream",
+                "title": "File"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MetadataResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/metadata/{metadata_id}/adopt-thumb": {
+      "post": {
+        "tags": [
+          "metadata"
+        ],
+        "summary": "Adopt Thumb",
+        "description": "把一张已有图 (剧照 / 候选图) 设为封面.\n\n由**服务端**下载那张图 —— 站点图片不带 CORS 头, 前端直接 fetch 会被浏览器拦下.",
+        "operationId": "adopt_thumb",
         "parameters": [
           {
             "name": "metadata_id",
@@ -1745,26 +1784,64 @@
             "required": true,
             "schema": {
               "type": "string",
-              "description": "要采用的图地址 (剧照或其它候选图)",
+              "description": "要采用的图地址 (剧照或候选图)",
               "title": "Source Url"
             },
-            "description": "要采用的图地址 (剧照或其它候选图)"
+            "description": "要采用的图地址 (剧照或候选图)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MetadataResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/metadata/{metadata_id}/adopt-poster": {
+      "post": {
+        "tags": [
+          "metadata"
+        ],
+        "summary": "Adopt Poster",
+        "description": "把一张已有图 (剧照 / 候选图) 直接作为海报, 不裁剪. 由服务端取图, 理由同 ``adopt-thumb``.",
+        "operationId": "adopt_poster",
+        "parameters": [
+          {
+            "name": "metadata_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Metadata Id"
+            }
           },
           {
-            "name": "target",
+            "name": "source_url",
             "in": "query",
-            "required": false,
+            "required": true,
             "schema": {
-              "enum": [
-                "poster",
-                "thumb"
-              ],
               "type": "string",
-              "description": "作为海报还是封面",
-              "default": "thumb",
-              "title": "Target"
+              "description": "要采用的图地址 (剧照或候选图)",
+              "title": "Source Url"
             },
-            "description": "作为海报还是封面"
+            "description": "要采用的图地址 (剧照或候选图)"
           }
         ],
         "responses": {

@@ -416,55 +416,33 @@ def _resource_url(store: ResourceStore, locator: str) -> str:
     return f"{RESOURCE_URL_PREFIX}/{store.url_hash(locator)}"
 
 
-#: 上传图落到 data_dir/uploads, 与刮削下载的 Resource 分开; 原图与旧地址都保留.
-UPLOAD_KIND_POSTER = "poster"
-UPLOAD_KIND_THUMB = "thumb"
+def _poster_ratio(runtime: RuntimeDep, content_type: ContentType) -> float:
+    """海报比例按内容类型分别配置."""
+    hot = runtime.config.hot.scraping
+    return hot.uncensored_poster_ratio if content_type == ContentType.UNCENSORED else hot.poster_ratio
 
 
-@router.post("/{metadata_id}/upload-image")
-async def upload_image(
-    metadata_id: int,
-    repo: RepoDep,
-    runtime: RuntimeDep,
-    file: Annotated[bytes, Body(media_type="application/octet-stream")],
-    target: Annotated[Literal["poster", "thumb"], Query(description="作为海报还是封面")] = "poster",
-) -> MetadataResponse:
-    """上传自定义图片, 作为海报或封面.
-
-    海报: 存好后按当前比例**自动裁剪一次**, 结果插到 ``poster_urls`` 头部; 用户不满意可以
-    再调 ``crop-poster`` 手工调整. 封面: 保持原图与原比例, 直接插到 ``thumb_urls`` 头部.
-
-    **不删除**原有地址, 只把新地址放到最前面; 想退回原来的图, 删掉首项即可.
-    """
-    metadata = await repo.get_metadata(metadata_id)
-    if metadata is None:
-        raise HTTPException(status_code=404, detail="影片不存在")
-
-    store = runtime.resource_store
+async def _store_upload_or_400(store: ResourceStore, data: bytes, *, kind: str) -> StoredUpload:
     try:
-        stored = await store_upload(store, file, kind=target)
+        return await store_upload(store, data, kind=kind)
     except UploadRejected as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
 
-    if target == UPLOAD_KIND_THUMB:
-        internal = _resource_url(store, stored.url)
-        existing = [url for url in metadata.thumb_urls if url != internal]
-        updated = await repo.update_metadata(metadata_id, mode=WriteMode.MANUAL, thumb_urls=[internal, *existing])
-        assert updated is not None
-        logger.info("thumb uploaded", metadata_id=metadata_id, url=internal)
-    else:
-        ratio = (
-            runtime.config.hot.scraping.uncensored_poster_ratio
-            if metadata.content_type == ContentType.UNCENSORED
-            else runtime.config.hot.scraping.poster_ratio
-        )
-        poster_url = await _crop_upload_to_poster(stored, ratio, store, runtime)
-        existing = [url for url in metadata.poster_urls if url != poster_url]
-        updated = await repo.update_metadata(metadata_id, mode=WriteMode.MANUAL, poster_urls=[poster_url, *existing])
-        assert updated is not None
-        logger.info("poster uploaded", metadata_id=metadata_id, url=poster_url, ratio=ratio)
 
-    return to_resp(MetadataResponse, updated).model_copy(update={"tags": runtime.tag_mappings.map_tags(updated.tags)})
+async def _apply_thumb(repo: RepoDep, metadata_id: int, thumb_urls: list[str], url: str) -> MetadataResponse:
+    """把 ``url`` 前置到封面列表, 旧图保留在后面."""
+    existing = [item for item in thumb_urls if item != url]
+    updated = await repo.update_metadata(metadata_id, mode=WriteMode.MANUAL, thumb_urls=[url, *existing])
+    assert updated is not None
+    return to_resp(MetadataResponse, updated)
+
+
+async def _apply_poster(repo: RepoDep, metadata_id: int, poster_urls: list[str], url: str) -> MetadataResponse:
+    """把 ``url`` 前置到海报列表, 旧图保留在后面."""
+    existing = [item for item in poster_urls if item != url]
+    updated = await repo.update_metadata(metadata_id, mode=WriteMode.MANUAL, poster_urls=[url, *existing])
+    assert updated is not None
+    return to_resp(MetadataResponse, updated)
 
 
 async def _crop_upload_to_poster(stored: StoredUpload, ratio: float, store: ResourceStore, runtime: RuntimeDep) -> str:
@@ -487,18 +465,61 @@ async def _crop_upload_to_poster(stored: StoredUpload, ratio: float, store: Reso
     return _resource_url(store, crop_res.url)
 
 
-@router.post("/{metadata_id}/adopt-image")
-async def adopt_image(
+@router.post("/{metadata_id}/upload-thumb")
+async def upload_thumb(
     metadata_id: int,
     repo: RepoDep,
     runtime: RuntimeDep,
-    source_url: Annotated[str, Query(description="要采用的图地址 (剧照或其它候选图)")],
-    target: Annotated[Literal["poster", "thumb"], Query(description="作为海报还是封面")] = "thumb",
+    file: Annotated[bytes, Body(media_type="application/octet-stream")],
 ) -> MetadataResponse:
-    """把一张已有图 (剧照 / 其它候选图) 设为封面或海报.
+    """上传自定义封面. 原样使用, 不裁剪. 旧封面保留在列表后面."""
+    metadata = await repo.get_metadata(metadata_id)
+    if metadata is None:
+        raise HTTPException(status_code=404, detail="影片不存在")
 
-    由**服务端**下载那张图再按上传流程处理 —— 站点图片不带 CORS 头, 前端直接 fetch 会被
-    浏览器拦下 (Failed to fetch).
+    store = runtime.resource_store
+    stored = await _store_upload_or_400(store, file, kind="thumb")
+    url = _resource_url(store, stored.url)
+    updated = await _apply_thumb(repo, metadata_id, metadata.thumb_urls, url)
+    logger.info("thumb uploaded", metadata_id=metadata_id, url=url)
+    return updated.model_copy(update={"tags": runtime.tag_mappings.map_tags(updated.tags)})
+
+
+@router.post("/{metadata_id}/upload-poster")
+async def upload_poster(
+    metadata_id: int,
+    repo: RepoDep,
+    runtime: RuntimeDep,
+    file: Annotated[bytes, Body(media_type="application/octet-stream")],
+) -> MetadataResponse:
+    """上传自定义图片作为海报.
+
+    存好后按当前比例**自动裁剪一次** (人脸优先定位主体); 不满意可以再调 ``crop-poster``
+    手工调整. 旧海报保留在列表后面.
+    """
+    metadata = await repo.get_metadata(metadata_id)
+    if metadata is None:
+        raise HTTPException(status_code=404, detail="影片不存在")
+
+    store = runtime.resource_store
+    stored = await _store_upload_or_400(store, file, kind="poster")
+    ratio = _poster_ratio(runtime, metadata.content_type)
+    url = await _crop_upload_to_poster(stored, ratio, store, runtime)
+    updated = await _apply_poster(repo, metadata_id, metadata.poster_urls, url)
+    logger.info("poster uploaded", metadata_id=metadata_id, url=url, ratio=ratio)
+    return updated.model_copy(update={"tags": runtime.tag_mappings.map_tags(updated.tags)})
+
+
+@router.post("/{metadata_id}/adopt-thumb")
+async def adopt_thumb(
+    metadata_id: int,
+    repo: RepoDep,
+    runtime: RuntimeDep,
+    source_url: Annotated[str, Query(description="要采用的图地址 (剧照或候选图)")],
+) -> MetadataResponse:
+    """把一张已有图 (剧照 / 候选图) 设为封面.
+
+    由**服务端**下载那张图 —— 站点图片不带 CORS 头, 前端直接 fetch 会被浏览器拦下.
     """
     metadata = await repo.get_metadata(metadata_id)
     if metadata is None:
@@ -508,30 +529,37 @@ async def adopt_image(
     path = await store.acquire(source_url, runtime.web_client)
     if path is None:
         raise HTTPException(status_code=400, detail="无法获取该图片")
-    data = path.read_bytes()
 
-    try:
-        stored = await store_upload(store, data, kind=target)
-    except UploadRejected as e:
-        raise HTTPException(status_code=400, detail=str(e)) from e
+    stored = await _store_upload_or_400(store, path.read_bytes(), kind="thumb")
+    url = _resource_url(store, stored.url)
+    updated = await _apply_thumb(repo, metadata_id, metadata.thumb_urls, url)
+    logger.info("thumb adopted", metadata_id=metadata_id, source_url=source_url)
+    return updated.model_copy(update={"tags": runtime.tag_mappings.map_tags(updated.tags)})
 
-    if target == UPLOAD_KIND_THUMB:
-        internal = _resource_url(store, stored.url)
-        existing = [url for url in metadata.thumb_urls if url != internal]
-        updated = await repo.update_metadata(metadata_id, mode=WriteMode.MANUAL, thumb_urls=[internal, *existing])
-    else:
-        ratio = (
-            runtime.config.hot.scraping.uncensored_poster_ratio
-            if metadata.content_type == ContentType.UNCENSORED
-            else runtime.config.hot.scraping.poster_ratio
-        )
-        poster_url = await _crop_upload_to_poster(stored, ratio, store, runtime)
-        existing = [url for url in metadata.poster_urls if url != poster_url]
-        updated = await repo.update_metadata(metadata_id, mode=WriteMode.MANUAL, poster_urls=[poster_url, *existing])
 
-    assert updated is not None
-    logger.info("image adopted", metadata_id=metadata_id, source_url=source_url, target=target)
-    return to_resp(MetadataResponse, updated).model_copy(update={"tags": runtime.tag_mappings.map_tags(updated.tags)})
+@router.post("/{metadata_id}/adopt-poster")
+async def adopt_poster(
+    metadata_id: int,
+    repo: RepoDep,
+    runtime: RuntimeDep,
+    source_url: Annotated[str, Query(description="要采用的图地址 (剧照或候选图)")],
+) -> MetadataResponse:
+    """把一张已有图 (剧照 / 候选图) 直接作为海报, 不裁剪. 由服务端取图, 理由同 ``adopt-thumb``."""
+    metadata = await repo.get_metadata(metadata_id)
+    if metadata is None:
+        raise HTTPException(status_code=404, detail="影片不存在")
+
+    store = runtime.resource_store
+    path = await store.acquire(source_url, runtime.web_client)
+    if path is None:
+        raise HTTPException(status_code=400, detail="无法获取该图片")
+
+    stored = await _store_upload_or_400(store, path.read_bytes(), kind="poster")
+    ratio = _poster_ratio(runtime, metadata.content_type)
+    url = await _crop_upload_to_poster(stored, ratio, store, runtime)
+    updated = await _apply_poster(repo, metadata_id, metadata.poster_urls, url)
+    logger.info("poster adopted", metadata_id=metadata_id, source_url=source_url, ratio=ratio)
+    return updated.model_copy(update={"tags": runtime.tag_mappings.map_tags(updated.tags)})
 
 
 async def _translate_selected_text(updates: dict[str, object], runtime: RuntimeDep, content_type: ContentType) -> None:

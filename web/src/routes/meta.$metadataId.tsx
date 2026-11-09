@@ -45,7 +45,6 @@ import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "rea
 import { useTranslation } from "react-i18next";
 import { z } from "zod";
 import {
-  adoptImageMutation,
   batchMetadataUserTagsMutation,
   createUserTagsMutation,
   deleteMetadataMutation,
@@ -216,23 +215,13 @@ function TitleDetailPage() {
     });
   };
 
-  const { upload, pending: uploadPending } = useUploadMetaImage({
+  const {
+    upload,
+    adopt,
+    pending: imagePending,
+  } = useUploadMetaImage({
     metadataId: id,
     onSuccess: invalidateDetail,
-  });
-
-  // 采用已有图 (剧照/候选图): 由后端下载, 避免前端 fetch 撞上 CORS.
-  const adoptMutation = useMutation({
-    ...adoptImageMutation(),
-    onSuccess: () => {
-      notifications.show({ message: t("detail.upload.success"), color: "blue" });
-      invalidateDetail();
-    },
-    onError: (err) =>
-      notifications.show({
-        message: extractErrorMessage(err, t("common:toast.operationFailed")),
-        color: "red",
-      }),
   });
 
   /**
@@ -241,12 +230,8 @@ function TitleDetailPage() {
    * 由**后端**去取那张图再存成上传件 —— 前端直接 ``fetch`` 外部图片会被 CORS 拦下
    * (站点的图不返回 ``Access-Control-Allow-Origin``), 报 "Failed to fetch".
    */
-  const applyImageSource = async (url: string, target: "poster" | "thumb") => {
-    if (!url) return;
-    await adoptMutation.mutateAsync({
-      path: { metadata_id: id },
-      query: { target, source_url: url },
-    });
+  const applyImageSource = (url: string, target: "poster" | "thumb") => {
+    adopt(url, target);
   };
 
   const scrapeMutation = useMutation({
@@ -742,7 +727,7 @@ function TitleDetailPage() {
                 </Button>
               </Box>
             </Tooltip>
-            {/* 上传与选图放在一个菜单里: 两者都是「换掉当前显示的图」, 分开放会让这一行过长. */}
+            {/* 封面与海报各用一个按钮, 各自只作用于自己那张图. */}
             <Menu
               shadow="md"
               position="bottom-start"
@@ -755,13 +740,12 @@ function TitleDetailPage() {
                   size="xs"
                   variant="light"
                   leftSection={<IconUpload size={14} />}
-                  loading={uploadPending}
+                  loading={imagePending === "thumb"}
                 >
-                  {t("detail.upload.action")}
+                  {t("detail.upload.cover")}
                 </Button>
               </Menu.Target>
               <Menu.Dropdown>
-                <Menu.Label>{t("detail.upload.replaceCover")}</Menu.Label>
                 <Menu.Item
                   leftSection={<IconUpload size={14} />}
                   onClick={() => thumbPickerRef.current?.click()}
@@ -776,8 +760,26 @@ function TitleDetailPage() {
                     {t("detail.upload.fromStill")}
                   </Menu.Item>
                 )}
-                <Menu.Divider />
-                <Menu.Label>{t("detail.upload.replacePoster")}</Menu.Label>
+              </Menu.Dropdown>
+            </Menu>
+            <Menu
+              shadow="md"
+              position="bottom-start"
+              trigger="hover"
+              openDelay={100}
+              closeDelay={200}
+            >
+              <Menu.Target>
+                <Button
+                  size="xs"
+                  variant="light"
+                  leftSection={<IconUpload size={14} />}
+                  loading={imagePending === "poster"}
+                >
+                  {t("detail.upload.poster")}
+                </Button>
+              </Menu.Target>
+              <Menu.Dropdown>
                 <Menu.Item
                   leftSection={<IconUpload size={14} />}
                   onClick={() => posterPickerRef.current?.click()}

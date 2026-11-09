@@ -172,14 +172,13 @@
       "sourceOther": "Candidate {{index}}"
     },
     "upload": {
-      "action": "Replace image",
-      "replaceCover": "Cover",
-      "replacePoster": "Poster",
       "fromFile": "Upload image",
       "fromStill": "Use a still as cover",
       "success": "Image updated",
       "unsupported": "Only JPG / PNG / WEBP are supported",
-      "tooLarge": "Image must be under 20 MB"
+      "tooLarge": "Image must be under 20 MB",
+      "cover": "Replace cover",
+      "poster": "Replace poster"
     },
     "playbackCopyTimestamp": "Copy timestamp",
     "playbackCopyLink": "Copy link to current time",

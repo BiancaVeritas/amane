@@ -6583,7 +6583,7 @@ export type CropPosterFromThumbResponses = {
 
 export type CropPosterFromThumbResponse = CropPosterFromThumbResponses[keyof CropPosterFromThumbResponses];
 
-export type UploadImageData = {
+export type UploadThumbData = {
     /**
      * File
      */
@@ -6594,36 +6594,62 @@ export type UploadImageData = {
          */
         metadata_id: number;
     };
-    query?: {
-        /**
-         * Target
-         *
-         * 作为海报还是封面
-         */
-        target?: 'poster' | 'thumb';
-    };
-    url: '/api/metadata/{metadata_id}/upload-image';
+    query?: never;
+    url: '/api/metadata/{metadata_id}/upload-thumb';
 };
 
-export type UploadImageErrors = {
+export type UploadThumbErrors = {
     /**
      * Validation Error
      */
     422: HttpValidationError;
 };
 
-export type UploadImageError = UploadImageErrors[keyof UploadImageErrors];
+export type UploadThumbError = UploadThumbErrors[keyof UploadThumbErrors];
 
-export type UploadImageResponses = {
+export type UploadThumbResponses = {
     /**
      * Successful Response
      */
     200: MetadataResponse;
 };
 
-export type UploadImageResponse = UploadImageResponses[keyof UploadImageResponses];
+export type UploadThumbResponse = UploadThumbResponses[keyof UploadThumbResponses];
 
-export type AdoptImageData = {
+export type UploadPosterData = {
+    /**
+     * File
+     */
+    body: Blob | File;
+    path: {
+        /**
+         * Metadata Id
+         */
+        metadata_id: number;
+    };
+    query?: never;
+    url: '/api/metadata/{metadata_id}/upload-poster';
+};
+
+export type UploadPosterErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type UploadPosterError = UploadPosterErrors[keyof UploadPosterErrors];
+
+export type UploadPosterResponses = {
+    /**
+     * Successful Response
+     */
+    200: MetadataResponse;
+};
+
+export type UploadPosterResponse = UploadPosterResponses[keyof UploadPosterResponses];
+
+export type AdoptThumbData = {
     body?: never;
     path: {
         /**
@@ -6635,36 +6661,67 @@ export type AdoptImageData = {
         /**
          * Source Url
          *
-         * 要采用的图地址 (剧照或其它候选图)
+         * 要采用的图地址 (剧照或候选图)
          */
         source_url: string;
-        /**
-         * Target
-         *
-         * 作为海报还是封面
-         */
-        target?: 'poster' | 'thumb';
     };
-    url: '/api/metadata/{metadata_id}/adopt-image';
+    url: '/api/metadata/{metadata_id}/adopt-thumb';
 };
 
-export type AdoptImageErrors = {
+export type AdoptThumbErrors = {
     /**
      * Validation Error
      */
     422: HttpValidationError;
 };
 
-export type AdoptImageError = AdoptImageErrors[keyof AdoptImageErrors];
+export type AdoptThumbError = AdoptThumbErrors[keyof AdoptThumbErrors];
 
-export type AdoptImageResponses = {
+export type AdoptThumbResponses = {
     /**
      * Successful Response
      */
     200: MetadataResponse;
 };
 
-export type AdoptImageResponse = AdoptImageResponses[keyof AdoptImageResponses];
+export type AdoptThumbResponse = AdoptThumbResponses[keyof AdoptThumbResponses];
+
+export type AdoptPosterData = {
+    body?: never;
+    path: {
+        /**
+         * Metadata Id
+         */
+        metadata_id: number;
+    };
+    query: {
+        /**
+         * Source Url
+         *
+         * 要采用的图地址 (剧照或候选图)
+         */
+        source_url: string;
+    };
+    url: '/api/metadata/{metadata_id}/adopt-poster';
+};
+
+export type AdoptPosterErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type AdoptPosterError = AdoptPosterErrors[keyof AdoptPosterErrors];
+
+export type AdoptPosterResponses = {
+    /**
+     * Successful Response
+     */
+    200: MetadataResponse;
+};
+
+export type AdoptPosterResponse = AdoptPosterResponses[keyof AdoptPosterResponses];
 
 export type MergeMetadataData = {
     body: MergeRequest;
