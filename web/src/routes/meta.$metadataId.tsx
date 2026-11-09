@@ -404,6 +404,25 @@ function TitleDetailPage() {
     }
   }
 
+  // 可当作封面/海报基准的图: 现有封面、海报与剧照, 去重后按出现顺序.
+  // 必须排在提前 return 之前: 否则首次渲染 (加载中) 少跑一次 useMemo, 加载完成后 hook
+  // 数量变化, React 会报 "Rendered more hooks than during the previous render".
+  const coverCandidates = useMemo(() => {
+    const source = data?.metadata;
+    const seen = new Set<string>();
+    const out: string[] = [];
+    for (const url of [
+      ...(source?.thumb_urls ?? []),
+      ...(source?.poster_urls ?? []),
+      ...(source?.extrafanart ?? []),
+    ]) {
+      if (!url || seen.has(url)) continue;
+      seen.add(url);
+      out.push(url);
+    }
+    return out;
+  }, [data?.metadata]);
+
   if (!validId) {
     return (
       <Alert color="red" icon={<IconAlertCircle size={18} />}>
@@ -437,21 +456,6 @@ function TitleDetailPage() {
   const hasExtrafanart = item.extrafanart && item.extrafanart.length > 0;
   const runtime = formatRuntime(item.runtime);
 
-  // 可当作封面/海报基准的图: 现有封面、海报与剧照, 去重后按出现顺序.
-  const coverCandidates = useMemo(() => {
-    const seen = new Set<string>();
-    const out: string[] = [];
-    for (const url of [
-      ...(item.thumb_urls ?? []),
-      ...(item.poster_urls ?? []),
-      ...(item.extrafanart ?? []),
-    ]) {
-      if (!url || seen.has(url)) continue;
-      seen.add(url);
-      out.push(url);
-    }
-    return out;
-  }, [item.thumb_urls, item.poster_urls, item.extrafanart]);
   // 中日文成对字段共享一个锁控件; 写入时仍展开为后端现有的两个字段锁.
   const pairedLockFields = (field: MetadataField): MetadataField[] => {
     if (field === "title" || field === "original_title") return ["title", "original_title"];
