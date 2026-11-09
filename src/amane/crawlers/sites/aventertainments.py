@@ -63,23 +63,16 @@ def _load_pro_index() -> dict[str, int]:
 
 
 def lookup_pro(number: str) -> int | None:
-    """按番号查 pro. 先精确匹配, 再退到「去掉分隔符后唯一」的宽松匹配.
+    """按番号精确查 pro; 未命中返回 None.
 
-    站点把 ``JS-03`` 与 ``JS03`` 当作不同商品, 因此宽松匹配只在结果唯一时采用,
-    存在歧义时宁可不给结果, 交给搜索页兜底.
+    **不做归一匹配**. 站点把 ``AND-001`` 与 ``AND001``、``F-B001`` 与 ``FB001`` 当作不同
+    商品 (索引里两种写法各自存在), 归一后强行合并会把 A 的 pro 安到 B 的番号上. 未命中
+    交给搜索页兜底, 那里的站内检索按原文匹配.
     """
     index = _load_pro_index()
     if not index:
         return None
-    key = number.strip().upper()
-    if exact := index.get(key):
-        return exact
-
-    folded = re.sub(r"[^A-Z0-9]", "", key)
-    if not folded:
-        return None
-    loose = [pro for candidate, pro in index.items() if re.sub(r"[^A-Z0-9]", "", candidate) == folded]
-    return loose[0] if len(loose) == 1 else None
+    return index.get(number.strip().upper())
 
 
 #: 该站的 VerifyBot 按「无 Referer 的浏览器请求」放行; 带上站内 Referer 反而落进挑战分支.

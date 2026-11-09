@@ -15,6 +15,7 @@ from amane.crawlers.sites.aventertainments import (
     _number_key,
     _search_terms,
     _version_links,
+    lookup_pro,
 )
 from amane.enums import SiteName
 
@@ -300,3 +301,24 @@ def test_parser_extracts_title_from_h3_when_jsonld_and_h1_are_absent() -> None:
     metadata = _metadata_from_page(DETAIL_URL, html)
     assert metadata is not None
     assert metadata.title == "S Model 06 : 沢木樹里 (ブルーレイ版)"
+
+
+@pytest.mark.parametrize(
+    ("number", "expected"),
+    [
+        # 分隔符是番号的一部分: 站点把带与不带 ``-`` 的两种写法当作不同商品,
+        # 索引里各自存在且 pro 不同, 不能归一.
+        ("AND-001", 114609),
+        ("AND001", 9730),
+        ("F-B001", 7383),
+        ("FB001", 5671),
+        # 只存在于一种写法时, 另一种必须查不到, 交给搜索页兜底.
+        ("DR009", 80),
+        ("DR-009", None),
+        # 大小写不敏感: 索引键统一大写.
+        ("gsdv-005", 162896),
+        ("不存在的番号", None),
+    ],
+)
+def test_lookup_pro_matches_exactly_without_normalizing(number: str, expected: int | None) -> None:
+    assert lookup_pro(number) == expected
