@@ -178,7 +178,8 @@
       "unsupported": "Only JPG / PNG / WEBP are supported",
       "tooLarge": "Image must be under 20 MB",
       "cover": "Replace cover",
-      "poster": "Replace poster"
+      "poster": "Replace poster",
+      "action": "Replace image"
     },
     "playbackCopyTimestamp": "Copy timestamp",
     "playbackCopyLink": "Copy link to current time",

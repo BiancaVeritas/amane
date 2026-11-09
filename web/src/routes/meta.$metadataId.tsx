@@ -727,7 +727,7 @@ function TitleDetailPage() {
                 </Button>
               </Box>
             </Tooltip>
-            {/* 封面与海报各用一个按钮, 各自只作用于自己那张图. */}
+            {/* 一个入口换图: 分行列出封面与海报, 避免按钮挤满一行. */}
             <Menu
               shadow="md"
               position="bottom-start"
@@ -740,12 +740,13 @@ function TitleDetailPage() {
                   size="xs"
                   variant="light"
                   leftSection={<IconUpload size={14} />}
-                  loading={imagePending === "thumb"}
+                  loading={imagePending !== null}
                 >
-                  {t("detail.upload.cover")}
+                  {t("detail.upload.action")}
                 </Button>
               </Menu.Target>
               <Menu.Dropdown>
+                <Menu.Label>{t("detail.upload.cover")}</Menu.Label>
                 <Menu.Item
                   leftSection={<IconUpload size={14} />}
                   onClick={() => thumbPickerRef.current?.click()}
@@ -755,31 +756,13 @@ function TitleDetailPage() {
                 {coverCandidates.length > 0 && (
                   <Menu.Item
                     leftSection={<IconPhoto size={14} />}
-                    onClick={() => void applyImageSource(coverCandidates[0] ?? "", "thumb")}
+                    onClick={() => applyImageSource(coverCandidates[0] ?? "", "thumb")}
                   >
                     {t("detail.upload.fromStill")}
                   </Menu.Item>
                 )}
-              </Menu.Dropdown>
-            </Menu>
-            <Menu
-              shadow="md"
-              position="bottom-start"
-              trigger="hover"
-              openDelay={100}
-              closeDelay={200}
-            >
-              <Menu.Target>
-                <Button
-                  size="xs"
-                  variant="light"
-                  leftSection={<IconUpload size={14} />}
-                  loading={imagePending === "poster"}
-                >
-                  {t("detail.upload.poster")}
-                </Button>
-              </Menu.Target>
-              <Menu.Dropdown>
+                <Menu.Divider />
+                <Menu.Label>{t("detail.upload.poster")}</Menu.Label>
                 <Menu.Item
                   leftSection={<IconUpload size={14} />}
                   onClick={() => posterPickerRef.current?.click()}

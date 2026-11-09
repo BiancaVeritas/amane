@@ -526,9 +526,12 @@ async def adopt_thumb(
         raise HTTPException(status_code=404, detail="影片不存在")
 
     store = runtime.resource_store
-    path = await store.acquire(source_url, runtime.web_client)
-    if path is None:
+    # 候选图可能是外链, 也可能是已缓存的内部地址 (`/api/resources/{hash}`); 后者只有
+    # `resolve_source` 认, `acquire` 只处理 http(s).
+    resolved = await store.resolve_source(source_url, runtime.web_client)
+    if resolved is None:
         raise HTTPException(status_code=400, detail="无法获取该图片")
+    path = resolved.path
 
     stored = await _store_upload_or_400(store, path.read_bytes(), kind="thumb")
     url = _resource_url(store, stored.url)
@@ -550,9 +553,12 @@ async def adopt_poster(
         raise HTTPException(status_code=404, detail="影片不存在")
 
     store = runtime.resource_store
-    path = await store.acquire(source_url, runtime.web_client)
-    if path is None:
+    # 候选图可能是外链, 也可能是已缓存的内部地址 (`/api/resources/{hash}`); 后者只有
+    # `resolve_source` 认, `acquire` 只处理 http(s).
+    resolved = await store.resolve_source(source_url, runtime.web_client)
+    if resolved is None:
         raise HTTPException(status_code=400, detail="无法获取该图片")
+    path = resolved.path
 
     stored = await _store_upload_or_400(store, path.read_bytes(), kind="poster")
     ratio = _poster_ratio(runtime, metadata.content_type)
