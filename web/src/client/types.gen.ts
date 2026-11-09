@@ -1823,6 +1823,10 @@ export type ImageInfo = {
      * 像素高
      */
     height?: number | null;
+    /**
+     * 用于排序: 封面 → 剧照 → 自定义
+     */
+    kind?: ImageKind;
 };
 
 /**
@@ -1848,6 +1852,13 @@ export type ImageInfoResponse = {
      */
     items?: Array<ImageInfo>;
 };
+
+/**
+ * ImageKind
+ *
+ * 候选图的来源类别; 决定选图框里的排列顺序.
+ */
+export type ImageKind = 'cover' | 'still' | 'custom' | 'other';
 
 /**
  * Interrupt

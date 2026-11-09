@@ -7,12 +7,14 @@ export interface ImageInfoItem {
   source?: string;
   width?: number | null;
   height?: number | null;
+  /** 排序用: 封面 → 剧照 → 自定义. */
+  kind?: "cover" | "still" | "custom" | "other";
 }
 
 export interface ImagePickerDialogProps {
   opened: boolean;
   onClose: () => void;
-  /** 候选图; 顺序固定, 选中不打乱. */
+  /** 候选图; 选中不打乱相对次序. */
   images: string[];
   /** 每张的来源与分辨率, 由 ``image-info`` 端点提供; 缺失时该行留空. */
   infos?: Map<string, ImageInfoItem>;
@@ -20,6 +22,14 @@ export interface ImagePickerDialogProps {
   onPick: (url: string) => void;
   onRemove?: (url: string) => void;
 }
+
+/** 展示顺序: 封面在前, 剧照居中, 自定义最后; 同组内保持原次序. */
+const KIND_ORDER: Record<NonNullable<ImageInfoItem["kind"]>, number> = {
+  cover: 0,
+  still: 1,
+  custom: 2,
+  other: 3,
+};
 
 /**
  * 从候选池里挑一张, 或把某张移出候选池.
@@ -37,6 +47,12 @@ export function ImagePickerDialog({
 }: ImagePickerDialogProps) {
   const { t } = useTranslation(["metadata", "common"]);
 
+  // 按类别重排: 封面 → 剧照 → 自定义. 组内顺序沿用后端给的候选次序.
+  const ordered = images
+    .map((url, index) => ({ url, index, kind: infos?.get(url)?.kind ?? "other" }))
+    .sort((a, b) => KIND_ORDER[a.kind] - KIND_ORDER[b.kind] || a.index - b.index)
+    .map((entry) => entry.url);
+
   return (
     <Modal
       opened={opened}
@@ -48,13 +64,13 @@ export function ImagePickerDialog({
       zIndex={400}
     >
       <Stack gap="sm">
-        {images.length === 0 ? (
+        {ordered.length === 0 ? (
           <Text size="sm" c="dimmed">
             {t("detail.imagePicker.empty")}
           </Text>
         ) : (
           <SimpleGrid cols={{ base: 2, sm: 3, md: 4 }} spacing="sm">
-            {images.map((url, index) => {
+            {ordered.map((url, index) => {
               const src = proxyImageUrl(url);
               const info = infos?.get(url);
               const size = info?.width && info.height ? `${info.width}×${info.height}` : null;
@@ -93,11 +109,11 @@ export function ImagePickerDialog({
                       {t("detail.imagePicker.remove")}
                     </Button>
                   )}
-                  <Stack gap={0} px={6} py={4}>
-                    <Text size="xs" fw={500} lineClamp={1}>
+                  <Stack gap={0} px={6} py={4} align="center">
+                    <Text size="xs" fw={500} lineClamp={1} ta="center">
                       {info?.source ?? ""}
                     </Text>
-                    <Text size="xs" c="dimmed" ff="monospace">
+                    <Text size="xs" c="dimmed" ff="monospace" ta="center">
                       {size ?? ""}
                     </Text>
                   </Stack>

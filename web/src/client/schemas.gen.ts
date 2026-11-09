@@ -3802,6 +3802,11 @@ export const ImageInfoSchema = {
             ],
             title: 'Height',
             description: '像素高'
+        },
+        kind: {
+            $ref: '#/components/schemas/ImageKind',
+            description: '用于排序: 封面 → 剧照 → 自定义',
+            default: 'other'
         }
     },
     type: 'object',
@@ -3840,6 +3845,18 @@ export const ImageInfoResponseSchema = {
     },
     type: 'object',
     title: 'ImageInfoResponse'
+} as const;
+
+export const ImageKindSchema = {
+    type: 'string',
+    enum: [
+        'cover',
+        'still',
+        'custom',
+        'other'
+    ],
+    title: 'ImageKind',
+    description: '候选图的来源类别; 决定选图框里的排列顺序.'
 } as const;
 
 export const InterruptSchema = {

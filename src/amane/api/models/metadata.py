@@ -1,4 +1,5 @@
 from datetime import datetime
+from enum import StrEnum
 from typing import TYPE_CHECKING, Literal
 
 from pydantic import BaseModel, Field, field_validator
@@ -160,6 +161,21 @@ class ImageInfoRequest(BaseModel):
     urls: list[str] = Field(default_factory=list, description="候选图地址 (内部或外链)")
 
 
+class ImageKind(StrEnum):
+    """候选图的来源类别; 决定选图框里的排列顺序."""
+
+    COVER = "cover"
+    """刮削得到的封面 (站点原图)."""
+
+    STILL = "still"
+    """剧照."""
+
+    CUSTOM = "custom"
+    """用户上传的图."""
+
+    OTHER = "other"
+
+
 class ImageInfo(BaseModel):
     """一张候选图的展示信息."""
 
@@ -167,6 +183,7 @@ class ImageInfo(BaseModel):
     source: str = Field(default="", description="来源名; 认不出时为空")
     width: int | None = Field(default=None, description="像素宽; 未本地化或损坏时为空")
     height: int | None = Field(default=None, description="像素高")
+    kind: ImageKind = Field(default=ImageKind.OTHER, description="用于排序: 封面 → 剧照 → 自定义")
 
 
 class ImageInfoResponse(BaseModel):

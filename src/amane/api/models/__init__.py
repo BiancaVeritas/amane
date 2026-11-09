@@ -62,6 +62,7 @@ from .metadata import (
     FilePhaseSummary,
     ImageInfo,
     ImageInfoRequest,
+    ImageKind,
     ImageInfoResponse,
     MergeRequest,
     MetadataBatchDeleteResponse,

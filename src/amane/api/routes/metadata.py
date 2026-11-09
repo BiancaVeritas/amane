@@ -31,6 +31,7 @@ from ..models import (
     ImageInfo,
     ImageInfoRequest,
     ImageInfoResponse,
+    ImageKind,
     MergeRequest,
     MetadataBatchDeleteResponse,
     MetadataBatchIdsRequest,
@@ -52,6 +53,7 @@ from .saved_queries import resolve_saved_query_id_subquery
 
 if TYPE_CHECKING:
     from ...db.repo_types import MetadataFields
+    from ...net.http import WebClient
 
 logger = structlog.get_logger()
 
@@ -822,7 +824,7 @@ async def image_info(
     store = runtime.resource_store
     items: list[ImageInfo] = []
     for url in req.urls:
-        origin, raw_url, size = await _resolve_image_origin(store, url)
+        origin, raw_url, size = await _resolve_image_origin(store, url, runtime.web_client)
         width, height = size if size is not None else (None, None)
         items.append(
             ImageInfo(
@@ -830,21 +832,41 @@ async def image_info(
                 source=_source_label(url, origin=origin, raw_url=raw_url),
                 width=width,
                 height=height,
+                kind=_image_kind(url, metadata, raw_url=raw_url),
             )
         )
     return ImageInfoResponse(items=items)
 
 
-async def _resolve_image_origin(
-    store: ResourceStore, url: str
-) -> tuple[str | None, str | None, tuple[int, int] | None]:
-    """内部地址 → (溯源地址, 记录原 url, 像素尺寸).
+def _image_kind(url: str, metadata: Metadata, *, raw_url: str | None) -> ImageKind:
+    """候选图归类: 上传件 → 自定义; 剧照池里的 → 剧照; 其余刮削封面."""
+    if raw_url is not None and raw_url.startswith("upload:"):
+        return ImageKind.CUSTOM
+    if url in metadata.extrafanart:
+        return ImageKind.STILL
+    if url in metadata.thumb_urls or url in metadata.poster_urls:
+        return ImageKind.COVER
+    return ImageKind.OTHER
 
-    外链没有本地记录, 三个值都是 None; 内部地址若尚未缓存, 同样拿不到尺寸.
+
+async def _resolve_image_origin(
+    store: ResourceStore, url: str, client: WebClient | None = None
+) -> tuple[str | None, str | None, tuple[int, int] | None]:
+    """候选图 → (溯源地址, 记录原 url, 像素尺寸).
+
+    外链会先**下载到本地**再量尺寸 —— 站点图在浏览器里读 ``naturalWidth`` 会被跨域拦,
+    统一在服务端落地后两边都能用, 之后显示也走本地地址.
     """
     url_hash = internal_url_hash(url)
     if url_hash is None:
-        return (None, None, None)
+        # 外链: 先落地再读尺寸; 失败就当没有尺寸, 不影响展示.
+        if client is None or not url.startswith(("http://", "https://")):
+            return (None, None, None)
+        local = await store.acquire(url, client)
+        if local is None:
+            return (None, None, None)
+        return (None, url, probe_oriented_size(local))
+
     found = await store.get_by_url_hash(url_hash)
     if found is None:
         return (None, None, None)
