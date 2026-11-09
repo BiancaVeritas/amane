@@ -197,8 +197,6 @@ class _GenderModel:
 
     def is_female(self, rgb: np.ndarray, bbox: tuple[float, float, float, float]) -> bool | None:
         """True=女, False=男, None=无法判断."""
-        import cv2
-
         x1, y1, x2, y2 = bbox
         w, h = x2 - x1, y2 - y1
         if w <= 0 or h <= 0:
@@ -206,17 +204,35 @@ class _GenderModel:
         center = ((x1 + x2) / 2, (y1 + y2) / 2)
         # 留 1.5 倍余量, 与官方一致: 裁剪范围比人脸框宽.
         scale = self._size / (max(w, h) * 1.5)
-        matrix = np.array(
-            [[scale, 0, -center[0] * scale + self._size / 2], [0, scale, -center[1] * scale + self._size / 2]],
-            dtype=np.float32,
-        )
-        aligned = cv2.warpAffine(rgb, matrix, (self._size, self._size), borderValue=0.0)
-        blob = cv2.dnn.blobFromImage(aligned, 1.0 / 128.0, (self._size, self._size), (127.5, 127.5, 127.5), swapRB=True)
+        aligned = _warp_affine_center(rgb, center, scale, self._size)
+        # 与 cv2.dnn.blobFromImage(1/128, (127.5,127.5,127.5), swapRB=True) 等价:
+        # 先 BGR, 再 (x-127.5)/128, 最后转成 NCHW.
+        blob = (aligned[:, :, ::-1].astype(np.float32) - 127.5) / 128.0
+        blob = np.ascontiguousarray(blob.transpose(2, 0, 1)[None])
         pred = self._session.run(None, {self._input_name: blob})[0][0]
         if len(pred) < 2:
             return None
         # 前两位是性别对数, 取大者: 0=女, 1=男.
         return int(np.argmax(pred[:2])) == 0
+
+
+def _warp_affine_center(rgb: np.ndarray, center: tuple[float, float], scale: float, size: int) -> np.ndarray:
+    """以 ``center`` 为中心按 ``scale`` 缩放到 ``size × size``.
+
+    等价于 ``cv2.warpAffine`` 配 ``[[s,0,-cx*s+size/2],[0,s,-cy*s+size/2]]``:
+    目标像素中心取最近邻原像素, 越界补 0. 只为一个 96×96 的裁剪引 opencv 不值得.
+    """
+    target = (np.arange(size, dtype=np.float32) + 0.5 - size / 2) / scale
+    ys = target + center[1]
+    xs = target + center[0]
+    xi = np.rint(xs).astype(np.intp)
+    yi = np.rint(ys).astype(np.intp)
+    valid_x = (xi >= 0) & (xi < rgb.shape[1])
+    valid_y = (yi >= 0) & (yi < rgb.shape[0])
+    out = np.zeros((size, size, rgb.shape[2]), dtype=rgb.dtype)
+    if valid_x.any() and valid_y.any():
+        out[np.ix_(valid_y, valid_x)] = rgb[np.ix_(yi[valid_y], xi[valid_x])]
+    return out
 
 
 @lru_cache(maxsize=1)
@@ -252,7 +268,13 @@ def main_subject_face(
     if gender is not None:
         rgb = np.asarray(image.convert("RGB"))
         for face in faces:
-            if gender.is_female(rgb, (face[0], face[1], face[2], face[3])):
+            try:
+                is_female = gender.is_female(rgb, (face[0], face[1], face[2], face[3]))
+            except Exception as e:
+                # 性别判定只是锦上添花: 失败就退回最大脸, 别让整个裁剪跟着失败.
+                logger.debug("gender inference failed", error=str(e))
+                break
+            if is_female:
                 return (face[0], face[1], face[2], face[3])
     # 没有性别模型, 或没有一张判为女性: 退回最大脸.
     x1, y1, x2, y2, _ = faces[0]

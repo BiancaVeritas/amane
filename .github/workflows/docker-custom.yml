@@ -39,7 +39,7 @@ jobs:
         uses: docker/metadata-action@v6
         with:
           images: ${{ env.IMAGE }}
-          # custom/v0.24.1 -> custom-v0.24.1; 固定别名 custom; 短 sha 便于回溯
+          # custom/v0.26.0 -> custom-v0.26.0; 固定别名 custom; 短 sha 便于回溯
           tags: |
             type=ref,event=branch
             type=raw,value=custom
