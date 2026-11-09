@@ -184,7 +184,14 @@
     "playbackCopyTimestamp": "Copy timestamp",
     "playbackCopyLink": "Copy link to current time",
     "playbackCopied": "Copied to clipboard",
-    "playbackCopyFailed": "Copy failed"
+    "playbackCopyFailed": "Copy failed",
+    "imagePicker": {
+      "pickCover": "Choose a cover image",
+      "pickPoster": "Choose a poster image",
+      "pick": "Pick image {{index}}",
+      "current": "Current",
+      "empty": "No candidate images available"
+    }
   },
   "browse": {
     "title": "Browse",

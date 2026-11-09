@@ -67,6 +67,7 @@ import { FanartLightbox, FanartStrip } from "@/components/media/fanart-lightbox"
 import { FilePhaseBadges, FilePhaseOverlay } from "@/components/media/file-phase-badges";
 import { OverlayChip, OverlayChipLabel } from "@/components/media/overlay-chip";
 import { VrOverlayChip } from "@/components/media/vr-badge";
+import { ImagePickerDialog } from "@/components/media/image-picker-dialog";
 import { PosterCropDialog } from "@/components/media/poster-crop-dialog";
 import { useUploadMetaImage } from "@/components/media/use-upload-meta-image";
 import { MergeDialog } from "@/components/metadata/merge-dialog";
@@ -149,6 +150,8 @@ function TitleDetailPage() {
   const [editOpen, setEditOpen] = useState(false);
   const [mergeOpen, setMergeOpen] = useState(false);
   const [cropOpen, setCropOpen] = useState(false);
+  // 挑图对话框: 有目标时才打开, 同时决定选中的图落到封面还是海报.
+  const [pickerTarget, setPickerTarget] = useState<"thumb" | "poster" | null>(null);
   // 上传选图用的隐藏 input; 菜单项点击时转交给它们.
   const thumbPickerRef = useRef<HTMLInputElement>(null);
   const posterPickerRef = useRef<HTMLInputElement>(null);
@@ -756,7 +759,7 @@ function TitleDetailPage() {
                 {coverCandidates.length > 0 && (
                   <Menu.Item
                     leftSection={<IconPhoto size={14} />}
-                    onClick={() => applyImageSource(coverCandidates[0] ?? "", "thumb")}
+                    onClick={() => setPickerTarget("thumb")}
                   >
                     {t("detail.upload.fromStill")}
                   </Menu.Item>
@@ -1213,18 +1216,36 @@ function TitleDetailPage() {
       />
 
       {thumbSrc && (
-        <PosterCropDialog
-          opened={cropOpen}
-          onClose={() => setCropOpen(false)}
-          metadataId={id}
-          thumbUrl={thumbSrc}
-          contentType={item.content_type}
-          alternativeSources={coverCandidates.filter((url) => url !== thumbSrc)}
-          onSuccess={() => {
-            invalidateDetail();
-            void queryClient.invalidateQueries({ queryKey: listMetadataQueryKey() });
-          }}
-        />
+        <>
+          <ImagePickerDialog
+            opened={pickerTarget !== null}
+            onClose={() => setPickerTarget(null)}
+            images={coverCandidates}
+            currentUrl={pickerTarget === "poster" ? posterSrc : thumbSrc}
+            title={
+              pickerTarget === "poster"
+                ? t("detail.imagePicker.pickPoster")
+                : t("detail.imagePicker.pickCover")
+            }
+            onPick={(url) => {
+              const target = pickerTarget ?? "thumb";
+              setPickerTarget(null);
+              applyImageSource(url, target);
+            }}
+          />
+          <PosterCropDialog
+            opened={cropOpen}
+            onClose={() => setCropOpen(false)}
+            metadataId={id}
+            thumbUrl={thumbSrc}
+            contentType={item.content_type}
+            alternativeSources={coverCandidates.filter((url) => url !== thumbSrc)}
+            onSuccess={() => {
+              invalidateDetail();
+              void queryClient.invalidateQueries({ queryKey: listMetadataQueryKey() });
+            }}
+          />
+        </>
       )}
 
       {coverLightboxOpen && coverSrc && (

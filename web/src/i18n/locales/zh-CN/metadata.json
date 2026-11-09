@@ -181,7 +181,14 @@
     "playbackCopyTimestamp": "复制时间戳",
     "playbackCopyLink": "复制当前时间的链接",
     "playbackCopied": "已复制到剪贴板",
-    "playbackCopyFailed": "复制失败"
+    "playbackCopyFailed": "复制失败",
+    "imagePicker": {
+      "pickCover": "选择封面图",
+      "pickPoster": "选择海报图",
+      "pick": "选择第 {{index}} 张",
+      "current": "当前",
+      "empty": "没有可用的候选图"
+    }
   },
   "browse": {
     "title": "分类浏览",
