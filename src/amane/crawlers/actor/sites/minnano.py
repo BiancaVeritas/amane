@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import json
 import re
 import unicodedata
+from functools import lru_cache
+from pathlib import Path
 from urllib.parse import quote, urljoin, urlsplit, urlunsplit
 
 from parsel import Selector
@@ -30,6 +33,35 @@ _FIGURE_RE = re.compile(
 _CUP_RE = re.compile(r"([A-Z]+)カップ", re.IGNORECASE)
 _ACTRESS_HREF_RE = re.compile(r"actress\d+\.html", re.IGNORECASE)
 
+#: 名字 → actress id 的离线表. 搜索页 ``search_result.php`` 处于 Cloudflare 挑战之后
+#: (403), 而列表页与详情页不设防, 所以整表枚举一次, 运行时查表直达详情页.
+_NAMES_PATH = Path(__file__).with_name("minnano_actress_names.json")
+
+
+@lru_cache(maxsize=1)
+def _name_index() -> dict[str, str]:
+    """名字 → id; 文件缺失或损坏时返回空表, 退回在线检索."""
+    try:
+        raw = json.loads(_NAMES_PATH.read_text(encoding="utf-8"))
+    except OSError, json.JSONDecodeError:
+        return {}
+    return {str(k): str(v) for k, v in raw.items() if v}
+
+
+def lookup_actress_id(name: str) -> str | None:
+    """按名字查 actress id. 先精确, 再忽略空白与大小写的宽松匹配."""
+    index = _name_index()
+    if not index:
+        return None
+    key = name.strip()
+    if found := index.get(key):
+        return found
+    folded = re.sub(r"\s+", "", key).casefold()
+    if not folded:
+        return None
+    hits = {value for candidate, value in index.items() if re.sub(r"\s+", "", candidate).casefold() == folded}
+    return hits.pop() if len(hits) == 1 else None
+
 
 class MinnanoActorCrawler(ActorCrawler):
     @classmethod
@@ -44,6 +76,12 @@ class MinnanoActorCrawler(ActorCrawler):
         )
 
     async def _search(self, name: str) -> str | None:
+        # 命中离线表就直接定位详情页, 完全不碰被 Cloudflare 拦的搜索页.
+        # 实际抓取由基类按返回的 URL 进行.
+        if local := lookup_actress_id(name):
+            return f"{self.base_url}/actress{local}.html"
+
+        # 表里没有才走在线检索 (可能仍被挑战拦下, 那就返回 None).
         search_url = self._search_url(name)
         text = await self.client.get_html(search_url, cookies=self.cookies)
         html = Selector(text=text)
