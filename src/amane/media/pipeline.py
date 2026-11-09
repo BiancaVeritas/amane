@@ -49,9 +49,18 @@ def _internal_url(store: ResourceStore, locator_url: str) -> str:
     return f"{RESOURCE_URL_PREFIX}/{store.url_hash(locator_url)}"
 
 
-def _success_first(urls: list[str], succeeded: set[str]) -> list[str]:
-    # 成功者保序前置, 失败者保序置于尾部. succeeded 为空时幂等返回原序.
-    return [u for u in urls if u in succeeded] + [u for u in urls if u not in succeeded]
+def _winner_first(urls: list[str], winner: str | None) -> list[str]:
+    """成功者前置, 其余候选 (下载失败与未尝试的) 保序留在尾部, 供来源恢复后重试."""
+    return ([winner] if winner else []) + [u for u in urls if u != winner]
+
+
+async def _acquire_first(urls: list[str], store: ResourceStore, client: WebClient) -> tuple[str | None, Path | None]:
+    """按序尝试候选, 命中即停. 候选是同一张图的回退链, 逐个下载只会把它在 Resource 里存成多份."""
+    for url in urls:
+        local = await store.acquire(url, client)
+        if local:
+            return url, local
+    return None, None
 
 
 async def _fallback_posters(
@@ -76,7 +85,9 @@ async def _fallback_posters(
             first_local = await store.get_by_url(url)
     if first_local is not None:
         await _maybe_upscale(store, first_local, config, data_dir)
-    return _success_first(poster_urls, succeeded) if succeeded else list(poster_urls)
+    # 成功的放到最前, 其余保序留在尾部: 下游按头部取图, 尾部留给来源恢复后重试.
+    ordered = _winner_first(poster_urls, next(iter(succeeded)) if succeeded else None)
+    return ordered if succeeded else list(poster_urls)
 
 
 def sr_args_dict(cfg: SrConfig) -> dict:
@@ -127,7 +138,7 @@ async def materialize_images(
     """仅下载集合内的类型; 未选中的图片类型保留聚合 URL.
 
     预告片是例外: 未启用预告片下载时, 同时清空其 URL, 避免下游仍显示播放入口.
-    死 URL 保序置于尾部, 供来源恢复后重试.
+    候选按序尝试, 命中即停; 未命中的候选保序留在尾部, 供来源恢复后重试.
     extrafanart 仅下载到 Resource, 站点分组结构不重排.
 
     ``crop_rule`` 命中时按规则给的固定窗口裁海报, 优先于人脸检测.
@@ -135,31 +146,26 @@ async def materialize_images(
     kinds = set(config.scraping.download_resources)
 
     # 下载 thumb.
-    thumb_ok: set[str] = set()
-    thumb_local: Path | None = None
+    thumb_winner: str | None = None
     thumb_src: str | None = None
+    thumb_local: Path | None = None
     if DownloadableResource.thumb in kinds:
-        for url in thumb_urls:
-            local = await store.acquire(url, client)
-            if local:
-                thumb_ok.add(url)
-                if thumb_local is None:
-                    thumb_local, thumb_src = local, url
-                    res = await store.get_by_url(url)
-                    if res:
-                        await _maybe_upscale(store, res, config, data_dir)
+        thumb_src, thumb_local = await _acquire_first(thumb_urls, store, client)
+        thumb_winner = thumb_src  # 下面的兜底裁剪会改写 thumb_src, 排序只认本步下载到的那个
+        if thumb_src:
+            res = await store.get_by_url(thumb_src)
+            if res:
+                await _maybe_upscale(store, res, config, data_dir)
 
     # 海报一律从封面裁: 站点给的海报横向居多, 尺寸与构图都不统一, 也不能按人脸定位.
     # 裁剪失败时才退回站点原图, 免得一张海报也拿不到.
     result_poster_urls = list(poster_urls)
     if DownloadableResource.poster in kinds:
         # 裁剪需要 thumb 本地文件; 若未选 thumb 下载, 为裁剪临时 acquire 首个 thumb.
+        # 用 _acquire_first 而不是手写循环: 候选按序尝试, 命中即停,
+        # 同一张图的回退链不会在 Resource 里存成多份.
         if thumb_local is None and thumb_urls:
-            for url in thumb_urls:
-                local = await store.acquire(url, client)
-                if local:
-                    thumb_local, thumb_src = local, url
-                    break
+            thumb_src, thumb_local = await _acquire_first(thumb_urls, store, client)
 
         if config.scraping.crop_poster and thumb_local:
             ratio = (
@@ -218,12 +224,9 @@ async def materialize_images(
             result_poster_urls = await _fallback_posters(store, poster_urls, client, config, data_dir)
 
     # 下载预告片.
-    trailer_ok: set[str] = set()
+    trailer_winner: str | None = None
     if DownloadableResource.trailer in kinds:
-        for url in trailer_urls:
-            local = await store.acquire(url, client)
-            if local:
-                trailer_ok.add(url)
+        trailer_winner, _ = await _acquire_first(trailer_urls, store, client)
 
     # 下载剧照: 按站点优先级, 有结果即停.
     if DownloadableResource.extrafanart in kinds and extrafanart_urls:
@@ -232,8 +235,9 @@ async def materialize_images(
 
     out = MaterializedImages(
         poster_urls=result_poster_urls,
-        thumb_urls=_success_first(thumb_urls, thumb_ok),
-        trailer_urls=(_success_first(trailer_urls, trailer_ok) if DownloadableResource.trailer in kinds else []),
+        thumb_urls=_winner_first(thumb_urls, thumb_winner),
+        # 未启用预告片下载时清空 URL, 避免下游仍显示播放入口.
+        trailer_urls=(_winner_first(trailer_urls, trailer_winner) if DownloadableResource.trailer in kinds else []),
     )
     logger.debug(
         "images materialized",
