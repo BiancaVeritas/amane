@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<movie>
+  <tagline>发行日期 2026-01-15</tagline>
+  <premiered>2026-01-15</premiered>
+  <releasedate>2026-01-15</releasedate>
+  <release>2026-01-15</release>
+  <year>2026</year>
+  <num>MIDV-123</num>
+  <title>MIDV-123 Test Title</title>
+  <originaltitle>MIDV-123 Test Title</originaltitle>
+  <sorttitle>MIDV-123 Test Title</sorttitle>
+  <mpaa>JP-18+</mpaa>
+  <actor>
+    <name>Actor A</name>
+    <type>Actor</type>
+  </actor>
+  <runtime>120</runtime>
+  <studio>Studio X</studio>
+  <maker>Studio X</maker>
+  <cover>https://img.example.com/thumb.jpg</cover>
+</movie>

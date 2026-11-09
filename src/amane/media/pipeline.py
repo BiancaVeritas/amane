@@ -21,7 +21,6 @@ from .images import (
     probe_oriented_size,
     probe_size,
     rotated_size,
-    should_crop_poster,
     validate_crop_box,
 )
 from .resource_store import RESOURCE_URL_PREFIX
@@ -51,6 +50,31 @@ def _internal_url(store: ResourceStore, locator_url: str) -> str:
 def _success_first(urls: list[str], succeeded: set[str]) -> list[str]:
     # 成功者保序前置, 失败者保序置于尾部. succeeded 为空时幂等返回原序.
     return [u for u in urls if u in succeeded] + [u for u in urls if u not in succeeded]
+
+
+async def _fallback_posters(
+    store: ResourceStore,
+    poster_urls: list[str],
+    client: WebClient,
+    config: HotSettings,
+    data_dir: Path,
+) -> list[str]:
+    """从封面裁不出海报时的退路: 下载站点原图并用它当海报.
+
+    只保留真正下载成功的地址; 全部失败时返回原列表, 交给下游按死链处理.
+    """
+    succeeded: set[str] = set()
+    first_local: Resource | None = None
+    for url in poster_urls:
+        local = await store.acquire(url, client)
+        if not local:
+            continue
+        succeeded.add(url)
+        if first_local is None:
+            first_local = await store.get_by_url(url)
+    if first_local is not None:
+        await _maybe_upscale(store, first_local, config, data_dir)
+    return _success_first(poster_urls, succeeded) if succeeded else list(poster_urls)
 
 
 def sr_args_dict(cfg: SrConfig) -> dict:
@@ -95,6 +119,7 @@ async def materialize_images(
     *,
     content_type: ContentType | None = None,
     extrafanart_urls: dict[str, list[str]] | None = None,
+    recrop: bool = False,
 ) -> MaterializedImages:
     """仅下载集合内的类型; 未选中的图片类型保留聚合 URL.
 
@@ -119,42 +144,19 @@ async def materialize_images(
                     if res:
                         await _maybe_upscale(store, res, config, data_dir)
 
-    # 下载 poster; 候选偏矮则从 thumb 裁剪.
-    poster_ok: set[str] = set()
-    poster_candidate_local: Path | None = None
+    # 海报一律从封面裁: 站点给的海报横向居多, 尺寸与构图都不统一, 也不能按人脸定位.
+    # 裁剪失败时才退回站点原图, 免得一张海报也拿不到.
     result_poster_urls = list(poster_urls)
     if DownloadableResource.poster in kinds:
-        for url in poster_urls:
-            local = await store.acquire(url, client)
-            if local:
-                poster_ok.add(url)
-                if poster_candidate_local is None:
-                    poster_candidate_local = local
-
         # 裁剪需要 thumb 本地文件; 若未选 thumb 下载, 为裁剪临时 acquire 首个 thumb.
-        if thumb_local is None and thumb_urls and config.scraping.crop_poster:
+        if thumb_local is None and thumb_urls:
             for url in thumb_urls:
                 local = await store.acquire(url, client)
                 if local:
                     thumb_local, thumb_src = local, url
                     break
 
-        thumb_size = probe_size(thumb_local) if thumb_local else None
-        cand_size = probe_size(poster_candidate_local) if poster_candidate_local else None
-
-        # 海报与封面是同一张图时也要裁: 这说明站点没给独立的竖版海报, 拿横版大图两边都用
-        # (caribbeancom / 1pondo 这类). 尺寸比自然是 1.0, 交给 should_crop_poster 会被判成
-        # 「候选够高」而跳过, 结果片库里的海报就一直是那张横版图.
-        same_as_thumb = bool(poster_urls) and bool(thumb_urls) and poster_urls[0] == thumb_urls[0]
-
-        if (
-            config.scraping.crop_poster
-            and (
-                same_as_thumb
-                or should_crop_poster(thumb_size, cand_size, skip_ratio=config.scraping.poster_crop_skip_ratio)
-            )
-            and thumb_local
-        ):
+        if config.scraping.crop_poster and thumb_local:
             ratio = (
                 config.scraping.uncensored_poster_ratio
                 if content_type == ContentType.UNCENSORED
@@ -172,20 +174,15 @@ async def materialize_images(
                     detect_face=config.scraping.poster_crop_detect_face,
                 )
 
-            crop_res = await store.acquire_derived(thumb_src or "", "crop", args, crop_producer)
+            crop_res = await store.acquire_derived(thumb_src or "", "crop", args, crop_producer, force=recrop)
             if crop_res:
                 await _maybe_upscale(store, crop_res, config, data_dir)
                 result_poster_urls = [_internal_url(store, crop_res.url)]
             else:
-                result_poster_urls = _success_first(poster_urls, poster_ok)
+                # 裁不出来才退到站点原图, 至少别让海报空着.
+                result_poster_urls = await _fallback_posters(store, poster_urls, client, config, data_dir)
         else:
-            result_poster_urls = _success_first(poster_urls, poster_ok)
-            if poster_candidate_local:
-                for url in poster_urls:
-                    res = await store.get_by_url(url)
-                    if res:
-                        await _maybe_upscale(store, res, config, data_dir)
-                        break
+            result_poster_urls = await _fallback_posters(store, poster_urls, client, config, data_dir)
 
     # 下载预告片.
     trailer_ok: set[str] = set()

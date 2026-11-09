@@ -316,13 +316,16 @@ class ResourceStore:
         producer: Callable[[Path], Awaitable[bool]],
         *,
         ext: str = ".jpg",
+        force: bool = False,
     ) -> Resource | None:
         # 同 (src_url, op, args) 命中已有记录且磁盘仍是记录的那份字节则直出. producer 失败返回 None.
+        # ``force`` 忽略已有产物重跑一次: 派生算法升级后 (例如裁切改为按人脸定位) 用它纠正旧结果,
+        # 因为缓存的键只含源与参数, 算法变化不会让它自然失效.
         locator = derived_locator(src_url, op, args)
         dest = self._compute_path(locator, ext=ext)
         async with self._serialized(locator):
             existing = await self.get_by_url(locator)
-            if existing is not None and self._matches_record(self.full_path(existing), existing):
+            if existing is not None and not force and self._matches_record(self.full_path(existing), existing):
                 return existing
 
             dest.parent.mkdir(parents=True, exist_ok=True)

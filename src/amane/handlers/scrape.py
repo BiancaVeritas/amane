@@ -321,6 +321,9 @@ class ScrapeHandler(TaskHandler[ScrapePayload, ScrapeResult]):
                     self._resource_store.data_dir,
                     content_type=image_content_type,
                     extrafanart_urls=result.metadata.extrafanart_urls,
+                    # 强制刮削时把海报重裁一遍: 派生键只含「源 + 比例」, 裁切算法升级后
+                    # 旧产物不会自动失效, 不重跑就一直留着旧构图.
+                    recrop=not payload.use_cache,
                 )
                 poster_out = materialized.poster_urls
                 thumb_out = materialized.thumb_urls

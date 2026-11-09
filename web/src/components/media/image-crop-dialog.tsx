@@ -469,8 +469,17 @@ export function ImageCropDialog({
       centered
     >
       <Stack gap="md">
-        {/* 舞台随视口缩放并居中; 画布 maxHeight 保证整图可见, 小屏时仍可滚动兜底. */}
-        <div style={{ maxHeight: "64vh", overflow: "auto", textAlign: "center" }}>
+        {/* 舞台自身不出滚动条: 出条会改变可用宽度, 画布随之重算尺寸, 拖动时选框就会跳.
+            画布按 contain 等比缩到这块区域里, 尺寸只由容器决定一次. */}
+        <div
+          style={{
+            height: "64vh",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            overflow: "hidden",
+          }}
+        >
           {loadError ? (
             <Text c="red" size="sm">
               {labels.operationFailed}
@@ -480,7 +489,16 @@ export function ImageCropDialog({
               <Loader size="sm" />
             </Group>
           ) : (
-            <div style={{ position: "relative", display: "inline-block", maxWidth: "100%" }}>
+            <div
+              style={{
+                position: "relative",
+                maxWidth: "100%",
+                maxHeight: "100%",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
               <ReactCrop
                 crop={crop}
                 onChange={(c) => setCrop(c)}
@@ -499,9 +517,11 @@ export function ImageCropDialog({
                   aria-label="crop source"
                   style={{
                     maxWidth: "100%",
-                    maxHeight: "60vh",
+                    maxHeight: "64vh",
+                    width: "auto",
+                    height: "auto",
+                    objectFit: "contain",
                     display: "block",
-                    margin: "0 auto",
                   }}
                 />
               </ReactCrop>

@@ -10,9 +10,10 @@ from PIL import Image
 
 from amane.config import HotSettings, SrConfig
 from amane.enums import DownloadableResource
-from amane.parsing import ContentType
 from amane.media import CropRotation, ResourceStore, manual_crop_image, materialize_images
 from amane.media import pipeline as pipeline_mod
+from amane.media.resource_store import RESOURCE_URL_PREFIX
+from amane.parsing import ContentType
 from tests.helpers import LOAD_TOLERANT_TIMEOUT, await_for
 
 if TYPE_CHECKING:
@@ -119,18 +120,23 @@ async def test_uncensored_uses_its_own_poster_ratio(resource_store: ResourceStor
 
 
 @pytest.mark.asyncio
-async def test_poster_external_when_candidate_tall(resource_store: ResourceStore, tmp_path: Path):
-    """poster 候选够高 → 不裁剪, poster 记外部 URL."""
+async def test_poster_always_cropped_from_thumb(resource_store: ResourceStore, tmp_path: Path):
+    """海报一律从封面裁, 不看站点原图尺寸.
+
+    站点给的海报构图各异, 只有按封面的人脸位置裁出来的才稳定; 原图只在裁不出时兜底.
+    """
     client = FakeClient(
         {
             "https://s/t.jpg": (800, 538),
-            "https://s/p.jpg": (379, 538),  # b/h=1.0 ≥ 0.9 → 不裁
+            "https://s/p.jpg": (379, 538),  # 原图本来够高, 旧逻辑会直接用它
         }
     )
     out = await materialize_images(
         ["https://s/p.jpg"], ["https://s/t.jpg"], [], resource_store, cast("WebClient", client), HotSettings(), tmp_path
     )
-    assert out.poster_urls == ["https://s/p.jpg"]  # 外部列表原样
+    assert len(out.poster_urls) == 1
+    assert out.poster_urls[0].startswith(RESOURCE_URL_PREFIX)  # 内部派生 (裁剪)
+    assert out.poster_urls[0] != "https://s/p.jpg"  # 不再是站点原图
 
 
 @pytest.mark.asyncio
