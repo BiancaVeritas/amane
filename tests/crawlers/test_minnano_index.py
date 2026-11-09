@@ -13,6 +13,7 @@ import pytest
 from amane.crawlers.actor.sites.minnano import (
     MinnanoActorCrawler,
     _detail_index,
+    _index_is_complete,
     _name_index,
     lookup_actress_id,
     metadata_from_index,
@@ -77,12 +78,46 @@ def test_metadata_from_index_missing_id_returns_none() -> None:
     assert metadata_from_index("999999999", base_url=BASE) is None
 
 
+def test_index_completeness_gate() -> None:
+    """「齐全」= 生日与三围都在; 缺一项就该去问网站."""
+    full = metadata_from_index("551014", base_url=BASE)
+    assert full is not None
+    assert _index_is_complete(full)
+
+    # 綾野カヲル 索引里没有生日.
+    partial = metadata_from_index("471698", base_url=BASE)
+    assert partial is not None
+    assert not _index_is_complete(partial)
+
+
 @pytest.mark.asyncio
-async def test_scrape_uses_index_without_touching_detail_page() -> None:
-    """详情页请求能省则省: 索引里有人就不发请求."""
+async def test_scrape_skips_detail_page_when_index_complete() -> None:
+    """资料齐全时不发请求."""
     crawler = MinnanoActorCrawler(client=AsyncMock(), config=None)
     meta = await crawler._scrape(f"{BASE}/actress551014.html")
 
     assert meta is not None
     assert meta.name == "竹内咲奈"
     crawler.client.get_html.assert_not_called()  # type: ignore[attr-defined]
+
+
+@pytest.mark.asyncio
+async def test_scrape_fetches_when_index_missing_fields() -> None:
+    """索引缺生日时应抓一次详情页, 并让网站数据覆盖索引."""
+    online_html = """
+    <div class="act-profile"><table>
+      <tr><td><h2>綾野カヲル （あやのかをる / Ayano Kaworu）</h2></td></tr>
+      <tr><td><span>生年月日</span><p>1990年1月2日</p></td></tr>
+    </table></div>
+    """
+    client = AsyncMock()
+    client.get_html = AsyncMock(return_value=online_html)
+    crawler = MinnanoActorCrawler(client=client, config=None)
+
+    meta = await crawler._scrape(f"{BASE}/actress471698.html")
+
+    assert meta is not None
+    assert meta.birthday == "1990-01-02"  # 网站补上了
+    assert meta.height == 155  # 索引仍在的字段保留
+    assert "あやのかをる" in meta.aliases  # 别名不因网站缺失而丢
+    client.get_html.assert_called_once()
