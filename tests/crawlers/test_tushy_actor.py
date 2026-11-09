@@ -40,7 +40,6 @@ def test_parse_next_data_and_only_highdpi_double_webp() -> None:
     [(TushyActorCrawler, SiteName.TUSHY, "tushy.com"), (TushyRawActorCrawler, SiteName.TUSHY_RAW, "tushyraw.com")],
 )
 async def test_fetch_exact_name_without_detail_request(crawler_type, site, host) -> None:
-    web = AsyncMock()
     client = AsyncMock()
     client.get_html = AsyncMock(return_value=_html())
     crawler = crawler_type(client=client)
