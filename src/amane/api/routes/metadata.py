@@ -464,10 +464,15 @@ async def _apply_thumb(
     ``thumb_url`` 只是指向某张图的引用: 换封面改引用即可. 列表顺序是用户认图的编号,
     每换一次就重排会让人看不出改了什么.
     """
-    cleaned = await _dedupe_by_content(store, thumb_urls, url)
-    # 新图追加到末尾 (已在池中则保持原位), 既有编号不动.
-    ordered = cleaned if url in cleaned else [*cleaned, url]
-    updated = await repo.update_metadata(metadata_id, mode=WriteMode.MANUAL, thumb_urls=ordered, thumb_selected=url)
+    # 源图可能已在池里 (用户点的就是候选图), 这时必须沿用池中那条地址 —— 重新拼一遍
+    # 得到的字符串未必相同 (例如带查询串), 会被当成新图追加, 池子越点越长.
+    target = next((item for item in thumb_urls if item == url), url)
+    cleaned = await _dedupe_by_content(store, thumb_urls, target)
+    # 不在池里的才追加到末尾 (既有的保持原位), 既有编号不动.
+    ordered = cleaned if target in cleaned else [*cleaned, target]
+    updated = await repo.update_metadata(
+        metadata_id, mode=WriteMode.MANUAL, thumb_urls=ordered, thumb_selected=target
+    )
     assert updated is not None
     return to_resp(MetadataResponse, updated)
 
@@ -572,13 +577,14 @@ async def adopt_thumb(
 
     store = runtime.resource_store
     # 候选图可能是外链, 也可能是已缓存的内部地址 (`/api/resources/{hash}`); 后者只有
-    # `resolve_source` 认, `acquire` 只处理 http(s).
+    # `resolve_source` 认, `acquire` 只处理 http(s). 这一步只是确认图能拿到。
     resolved = await store.resolve_source(source_url, runtime.web_client)
     if resolved is None:
         raise HTTPException(status_code=400, detail="无法获取该图片")
 
-    url = _resource_url(store, resolved.locator)
-    updated = await _apply_thumb(store, repo, metadata_id, metadata.thumb_urls, url)
+    # 直接引用用户点的那条地址, 不重新拼: 重拼得到的字符串未必与池中一致 (查询串、
+    # 外部 URL vs 内部地址), 会被当成新图追加, 池子越点越长.
+    updated = await _apply_thumb(store, repo, metadata_id, metadata.thumb_urls, source_url)
     logger.info("thumb adopted", metadata_id=metadata_id, source_url=source_url)
     return updated.model_copy(update={"tags": runtime.tag_mappings.map_tags(updated.tags)})
 
@@ -629,26 +635,29 @@ async def remove_image(
     if metadata is None:
         raise HTTPException(status_code=404, detail="影片不存在")
 
-    is_thumb = target == "thumb"
-    pool = list(metadata.thumb_urls if is_thumb else metadata.poster_urls)
-    selected = metadata.thumb_selected if is_thumb else metadata.poster_selected
-    if url not in pool:
+    # 选图框把封面、海报、剧照并列显示, 用户点的可能是任一来源; 因此从**所有**候选池里
+    # 一并移除, 否则删完它还会在框里出现.
+    thumbs = [item for item in metadata.thumb_urls if item != url]
+    posters = [item for item in metadata.poster_urls if item != url]
+    fanart = [item for item in metadata.extrafanart if item != url]
+    if len(thumbs) == len(metadata.thumb_urls) and len(posters) == len(metadata.poster_urls) and len(fanart) == len(metadata.extrafanart):
         raise HTTPException(status_code=404, detail="该图片不在候选池中")
 
-    # 去掉后按剩余顺序重排, 编号保持连续 (删掉第 4 张, 原来的第 5 张顺位成第 4 张).
-    remaining = [item for item in pool if item != url]
-    new_selected = selected
-    if selected == url:
-        new_selected = remaining[0] if remaining else None
+    thumb_selected = metadata.thumb_selected
+    if thumb_selected == url:
+        thumb_selected = thumbs[0] if thumbs else None
+    poster_selected = metadata.poster_selected
+    if poster_selected == url:
+        poster_selected = posters[0] if posters else None
 
-    if is_thumb:
-        updated = await repo.update_metadata(
-            metadata_id, mode=WriteMode.MANUAL, thumb_urls=remaining, thumb_selected=new_selected
-        )
-    else:
-        updated = await repo.update_metadata(
-            metadata_id, mode=WriteMode.MANUAL, poster_urls=remaining, poster_selected=new_selected
-        )
+    updated = await repo.update_metadata(
+        metadata_id,
+        mode=WriteMode.MANUAL,
+        thumb_urls=thumbs,
+        poster_urls=posters,
+        thumb_selected=thumb_selected,
+        poster_selected=poster_selected,
+    )
     assert updated is not None
 
     # 真正删盘: 文件丢了不影响后续, 重新刮削会重新下载.

@@ -14,9 +14,9 @@ from ...utils.collections import unique_ids
 from ...utils.text import normalize_long_text
 from ..models import (
     MediaFile,
+    MediaFileStatus,
     MediaIdentity,
     MediaIdentityType,
-    MediaFileStatus,
     Metadata,
     MetadataActor,
     MetadataDirector,
@@ -776,8 +776,12 @@ class MetadataRepoMixin(RepositoryMixinBase):
                 metadata.original_poster_urls = updates["original_poster_urls"]
             if "poster_urls" in updates:
                 metadata.poster_urls = updates["poster_urls"]
+            if "poster_selected" in updates:
+                metadata.poster_selected = updates["poster_selected"]
             if "thumb_urls" in updates:
                 metadata.thumb_urls = updates["thumb_urls"]
+            if "thumb_selected" in updates:
+                metadata.thumb_selected = updates["thumb_selected"]
             if "trailer_urls" in updates:
                 metadata.trailer_urls = updates["trailer_urls"]
             if "extrafanart_urls" in updates:

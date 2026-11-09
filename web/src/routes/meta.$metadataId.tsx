@@ -411,11 +411,7 @@ function TitleDetailPage() {
     const source = data?.metadata;
     const seen = new Set<string>();
     const out: string[] = [];
-    for (const url of [
-      ...(source?.thumb_urls ?? []),
-      ...(source?.poster_urls ?? []),
-      ...(source?.extrafanart ?? []),
-    ]) {
+    for (const url of [...(source?.thumb_urls ?? []), ...(source?.extrafanart ?? [])]) {
       if (!url || seen.has(url)) continue;
       seen.add(url);
       out.push(url);
@@ -1225,7 +1221,6 @@ function TitleDetailPage() {
             opened={pickerTarget !== null}
             onClose={() => setPickerTarget(null)}
             images={coverCandidates}
-            selectedUrl={pickerTarget === "poster" ? posterSrc : thumbSrc}
             onRemove={pickerTarget === null ? undefined : (url) => removeImage(url, pickerTarget)}
             title={
               pickerTarget === "poster"

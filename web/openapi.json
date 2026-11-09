@@ -1874,7 +1874,7 @@
           "metadata"
         ],
         "summary": "Remove Image",
-        "description": "从候选池移除一张图. 只是去掉引用, **不删除磁盘文件** —— 裁切派生结果可能仍被其它条目共享.\n\n移除的若正是当前选中的那张, 顺延到池里的下一张 (池空则为无).",
+        "description": "从候选池移除一张图, 并**删掉本地文件**.\n\n只删这一张: 其它条目可能引用同一份文件 (裁剪派生以源为键), 所以删之前先确认没有别的\n条目还在用. 文件丢了不影响后续刮削 —— 重新刮削会重新下载.",
         "operationId": "remove_image",
         "parameters": [
           {
@@ -1892,10 +1892,10 @@
             "required": true,
             "schema": {
               "type": "string",
-              "description": "要从候选池移除的图片地址",
+              "description": "要移除的图片地址",
               "title": "Url"
             },
-            "description": "要从候选池移除的图片地址"
+            "description": "要移除的图片地址"
           },
           {
             "name": "target",
@@ -13369,6 +13369,17 @@
             "title": "Poster Urls",
             "default": []
           },
+          "poster_selected": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Poster Selected"
+          },
           "thumb_urls": {
             "items": {
               "type": "string"
@@ -13376,6 +13387,17 @@
             "type": "array",
             "title": "Thumb Urls",
             "default": []
+          },
+          "thumb_selected": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Thumb Selected"
           },
           "trailer_urls": {
             "items": {

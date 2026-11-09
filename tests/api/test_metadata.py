@@ -355,3 +355,35 @@ class TestMetadataHttp:
         listed = await client.get("metadata?search=LOCK-102")
         assert listed.status_code == 200
         assert listed.json()["items"][0]["locked_fields"] == ["title"]
+
+
+@pytest.mark.asyncio
+class TestImageSelection:
+    """选中项与删除: 顺序固定, 选中项落在独立字段上."""
+
+    async def test_adopt_records_selected_url_without_reordering(self, client, repo, app):
+        # 两个外链作候选; 站点图不可达时用本地生成的图代替.
+        first = "https://example.com/a.jpg"
+        second = "https://example.com/b.jpg"
+
+        async def fake_download(url: str, dest: Path, **kwargs: object) -> bool:
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            Image.new("RGB", (800, 538), "blue").save(dest)
+            return True
+
+        async def fake_resolve(url: str, **kwargs: object) -> str:
+            return url
+
+        app.state.runtime.web_client.download = fake_download  # type: ignore[method-assign]
+        app.state.runtime.web_client.resolve_final_url = fake_resolve  # type: ignore[method-assign]
+
+        meta = await repo.upsert_metadata(number="SEL-001", thumb_urls=[first, second])
+
+        resp = await client.post(f"metadata/{meta.id}/adopt-thumb", params={"source_url": second})
+
+        assert resp.status_code == 200
+        data = resp.json()
+        # 顺序不变, 选中项记在独立字段上.
+        assert data["thumb_urls"] == [first, second]
+        assert data["thumb_selected"] == second
+        assert data["thumb_url"] == second

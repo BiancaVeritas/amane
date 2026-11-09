@@ -6212,6 +6212,17 @@ export const MetadataResponseSchema = {
             title: 'Poster Urls',
             default: []
         },
+        poster_selected: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Poster Selected'
+        },
         thumb_urls: {
             items: {
                 type: 'string'
@@ -6219,6 +6230,17 @@ export const MetadataResponseSchema = {
             type: 'array',
             title: 'Thumb Urls',
             default: []
+        },
+        thumb_selected: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Thumb Selected'
         },
         trailer_urls: {
             items: {

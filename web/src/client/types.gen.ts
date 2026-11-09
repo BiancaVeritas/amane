@@ -2961,9 +2961,17 @@ export type MetadataResponse = {
      */
     poster_urls?: Array<string>;
     /**
+     * Poster Selected
+     */
+    poster_selected?: string | null;
+    /**
      * Thumb Urls
      */
     thumb_urls?: Array<string>;
+    /**
+     * Thumb Selected
+     */
+    thumb_selected?: string | null;
     /**
      * Trailer Urls
      */
@@ -6743,7 +6751,7 @@ export type RemoveImageData = {
         /**
          * Url
          *
-         * 要从候选池移除的图片地址
+         * 要移除的图片地址
          */
         url: string;
         /**

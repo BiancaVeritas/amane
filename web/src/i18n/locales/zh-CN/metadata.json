@@ -165,8 +165,7 @@
       "needSelection": "请先框选有效区域",
       "success": "海报已更新",
       "noThumb": "需要封面图才能裁切海报",
-      "sourceCover": "当前封面",
-      "sourceOther": "候选图 {{index}}"
+      "selectSource": "选择图源"
     },
     "upload": {
       "fromFile": "上传图片",

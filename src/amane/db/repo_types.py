@@ -294,7 +294,9 @@ class MetadataFields(TypedDict, total=False):
     directors: list[str]
     original_poster_urls: list[str]
     poster_urls: list[str]
+    poster_selected: str | None
     thumb_urls: list[str]
+    thumb_selected: str | None
     trailer_urls: list[str]
     extrafanart_urls: dict[str, list[str]]
     scores: dict[str, float]

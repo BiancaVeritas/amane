@@ -301,9 +301,10 @@ export const adoptPoster = <ThrowOnError extends boolean = false>(options: Optio
 /**
  * Remove Image
  *
- * 从候选池移除一张图. 只是去掉引用, **不删除磁盘文件** —— 裁切派生结果可能仍被其它条目共享.
+ * 从候选池移除一张图, 并**删掉本地文件**.
  *
- * 移除的若正是当前选中的那张, 顺延到池里的下一张 (池空则为无).
+ * 只删这一张: 其它条目可能引用同一份文件 (裁剪派生以源为键), 所以删之前先确认没有别的
+ * 条目还在用. 文件丢了不影响后续刮削 —— 重新刮削会重新下载.
  */
 export const removeImage = <ThrowOnError extends boolean = false>(options: Options<RemoveImageData, ThrowOnError>): RequestResult<RemoveImageResponses, RemoveImageErrors, ThrowOnError> => (options.client ?? client).delete<RemoveImageResponses, RemoveImageErrors, ThrowOnError>({ url: '/api/metadata/{metadata_id}/images', ...options });
 
