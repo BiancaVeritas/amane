@@ -726,6 +726,36 @@ class AgentThinkingMode(StrEnum):
     XHIGH = "xhigh"
 
 
+class MediaServerConfig(BaseModel):
+    """Emby / Jellyfin 人物推送; url 与 api_key 齐备才启用."""
+
+    kind: Literal["emby", "jellyfin"] = Field(default="jellyfin", description="媒体服务器类型")
+    url: str | None = Field(default=None, description="服务器地址, 含协议、端口与可选子路径")
+    api_key: str | None = Field(default=None, description="管理员 API Key")
+    verify_tls: bool = Field(default=True, description="校验 HTTPS 证书; 自签名证书可关闭")
+
+    @field_validator("url")
+    @classmethod
+    def _normalize_url(cls, value: str | None) -> str | None:
+        if value is None or not value.strip():
+            return None
+        normalized = value.strip().rstrip("/")
+        if not normalized.startswith(("http://", "https://")):
+            raise ValueError("media_server.url 必须以 http:// 或 https:// 开头")
+        return normalized
+
+    @field_validator("api_key")
+    @classmethod
+    def _normalize_api_key(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        return value.strip() or None
+
+    @property
+    def enabled(self) -> bool:
+        return bool(self.url and self.api_key)
+
+
 class AgentConfig(BaseModel):
     """与 llm 翻译 section 分离: 凭据/模型/限速各自独立."""
 
@@ -852,6 +882,7 @@ class HotSettings(BaseModel):
     agent: AgentConfig = AgentConfig()
     network: NetworkConfig = NetworkConfig()
     sr: SrConfig = SrConfig()
+    media_server: MediaServerConfig = MediaServerConfig()
     semantic: SemanticConfig = SemanticConfig()
     watermark: WatermarkConfig = WatermarkConfig()
     llm: LLMConfig = LLMConfig()

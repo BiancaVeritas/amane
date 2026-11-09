@@ -11,7 +11,8 @@
     "sr": "Super Resolution",
     "llm": "LLM Translation",
     "watermark": "Watermark",
-    "semantic": "Semantic Search"
+    "semantic": "Semantic Search",
+    "media_server": "Media server"
   },
   "config": {
     "loadError": "Failed to load configuration"
@@ -937,6 +938,36 @@
       "auto_maintain": {
         "label": "Auto-maintain",
         "description": "Recompute an entry's vectors as soon as its images change; keeps the model resident"
+      }
+    },
+    "media_server": {
+      "label": "Media server",
+      "description": "Push actor profiles to Emby / Jellyfin person entries",
+      "kind": {
+        "label": "Server type",
+        "description": "Chosen by brand; the two differ in API paths",
+        "$": {
+          "options": {
+            "emby": "Emby",
+            "jellyfin": "Jellyfin"
+          }
+        },
+        "options": {
+          "emby": "Emby",
+          "jellyfin": "Jellyfin"
+        }
+      },
+      "url": {
+        "label": "Server URL",
+        "description": "Include scheme and port; add the subpath if behind a reverse proxy"
+      },
+      "api_key": {
+        "label": "API key",
+        "description": "Admin key used to upload images and edit person entries"
+      },
+      "verify_tls": {
+        "label": "Verify HTTPS certificate",
+        "description": "Turn off for self-signed certificates"
       }
     }
   }

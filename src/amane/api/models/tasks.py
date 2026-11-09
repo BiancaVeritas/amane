@@ -8,6 +8,8 @@ from pydantic import BaseModel, Field, TypeAdapter, field_validator, model_valid
 from ...db import MediaFile, Repository, TaskStatus, TaskType
 from ...db.embeddings import EmbeddingKind
 from ...handlers import (
+    ActorPushPayload,
+    ActorPushResult,
     ActorScrapeResult,
     CacheKind,
     CleanupPayload,
@@ -53,6 +55,7 @@ TaskResultPayload = Annotated[
     | UpscaleResult
     | R18ImportResult
     | ActorScrapeResult
+    | ActorPushResult
     | RescrapeResult
     | SemanticIndexResult
     | SemanticBenchmarkResult,
@@ -277,6 +280,10 @@ class SemanticBenchmarkSubmission(BaseModel):
     type: Literal["semantic_benchmark"]
 
 
+class ActorPushSubmission(ActorPushPayload):
+    type: Literal["actor_push"]
+
+
 class ActorScrapeSubmission(BaseModel):
     type: Literal["actor_scrape"]
     actor_id: int = Field(description="Actor 实体 ID")
@@ -296,6 +303,7 @@ TaskSubmission = Annotated[
     | UpscaleSubmission
     | R18ImportSubmission
     | ActorScrapeSubmission
+    | ActorPushSubmission
     | RescrapeSubmission
     | SemanticIndexSubmission
     | SemanticBenchmarkSubmission,

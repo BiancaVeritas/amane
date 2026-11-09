@@ -56,6 +56,22 @@ function resultBranch(result: TaskResult, failed: boolean): ReactNode {
         </>
       );
     }
+    case "actor_push": {
+      const empty =
+        result.matched === 0 &&
+        result.updated === 0 &&
+        result.images === 0 &&
+        result.not_found === 0 &&
+        result.no_image === 0 &&
+        result.missing === 0 &&
+        result.failed === 0;
+      return (
+        <>
+          <ActorPushCounts result={result} />
+          <EmptyHint visible={!failed && empty} />
+        </>
+      );
+    }
     case "organize": {
       const empty =
         result.organized === 0 &&
@@ -90,6 +106,46 @@ function resultBranch(result: TaskResult, failed: boolean): ReactNode {
     default:
       return assertNever(result, "TaskResult");
   }
+}
+
+function ActorPushCounts({ result }: { result: Extract<TaskResult, { type: "actor_push" }> }) {
+  const { t } = useTranslation("tasks");
+  return (
+    <Group gap="xs">
+      <Badge variant="light" color="teal">
+        {t("result.actorPushMatched", { value: result.matched })}
+      </Badge>
+      <Badge variant="light" color="blue">
+        {t("result.actorPushUpdated", { value: result.updated })}
+      </Badge>
+      <Badge variant="light" color="grape">
+        {t("result.actorPushImages", { value: result.images })}
+      </Badge>
+      <Badge variant="light" color="gray">
+        {t("result.actorPushSkipped", { value: result.skipped })}
+      </Badge>
+      {result.not_found > 0 && (
+        <Badge variant="light" color="yellow">
+          {t("result.actorPushNotFound", { value: result.not_found })}
+        </Badge>
+      )}
+      {result.no_image > 0 && (
+        <Badge variant="light" color="yellow">
+          {t("result.actorPushNoImage", { value: result.no_image })}
+        </Badge>
+      )}
+      {result.missing > 0 && (
+        <Badge variant="light" color="yellow">
+          {t("result.actorPushMissing", { value: result.missing })}
+        </Badge>
+      )}
+      {result.failed > 0 && (
+        <Badge variant="light" color="red">
+          {t("result.actorPushFailed", { value: result.failed })}
+        </Badge>
+      )}
+    </Group>
+  );
 }
 
 function SemanticCounts({ result }: { result: Extract<TaskResult, { type: "semantic_index" }> }) {

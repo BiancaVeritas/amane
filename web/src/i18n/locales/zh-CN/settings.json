@@ -11,7 +11,8 @@
     "sr": "图像超分",
     "llm": "LLM 翻译",
     "watermark": "水印",
-    "semantic": "语义检索"
+    "semantic": "语义检索",
+    "media_server": "媒体服务器"
   },
   "config": {
     "loadError": "加载配置失败"
@@ -937,6 +938,36 @@
       "auto_maintain": {
         "label": "自动维护",
         "description": "图片变化后立即重算该条目的向量; 打开时模型常驻内存"
+      }
+    },
+    "media_server": {
+      "label": "媒体服务器",
+      "description": "把演员资料推送到 Emby / Jellyfin 的人物条目",
+      "kind": {
+        "label": "服务器类型",
+        "description": "按服务器品牌选择, 两家的接口路径不同",
+        "$": {
+          "options": {
+            "emby": "Emby",
+            "jellyfin": "Jellyfin"
+          }
+        },
+        "options": {
+          "emby": "Emby",
+          "jellyfin": "Jellyfin"
+        }
+      },
+      "url": {
+        "label": "服务器地址",
+        "description": "含协议与端口; 反向代理带子路径时一并写上"
+      },
+      "api_key": {
+        "label": "API Key",
+        "description": "管理员密钥, 用于上传头像与修改人物条目"
+      },
+      "verify_tls": {
+        "label": "校验 HTTPS 证书",
+        "description": "自签名证书时关闭"
       }
     }
   }

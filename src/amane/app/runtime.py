@@ -19,6 +19,7 @@ from ..crawlers.r18dev import R18Database
 from ..db.models import TaskType
 from ..enums import BrowserBackendName, BrowserMode, SiteName
 from ..handlers import (
+    ActorPushHandler,
     ActorScrapeHandler,
     CleanupHandler,
     DeleteHandler,
@@ -592,6 +593,7 @@ def build_handlers(
             tag_mappings,
         ),
         TaskType.ACTOR_SCRAPE: ActorScrapeHandler(repo, factory, resource_store, hot, web_client),
+        TaskType.ACTOR_PUSH: ActorPushHandler(repo, resource_store, hot),
         TaskType.ORGANIZE: OrganizeHandler(
             repo,
             hot,
