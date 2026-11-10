@@ -153,6 +153,8 @@ interface SchemaFormProps {
    * - `grid`: consecutive short scalars share a 2-col row on `sm+`.
    */
   fieldLayout?: "stack" | "grid";
+  /** 在指定字段之后插入自定义内容; 用于把「打开对话框」之类的控件挂到某个开关下面. */
+  afterField?: Record<string, ReactNode>;
 }
 
 export function SchemaForm({
@@ -167,6 +169,7 @@ export function SchemaForm({
   submitLabel,
   submitDisabled = false,
   fieldLayout = "stack",
+  afterField,
 }: SchemaFormProps) {
   const { t } = useTranslation("common");
   const formId = useId();
@@ -299,9 +302,11 @@ export function SchemaForm({
     const rowStyle =
       rowIdx > 0 ? { borderTop: "1px solid var(--mantine-color-default-border)" } : undefined;
     if (row.length === 1) {
+      const extra = afterField?.[row[0].key];
       return (
         <Box key={row[0].key} style={rowStyle}>
           {fields[0]}
+          {extra}
         </Box>
       );
     }

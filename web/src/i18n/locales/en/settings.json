@@ -550,7 +550,7 @@
             "label": "Number prefix"
           },
           "studio": {
-            "label": "Studio"
+            "label": "Maker"
           },
           "publisher": {
             "label": "Publisher"
@@ -1009,7 +1009,7 @@
   },
   "cropRules": {
     "button": "Precise crop",
-    "description": "Crop matched titles at the pinned window.",
+    "description": "Crop matched titles at the pinned window instead of detecting each time.",
     "dialogTitle": "Precise crop rules",
     "dialogHint": "All filled conditions must match; an empty rule is ignored. Window is 0~1 of the cover.",
     "empty": "No rules yet.",
@@ -1018,7 +1018,8 @@
     "window": "Window",
     "noCondition": "No condition (inactive)",
     "commitHint": "Takes effect on the next scrape",
-    "filenameKeywordHint": "Must appear in the filename (e.g. BD); falls back to the number when unknown"
+    "filenameKeywordHint": "Must appear in the filename (e.g. BD); falls back to the number when unknown",
+    "title": "Fixed crop by custom rules"
   },
   "cropCalibrate": {
     "title": "Calibrate crop window",
@@ -1031,7 +1032,7 @@
     "noFilm": "No film found.",
     "pick": "Pick",
     "cropTitle": "Drag the crop window",
-    "useWindow": "Use this window",
+    "useWindow": "Confirm",
     "needSelection": "Drag a window on the image first",
     "aspect": "Aspect",
     "lockAspect": "Lock aspect",

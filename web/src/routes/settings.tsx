@@ -12,7 +12,7 @@ import {
   Text,
   Title,
 } from "@mantine/core";
-import { IconAlertCircle, IconCrop } from "@tabler/icons-react";
+import { IconAlertCircle } from "@tabler/icons-react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -128,20 +128,6 @@ function SettingsPage() {
                     {/* Schema 顶层分组名运行时才知, 动态表单例外. */}
                     {t(`tabs.${key}` as never, { defaultValue: key })}
                   </Text>
-                  {key === "scraping" && (
-                    <Group mb="md">
-                      <Button
-                        variant="light"
-                        leftSection={<IconCrop size={16} />}
-                        onClick={() => setCropRulesOpen(true)}
-                      >
-                        {t("cropRules.button")}
-                      </Button>
-                      <Text size="xs" c="dimmed">
-                        {t("cropRules.description")}
-                      </Text>
-                    </Group>
-                  )}
                   <SchemaForm
                     schema={sectionSchema}
                     prefix={key}
@@ -150,6 +136,31 @@ function SettingsPage() {
                     actionsPlacement="affix"
                     onSave={(patch) => saveMutation.mutate({ body: { [key]: patch } })}
                     saving={saveMutation.isPending}
+                    afterField={
+                      key === "scraping"
+                        ? {
+                            poster_crop_detect_face: (
+                              <Group justify="space-between" wrap="nowrap" gap="md" py="md">
+                                <Box style={{ minWidth: 0 }}>
+                                  <Text size="sm" fw={600}>
+                                    {t("cropRules.title")}
+                                  </Text>
+                                  <Text size="xs" c="dimmed">
+                                    {t("cropRules.description")}
+                                  </Text>
+                                </Box>
+                                <Button
+                                  size="compact-xs"
+                                  variant="light"
+                                  onClick={() => setCropRulesOpen(true)}
+                                >
+                                  {t("cropRules.button")}
+                                </Button>
+                              </Group>
+                            ),
+                          }
+                        : undefined
+                    }
                   />
                 </Paper>
               );

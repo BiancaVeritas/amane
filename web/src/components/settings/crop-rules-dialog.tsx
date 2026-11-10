@@ -4,6 +4,7 @@ import {
   Group,
   Modal,
   NumberInput,
+  Select,
   Stack,
   Table,
   Text,
@@ -11,7 +12,9 @@ import {
   Tooltip,
 } from "@mantine/core";
 import { IconPhoto, IconPlus, IconTrash } from "@tabler/icons-react";
+import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
+import { listFacetsOptions } from "@/client/@tanstack/react-query.gen";
 import { CropCalibrateDialog } from "./crop-calibrate-dialog";
 import { useTranslation } from "react-i18next";
 
@@ -38,6 +41,11 @@ interface CropRulesDialogProps {
 
 const BLANK: CropRule = { left: 0.65, top: 0, width: 0.35, height: 1 };
 
+/** facet 响应 → 下拉框选项; 顶层函数, 免得每次渲染重建. */
+function facetNames(payload: { items?: { name: string }[] } | undefined): string[] {
+  return (payload?.items ?? []).map((item) => item.name);
+}
+
 /**
  * 精准裁切规则编辑.
  *
@@ -49,6 +57,19 @@ export function CropRulesDialog({ opened, onClose, rules, onChange }: CropRulesD
   const [editing, setEditing] = useState<CropRule | null>(null);
   const [index, setIndex] = useState<number | null>(null);
   const [calibrating, setCalibrating] = useState(false);
+  // 系列 / 制作商 / 发行商都从已有分类里选, 免得手打的名字与刮削结果对不上.
+  const { data: seriesFacets } = useQuery({
+    ...listFacetsOptions({ path: { kind: "series" } }),
+    enabled: opened,
+  });
+  const { data: studioFacets } = useQuery({
+    ...listFacetsOptions({ path: { kind: "studio" } }),
+    enabled: opened,
+  });
+  const { data: publisherFacets } = useQuery({
+    ...listFacetsOptions({ path: { kind: "publisher" } }),
+    enabled: opened,
+  });
 
   const startAdd = () => {
     setEditing({ ...BLANK });
@@ -93,7 +114,15 @@ export function CropRulesDialog({ opened, onClose, rules, onChange }: CropRulesD
       .join(" · ");
 
   return (
-    <Modal opened={opened} onClose={onClose} title={t("cropRules.dialogTitle")} size="xl" centered>
+    <Modal
+      opened={opened}
+      onClose={onClose}
+      title={t("cropRules.dialogTitle")}
+      size="xl"
+      centered
+      // 它上面还会叠标定框: 点空白时只该关最上面那层, 否则两层一起消失.
+      closeOnClickOutside={false}
+    >
       <Stack gap="sm">
         <Text size="sm" c="dimmed">
           {t("cropRules.dialogHint")}
@@ -148,10 +177,13 @@ export function CropRulesDialog({ opened, onClose, rules, onChange }: CropRulesD
         ) : (
           <Stack gap="xs">
             <Group grow>
-              <TextInput
+              <Select
                 label={t("fields.scraping.poster_crop_rules.$.series.label")}
-                value={editing.series ?? ""}
-                onChange={(e) => setEditing({ ...editing, series: e.currentTarget.value || null })}
+                searchable
+                clearable
+                data={facetNames(seriesFacets)}
+                value={editing.series ?? null}
+                onChange={(v) => setEditing({ ...editing, series: v })}
               />
               <TextInput
                 label={t("fields.scraping.poster_crop_rules.$.number_prefix.label")}
@@ -172,17 +204,21 @@ export function CropRulesDialog({ opened, onClose, rules, onChange }: CropRulesD
               }
             />
             <Group grow>
-              <TextInput
+              <Select
                 label={t("fields.scraping.poster_crop_rules.$.studio.label")}
-                value={editing.studio ?? ""}
-                onChange={(e) => setEditing({ ...editing, studio: e.currentTarget.value || null })}
+                searchable
+                clearable
+                data={facetNames(studioFacets)}
+                value={editing.studio ?? null}
+                onChange={(v) => setEditing({ ...editing, studio: v })}
               />
-              <TextInput
+              <Select
                 label={t("fields.scraping.poster_crop_rules.$.publisher.label")}
-                value={editing.publisher ?? ""}
-                onChange={(e) =>
-                  setEditing({ ...editing, publisher: e.currentTarget.value || null })
-                }
+                searchable
+                clearable
+                data={facetNames(publisherFacets)}
+                value={editing.publisher ?? null}
+                onChange={(v) => setEditing({ ...editing, publisher: v })}
               />
             </Group>
             <Group grow>

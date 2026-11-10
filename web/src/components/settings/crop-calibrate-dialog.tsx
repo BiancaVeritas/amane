@@ -159,6 +159,7 @@ export function CropCalibrateDialog({ opened, onClose, onCalibrated }: CropCalib
           onClose={closeSample}
           imageUrl={sampleUrl}
           defaultAspect={0.7}
+          defaultLockAspect={false}
           initialAnchor="right"
           submitting={false}
           labels={{

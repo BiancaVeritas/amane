@@ -71,6 +71,8 @@ export interface ImageCropDialogProps {
   submitting: boolean;
   /** 标题栏右侧的附加控件, 例如切换裁切基准图. */
   headerExtra?: ReactNode;
+  /** 打开时是否默认锁定宽高比; 标定窗口这类要自由拖的场景传 false. */
+  defaultLockAspect?: boolean;
 }
 
 interface DecodedImage {
@@ -262,13 +264,14 @@ export function ImageCropDialog({
   onSubmit,
   submitting,
   headerExtra,
+  defaultLockAspect = false,
 }: ImageCropDialogProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [source, setSource] = useState<DecodedImage | null>(null);
   const [rotation, setRotation] = useState<CropRotation>(0);
   const [crop, setCrop] = useState<Crop>();
   const [completedCrop, setCompletedCrop] = useState<PixelCrop>();
-  const [lockAspect, setLockAspect] = useState(true);
+  const [lockAspect, setLockAspect] = useState(defaultLockAspect);
   const [aspectRatio, setAspectRatio] = useState(defaultAspect);
   const [box, setBox] = useState<BoxState>(EMPTY_BOX);
   const [loadError, setLoadError] = useState(false);
@@ -288,7 +291,7 @@ export function ImageCropDialog({
     setCompletedCrop(undefined);
     setBox(EMPTY_BOX);
     // 默认不锁定: 锁定只是「按比例拖」的辅助, 大多数裁切要自己决定宽高.
-    setLockAspect(false);
+    setLockAspect(defaultLockAspect);
     setAspectRatio(defaultAspect);
     if (imageKey !== prevImage) {
       setPrevImage(imageKey);
@@ -605,17 +608,31 @@ export function ImageCropDialog({
               onChange={(e) => {
                 const checked = e.currentTarget.checked;
                 setLockAspect(checked);
-                if (checked) {
-                  // 按输入框中的宽高比约束当前选区 (不反推覆盖输入值)
-                  const height = box.height > 0 ? box.height : (naturalSize?.height ?? 0);
-                  const top = box.height > 0 ? box.top : 0;
-                  const width = box.width > 0 ? box.width : height;
-                  const left = box.width > 0 ? box.left : 0;
-                  applyNaturalBox(
-                    { left, top, width, height },
-                    { locked: true, aspect: aspectRatio, anchor: "height" },
-                  );
+                if (!checked || !naturalSize) return;
+                // 开锁定即刻把当前选区调整成该比例. 尺寸取 completedCrop (拖拽时实时更新)
+                // 而不是 box —— box 由 effect 同步, 此刻可能还落后一次拖拽, 按它重塑会让
+                // 选框跳一下甚至塌成一条.
+                const canvas = canvasRef.current;
+                const current =
+                  completedCrop ?? (crop && canvas ? toPixelCrop(crop, canvas) : undefined);
+                if (
+                  canvas === null ||
+                  current === undefined ||
+                  current.width <= 0 ||
+                  current.height <= 0
+                ) {
+                  return;
                 }
+                const scale = displayScale(canvas);
+                applyNaturalBox(
+                  {
+                    left: Math.round(current.x * scale.x),
+                    top: Math.round(current.y * scale.y),
+                    width: Math.round(current.width * scale.x),
+                    height: Math.round(current.height * scale.y),
+                  },
+                  { locked: true, aspect: aspectRatio, anchor: "height" },
+                );
               }}
             />
           </Stack>

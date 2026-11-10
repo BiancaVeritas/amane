@@ -550,7 +550,7 @@
             "label": "番号前缀"
           },
           "studio": {
-            "label": "供应商"
+            "label": "制作商"
           },
           "publisher": {
             "label": "发行商"
@@ -1018,7 +1018,8 @@
     "window": "裁切窗口",
     "noCondition": "未填条件 (不生效)",
     "commitHint": "保存后立即生效, 下次刮削按新位置裁切",
-    "filenameKeywordHint": "文件名里必须含这个词 (如 BD); 没有文件名时改看番号"
+    "filenameKeywordHint": "文件名里必须含这个词 (如 BD); 没有文件名时改看番号",
+    "title": "按自定义规则固定裁切"
   },
   "cropCalibrate": {
     "title": "标定裁切窗口",
@@ -1031,7 +1032,7 @@
     "noFilm": "没有找到影片。",
     "pick": "选择",
     "cropTitle": "拖出裁切范围",
-    "useWindow": "用这个窗口",
+    "useWindow": "确认",
     "needSelection": "先在图上拖出裁切范围",
     "aspect": "宽高比",
     "lockAspect": "锁定比例",
