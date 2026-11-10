@@ -4,7 +4,7 @@ import pytest
 from PIL import Image
 
 from amane.config import PosterCropRule
-from amane.media.crop_rules import find_rule, rule_matches
+from amane.media.crop_rules import find_rule, rule_matches, rule_window
 
 
 def test_rule_matches_single_condition() -> None:
@@ -123,3 +123,96 @@ def test_filename_keyword_combines_with_other_conditions() -> None:
     assert not rule_matches(
         rule, number="SSIS-001", series=None, studio=None, publisher=None, media_path="SSIS-001-BD.mp4"
     )
+
+
+def test_rule_window_passes_through_when_aspect_disabled() -> None:
+    """use_aspect 关闭时原样使用四个比例值."""
+    rule = PosterCropRule(left=0.52, top=0.0, width=0.48, height=1.0)
+
+    assert rule_window(rule, image_width=1280, image_height=707) == (0.52, 0.0, 0.48, 1.0)
+
+
+@pytest.mark.parametrize(
+    ("align", "expected_left"),
+    [
+        ("right", 0.5200),
+        ("left", 0.0),
+        ("center", 0.26),
+    ],
+)
+def test_rule_window_aspect_alignment(align: str, expected_left: float) -> None:
+    """宽高比 0.87 + 整高, 在 1.8116 的封面上宽度占比约 0.48."""
+    rule = PosterCropRule(use_aspect=True, aspect=0.87, align=align, top=0.0, height=1.0)
+
+    left, top, width, height = rule_window(rule, image_width=1280, image_height=707)
+
+    assert width == pytest.approx(0.48, abs=0.01)
+    assert left == pytest.approx(expected_left, abs=0.01)
+    assert (top, height) == (0.0, 1.0)
+
+
+def test_rule_window_aspect_stays_stable_across_resolutions() -> None:
+    """同构图不同分辨率: 窗口占比几乎一致, 裁出来的宽高比都是 0.87."""
+    rule = PosterCropRule(use_aspect=True, aspect=0.87, align="right", top=0.0, height=1.0)
+
+    ratios = []
+    for w, h in [(750, 414), (1280, 707)]:
+        left, _, width, height = rule_window(rule, image_width=w, image_height=h)
+        ratios.append((width * w) / (height * h))
+        assert left + width == pytest.approx(1.0, abs=1e-9)
+
+    assert ratios[0] == pytest.approx(0.87, abs=0.01)
+    assert ratios[1] == pytest.approx(0.87, abs=0.01)
+
+
+def test_rule_window_custom_align_uses_left() -> None:
+    rule = PosterCropRule(use_aspect=True, aspect=0.87, align="custom", left=0.3, height=1.0)
+
+    left, _, width, _ = rule_window(rule, image_width=1280, image_height=707)
+
+    assert left == pytest.approx(0.3, abs=1e-6)
+    assert left + width <= 1.0 + 1e-9
+
+
+def test_rule_window_aspect_wider_than_cover_fills_width() -> None:
+    """目标比例比封面本身还宽时宽度打满, 不能超过 1."""
+    rule = PosterCropRule(use_aspect=True, aspect=3.0, align="left", height=1.0)
+
+    _, _, width, _ = rule_window(rule, image_width=1000, image_height=1000)
+
+    assert width <= 1.0
+
+
+@pytest.mark.parametrize(
+    ("prefix", "number", "expected"),
+    [
+        # 有分隔符: 只比切出来的那一段.
+        ("MCB3DBD", "MCB3DBD-43", True),
+        ("MCB3DBD", "mcb3dbd-43", True),
+        ("ABP", "ABP-123", True),
+        ("MCB3DBD", "CMC3DBD-43", False),
+        ("MCB3DBD", "XMCB3DBD-1", False),
+        ("MCB3DBD", "MCB3DBD2-1", False),
+        ("MCB3DBD", "MCB-1", False),
+        ("ABP", "ACBP-123", False),
+        # 无分隔符: 退回「以…开头」.
+        ("MCB3DBD", "MCB3DBD43", True),
+        ("ABP", "ABP123", True),
+        ("n", "n1138", True),
+        ("MCB3DBD", "XMCB3DBD1", False),
+        # 纯数字前缀没有意义.
+        ("1234", "1234-ABP", False),
+    ],
+)
+def test_number_prefix_requires_startswith(prefix: str, number: str, expected: bool):
+    from amane.media.crop_rules import _number_prefix_matches
+
+    assert _number_prefix_matches(prefix, number) is expected
+
+
+def test_rule_with_digit_prefix_matches() -> None:
+    """前缀含数字的规则要能命中 —— 这是实际踩过的坑."""
+    rule = PosterCropRule(number_prefix="MCB3DBD")
+
+    assert rule_matches(rule, number="MCB3DBD-43", series=None, studio=None, publisher=None)
+    assert not rule_matches(rule, number="ABP-123", series=None, studio=None, publisher=None)

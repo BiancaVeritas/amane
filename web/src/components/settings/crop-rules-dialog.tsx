@@ -5,7 +5,9 @@ import {
   Modal,
   NumberInput,
   Select,
+  SimpleGrid,
   Stack,
+  Switch,
   Table,
   Text,
   TextInput,
@@ -15,6 +17,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { listFacetsOptions } from "@/client/@tanstack/react-query.gen";
+import { Z_INDEX } from "@/lib/z-index";
 import { CropCalibrateDialog } from "./crop-calibrate-dialog";
 
 /** 后端 ``PosterCropRule`` 的等价形状; 字段全部可选, 裁切窗口按封面比例 0~1. */
@@ -25,6 +28,9 @@ export interface CropRule {
   filename_keyword?: string | null;
   studio?: string | null;
   publisher?: string | null;
+  use_aspect: boolean;
+  aspect: number;
+  align: "left" | "center" | "right" | "custom";
   left: number;
   top: number;
   width: number;
@@ -39,7 +45,26 @@ interface CropRulesDialogProps {
 }
 
 /** 新规则的初始窗口: 右侧一条竖版. */
-const BLANK: CropRule = { left: 0.65, top: 0, width: 0.35, height: 1 };
+const BLANK: CropRule = {
+  use_aspect: false,
+  aspect: 0.7,
+  align: "right",
+  left: 0.65,
+  top: 0,
+  width: 0.35,
+  height: 1,
+};
+
+/** 列表里的「窗口」摘要: 开了宽高比时那四个数不参与计算, 不该显示出来误导人. */
+function describeWindow(rule: CropRule): string {
+  if (!rule.use_aspect) {
+    return `left=${rule.left} top=${rule.top} w=${rule.width} h=${rule.height}`;
+  }
+  const base = `aspect=${rule.aspect} align=${rule.align}`;
+  return rule.align === "custom"
+    ? `${base} left=${rule.left} top=${rule.top} h=${rule.height}`
+    : base;
+}
 
 /** facet 响应 → 下拉框选项; 顶层函数, 免得每次渲染重建. */
 function facetNames(payload: { items?: { name: string }[] } | undefined): string[] {
@@ -98,8 +123,9 @@ export function CropRulesDialog({ opened, onClose, rules, onChange }: CropRulesD
         opened={opened}
         onClose={onClose}
         title={t("cropRules.dialogTitle")}
-        size="min(92vw, 60rem)"
+        size="min(96vw, 76rem)"
         centered
+        zIndex={Z_INDEX.ruleList}
       >
         <Stack gap="sm">
           <Text size="sm" c="dimmed">
@@ -114,7 +140,7 @@ export function CropRulesDialog({ opened, onClose, rules, onChange }: CropRulesD
             <Table striped withTableBorder>
               <Table.Thead>
                 <Table.Tr>
-                  <Table.Th>{t("cropRules.match")}</Table.Th>
+                  <Table.Th style={{ width: "55%" }}>{t("cropRules.match")}</Table.Th>
                   <Table.Th>{t("cropRules.window")}</Table.Th>
                   <Table.Th w={100} />
                 </Table.Tr>
@@ -123,11 +149,14 @@ export function CropRulesDialog({ opened, onClose, rules, onChange }: CropRulesD
                 {rules.map((rule, at) => (
                   <Table.Tr key={`${describe(rule)}-${String(at)}`}>
                     <Table.Td>
-                      <Text size="sm">{describe(rule) || t("cropRules.noCondition")}</Text>
+                      {/* 条件可能很长: 单行显示, 超出用省略号, 全文放 Tooltip. */}
+                      <Text size="sm" lineClamp={1} title={describe(rule)}>
+                        {describe(rule) || t("cropRules.noCondition")}
+                      </Text>
                     </Table.Td>
                     <Table.Td>
                       <Text size="xs" ff="monospace" c="dimmed">
-                        {`left=${rule.left} top=${rule.top} w=${rule.width} h=${rule.height}`}
+                        {describeWindow(rule)}
                       </Text>
                     </Table.Td>
                     <Table.Td>
@@ -178,7 +207,7 @@ export function CropRulesDialog({ opened, onClose, rules, onChange }: CropRulesD
 }
 
 /** 单条规则的编辑窗口: 命中条件 + 裁切窗口 + 从图片标定. */
-function CropRuleEditorDialog({
+export function CropRuleEditorDialog({
   opened,
   initial,
   onClose,
@@ -224,11 +253,12 @@ function CropRuleEditorDialog({
         title={t("cropRules.editorTitle")}
         size="min(92vw, 56rem)"
         centered
-        zIndex={300}
+        zIndex={Z_INDEX.ruleEditor}
       >
         <Stack gap="md">
           <Group grow>
             <Select
+              comboboxProps={{ zIndex: Z_INDEX.dropdown }}
               label={t("fields.scraping.poster_crop_rules.$.series.label")}
               searchable
               clearable
@@ -254,6 +284,7 @@ function CropRuleEditorDialog({
           />
           <Group grow>
             <Select
+              comboboxProps={{ zIndex: Z_INDEX.dropdown }}
               label={t("fields.scraping.poster_crop_rules.$.studio.label")}
               searchable
               clearable
@@ -262,6 +293,7 @@ function CropRuleEditorDialog({
               onChange={(v) => setDraft({ ...draft, studio: v })}
             />
             <Select
+              comboboxProps={{ zIndex: Z_INDEX.dropdown }}
               label={t("fields.scraping.poster_crop_rules.$.publisher.label")}
               searchable
               clearable
@@ -271,6 +303,43 @@ function CropRuleEditorDialog({
             />
           </Group>
 
+          {/* 两种给窗口的方式二选一: 开了按宽高比, 关了用下面四个比例值. */}
+          <Switch
+            label={t("cropRules.useAspect")}
+            description={t("cropRules.useAspectHint")}
+            checked={draft.use_aspect}
+            onChange={(e) => setDraft({ ...draft, use_aspect: e.currentTarget.checked })}
+          />
+
+          <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
+            <NumberInput
+              label={t("cropRules.aspect")}
+              min={0.1}
+              max={3}
+              step={0.01}
+              decimalScale={3}
+              disabled={!draft.use_aspect}
+              value={draft.aspect}
+              onChange={(v) => setDraft({ ...draft, aspect: typeof v === "number" ? v : 0.7 })}
+            />
+            <Select
+              comboboxProps={{ zIndex: Z_INDEX.dropdown }}
+              label={t("cropRules.align")}
+              disabled={!draft.use_aspect}
+              data={[
+                { value: "left", label: t("cropRules.alignLeft") },
+                { value: "center", label: t("cropRules.alignCenter") },
+                { value: "right", label: t("cropRules.alignRight") },
+                { value: "custom", label: t("cropRules.alignCustom") },
+              ]}
+              value={draft.align}
+              onChange={(v) => setDraft({ ...draft, align: (v ?? "right") as CropRule["align"] })}
+            />
+          </SimpleGrid>
+
+          {/* 靠左/居中/靠右时窗口完全由宽高比推出 (上边距 0、整高), 这四个数不参与计算,
+              所以置灰而不是隐藏 —— 保持字段位置稳定, 也让人看得出它们仍然存在.
+              只有「自定义」才让人直接调它们. */}
           <Group grow>
             <NumberInput
               label={t("fields.scraping.poster_crop_rules.$.left.label")}
@@ -278,6 +347,7 @@ function CropRuleEditorDialog({
               max={1}
               step={0.01}
               decimalScale={3}
+              disabled={draft.use_aspect && draft.align !== "custom"}
               value={draft.left}
               onChange={(v) => setDraft({ ...draft, left: typeof v === "number" ? v : 0 })}
             />
@@ -287,6 +357,7 @@ function CropRuleEditorDialog({
               max={1}
               step={0.01}
               decimalScale={3}
+              disabled={draft.use_aspect && draft.align !== "custom"}
               value={draft.top}
               onChange={(v) => setDraft({ ...draft, top: typeof v === "number" ? v : 0 })}
             />
@@ -296,6 +367,7 @@ function CropRuleEditorDialog({
               max={1}
               step={0.01}
               decimalScale={3}
+              disabled={draft.use_aspect}
               value={draft.width}
               onChange={(v) => setDraft({ ...draft, width: typeof v === "number" ? v : 0 })}
             />
@@ -305,6 +377,7 @@ function CropRuleEditorDialog({
               max={1}
               step={0.01}
               decimalScale={3}
+              disabled={draft.use_aspect && draft.align !== "custom"}
               value={draft.height}
               onChange={(v) => setDraft({ ...draft, height: typeof v === "number" ? v : 0 })}
             />

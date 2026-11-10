@@ -56,6 +56,29 @@ def _url_hash(url: str) -> str:
     return hashlib.sha256(url.encode()).hexdigest()[:16]
 
 
+def _parse_ratio(args: str) -> float | None:
+    """``0.7000`` → 0.7; 其它形状返回 None."""
+    try:
+        value = float(args)
+    except ValueError:
+        return None
+    return value if value > 0 else None
+
+
+def _parse_box_args(args: str) -> tuple[int, int, int, int] | None:
+    """``box:left,top,right,bottom`` → 四元组; 其它形状返回 None."""
+    if not args.startswith("box:"):
+        return None
+    parts = args[len("box:") :].split(",")
+    if len(parts) != 4:
+        return None
+    try:
+        left, top, right, bottom = (int(p) for p in parts)
+    except ValueError:
+        return None
+    return left, top, right, bottom
+
+
 def derived_locator(src_url: str, op: str, args: str) -> str:
     # 同一 (src_url, op, args) 恒得同一 locator, 无需反推 url.
     inner = hashlib.sha256(src_url.encode()).hexdigest()
@@ -290,6 +313,63 @@ class ResourceStore:
             # 早期上传件按内容哈希命名 (``thumb_xxx`` / ``poster_xxx``), 与 url hash 不一致,
             # 上面两条模式都命中不了; 这里按内容哈希兜底, 让那批旧文件仍能显示.
             return await self._legacy_upload_by_content_hash(session, url_hash)
+
+    async def get_record_by_url_hash(self, url_hash: str) -> Resource | None:
+        """按 URL hash 取记录, **不看文件是否存在**.
+
+        给「记录还在但文件丢了」的场景用: 调用方据此判断能否就地重建。
+        """
+        async with self._session() as session:
+            for pattern in (f"{url_hash[:2]}/{url_hash}.%", f"../uploads/{url_hash[:2]}/{url_hash}.%"):
+                result = await session.exec(select(Resource).where(col(Resource.file_path).like(pattern)))
+                record = result.first()
+                if record is not None:
+                    return record
+        return None
+
+    async def rebuild_derived(self, record: Resource) -> tuple[Resource, Path] | None:
+        """按记录里的 ``meta`` 重跑一次派生 (裁切) 并回写.
+
+        派生件的键只含「源 + 操作 + 参数」, 文件丢了但源还在时可以直接重算 —— 比退回低优先级
+        来源更准, 也符合「海报就是从封面裁出来的」这一事实. 源也丢了就返回 None.
+        """
+        meta = record.meta or {}
+        op = meta.get("op")
+        src_url = meta.get("src")
+        args = meta.get("args")
+        if not isinstance(op, str) or not isinstance(src_url, str) or not isinstance(args, str):
+            return None
+        if op != "crop":
+            return None
+
+        src_record = await self.get_by_url(src_url)
+        if src_record is None:
+            return None
+        src_path = self._base_dir / src_record.file_path
+        if not src_path.exists():
+            return None
+
+        from .images import crop_box, crop_poster
+
+        ext = Path(record.file_path).suffix or ".jpg"
+        # 参数有三种形状, 都要能重放: 纯比例 ``0.7000``、手工框 ``box:l,t,r,b``、
+        # 规则窗口 ``rule:...`` (规则依赖当次配置, 无法离线重放, 直接放弃).
+        box_args = _parse_box_args(args)
+        ratio = _parse_ratio(args)
+
+        async def producer(target: Path) -> bool:
+            if box_args is not None:
+                return crop_box(src_path, target, box_args)
+            if ratio is not None:
+                return crop_poster(src_path, target, poster_ratio=ratio, jpeg_quality=95, detect_face=True)
+            return False
+
+        rebuilt = await self.acquire_derived(src_url, op, args, producer, ext=ext, force=True)
+        if rebuilt is None:
+            return None
+        # 与 get_by_url_hash 的形状对齐: 调用方拿到 (记录, 完整路径) 就能直接出图.
+        full = self._base_dir / rebuilt.file_path
+        return (rebuilt, full) if full.exists() else None
 
     async def _legacy_upload_by_content_hash(
         self, session: AsyncSession, url_hash: str

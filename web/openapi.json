@@ -9085,6 +9085,17 @@
         ],
         "title": "ContentType"
       },
+      "CropAlign": {
+        "type": "string",
+        "enum": [
+          "left",
+          "center",
+          "right",
+          "custom"
+        ],
+        "title": "CropAlign",
+        "description": "use_aspect 时窗口的水平位置."
+      },
       "CropAvatarRequest": {
         "properties": {
           "left": {
@@ -10993,7 +11004,7 @@
           "network": {
             "$ref": "#/components/schemas/NetworkConfig",
             "default": {
-              "timeout": 10.0,
+              "timeout": 20.0,
               "max_retries": 2,
               "max_clients": 50,
               "browser": {
@@ -11002,7 +11013,7 @@
                 "timeout": 30000
               },
               "chunked_threshold": 2097152,
-              "chunk_size": 1048576,
+              "chunk_size": 524288,
               "concurrency": 10,
               "rate_limits": {},
               "default_rate_limit": 5.0
@@ -13856,7 +13867,7 @@
             "maximum": 300.0,
             "minimum": 5.0,
             "title": "Timeout",
-            "default": 10.0
+            "default": 20.0
           },
           "max_retries": {
             "type": "integer",
@@ -13888,7 +13899,7 @@
             "maximum": 52428800.0,
             "minimum": 262144.0,
             "title": "Chunk Size",
-            "default": 1048576
+            "default": 524288
           },
           "concurrency": {
             "type": "integer",
@@ -14527,6 +14538,25 @@
             ],
             "title": "Publisher",
             "description": "发行商; 空则不限"
+          },
+          "use_aspect": {
+            "type": "boolean",
+            "title": "Use Aspect",
+            "description": "按宽高比 + 对齐方式给窗口; 关闭时用下面四个 0~1 的比例值",
+            "default": false
+          },
+          "aspect": {
+            "type": "number",
+            "maximum": 3.0,
+            "minimum": 0.1,
+            "title": "Aspect",
+            "description": "use_aspect 时的目标宽高比 (w/h)",
+            "default": 0.7
+          },
+          "align": {
+            "$ref": "#/components/schemas/CropAlign",
+            "description": "use_aspect 时的水平位置; custom 取 left 作为左边距",
+            "default": "right"
           },
           "left": {
             "type": "number",

@@ -173,9 +173,10 @@ def crop_poster(
 
 
 def _poster_crop_left(img: Image.Image, target_w: int, *, detect_face: bool) -> int:
-    """裁切窗口的左边距; 人脸居中优先, 未知则取右侧."""
+    """裁切窗口的左边距; 按主人物人脸居中, 检测不到时整体居中取景."""
     w, _ = img.size
-    fallback = w - target_w
+    # 兜底居中: 人物构图通常居中, 靠右只是日式封面右半是海报的经验值, 并不普遍成立.
+    fallback = round((w - target_w) / 2)
     if not detect_face:
         return fallback
 
@@ -186,8 +187,9 @@ def _poster_crop_left(img: Image.Image, target_w: int, *, detect_face: bool) -> 
         return fallback
     x1, _, x2, _ = face
     face_cx = (x1 + x2) / 2
-    # 夹在 [0, 右边距] 内: 窗口始终完整落在封面内, 脸靠边时停在边界而不裁出画面.
-    return round(min(max(0.0, face_cx - target_w / 2), float(fallback)))
+    # 夹在 [0, w - target_w] 内: 窗口始终完整落在封面内, 脸靠边时停在边界而不裁出画面.
+    # 上界必须是「最右位置」而不是兜底中心值 —— 用中心值夹会把右半边的脸硬拉回居中.
+    return round(min(max(0.0, face_cx - target_w / 2), float(w - target_w)))
 
 
 def crop_poster_by_rule(

@@ -69,6 +69,8 @@ import { OverlayChip, OverlayChipLabel } from "@/components/media/overlay-chip";
 import { VrOverlayChip } from "@/components/media/vr-badge";
 import { type ImageInfoItem, ImagePickerDialog } from "@/components/media/image-picker-dialog";
 import { PosterCropDialog } from "@/components/media/poster-crop-dialog";
+import { useConfig, useUpdateConfig } from "@/hooks/use-config";
+import { type CropRule, CropRuleEditorDialog } from "@/components/settings/crop-rules-dialog";
 import { useUploadMetaImage } from "@/components/media/use-upload-meta-image";
 import { MergeDialog } from "@/components/metadata/merge-dialog";
 import { type JSONSchemaObject, resolveSchema } from "@/components/schema-form/schema";
@@ -85,6 +87,24 @@ import { CommentSection } from "@/components/media/comment-section";
 import { PlaybackPanel } from "@/components/media/playback-panel";
 import { LazyPlaybackPlayer } from "@/components/media/playback-player-lazy";
 import type { SeekRequest } from "@/components/media/playback-player";
+
+/** 番号的厂商前缀: 取第一个分隔符之前的部分; 没有分隔符时保留原样. */
+function vendorPrefix(number: string | null | undefined): string | null {
+  const raw = (number ?? "").trim();
+  if (!raw) return null;
+  const head = raw.split(/[-_. ]+/, 1)[0];
+  return head || null;
+}
+
+const BLANK_RULE: CropRule = {
+  use_aspect: false,
+  aspect: 0.7,
+  align: "right",
+  left: 0.65,
+  top: 0,
+  width: 0.35,
+  height: 1,
+};
 
 /**
  * `t` 是评论时间戳跳转的目标秒数: 写进地址栏以便分享与刷新后定位, 因此可以非整数以外的任何值
@@ -150,6 +170,15 @@ function TitleDetailPage() {
   const [editOpen, setEditOpen] = useState(false);
   const [mergeOpen, setMergeOpen] = useState(false);
   const [cropOpen, setCropOpen] = useState(false);
+  // 「精准裁切」按钮带出来的规则草稿; 非空时打开规则编辑窗.
+  const [ruleDraft, setRuleDraft] = useState<CropRule | null>(null);
+  // 现有规则与保存入口: 详情页只负责追加一条, 完整编辑仍在设置页.
+  const { data: config } = useConfig();
+  const cropRules = (config?.scraping?.poster_crop_rules ?? []) as CropRule[];
+  const updateConfigMutation = useUpdateConfig();
+  const addCropRuleMutation = {
+    mutate: (vars: { body: unknown }) => updateConfigMutation.mutate(vars as never),
+  };
   // 挑图对话框: 有目标时才打开, 同时决定选中的图落到封面还是海报.
   const [pickerTarget, setPickerTarget] = useState<"thumb" | "poster" | null>(null);
   // 上传选图用的隐藏 input; 菜单项点击时转交给它们.
@@ -458,7 +487,15 @@ function TitleDetailPage() {
   }
 
   if (isLoading) {
-    return <Loader />;
+    // DEBUG: 带上编号与状态, 确认到底是哪个查询卡住.
+    return (
+      <Stack gap="xs">
+        <Loader />
+        <Text size="sm" c="dimmed">
+          DEBUG: isLoading id={id} validId={String(validId)}
+        </Text>
+      </Stack>
+    );
   }
 
   if (isError || !data) {
@@ -1272,6 +1309,18 @@ function TitleDetailPage() {
             contentType={item.content_type}
             alternativeSources={coverCandidates.filter((url) => url !== thumbSrc)}
             infos={imageInfos}
+            onAddRule={(win) => {
+              // 把当前裁切位置带进规则编辑器: 用户只需补命中条件.
+              // 裁切窗保持打开, 保存规则后能接着按「确定」把海报存下来.
+              setRuleDraft({
+                use_aspect: false,
+                aspect: 0.7,
+                align: "right",
+                // 预填厂商前缀 (S2MBD-047 → S2MBD), 而不是完整番号: 规则本来就是按系列命中.
+                number_prefix: vendorPrefix(item.number),
+                ...win,
+              });
+            }}
             onSuccess={() => {
               invalidateDetail();
               void queryClient.invalidateQueries({ queryKey: listMetadataQueryKey() });
@@ -1283,6 +1332,19 @@ function TitleDetailPage() {
       {coverLightboxOpen && coverSrc && (
         <FanartLightbox images={[coverSrc]} onClose={coverLightbox.close} />
       )}
+
+      {/* 「精准裁切」带出来的规则草稿: 复用设置页的编辑器, 保存即追加一条规则. */}
+      <CropRuleEditorDialog
+        opened={ruleDraft !== null}
+        initial={ruleDraft ?? BLANK_RULE}
+        onClose={() => setRuleDraft(null)}
+        onSubmit={(rule) => {
+          setRuleDraft(null);
+          addCropRuleMutation.mutate({
+            body: { scraping: { poster_crop_rules: [...cropRules, rule] } },
+          });
+        }}
+      />
     </Stack>
   );
 }

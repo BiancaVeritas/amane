@@ -19,6 +19,7 @@ import { useTranslation } from "react-i18next";
 import { listMetadataOptions } from "@/client/@tanstack/react-query.gen";
 import { ImageCropDialog } from "@/components/media/image-crop-dialog";
 import { proxyImageUrl } from "@/lib/utils";
+import { Z_INDEX } from "@/lib/z-index";
 
 /** 标定结果: 相对封面宽高的比例 (0~1), 直接写进裁切规则. */
 export interface CalibratedWindow {
@@ -75,6 +76,7 @@ export function CropCalibrateDialog({ opened, onClose, onCalibrated }: CropCalib
         title={t("cropCalibrate.title")}
         size="min(92vw, 68rem)"
         centered
+        zIndex={Z_INDEX.calibrate}
       >
         <Stack gap="md">
           <Text size="sm" c="dimmed">
@@ -161,6 +163,8 @@ export function CropCalibrateDialog({ opened, onClose, onCalibrated }: CropCalib
           defaultAspect={0.7}
           defaultLockAspect={false}
           initialAnchor="right"
+          // 这一层是从标定框 (380) 里再开的, 必须更高才不会被它盖住.
+          zIndex={Z_INDEX.calibrateCrop}
           submitting={false}
           labels={{
             title: t("cropCalibrate.cropTitle"),

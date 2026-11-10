@@ -626,3 +626,100 @@ class TestUploadedResource:
         # 路径带 ../ 前缀, 比内容而非字面量.
         assert found[1].resolve() == legacy_path.resolve()
         assert found[1].read_bytes() == data
+
+
+class TestRebuildDerived:
+    """派生件文件丢了但记录还在时, 按 meta 里的源与参数重跑一次."""
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_get_record_by_url_hash_sees_missing_file(
+        self, resource_store: ResourceStore, monkeypatch: pytest.MonkeyPatch
+    ):
+        _ = _stub_client(monkeypatch, final_url="https://s/c.jpg")
+
+        async def producer(dest: Path) -> bool:
+            dest.write_bytes(b"cropped")
+            return True
+
+        made = await resource_store.acquire_derived("https://s/c.jpg", "crop", "0.7000", producer)
+        assert made is not None
+        url_hash = ResourceStore.url_hash(made.url)
+
+        resource_store.full_path(made).unlink()
+
+        # get_by_url_hash 看不到它 (文件没了), 但按记录仍能取到.
+        assert await resource_store.get_by_url_hash(url_hash) is None
+        record = await resource_store.get_record_by_url_hash(url_hash)
+        assert record is not None
+        assert record.url == made.url
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_rebuild_returns_none_when_source_gone(
+        self, resource_store: ResourceStore, monkeypatch: pytest.MonkeyPatch
+    ):
+        """源图也没了就重建不了, 不能凭空造."""
+        _ = _stub_client(monkeypatch, final_url="https://s/c.jpg")
+
+        async def producer(dest: Path) -> bool:
+            dest.write_bytes(b"cropped")
+            return True
+
+        made = await resource_store.acquire_derived("https://s/missing.jpg", "crop", "0.7000", producer)
+        assert made is not None
+        resource_store.full_path(made).unlink()
+
+        record = await resource_store.get_record_by_url_hash(ResourceStore.url_hash(made.url))
+        assert record is not None
+        assert await resource_store.rebuild_derived(record) is None
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_rebuild_ignores_non_crop_derived(
+        self, resource_store: ResourceStore, monkeypatch: pytest.MonkeyPatch
+    ):
+        """超分等其它派生不归这里管, 返回 None 由调用方 404."""
+        _ = _stub_client(monkeypatch, final_url="https://s/c.jpg")
+
+        async def producer(dest: Path) -> bool:
+            dest.write_bytes(b"scaled")
+            return True
+
+        made = await resource_store.acquire_derived("https://s/c.jpg", "upscale", "x2", producer)
+        assert made is not None
+
+        record = await resource_store.get_record_by_url_hash(ResourceStore.url_hash(made.url))
+        assert record is not None
+        assert await resource_store.rebuild_derived(record) is None
+
+
+class TestRebuildDerivedArgs:
+    """派生参数有多种形状, 重放要认得出来."""
+
+    @pytest.mark.parametrize(
+        ("args", "expected"),
+        [
+            ("0.7000", 0.7),
+            ("0.87", 0.87),
+            ("box:242,0,557,450", None),
+            ("rule:aspect=0.87", None),
+            ("garbage", None),
+        ],
+    )
+    def test_parse_ratio(self, args: str, expected: float | None):
+        from amane.media.resource_store import _parse_ratio
+
+        assert _parse_ratio(args) == expected
+
+    @pytest.mark.parametrize(
+        ("args", "expected"),
+        [
+            ("box:242,0,557,450", (242, 0, 557, 450)),
+            ("box:1,2,3", None),
+            ("box:a,b,c,d", None),
+            ("0.7000", None),
+            ("rule:aspect=0.87", None),
+        ],
+    )
+    def test_parse_box_args(self, args: str, expected: tuple[int, int, int, int] | None):
+        from amane.media.resource_store import _parse_box_args
+
+        assert _parse_box_args(args) == expected

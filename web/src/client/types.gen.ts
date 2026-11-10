@@ -1026,6 +1026,13 @@ export type ConnectivityStatus = 'ok' | 'failed' | 'skipped';
 export type ContentType = 'censored' | 'uncensored' | 'chinese' | 'western' | 'fc2' | 'amateur' | 'hentai';
 
 /**
+ * CropAlign
+ *
+ * use_aspect 时窗口的水平位置.
+ */
+export type CropAlign = 'left' | 'center' | 'right' | 'custom';
+
+/**
  * CropAvatarRequest
  *
  * 从当前主图按像素框裁切头像 (相对 image_urls[0] 当前本地文件像素; 含就地超分后尺寸).
@@ -3707,6 +3714,22 @@ export type PosterCropRule = {
      * 发行商; 空则不限
      */
     publisher?: string | null;
+    /**
+     * Use Aspect
+     *
+     * 按宽高比 + 对齐方式给窗口; 关闭时用下面四个 0~1 的比例值
+     */
+    use_aspect?: boolean;
+    /**
+     * Aspect
+     *
+     * use_aspect 时的目标宽高比 (w/h)
+     */
+    aspect?: number;
+    /**
+     * use_aspect 时的水平位置; custom 取 left 作为左边距
+     */
+    align?: CropAlign;
     /**
      * Left
      *

@@ -1,13 +1,15 @@
 """资源图 HTTP 缓存头.
 
-SR 开启: URL 不变且文件就地覆盖, 用 ``public, no-cache`` + ETag 协商失效.
-SR 关闭: 原图不变, 用 ``public, max-age=2592000`` 缓存 30 天.
+一律 ``public, no-cache`` + ETag 协商.
+
+文件名是 URL 的哈希, 内容变了地址也不变: 强刮削会就地覆盖同一张封面, 派生件 (裁切/超分)
+的键也只含「源 + 参数」. 用 ``max-age`` 长缓存时浏览器会一直拿旧图不放, 必须手动强刷才能
+看到新内容; ``no-cache`` 只是要求每次复用前向服务器确认, 未变时回 304, 速度与直取缓存相当.
 """
 
 from fastapi import Request, Response
 
 RESOURCE_CACHE_HEADERS = {"Cache-Control": "public, no-cache"}
-ORIGINAL_RESOURCE_CACHE_HEADERS = {"Cache-Control": "public, max-age=2592000"}
 
 
 def format_etag(content_hash: str) -> str:

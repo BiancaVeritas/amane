@@ -12,7 +12,6 @@ from fastapi.responses import FileResponse
 
 from ..deps import RuntimeDep
 from ..support.http_cache import (
-    ORIGINAL_RESOURCE_CACHE_HEADERS,
     RESOURCE_CACHE_HEADERS,
     format_etag,
     maybe_not_modified,
@@ -33,15 +32,9 @@ _EXT_TO_MIME = {
 }
 
 
-def _image_response(request: Request, path: Path, content_hash: str | None, cache_mode: str) -> Response:
-    # `original` is safe for 30-day browser caching only while SR is disabled;
-    # the query parameter is also part of the browser cache key.
-    if cache_mode == "original":
-        return FileResponse(
-            path=path,
-            media_type=_EXT_TO_MIME.get(path.suffix.lower(), "image/jpeg"),
-            headers=dict(ORIGINAL_RESOURCE_CACHE_HEADERS),
-        )
+def _image_response(request: Request, path: Path, content_hash: str | None, cache_mode: str | None = None) -> Response:
+    # 一律 ETag 协商: 文件名是 URL 的哈希, 覆盖同一地址后浏览器若不回源就会一直显示旧图.
+    _ = cache_mode
     not_modified = maybe_not_modified(request, content_hash)
     if not_modified is not None:
         return not_modified
@@ -109,23 +102,30 @@ async def serve_resource(
     runtime: RuntimeDep,
     mode: Annotated[str | None, Query(description="Browser cache mode")] = None,
 ) -> Response:
-    found = await runtime.resource_store.get_by_url_hash(url_hash)
+    store = runtime.resource_store
+    found = await store.get_by_url_hash(url_hash)
     if found is None:
-        raise HTTPException(status_code=404, detail="资源不存在")
+        # 记录还在但文件丢了: 派生件能按 meta 里的源与参数重跑一次, 比退回低优先级来源更准.
+        # 原始件无法重建 (源图本身丢了), 直接 404.
+        stale = await store.get_record_by_url_hash(url_hash)
+        if stale is not None:
+            rebuilt = await store.rebuild_derived(stale)
+            if rebuilt is not None:
+                # rebuild_derived 返回 (记录, 路径); 但 acquire_derived 只给记录, 这里统一成二元组.
+                found = rebuilt
+                logger.info("derived resource rebuilt", url_hash=url_hash, url=rebuilt[0].url)
+        if found is None:
+            raise HTTPException(status_code=404, detail="资源不存在")
     record, path = found
 
-    cache_mode = _cache_mode(runtime, mode)
-    # 派生件 (裁切/超分) 的地址由「源 + 操作 + 参数」决定, 算法升级后内容会变而同址.
-    # 30 天强缓存会让浏览器拿着旧图不放, 所以派生件一律走 ETag 协商; 只有原始件才长缓存.
-    derived = record.url.startswith("derived:")
-    if cache_mode == "original" and not derived:
-        headers = dict(ORIGINAL_RESOURCE_CACHE_HEADERS)
-    else:
-        not_modified = maybe_not_modified(request, record.content_hash)
-        if not_modified is not None:
-            return not_modified
-        headers = dict(RESOURCE_CACHE_HEADERS)
-        if record.content_hash:
-            headers["ETag"] = format_etag(record.content_hash)
+    # 原始件与派生件都走 ETag 协商: 文件名是 URL 的哈希, 内容变了地址也不变 —— 强刮削会
+    # 就地覆盖同一张封面. 长缓存会让浏览器拿着旧图不放, 必须手动强刷才看得到新内容.
+    _ = _cache_mode(runtime, mode)
+    not_modified = maybe_not_modified(request, record.content_hash)
+    if not_modified is not None:
+        return not_modified
+    headers = dict(RESOURCE_CACHE_HEADERS)
+    if record.content_hash:
+        headers["ETag"] = format_etag(record.content_hash)
     media_type = record.mime_type or _EXT_TO_MIME.get(path.suffix.lower(), "application/octet-stream")
     return FileResponse(path=path, media_type=media_type, headers=headers)

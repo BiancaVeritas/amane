@@ -569,6 +569,21 @@
           },
           "filename_keyword": {
             "label": "文件名关键词"
+          },
+          "use_aspect": {
+            "label": "按宽高比"
+          },
+          "aspect": {
+            "label": "宽高比"
+          },
+          "align": {
+            "label": "水平位置",
+            "options": {
+              "left": "靠左",
+              "center": "居中",
+              "right": "靠右",
+              "custom": "自定义"
+            }
           }
         }
       }
@@ -1014,16 +1029,26 @@
     "dialogHint": "命中条件全部满足才生效; 全部留空视为不启用。裁切窗口按封面比例的 0~1 填写。",
     "empty": "还没有规则。",
     "add": "添加规则",
-    "match": "命中条件",
+    "match": "规则条件",
     "window": "裁切窗口",
     "noCondition": "未填条件 (不生效)",
     "commitHint": "保存后立即生效, 下次刮削按新位置裁切",
     "filenameKeywordHint": "文件名里必须含这个词 (如 BD); 没有文件名时改看番号",
     "title": "按自定义规则固定裁切",
-    "editorTitle": "编辑裁切规则"
+    "editorTitle": "编辑裁切规则",
+    "useAspect": "按宽高比裁切",
+    "useAspectHint": "开启后按目标宽高比 + 对齐方式自动算窗口, 换分辨率也不会跑偏",
+    "aspect": "宽高比",
+    "aspectHint": "目标海报的 w/h",
+    "align": "水平位置",
+    "alignLeft": "靠左",
+    "alignCenter": "居中",
+    "alignRight": "靠右",
+    "alignCustom": "自定义",
+    "customLeftHint": "自定义位置: 左边距按封面宽度的比例填"
   },
   "cropCalibrate": {
-    "title": "标定裁切窗口",
+    "title": "标定裁切",
     "hint": "选一张同系列的封面, 在图上拖出想要的裁切范围; 比例会写进规则, 之后同条件的影片按它裁切。",
     "fromLibrary": "从片库选择",
     "fromUpload": "上传临时图片",
@@ -1032,7 +1057,7 @@
     "searchPlaceholder": "输入番号或标题搜索",
     "noFilm": "没有找到影片。",
     "pick": "选择",
-    "cropTitle": "拖出裁切范围",
+    "cropTitle": "裁切范围",
     "useWindow": "确认",
     "needSelection": "先在图上拖出裁切范围",
     "aspect": "宽高比",
@@ -1044,6 +1069,7 @@
     "rotateLeft": "左转",
     "rotateRight": "右转",
     "resetRotation": "复位",
-    "search": "搜索"
+    "search": "搜索",
+    "button": "标定裁切"
   }
 }

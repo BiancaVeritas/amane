@@ -168,7 +168,8 @@
       "needSelection": "Select a valid region first",
       "success": "Poster updated",
       "noThumb": "A cover image is required to crop a poster",
-      "selectSource": "Replace image"
+      "selectSource": "Replace image",
+      "addRule": "Precise crop"
     },
     "upload": {
       "fromFile": "Upload image",

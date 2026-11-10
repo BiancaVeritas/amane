@@ -1,3 +1,4 @@
+import asyncio
 from collections.abc import Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, Literal, cast
@@ -836,6 +837,10 @@ def _source_label(url: str, *, origin: str | None, raw_url: str | None = None) -
     return ""
 
 
+#: 候选图尺寸解析的并发上限; 同时最多下载这么多张.
+_IMAGE_INFO_CONCURRENCY = 5
+
+
 @router.post("/{metadata_id}/image-info")
 async def image_info(
     metadata_id: int,
@@ -853,19 +858,25 @@ async def image_info(
         raise HTTPException(status_code=404, detail="影片不存在")
 
     store = runtime.resource_store
-    items: list[ImageInfo] = []
-    for url in req.urls:
-        origin, raw_url, size = await _resolve_image_origin(store, url, runtime.web_client)
-        width, height = size if size is not None else (None, None)
-        items.append(
-            ImageInfo(
-                url=url,
-                source=_source_label(url, origin=origin, raw_url=raw_url),
-                width=width,
-                height=height,
-                kind=_image_kind(url, metadata, raw_url=raw_url),
-            )
+    # 并发解析: 外链要逐张下载才能量尺寸, 串行时一张两秒、六张就十几秒, 详情页会一直转圈.
+    # 上限 5 张: 候选图可能几十张, 一次全发会把带宽占满, 反而拖慢首张的完成时间.
+    semaphore = asyncio.Semaphore(_IMAGE_INFO_CONCURRENCY)
+
+    async def resolve(url: str) -> tuple[str | None, str | None, tuple[int, int] | None]:
+        async with semaphore:
+            return await _resolve_image_origin(store, url, runtime.web_client)
+
+    resolved = await asyncio.gather(*(resolve(url) for url in req.urls))
+    items = [
+        ImageInfo(
+            url=url,
+            source=_source_label(url, origin=origin, raw_url=raw_url),
+            width=size[0] if size is not None else None,
+            height=size[1] if size is not None else None,
+            kind=_image_kind(url, metadata, raw_url=raw_url),
         )
+        for url, (origin, raw_url, size) in zip(req.urls, resolved, strict=True)
+    ]
     return ImageInfoResponse(items=items)
 
 

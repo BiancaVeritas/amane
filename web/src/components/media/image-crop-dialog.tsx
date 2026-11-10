@@ -22,8 +22,10 @@ import {
 } from "react";
 import ReactCrop, { type Crop, type PixelCrop } from "react-image-crop";
 import "react-image-crop/dist/ReactCrop.css";
+import { CropMagnifier } from "./crop-magnifier";
 import { apiFetch } from "@/lib/api-token";
 import { proxyImageUrl } from "@/lib/utils";
+import { Z_INDEX } from "@/lib/z-index";
 
 const MIN_ASPECT = 0.1;
 const MAX_ASPECT = 5;
@@ -73,6 +75,12 @@ export interface ImageCropDialogProps {
   headerExtra?: ReactNode;
   /** 打开时是否默认锁定宽高比; 标定窗口这类要自由拖的场景传 false. */
   defaultLockAspect?: boolean;
+  /** 选区 (自然像素) 变化时回调; 供调用方取出「当前裁切框」做别的用途. */
+  onSelectionChange?: (box: CropBox) => void;
+  /** 基准图的自然像素尺寸就绪时回调; 换算比例要用到它. */
+  onNaturalSizeChange?: (size: { width: number; height: number }) => void;
+  /** 层叠高度; 嵌在别的弹框里时要给得比它高. */
+  zIndex?: number;
 }
 
 interface DecodedImage {
@@ -132,13 +140,64 @@ function displayScale(canvas: HTMLCanvasElement): { x: number; y: number } {
   };
 }
 
+/** 把选区坐标吸附到整像素: ReactCrop 给的是浮点, 直接存会一路带出 0.5px 的零头. */
+function snapCrop(crop: Crop, canvas: HTMLCanvasElement | null): Crop {
+  if (canvas === null) return crop;
+  const shownW = canvas.clientWidth || 1;
+  const shownH = canvas.clientHeight || 1;
+  // displayScale 是「显示 → 自然」的倍数; 选区贴着整像素的自然是显示坐标 × scale.
+  const scaleX = canvas.width / shownW;
+  const scaleY = canvas.height / shownH;
+
+  // 先还原成显示像素, 再换算成自然像素并取整 —— 取整必须在**自然像素**上做,
+  // 只吸附显示坐标的话, 乘回 scale (通常不是整数) 后又冒出小数.
+  const shown =
+    crop.unit === "px"
+      ? { x: crop.x, y: crop.y, width: crop.width, height: crop.height }
+      : {
+          x: (crop.x / 100) * shownW,
+          y: (crop.y / 100) * shownH,
+          width: (crop.width / 100) * shownW,
+          height: (crop.height / 100) * shownH,
+        };
+
+  const natX = Math.round(shown.x * scaleX);
+  const natY = Math.round(shown.y * scaleY);
+  const natW = Math.max(1, Math.round(shown.width * scaleX));
+  const natH = Math.max(1, Math.round(shown.height * scaleY));
+
+  // 再折回显示坐标交给 ReactCrop; 这样由它换算出的自然坐标天然是整数.
+  const backX = natX / scaleX;
+  const backY = natY / scaleY;
+  const backW = Math.max(1, natW / scaleX);
+  const backH = Math.max(1, natH / scaleY);
+
+  return { unit: "px", x: backX, y: backY, width: backW, height: backH };
+}
+
 /** 显示像素选区 → 原图像素框 (left/top/right/bottom, right/bottom 不含). */
-function toNaturalBox(crop: PixelCrop, canvas: HTMLCanvasElement): CropBox {
+function toNaturalBox(crop: Crop, canvas: HTMLCanvasElement): CropBox {
   const scale = displayScale(canvas);
-  const left = Math.round(crop.x * scale.x);
-  const top = Math.round(crop.y * scale.y);
-  const right = Math.round((crop.x + crop.width) * scale.x);
-  const bottom = Math.round((crop.y + crop.height) * scale.y);
+  // ReactCrop 在百分比模式下给出 0~100 的数值; 不先归一就乘 scale, 会得到几万的假坐标.
+  const shown =
+    crop.unit === "px"
+      ? { x: crop.x, y: crop.y, width: crop.width, height: crop.height }
+      : {
+          x: (crop.x / 100) * canvas.clientWidth,
+          y: (crop.y / 100) * canvas.clientHeight,
+          width: (crop.width / 100) * canvas.clientWidth,
+          height: (crop.height / 100) * canvas.clientHeight,
+        };
+  const left = Math.max(0, Math.round(shown.x * scale.x));
+  const top = Math.max(0, Math.round(shown.y * scale.y));
+  const right = Math.min(
+    canvas.width,
+    Math.max(left + 1, Math.round((shown.x + shown.width) * scale.x)),
+  );
+  const bottom = Math.min(
+    canvas.height,
+    Math.max(top + 1, Math.round((shown.y + shown.height) * scale.y)),
+  );
   return {
     left: Math.max(0, left),
     top: Math.max(0, top),
@@ -150,12 +209,15 @@ function toNaturalBox(crop: PixelCrop, canvas: HTMLCanvasElement): CropBox {
 /** 原图像素框 → 显示像素选区. */
 function fromNaturalBox(box: CropBox, canvas: HTMLCanvasElement): PixelCrop {
   const scale = displayScale(canvas);
+  // displayScale 是「显示 → 自然」的倍数, 这里是反方向, 必须**除**而不是乘:
+  // 两个方向都用乘法的话, 一次「显示→自然→显示」往返会把坐标放大 scale² 倍
+  // (图片比显示区大 8 倍时就是 64 倍), 反复操作输入框的数字会直接冲到几万.
   return {
     unit: "px",
-    x: box.left * scale.x,
-    y: box.top * scale.y,
-    width: (box.right - box.left) * scale.x,
-    height: (box.bottom - box.top) * scale.y,
+    x: box.left / scale.x,
+    y: box.top / scale.y,
+    width: Math.max(1, (box.right - box.left) / scale.x),
+    height: Math.max(1, (box.bottom - box.top) / scale.y),
   };
 }
 
@@ -190,6 +252,15 @@ function toCropPercent(
     width: (crop.width / w) * 100,
     height: (crop.height / h) * 100,
   };
+}
+
+/** NumberInput 的 onChange 可能给字符串 (清空时是空串), 统一解析成数字或 undefined. */
+function parseNumberInput(value: number | string): number | undefined {
+  if (typeof value === "number") return Number.isFinite(value) ? value : undefined;
+  const trimmed = value.trim();
+  if (trimmed === "") return undefined;
+  const parsed = Number(trimmed);
+  return Number.isFinite(parsed) ? parsed : undefined;
 }
 
 /** Percent/pixel Crop → 显示像素 PixelCrop. */
@@ -281,6 +352,9 @@ export function ImageCropDialog({
   submitting,
   headerExtra,
   defaultLockAspect = false,
+  onSelectionChange,
+  onNaturalSizeChange,
+  zIndex = Z_INDEX.cropDialog,
 }: ImageCropDialogProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [source, setSource] = useState<DecodedImage | null>(null);
@@ -291,33 +365,54 @@ export function ImageCropDialog({
   const [aspectRatio, setAspectRatio] = useState(defaultAspect);
   const [box, setBox] = useState<BoxState>(EMPTY_BOX);
   const [loadError, setLoadError] = useState(false);
+  // 放大镜要从画布取像素; 渲染期不能读 ref, 因此另存一份到 state.
+  const [canvasEl, setCanvasEl] = useState<HTMLCanvasElement | null>(null);
   const aspectRef = useRef(aspectRatio);
   const naturalSize = useMemo(
     () => (source ? rotatedSize(source, rotation) : null),
     [source, rotation],
   );
 
-  // 比例变化只重置选区; 同一张图不重拉. 换图时连位图与角度一起重置.
-  const imageKey = opened ? imageUrl : "";
-  const sessionKey = `${imageKey}:${defaultAspect}`;
+  // 基准图尺寸就绪后抛给调用方: 换算裁切框比例需要它.
+  const onNaturalSizeRef = useRef(onNaturalSizeChange);
+  useEffect(() => {
+    onNaturalSizeRef.current = onNaturalSizeChange;
+  }, [onNaturalSizeChange]);
+  useEffect(() => {
+    if (naturalSize !== null) onNaturalSizeRef.current?.(naturalSize);
+  }, [naturalSize]);
+
+  // 打开/关闭用 opened 单独记, 换图看 imageUrl 本身.
+  // 早先把 opened 掺进 imageKey (关闭时置空), 于是每次重开都被当成「换了图」, 走清空分支;
+  // 而那个分支同时把 source 也清掉了, 后面重建选区时又依赖 source, 结果选框再也不出现.
+  const sessionKey = `${String(opened)}:${imageUrl}:${defaultAspect}`;
   const [prevSession, setPrevSession] = useState(sessionKey);
-  const [prevImage, setPrevImage] = useState(imageKey);
+  const [prevImage, setPrevImage] = useState(imageUrl);
   if (sessionKey !== prevSession) {
     setPrevSession(sessionKey);
-    setCompletedCrop(undefined);
-    setBox(EMPTY_BOX);
-    // 默认不锁定: 锁定只是「按比例拖」的辅助, 大多数裁切要自己决定宽高.
     setLockAspect(defaultLockAspect);
     setAspectRatio(defaultAspect);
-    if (imageKey !== prevImage) {
-      setPrevImage(imageKey);
+    if (!opened) {
+      // 关闭时只记下状态, 位图与选区留着: 重新打开同一张图要能立刻用上.
+      setCompletedCrop(undefined);
+      setBox(EMPTY_BOX);
+    } else if (imageUrl !== prevImage) {
+      // 换了图源: 位图、旋转、选区都要重来.
+      setPrevImage(imageUrl);
+      setCompletedCrop(undefined);
+      setBox(EMPTY_BOX);
       setSource(null);
       setRotation(0);
       setLoadError(false);
       setCrop(undefined);
-    } else if (source) {
-      // 重新打开同一个图源: 用**当前**宽高比重建选区, 而不是回合到 defaultAspect ——
-      // 后者会让解除锁定后重开时选区尺寸/形状跳回初始值, 看起来像「选框消失了」.
+    } else if (source === null) {
+      // 首次打开同一张图: 位图还没解码, 等 drawRotated 的 effect 建好选区.
+      setCompletedCrop(undefined);
+      setBox(EMPTY_BOX);
+    } else {
+      // 重开同一张图且位图还在: 按当前比例重建选区.
+      setCompletedCrop(undefined);
+      setBox(EMPTY_BOX);
       const size = rotatedSize(source, rotation);
       setCrop(initialAspectCrop(size.width, size.height, aspectRatio, initialAnchor));
     }
@@ -360,14 +455,22 @@ export function ImageCropDialog({
     return () => bitmap?.close();
   }, [source]);
 
-  const syncBoxFromCrop = useCallback((pixelCrop: PixelCrop, canvas: HTMLCanvasElement) => {
+  // 选区变化都汇聚到这里: 更新输入框的值, 顺带把自然像素框抛给调用方.
+  const onSelectionRef = useRef(onSelectionChange);
+  useEffect(() => {
+    onSelectionRef.current = onSelectionChange;
+  }, [onSelectionChange]);
+
+  const syncBoxFromCrop = useCallback((pixelCrop: Crop, canvas: HTMLCanvasElement) => {
     const natural = toNaturalBox(pixelCrop, canvas);
-    setBox({
+    const next = {
       left: natural.left,
       top: natural.top,
       width: natural.right - natural.left,
       height: natural.bottom - natural.top,
-    });
+    };
+    setBox(next);
+    onSelectionRef.current?.(natural);
   }, []);
 
   // 换角度后按新坐标系重绘, 并把选区重置为该比例下的默认框 (原框已不在画布内).
@@ -378,7 +481,8 @@ export function ImageCropDialog({
     const canvas = canvasRef.current;
     if (!source || !canvas) return;
     drawRotated(canvas, source, rotation);
-    const key = `${String(source === null)}:${String(rotation)}:${imageKey}`;
+    // 重开对话框时也要重建: 把 opened 计入 key, 关闭再打开就会重新算一次选区.
+    const key = `${String(opened)}:${String(rotation)}:${imageUrl}`;
     if (cropSessionRef.current === key) return;
     cropSessionRef.current = key;
     const next = initialAspectCrop(canvas.width, canvas.height, aspectRef.current, initialAnchor);
@@ -391,7 +495,7 @@ export function ImageCropDialog({
     } else {
       setBox(EMPTY_BOX);
     }
-  }, [source, rotation, initialAnchor, syncBoxFromCrop, imageKey]);
+  }, [source, rotation, initialAnchor, syncBoxFromCrop, imageUrl, opened]);
 
   // 初始 percent crop / 拖拽中同步像素框到 NumberInput
   useEffect(() => {
@@ -522,7 +626,7 @@ export function ImageCropDialog({
       size="min(92vw, 64rem)"
       centered
       // 可能叠在别的弹框里 (标定裁切窗口), 需要压在上层才能点到画布.
-      zIndex={340}
+      zIndex={zIndex}
     >
       <Stack gap="md">
         {/* 舞台自身不出滚动条: 出条会改变可用宽度, 画布随之重算尺寸, 拖动时选框就会跳.
@@ -557,18 +661,24 @@ export function ImageCropDialog({
             >
               <ReactCrop
                 crop={crop}
-                onChange={(c) => setCrop(c)}
+                onChange={(c) => setCrop(snapCrop(c, canvasRef.current))}
                 onComplete={(c) => {
+                  // 松手时也走一次吸附: 拖动过程中的浮点残留不该落进输入框.
+                  // completedCrop 只用于「有选区」的判断, 保持 ReactCrop 给的像素值;
+                  // 吸附后的整数框由 syncBoxFromCrop 写进 box.
                   setCompletedCrop(c);
                   if (canvasRef.current && c.width > 0 && c.height > 0) {
-                    syncBoxFromCrop(c, canvasRef.current);
+                    syncBoxFromCrop(snapCrop(c, canvasRef.current), canvasRef.current);
                   }
                 }}
                 aspect={lockAspect ? aspectRatio : undefined}
                 keepSelection
               >
                 <canvas
-                  ref={canvasRef}
+                  ref={(node) => {
+                    canvasRef.current = node;
+                    setCanvasEl(node);
+                  }}
                   role="img"
                   aria-label="crop source"
                   style={{
@@ -581,6 +691,7 @@ export function ImageCropDialog({
                   }}
                 />
               </ReactCrop>
+              <CropMagnifier source={canvasEl} crop={crop} enabled={opened} />
               {naturalSize && (
                 <Text
                   size="xs"
@@ -665,10 +776,12 @@ export function ImageCropDialog({
             min={0}
             max={naturalSize ? naturalSize.width - 1 : undefined}
             allowDecimal={false}
+            step={1}
+            clampBehavior="strict"
             onChange={(v) =>
               applyNaturalBox({
                 ...box,
-                left: typeof v === "number" ? v : 0,
+                left: parseNumberInput(v) ?? box.left,
               })
             }
             style={{ width: 110 }}
@@ -679,10 +792,12 @@ export function ImageCropDialog({
             min={0}
             max={naturalSize ? naturalSize.height - 1 : undefined}
             allowDecimal={false}
+            step={1}
+            clampBehavior="strict"
             onChange={(v) =>
               applyNaturalBox({
                 ...box,
-                top: typeof v === "number" ? v : 0,
+                top: parseNumberInput(v) ?? box.top,
               })
             }
             style={{ width: 110 }}
@@ -693,8 +808,13 @@ export function ImageCropDialog({
             min={1}
             max={naturalSize ? naturalSize.width : undefined}
             allowDecimal={false}
+            step={1}
+            clampBehavior="strict"
             onChange={(v) =>
-              applyNaturalBox({ ...box, width: typeof v === "number" ? v : 1 }, { anchor: "width" })
+              applyNaturalBox(
+                { ...box, width: parseNumberInput(v) ?? box.width },
+                { anchor: "width" },
+              )
             }
             style={{ width: 110 }}
           />
@@ -704,11 +824,13 @@ export function ImageCropDialog({
             min={1}
             max={naturalSize ? naturalSize.height : undefined}
             allowDecimal={false}
+            step={1}
+            clampBehavior="strict"
             disabled={lockAspect}
             onChange={(v) =>
               applyNaturalBox({
                 ...box,
-                height: typeof v === "number" ? v : 1,
+                height: parseNumberInput(v) ?? box.height,
               })
             }
             style={{ width: 110 }}

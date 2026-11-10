@@ -340,6 +340,15 @@ class SiteConfig(BaseModel):
         return languages
 
 
+class CropAlign(StrEnum):
+    """use_aspect 时窗口的水平位置."""
+
+    LEFT = "left"
+    CENTER = "center"
+    RIGHT = "right"
+    CUSTOM = "custom"
+
+
 class PosterCropRule(BaseModel):
     """一条固定裁切规则: 命中条件 + 裁切窗口 (按封面高度归一化).
 
@@ -358,6 +367,17 @@ class PosterCropRule(BaseModel):
     )
     studio: str | None = Field(default=None, description="供应商; 空则不限")
     publisher: str | None = Field(default=None, description="发行商; 空则不限")
+    # 两种给窗口的方式, 由 use_aspect 二选一.
+    use_aspect: bool = Field(
+        default=False,
+        description="按宽高比 + 对齐方式给窗口; 关闭时用下面四个 0~1 的比例值",
+    )
+    aspect: float = Field(default=0.7, ge=0.1, le=3.0, description="use_aspect 时的目标宽高比 (w/h)")
+    align: CropAlign = Field(
+        default=CropAlign.RIGHT,
+        description="use_aspect 时的水平位置; custom 取 left 作为左边距",
+    )
+
     left: float = Field(default=0.0, ge=0.0, le=1.0, description="裁切窗口左边距 (占封面宽度)")
     top: float = Field(default=0.0, ge=0.0, le=1.0, description="裁切窗口上边距 (占封面高度)")
     width: float = Field(default=1.0, gt=0.0, le=1.0, description="裁切窗口宽度 (占封面宽度)")
@@ -392,12 +412,6 @@ class ScrapingConfig(BaseModel):
         default_factory=list, json_schema_extra={"x-hidden": True}
     )
     """按系列 / 番号前缀 / 文件名关键词 / 供应商 / 发行商命中的固定裁切位置.
-
-    命中时优先于人脸检测: 同系列封面构图一致, 固定位置比逐张检测更准也更稳.
-    """
-
-    poster_crop_rules: list[PosterCropRule] = Field(default_factory=list, json_schema_extra={"x-hidden": True})
-    """按系列 / 番号前缀 / 供应商 / 发行商命中的固定裁切位置.
 
     命中时优先于人脸检测: 同系列封面构图一致, 固定位置比逐张检测更准也更稳.
     """
@@ -644,7 +658,7 @@ class BrowserConfig(BaseModel):
 
 class NetworkConfig(BaseModel):
     proxy: str | None = None
-    timeout: float = Field(default=10.0, ge=5.0, le=300.0)
+    timeout: float = Field(default=20.0, ge=5.0, le=300.0)
     max_retries: int = Field(default=2, ge=0, le=10)
     """首次请求之外的重试次数 (``2`` → 最多发 3 次请求); 0 表示不重试. 名字为兼容既有配置保留."""
     max_clients: int = Field(default=50, ge=5, le=500, json_schema_extra={"x-hidden": True})
@@ -653,7 +667,7 @@ class NetworkConfig(BaseModel):
     chunked_threshold: int = Field(default=2 * 1024**2, ge=512 * 1024, le=100 * 1024**2)
     """超过此大小 (字节) 启用分块并发下载."""
 
-    chunk_size: int = Field(default=1 * 1024**2, ge=256 * 1024, le=50 * 1024**2)
+    chunk_size: int = Field(default=512 * 1024, ge=256 * 1024, le=50 * 1024**2)
     """单个分片的大小 (字节). 分片须能在 ``timeout`` 内下完, 否则每个分片都以超时告终, 重试不改变结果."""
 
     concurrency: int = Field(default=10, ge=1, le=50)

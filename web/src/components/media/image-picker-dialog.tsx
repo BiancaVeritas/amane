@@ -3,6 +3,7 @@ import { IconTrash } from "@tabler/icons-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { proxyImageUrl } from "@/lib/utils";
+import { Z_INDEX } from "@/lib/z-index";
 
 export interface ImageInfoItem {
   url: string;
@@ -54,7 +55,7 @@ export function ImagePickerDialog({
       size="xl"
       centered
       // 选图框可能从另一个 Modal (裁切) 里打开, 需要压在上面才能点到图.
-      zIndex={400}
+      zIndex={Z_INDEX.imagePicker}
     >
       <Stack gap="sm">
         {ordered.length === 0 ? (

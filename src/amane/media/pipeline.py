@@ -12,6 +12,7 @@ import structlog
 from ..config import DownloadableResource
 from ..parsing import ContentType
 from ..sr import get_preset_meta, run_SR
+from .crop_rules import rule_window
 from .images import (
     CropRotation,
     crop_box,
@@ -167,23 +168,35 @@ async def materialize_images(
                 else config.scraping.poster_ratio
             )
             local_thumb = thumb_local
-            # 规则的派生键带上窗口比例, 否则改规则后仍命中旧产物.
+            # 规则的派生键带上窗口参数, 否则改规则后仍命中旧产物.
+            # use_aspect 时窗口依赖封面尺寸, 键里必须含「宽高比 + 对齐 + 上边距」,
+            # 否则换一张同系列但分辨率不同的封面会命中上一次的裁切结果.
             rule = crop_rule
-            args = (
-                f"rule:{rule.left:.4f},{rule.top:.4f},{rule.width:.4f},{rule.height:.4f}"
-                if rule is not None
-                else f"{ratio:.4f}"
-            )
+            if rule is None:
+                args = f"{ratio:.4f}"
+            elif rule.use_aspect:
+                args = (
+                    f"rule:aspect={rule.aspect:.4f},align={rule.align}"
+                    f",top={rule.top:.4f},height={rule.height:.4f},left={rule.left:.4f}"
+                )
+            else:
+                args = f"rule:{rule.left:.4f},{rule.top:.4f},{rule.width:.4f},{rule.height:.4f}"
 
             async def crop_producer(dest: Path) -> bool:
                 if rule is not None:
+                    # 用 exif 转正后的尺寸: 裁切端也是按转正后的图算框的.
+                    size = probe_oriented_size(local_thumb)
+                    width_px, height_px = size if size is not None else (0, 0)
+                    left, top, width, height = rule_window(
+                        rule, image_width=width_px, image_height=height_px
+                    )
                     return crop_poster_by_rule(
                         local_thumb,
                         dest,
-                        left=rule.left,
-                        top=rule.top,
-                        width=rule.width,
-                        height=rule.height,
+                        left=left,
+                        top=top,
+                        width=width,
+                        height=height,
                         jpeg_quality=config.scraping.jpeg_quality,
                     )
                 return crop_poster(

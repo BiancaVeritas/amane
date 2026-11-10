@@ -1799,6 +1799,18 @@ export const ContentTypeSchema = {
     title: 'ContentType'
 } as const;
 
+export const CropAlignSchema = {
+    type: 'string',
+    enum: [
+        'left',
+        'center',
+        'right',
+        'custom'
+    ],
+    title: 'CropAlign',
+    description: 'use_aspect 时窗口的水平位置.'
+} as const;
+
 export const CropAvatarRequestSchema = {
     properties: {
         left: {
@@ -3744,7 +3756,7 @@ export const HotSettingsSchema = {
         network: {
             $ref: '#/components/schemas/NetworkConfig',
             default: {
-                timeout: 10,
+                timeout: 20,
                 max_retries: 2,
                 max_clients: 50,
                 browser: {
@@ -3753,7 +3765,7 @@ export const HotSettingsSchema = {
                     timeout: 30000
                 },
                 chunked_threshold: 2097152,
-                chunk_size: 1048576,
+                chunk_size: 524288,
                 concurrency: 10,
                 rate_limits: {},
                 default_rate_limit: 5
@@ -6654,7 +6666,7 @@ export const NetworkConfigSchema = {
             maximum: 300,
             minimum: 5,
             title: 'Timeout',
-            default: 10
+            default: 20
         },
         max_retries: {
             type: 'integer',
@@ -6686,7 +6698,7 @@ export const NetworkConfigSchema = {
             maximum: 52428800,
             minimum: 262144,
             title: 'Chunk Size',
-            default: 1048576
+            default: 524288
         },
         concurrency: {
             type: 'integer',
@@ -7343,6 +7355,25 @@ export const PosterCropRuleSchema = {
             ],
             title: 'Publisher',
             description: '发行商; 空则不限'
+        },
+        use_aspect: {
+            type: 'boolean',
+            title: 'Use Aspect',
+            description: '按宽高比 + 对齐方式给窗口; 关闭时用下面四个 0~1 的比例值',
+            default: false
+        },
+        aspect: {
+            type: 'number',
+            maximum: 3,
+            minimum: 0.1,
+            title: 'Aspect',
+            description: 'use_aspect 时的目标宽高比 (w/h)',
+            default: 0.7
+        },
+        align: {
+            $ref: '#/components/schemas/CropAlign',
+            description: 'use_aspect 时的水平位置; custom 取 left 作为左边距',
+            default: 'right'
         },
         left: {
             type: 'number',

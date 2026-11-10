@@ -1,6 +1,6 @@
-import { Button } from "@mantine/core";
+import { Button, Group } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
-import { IconPhoto } from "@tabler/icons-react";
+import { IconCrop, IconPhoto } from "@tabler/icons-react";
 import { useMutation } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -13,6 +13,11 @@ import { extractErrorMessage } from "@/lib/api-error";
 
 const DEFAULT_POSTER_RATIO = 0.7;
 
+/** 比例保留三位小数, 与规则存储精度一致. */
+function round3(value: number): number {
+  return Math.round(value * 1000) / 1000;
+}
+
 export interface PosterCropDialogProps {
   opened: boolean;
   onClose: () => void;
@@ -23,6 +28,8 @@ export interface PosterCropDialogProps {
   alternativeSources?: string[];
   /** 每张候选的来源与分辨率, 交给选图框显示; 与详情页换图共用同一份. */
   infos?: Map<string, ImageInfoItem>;
+  /** 把当前裁切框交给「编辑裁切规则」弹框, 由调用方负责插入规则. */
+  onAddRule?: (window: { left: number; top: number; width: number; height: number }) => void;
   onSuccess?: () => void;
 }
 
@@ -35,6 +42,7 @@ export function PosterCropDialog({
   contentType,
   alternativeSources = [],
   infos,
+  onAddRule,
   onSuccess,
 }: PosterCropDialogProps) {
   const { t } = useTranslation(["metadata", "common"]);
@@ -65,6 +73,36 @@ export function PosterCropDialog({
   }
   const activeSource = sources[Math.min(sourceIndex, sources.length - 1)] ?? thumbUrl;
   const [pickerOpen, setPickerOpen] = useState(false);
+  // 当前裁切框 (自然像素) 与基准图尺寸: 把像素换成比例才能存进规则.
+  const [selection, setSelection] = useState<{
+    left: number;
+    top: number;
+    width: number;
+    height: number;
+  } | null>(null);
+  const [naturalSize, setNaturalSize] = useState<{ width: number; height: number } | null>(null);
+
+  /** 当前裁切框 → 规则用的 0~1 比例; 尺寸未知时返回 null. */
+  const selectionRatio = () => {
+    if (selection === null || naturalSize === null) return null;
+    const w = naturalSize.width || 1;
+    const h = naturalSize.height || 1;
+    return {
+      left: round3(selection.left / w),
+      top: round3(selection.top / h),
+      width: round3(selection.width / w),
+      height: round3(selection.height / h),
+    };
+  };
+
+  const addRuleFromCrop = () => {
+    const win = selectionRatio();
+    if (win === null) {
+      notifications.show({ message: t("detail.cropPoster.needSelection"), color: "red" });
+      return;
+    }
+    onAddRule?.(win);
+  };
 
   const mutation = useMutation({
     ...cropPosterFromThumbMutation(),
@@ -93,8 +131,18 @@ export function PosterCropDialog({
         defaultAspect={configRatio}
         initialAnchor="right"
         submitting={mutation.isPending}
+        onSelectionChange={(box) => {
+          setSelection({
+            left: box.left,
+            top: box.top,
+            width: box.right - box.left,
+            height: box.bottom - box.top,
+          });
+        }}
+        onNaturalSizeChange={setNaturalSize}
         headerExtra={
-          sources.length > 1 ? (
+          <Group gap={6} wrap="nowrap">
+            {/* 只有一张图也保留入口: 将来换源时不必先想到「这里原本有没有按钮」. */}
             <Button
               size="compact-xs"
               variant="light"
@@ -103,7 +151,17 @@ export function PosterCropDialog({
             >
               {t("detail.cropPoster.selectSource")}
             </Button>
-          ) : undefined
+            {onAddRule ? (
+              <Button
+                size="compact-xs"
+                variant="light"
+                leftSection={<IconCrop size={12} />}
+                onClick={() => addRuleFromCrop()}
+              >
+                {t("detail.cropPoster.addRule")}
+              </Button>
+            ) : null}
+          </Group>
         }
         onSubmit={(box, rotation) =>
           mutation.mutate({
