@@ -34,17 +34,19 @@ export function ScrollToTop() {
     const listenTarget: EventTarget = usesWindow ? window : (target as HTMLElement);
 
     const read = () => (usesWindow ? window.scrollY : (target as HTMLElement).scrollTop);
-    // 不在 effect 里同步置初值 (会多一轮渲染): 滚动事件与首帧的 resize 都会校准一次,
-    // 而刷新后停在中间的情况本来就会随下一次滚动出现.
-    const onScroll = () => setVisible(read() > SHOW_AFTER_PX);
-    listenTarget.addEventListener("scroll", onScroll, { passive: true });
-    window.addEventListener("resize", onScroll, { passive: true });
+    // 滚动事件按帧触发, 每帧都 setState 会让整页跟着重渲染一次; 只在跨过阈值时改状态.
+    const sync = () => {
+      const next = read() > SHOW_AFTER_PX;
+      setVisible((prev) => (prev === next ? prev : next));
+    };
+    listenTarget.addEventListener("scroll", sync, { passive: true });
+    window.addEventListener("resize", sync, { passive: true });
     // 挂载后补一次: 从详情页返回列表时可能已经停在中间, 没有新的滚动事件.
-    const id = requestAnimationFrame(onScroll);
+    const id = requestAnimationFrame(sync);
     return () => {
       cancelAnimationFrame(id);
-      listenTarget.removeEventListener("scroll", onScroll);
-      window.removeEventListener("resize", onScroll);
+      listenTarget.removeEventListener("scroll", sync);
+      window.removeEventListener("resize", sync);
     };
   }, []);
 

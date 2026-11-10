@@ -103,7 +103,8 @@ async def list_metadata(
     filters: Annotated[MetadataFilters, Depends(parse_metadata_filters)],
     search: Annotated[str | None, Query()] = None,
     offset: Annotated[int, Query(ge=0)] = 0,
-    limit: Annotated[int, Query(ge=1, le=200)] = 20,
+    # 前端页大小选项最高 500 (见 web/src/lib/page-size.ts); 对不上时 422, 列表看起来就是空的.
+    limit: Annotated[int, Query(ge=1, le=500)] = 20,
     sort_by: Annotated[MetadataSortField, Query(description="Sort field")] = MetadataSortField.UPDATED_AT,
     order: Annotated[SortOrder, Query(description="Sort order")] = SortOrder.DESC,
     semantic_query: Annotated[

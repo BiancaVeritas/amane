@@ -214,202 +214,198 @@ function ActorsIndexPage() {
   }
 
   return (
-    <>
-      <BrowsePageShell
-        fill={isList}
-        title={<Title order={2}>{t("actors.title")}</Title>}
-        actions={
-          <ListDefaultActions update={{ key: "actors", value: actorListDefaults(search) }} />
-        }
-        viewSwitch={
-          <SegmentedControl
-            value={search.view}
-            onChange={(v) =>
-              void navigate({
-                search: (prev) => ({
-                  ...prev,
-                  view: v === "list" ? "list" : "grid",
-                  page: 1,
-                }),
-              })
-            }
-            data={[
-              { value: "grid", label: t("view.grid") },
-              { value: "list", label: t("view.list") },
-            ]}
+    <BrowsePageShell
+      fill={isList}
+      title={<Title order={2}>{t("actors.title")}</Title>}
+      actions={<ListDefaultActions update={{ key: "actors", value: actorListDefaults(search) }} />}
+      viewSwitch={
+        <SegmentedControl
+          value={search.view}
+          onChange={(v) =>
+            void navigate({
+              search: (prev) => ({
+                ...prev,
+                view: v === "list" ? "list" : "grid",
+                page: 1,
+              }),
+            })
+          }
+          data={[
+            { value: "grid", label: t("view.grid") },
+            { value: "list", label: t("view.list") },
+          ]}
+        />
+      }
+      summary={
+        <Text size="sm" c="dimmed">
+          {t("common:pagination.totalItems", { count: total })}
+        </Text>
+      }
+      search={
+        <TextInput
+          value={searchInput}
+          onChange={(e) => handleSearchChange(e.currentTarget.value)}
+          placeholder={t("actors.searchPlaceholder")}
+          leftSection={<IconSearch size={16} />}
+          w="100%"
+        />
+      }
+      extras={
+        <>
+          {/* 窄屏的筛选在底部面板里常驻展开, 该开关只在宽屏有意义. */}
+          {narrowViewport ? null : (
+            <HintedActionIcon
+              variant={advancedOpen || hasNonDefaultFilters ? "filled" : "default"}
+              size={36}
+              onClick={() => setAdvancedOpen((v) => !v)}
+              label={t("search.advanced")}
+            >
+              <IconFilter size={16} />
+            </HintedActionIcon>
+          )}
+          {!isList && (
+            <SortMenu
+              options={ACTOR_SORT_FIELDS.map((f) => ({
+                value: f,
+                label: t(ACTOR_SORT_I18N_KEY[f]),
+              }))}
+              sortBy={search.sort_by}
+              order={search.order}
+              defaultSortBy="count"
+              defaultOrder="desc"
+              onChange={(nextSortBy, nextOrder) =>
+                void navigate({
+                  search: (prev) => ({
+                    ...prev,
+                    sort_by: nextSortBy,
+                    order: nextOrder,
+                    page: 1,
+                  }),
+                })
+              }
+            />
+          )}
+          <BrowseDisplaySettings
+            pageSizeKey="actorsList"
+            onPageSizeChanged={() => void navigate({ search: (prev) => ({ ...prev, page: 1 }) })}
           />
-        }
-        summary={
-          <Text size="sm" c="dimmed">
-            {t("common:pagination.totalItems", { count: total })}
-          </Text>
-        }
-        search={
-          <TextInput
-            value={searchInput}
-            onChange={(e) => handleSearchChange(e.currentTarget.value)}
-            placeholder={t("actors.searchPlaceholder")}
-            leftSection={<IconSearch size={16} />}
-            w="100%"
-          />
-        }
-        extras={
-          <>
-            {/* 窄屏的筛选在底部面板里常驻展开, 该开关只在宽屏有意义. */}
-            {narrowViewport ? null : (
-              <HintedActionIcon
-                variant={advancedOpen || hasNonDefaultFilters ? "filled" : "default"}
-                size={36}
-                onClick={() => setAdvancedOpen((v) => !v)}
-                label={t("search.advanced")}
-              >
-                <IconFilter size={16} />
-              </HintedActionIcon>
-            )}
-            {!isList && (
-              <SortMenu
-                options={ACTOR_SORT_FIELDS.map((f) => ({
-                  value: f,
-                  label: t(ACTOR_SORT_I18N_KEY[f]),
-                }))}
-                sortBy={search.sort_by}
-                order={search.order}
-                defaultSortBy="count"
-                defaultOrder="desc"
-                onChange={(nextSortBy, nextOrder) =>
+        </>
+      }
+      filterPanel={
+        <ActorFilterControls
+          opened={narrowViewport || advancedOpen}
+          committed={filters}
+          onApply={applyFilters}
+        />
+      }
+    >
+      {hasActiveFilters && (
+        <Group gap="xs">
+          {search.saved_query_id != null && (
+            <Group gap={4} wrap="nowrap">
+              <ActiveFilterChip
+                label={`${t("common:nav.savedQueries")}: #${search.saved_query_id}`}
+                onClear={() =>
                   void navigate({
-                    search: (prev) => ({
-                      ...prev,
-                      sort_by: nextSortBy,
-                      order: nextOrder,
-                      page: 1,
-                    }),
+                    search: (prev) => ({ ...prev, saved_query_id: undefined, page: 1 }),
                   })
                 }
               />
-            )}
-            <BrowseDisplaySettings
-              pageSizeKey="actorsList"
-              onPageSizeChanged={() => void navigate({ search: (prev) => ({ ...prev, page: 1 }) })}
+              <ActionIcon
+                size="sm"
+                variant="subtle"
+                component="a"
+                href={`/saved-queries/${search.saved_query_id}`}
+                target="_blank"
+                rel="noreferrer"
+                aria-label={t("savedQueries:openData")}
+              >
+                <IconTable size={14} />
+              </ActionIcon>
+            </Group>
+          )}
+          {filters.gender.map((g) => (
+            <ActiveFilterChip
+              key={g}
+              label={t(GENDER_I18N[g])}
+              onClear={() => applyFilterPatch({ gender: filters.gender.filter((x) => x !== g) })}
             />
-          </>
-        }
-        filterPanel={
-          <ActorFilterControls
-            opened={narrowViewport || advancedOpen}
-            committed={filters}
-            onApply={applyFilters}
-          />
-        }
-      >
-        {hasActiveFilters && (
-          <Group gap="xs">
-            {search.saved_query_id != null && (
-              <Group gap={4} wrap="nowrap">
-                <ActiveFilterChip
-                  label={`${t("common:nav.savedQueries")}: #${search.saved_query_id}`}
-                  onClear={() =>
-                    void navigate({
-                      search: (prev) => ({ ...prev, saved_query_id: undefined, page: 1 }),
-                    })
-                  }
-                />
-                <ActionIcon
-                  size="sm"
-                  variant="subtle"
-                  component="a"
-                  href={`/saved-queries/${search.saved_query_id}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  aria-label={t("savedQueries:openData")}
-                >
-                  <IconTable size={14} />
-                </ActionIcon>
-              </Group>
-            )}
-            {filters.gender.map((g) => (
+          ))}
+          {ACTOR_RANGE_FILTERS.map((range) => {
+            const min = rangeValue(filters, range.min);
+            const max = rangeValue(filters, range.max);
+            if (min == null && max == null) return null;
+            return (
               <ActiveFilterChip
-                key={g}
-                label={t(GENDER_I18N[g])}
-                onClear={() => applyFilterPatch({ gender: filters.gender.filter((x) => x !== g) })}
+                key={range.min}
+                label={formatActorRangeChip(t(range.labelKey), min, max)}
+                onClear={() => clearFilterKeys([range.min, range.max])}
               />
-            ))}
-            {ACTOR_RANGE_FILTERS.map((range) => {
-              const min = rangeValue(filters, range.min);
-              const max = rangeValue(filters, range.max);
-              if (min == null && max == null) return null;
-              return (
-                <ActiveFilterChip
-                  key={range.min}
-                  label={formatActorRangeChip(t(range.labelKey), min, max)}
-                  onClear={() => clearFilterKeys([range.min, range.max])}
-                />
-              );
-            })}
-            {filters.birthplace != null && (
-              <ActiveFilterChip
-                label={`${t("browse.person.birthplace")}: ${filters.birthplace}`}
-                onClear={() => clearFilterKeys(["birthplace"])}
-              />
-            )}
-            {filters.user_tag_id != null && (
-              <ActiveUserTagChip
-                tagId={filters.user_tag_id}
-                onClear={() => applyFilterPatch({ user_tag_id: undefined })}
-              />
-            )}
-            {filters.has_person != null && (
-              <ActiveFilterChip
-                label={
-                  filters.has_person === "true"
-                    ? t("actors.filterHasPerson")
-                    : t("actors.filterNoPerson")
-                }
-                onClear={() => applyFilterPatch({ has_person: undefined })}
-              />
-            )}
-            {filters.has_image != null && (
-              <ActiveFilterChip
-                label={
-                  filters.has_image === "true"
-                    ? t("actors.filterHasImage")
-                    : t("actors.filterNoImage")
-                }
-                onClear={() => applyFilterPatch({ has_image: undefined })}
-              />
-            )}
-          </Group>
-        )}
+            );
+          })}
+          {filters.birthplace != null && (
+            <ActiveFilterChip
+              label={`${t("browse.person.birthplace")}: ${filters.birthplace}`}
+              onClear={() => clearFilterKeys(["birthplace"])}
+            />
+          )}
+          {filters.user_tag_id != null && (
+            <ActiveUserTagChip
+              tagId={filters.user_tag_id}
+              onClear={() => applyFilterPatch({ user_tag_id: undefined })}
+            />
+          )}
+          {filters.has_person != null && (
+            <ActiveFilterChip
+              label={
+                filters.has_person === "true"
+                  ? t("actors.filterHasPerson")
+                  : t("actors.filterNoPerson")
+              }
+              onClear={() => applyFilterPatch({ has_person: undefined })}
+            />
+          )}
+          {filters.has_image != null && (
+            <ActiveFilterChip
+              label={
+                filters.has_image === "true"
+                  ? t("actors.filterHasImage")
+                  : t("actors.filterNoImage")
+              }
+              onClear={() => applyFilterPatch({ has_image: undefined })}
+            />
+          )}
+        </Group>
+      )}
 
-        {isList ? (
-          <ActorTable
-            key={listLimit}
-            items={listItems}
-            isLoading={listQuery.isLoading}
-            total={listTotal}
-            page={search.page}
-            sortBy={search.sort_by}
-            order={search.order}
-            onPageChange={(page) => void navigate({ search: (prev) => ({ ...prev, page }) })}
-            onSort={onSort}
+      {isList ? (
+        <ActorTable
+          key={listLimit}
+          items={listItems}
+          isLoading={listQuery.isLoading}
+          total={listTotal}
+          page={search.page}
+          sortBy={search.sort_by}
+          order={search.order}
+          onPageChange={(page) => void navigate({ search: (prev) => ({ ...prev, page }) })}
+          onSort={onSort}
+        />
+      ) : (
+        <>
+          <ActorGrid
+            cardSize={cardSize}
+            items={gridItems}
+            loading={gridQuery.isLoading && gridItems.length === 0}
+            emptyMessage={t("actors.empty")}
           />
-        ) : (
-          <>
-            <ActorGrid
-              cardSize={cardSize}
-              items={gridItems}
-              loading={gridQuery.isLoading && gridItems.length === 0}
-              emptyMessage={t("actors.empty")}
-            />
-            <ListPagination
-              totalPages={Math.ceil(gridTotal / listLimit)}
-              page={search.page}
-              onChange={(page) => void navigate({ search: (prev) => ({ ...prev, page }) })}
-            />
-          </>
-        )}
-      </BrowsePageShell>
+          <ListPagination
+            totalPages={Math.ceil(gridTotal / listLimit)}
+            page={search.page}
+            onChange={(page) => void navigate({ search: (prev) => ({ ...prev, page }) })}
+          />
+        </>
+      )}
       <ScrollToTop />
-    </>
+    </BrowsePageShell>
   );
 }
