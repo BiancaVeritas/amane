@@ -479,6 +479,8 @@ export function ImageCropDialog({
       }
       size="min(92vw, 64rem)"
       centered
+      // 可能叠在别的弹框里 (标定裁切窗口), 需要压在上层才能点到画布.
+      zIndex={340}
     >
       <Stack gap="md">
         {/* 舞台自身不出滚动条: 出条会改变可用宽度, 画布随之重算尺寸, 拖动时选框就会跳.
@@ -608,30 +610,53 @@ export function ImageCropDialog({
               onChange={(e) => {
                 const checked = e.currentTarget.checked;
                 setLockAspect(checked);
-                if (!checked || !naturalSize) return;
-                // 开锁定即刻把当前选区调整成该比例. 尺寸取 completedCrop (拖拽时实时更新)
-                // 而不是 box —— box 由 effect 同步, 此刻可能还落后一次拖拽, 按它重塑会让
-                // 选框跳一下甚至塌成一条.
                 const canvas = canvasRef.current;
-                const current =
-                  completedCrop ?? (crop && canvas ? toPixelCrop(crop, canvas) : undefined);
-                if (
-                  canvas === null ||
-                  current === undefined ||
-                  current.width <= 0 ||
-                  current.height <= 0
-                ) {
-                  return;
-                }
+                if (!checked || !naturalSize || canvas === null) return;
+                // 开锁定即刻把当前选区调整成该比例.
+                // 单位先归一: ReactCrop 在百分比模式下给出的 x/width 是 0~100 的百分数,
+                // 直接乘 displayScale 会得到几万的假像素值, 选框瞬间炸开.
+                // 按当前选框的**高度**定尺寸: 高度保持不变, 宽度 = 高度 × 比例, 再水平居中
+                // 到原来的框. 这样开锁定只是「把框收成该比例」, 不会跳位置也不会改大小.
+                const picked = completedCrop ?? (crop ? toPixelCrop(crop, canvas) : undefined);
+                if (picked === undefined) return;
+                // ReactCrop 的坐标可能是百分比, 统一换成显示像素再往下算.
+                const shown =
+                  picked.unit === "px"
+                    ? picked
+                    : {
+                        x: (picked.x / 100) * canvas.clientWidth,
+                        y: (picked.y / 100) * canvas.clientHeight,
+                        width: (picked.width / 100) * canvas.clientWidth,
+                        height: (picked.height / 100) * canvas.clientHeight,
+                      };
                 const scale = displayScale(canvas);
+                // 高度保持原样 (ReactCrop 已保证它不超过图片), 宽度按比例反推.
+                // 只有比例本身比图片还宽时, 算出的宽度才会越界 —— 那时按可用宽度收一次,
+                // 高度跟着等比回落.
+                let naturalHeight = Math.round(shown.height * scale.y);
+                let naturalWidth = Math.max(1, Math.round(naturalHeight * aspectRatio));
+                if (naturalWidth > naturalSize.width) {
+                  naturalWidth = naturalSize.width;
+                  naturalHeight = Math.max(1, Math.round(naturalWidth / aspectRatio));
+                }
+                if (naturalHeight <= 0) return;
+                // 水平居中: 保持原框中心不动, 再夹回画面内.
+                const centerX = Math.round((shown.x + shown.width / 2) * scale.x);
+                const naturalLeft = Math.max(
+                  0,
+                  Math.min(
+                    Math.round(centerX - naturalWidth / 2),
+                    naturalSize.width - naturalWidth,
+                  ),
+                );
                 applyNaturalBox(
                   {
-                    left: Math.round(current.x * scale.x),
-                    top: Math.round(current.y * scale.y),
-                    width: Math.round(current.width * scale.x),
-                    height: Math.round(current.height * scale.y),
+                    left: naturalLeft,
+                    top: Math.round(shown.y * scale.y),
+                    width: naturalWidth,
+                    height: naturalHeight,
                   },
-                  { locked: true, aspect: aspectRatio, anchor: "height" },
+                  { locked: true, aspect: aspectRatio, anchor: "width" },
                 );
               }}
             />

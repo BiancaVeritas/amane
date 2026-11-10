@@ -114,15 +114,7 @@ export function CropRulesDialog({ opened, onClose, rules, onChange }: CropRulesD
       .join(" · ");
 
   return (
-    <Modal
-      opened={opened}
-      onClose={onClose}
-      title={t("cropRules.dialogTitle")}
-      size="xl"
-      centered
-      // 它上面还会叠标定框: 点空白时只该关最上面那层, 否则两层一起消失.
-      closeOnClickOutside={false}
-    >
+    <Modal opened={opened} onClose={onClose} title={t("cropRules.dialogTitle")} size="xl" centered>
       <Stack gap="sm">
         <Text size="sm" c="dimmed">
           {t("cropRules.dialogHint")}

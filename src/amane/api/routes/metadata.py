@@ -668,13 +668,21 @@ async def remove_image(
     # 一并移除, 否则删完它还会在框里出现.
     thumbs = [item for item in metadata.thumb_urls if item != url]
     posters = [item for item in metadata.poster_urls if item != url]
-    fanart = [item for item in metadata.extrafanart if item != url]
     thumb_pool = [item for item in metadata.thumb_candidates if item != url]
+    # 剧照按站点分组存, 只从被命中的那几组里剔除 (整组为空就删掉该站, 保持结构干净).
+    fanart_groups: dict[str, list[str]] = {}
+    fanart_changed = False
+    for site, items in metadata.extrafanart_urls.items():
+        kept = [item for item in items if item != url]
+        if len(kept) != len(items):
+            fanart_changed = True
+        if kept:
+            fanart_groups[site] = kept
     if (
         len(thumbs) == len(metadata.thumb_urls)
         and len(posters) == len(metadata.poster_urls)
-        and len(fanart) == len(metadata.extrafanart)
         and len(thumb_pool) == len(metadata.thumb_candidates)
+        and not fanart_changed
     ):
         raise HTTPException(status_code=404, detail="该图片不在候选池中")
 
@@ -687,6 +695,7 @@ async def remove_image(
         thumb_urls=thumb_urls,
         poster_urls=posters,
         thumb_candidates=thumb_pool,
+        extrafanart_urls=fanart_groups,
     )
     assert updated is not None
 

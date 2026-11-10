@@ -73,7 +73,7 @@ export function CropCalibrateDialog({ opened, onClose, onCalibrated }: CropCalib
         opened={opened && !calibrating}
         onClose={onClose}
         title={t("cropCalibrate.title")}
-        size="xl"
+        size="min(92vw, 68rem)"
         centered
       >
         <Stack gap="md">
@@ -244,8 +244,8 @@ function SimpleFilmList({
               <Image
                 src={proxyImageUrl(item.thumb_url)}
                 alt=""
-                h={54}
-                w={96}
+                h={90}
+                w={160}
                 fit="cover"
                 radius="sm"
               />

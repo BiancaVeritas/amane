@@ -442,6 +442,43 @@ class TestImageSelection:
         assert data["thumb_candidates"] == [first]
 
 
+    async def test_remove_deletes_extra_fanart(self, client, repo, app):
+        """剧照在按站点分组的 extrafanart_urls 里, 删掉要落到那一层.
+
+        早期只过滤 flat 的 ``extrafanart`` 属性 (只读首站), 结果剧照删了仍在, 前端看起来
+        像「删除没反应」.
+        """
+        still = "https://example.com/still1.jpg"
+        keep = "https://example.com/still2.jpg"
+        meta = await repo.upsert_metadata(
+            number="SEL-005",
+            extrafanart_urls={"javdb": [still, keep]},
+        )
+
+        resp = await client.request(
+            "DELETE", f"metadata/{meta.id}/images", params={"url": still, "target": "thumb"}
+        )
+
+        assert resp.status_code == 200
+        updated = await repo.get_metadata(meta.id)
+        assert updated is not None
+        assert updated.extrafanart_urls == {"javdb": [keep]}
+
+    async def test_remove_last_still_drops_site_group(self, client, repo, app):
+        """某站的剧照全删完后该站分组应消失, 不留空数组."""
+        only = "https://example.com/only-still.jpg"
+        meta = await repo.upsert_metadata(number="SEL-006", extrafanart_urls={"javdb": [only]})
+
+        resp = await client.request(
+            "DELETE", f"metadata/{meta.id}/images", params={"url": only, "target": "thumb"}
+        )
+
+        assert resp.status_code == 200
+        updated = await repo.get_metadata(meta.id)
+        assert updated is not None
+        assert updated.extrafanart_urls == {}
+
+
 class TestImageInfo:
     """候选图的来源与分辨率, 供选图框展示."""
 
