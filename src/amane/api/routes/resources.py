@@ -115,7 +115,10 @@ async def serve_resource(
     record, path = found
 
     cache_mode = _cache_mode(runtime, mode)
-    if cache_mode == "original":
+    # 派生件 (裁切/超分) 的地址由「源 + 操作 + 参数」决定, 算法升级后内容会变而同址.
+    # 30 天强缓存会让浏览器拿着旧图不放, 所以派生件一律走 ETag 协商; 只有原始件才长缓存.
+    derived = record.url.startswith("derived:")
+    if cache_mode == "original" and not derived:
         headers = dict(ORIGINAL_RESOURCE_CACHE_HEADERS)
     else:
         not_modified = maybe_not_modified(request, record.content_hash)

@@ -263,7 +263,9 @@ def main_subject_face(
     def area(face: tuple[float, float, float, float, float]) -> float:
         return (face[2] - face[0]) * (face[3] - face[1])
 
-    faces.sort(key=lambda f: area(f), reverse=True)
+    # 主体脸排序: 单看面积会被侧脸骗到 —— 侧脸框常常又高又窄, 面积不小, 但只露出轮廓.
+    # 正脸接近正方形 (宽高比 ~1.0), 检测分数也更高; 三项一起看才能挑中画面主角.
+    faces.sort(key=lambda f: _subject_score(f), reverse=True)
     gender = _gender_model()
     if gender is not None:
         rgb = np.asarray(image.convert("RGB"))
@@ -276,6 +278,22 @@ def main_subject_face(
                 break
             if is_female:
                 return (face[0], face[1], face[2], face[3])
-    # 没有性别模型, 或没有一张判为女性: 退回最大脸.
+    # 没有性别模型, 或没有一张判为女性: 退回评分最高的那张.
     x1, y1, x2, y2, _ = faces[0]
     return (x1, y1, x2, y2)
+
+
+def _subject_score(face: tuple[float, float, float, float, float]) -> float:
+    """主体脸评分: 面积 × 检测分数 × 正脸程度.
+
+    正脸程度把宽高比映射到 ``[0.35, 1]`` —— 侧脸几乎拿不到分, 仍会因面积大而排得靠前;
+    检测分数区分「清晰正脸」与「半个后脑勺」.
+    """
+    x1, y1, x2, y2, score = face
+    w, h = x2 - x1, y2 - y1
+    if w <= 0 or h <= 0:
+        return 0.0
+    aspect = min(w, h) / max(w, h)
+    # 宽高比低于 0.6 基本是侧脸或遮挡; 高于 0.6 线性加分到 1.
+    frontal = 0.35 + 0.65 * min(1.0, max(0.0, (aspect - 0.6) / 0.35))
+    return w * h * score * frontal

@@ -55,6 +55,9 @@ class MetadataResponse(BaseModel):
     original_poster_urls: list[str] = []
     poster_urls: list[str] = []
     thumb_urls: list[str] = []
+    # 候选池 (顺序固定, 已去重) 与其中最当前的一张; 选图框按它展示与标出当前项.
+    thumb_candidates: list[str] = []
+    poster_candidates: list[str] = []
     trailer_urls: list[str] = []
     extrafanart_urls: dict = {}
     scores: dict[str, float] = {}

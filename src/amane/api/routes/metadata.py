@@ -462,27 +462,57 @@ async def _dedupe_by_content(store: ResourceStore, urls: list[str], keep: str) -
     return out
 
 
+async def _admit(store: ResourceStore, pool: list[str], url: str, current: str | None) -> list[str]:
+    """把 ``url`` 并进候选池: 保持既有顺序, 同址或同内容的不重复入池.
+
+    ``current`` 是当前正在用的那张. 旧数据没有候选池 (只有 ``thumb_urls``), 首次换图时
+    要把它补进来, 否则原封面会被挤掉; 已有的池仍按原顺序, 不因为它是当前项就提到最前.
+    """
+    out = list(dict.fromkeys(pool))
+    if current and current not in out:
+        out.insert(0, current)
+    if url in out:
+        return out
+    # 内容相同但地址不同 (站点给同一张图的多个尺寸、派生件): 只留已有的那份.
+    url_hash = await _content_hash_of(store, url)
+    if url_hash is not None:
+        for existing in out:
+            if await _content_hash_of(store, existing) == url_hash:
+                return out
+    return [*out, url]
+
+
 async def _apply_thumb(
-    store: ResourceStore, repo: RepoDep, metadata_id: int, thumb_urls: list[str], url: str
+    store: ResourceStore, repo: RepoDep, metadata_id: int, metadata: Metadata, url: str
 ) -> MetadataResponse:
     """把 ``url`` 设为当前封面.
 
-    与上游一致: ``thumb_urls`` 只存**正在用的那张**, 换图即替换。候选图 (剧照、上传件)
-    由各自的字段保存, 不往这里堆 —— 否则列表越换越长, 而 ``thumb_url`` 只取首项, 多出来的
-    条目既不影响显示也不参与选择.
+    ``thumb_candidates`` 是候选池: 选过的图按首次出现的顺序留在里面, 换图不重排, 所以
+    选图框里的编号不会因为换一次图就全变. ``thumb_urls`` 仍只存当前的那**一张** ——
+    下游 (NFO / 整理 / 媒体库) 直接取它, 不该看到候选池.
     """
-    del store, thumb_urls  # 兼容签名; 替换语义不需要旧值
-    updated = await repo.update_metadata(metadata_id, mode=WriteMode.MANUAL, thumb_urls=[url])
+    pool = await _admit(store, metadata.thumb_candidates, url, metadata.thumb_urls[0] if metadata.thumb_urls else None)
+    updated = await repo.update_metadata(
+        metadata_id,
+        mode=WriteMode.MANUAL,
+        thumb_urls=[url],
+        thumb_candidates=pool,
+    )
     assert updated is not None
     return to_resp(MetadataResponse, updated)
 
 
 async def _apply_poster(
-    store: ResourceStore, repo: RepoDep, metadata_id: int, poster_urls: list[str], url: str
+    store: ResourceStore, repo: RepoDep, metadata_id: int, metadata: Metadata, url: str
 ) -> MetadataResponse:
-    """把 ``url`` 设为当前海报. 替换语义, 理由同 ``_apply_thumb``."""
-    del store, poster_urls
-    updated = await repo.update_metadata(metadata_id, mode=WriteMode.MANUAL, poster_urls=[url])
+    """把 ``url`` 设为当前海报. 池的语义同 ``_apply_thumb``."""
+    pool = await _admit(store, metadata.poster_candidates, url, metadata.poster_urls[0] if metadata.poster_urls else None)
+    updated = await repo.update_metadata(
+        metadata_id,
+        mode=WriteMode.MANUAL,
+        poster_urls=[url],
+        poster_candidates=pool,
+    )
     assert updated is not None
     return to_resp(MetadataResponse, updated)
 
@@ -528,7 +558,7 @@ async def upload_thumb(
     store = runtime.resource_store
     stored = await _store_upload_or_400(store, file, kind="thumb")
     url = _resource_url(store, stored.url)
-    updated = await _apply_thumb(store, repo, metadata_id, metadata.thumb_urls, url)
+    updated = await _apply_thumb(store, repo, metadata_id, metadata, url)
     logger.info("thumb uploaded", metadata_id=metadata_id, url=url)
     return updated.model_copy(update={"tags": runtime.tag_mappings.map_tags(updated.tags)})
 
@@ -553,7 +583,7 @@ async def upload_poster(
     stored = await _store_upload_or_400(store, file, kind="poster")
     ratio = _poster_ratio(runtime, metadata.content_type)
     url = await _crop_source_to_poster(stored.url, stored.path, ratio, store, runtime)
-    updated = await _apply_poster(store, repo, metadata_id, metadata.poster_urls, url)
+    updated = await _apply_poster(store, repo, metadata_id, metadata, url)
     logger.info("poster uploaded", metadata_id=metadata_id, url=url, ratio=ratio)
     return updated.model_copy(update={"tags": runtime.tag_mappings.map_tags(updated.tags)})
 
@@ -583,7 +613,7 @@ async def adopt_thumb(
 
     # 直接引用用户点的那条地址, 不重新拼: 重拼得到的字符串未必与池中一致 (查询串、
     # 外部 URL vs 内部地址), 会被当成新图追加, 池子越点越长.
-    updated = await _apply_thumb(store, repo, metadata_id, metadata.thumb_urls, source_url)
+    updated = await _apply_thumb(store, repo, metadata_id, metadata, source_url)
     logger.info("thumb adopted", metadata_id=metadata_id, source_url=source_url)
     return updated.model_copy(update={"tags": runtime.tag_mappings.map_tags(updated.tags)})
 
@@ -612,7 +642,7 @@ async def adopt_poster(
 
     ratio = _poster_ratio(runtime, metadata.content_type)
     url = await _crop_source_to_poster(resolved.locator, resolved.path, ratio, store, runtime)
-    updated = await _apply_poster(store, repo, metadata_id, metadata.poster_urls, url)
+    updated = await _apply_poster(store, repo, metadata_id, metadata, url)
     logger.info("poster adopted", metadata_id=metadata_id, source_url=source_url, ratio=ratio)
     return updated.model_copy(update={"tags": runtime.tag_mappings.map_tags(updated.tags)})
 
@@ -639,18 +669,28 @@ async def remove_image(
     thumbs = [item for item in metadata.thumb_urls if item != url]
     posters = [item for item in metadata.poster_urls if item != url]
     fanart = [item for item in metadata.extrafanart if item != url]
+    thumb_pool = [item for item in metadata.thumb_candidates if item != url]
+    poster_pool = [item for item in metadata.poster_candidates if item != url]
     if (
         len(thumbs) == len(metadata.thumb_urls)
         and len(posters) == len(metadata.poster_urls)
         and len(fanart) == len(metadata.extrafanart)
+        and len(thumb_pool) == len(metadata.thumb_candidates)
+        and len(poster_pool) == len(metadata.poster_candidates)
     ):
         raise HTTPException(status_code=404, detail="该图片不在候选池中")
+
+    # 删掉的正好是正在用的那张时, 顺延到池里第一张 (池空则留空).
+    thumb_urls = thumbs if url not in metadata.thumb_urls else ([thumb_pool[0]] if thumb_pool else [])
+    poster_urls = posters if url not in metadata.poster_urls else ([poster_pool[0]] if poster_pool else [])
 
     updated = await repo.update_metadata(
         metadata_id,
         mode=WriteMode.MANUAL,
-        thumb_urls=thumbs,
-        poster_urls=posters,
+        thumb_urls=thumb_urls,
+        poster_urls=poster_urls,
+        thumb_candidates=thumb_pool,
+        poster_candidates=poster_pool,
     )
     assert updated is not None
 

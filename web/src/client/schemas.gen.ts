@@ -6139,6 +6139,34 @@ export const MetadataPartialSchema = {
             ],
             title: 'Thumb Urls'
         },
+        thumb_candidates: {
+            anyOf: [
+                {
+                    items: {
+                        type: 'string'
+                    },
+                    type: 'array'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Thumb Candidates'
+        },
+        poster_candidates: {
+            anyOf: [
+                {
+                    items: {
+                        type: 'string'
+                    },
+                    type: 'array'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Poster Candidates'
+        },
         trailer_urls: {
             anyOf: [
                 {
@@ -6441,6 +6469,22 @@ export const MetadataResponseSchema = {
             },
             type: 'array',
             title: 'Thumb Urls',
+            default: []
+        },
+        thumb_candidates: {
+            items: {
+                type: 'string'
+            },
+            type: 'array',
+            title: 'Thumb Candidates',
+            default: []
+        },
+        poster_candidates: {
+            items: {
+                type: 'string'
+            },
+            type: 'array',
+            title: 'Poster Candidates',
             default: []
         },
         trailer_urls: {

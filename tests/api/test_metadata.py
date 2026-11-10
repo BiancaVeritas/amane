@@ -358,12 +358,10 @@ class TestMetadataHttp:
 
 @pytest.mark.asyncio
 class TestImageSelection:
-    """换图 = 替换, 与上游一致: thumb_urls 只存正在用的那张."""
+    """候选池只增不重排, 换图只改选中项; thumb_urls 仍只存当前那张."""
 
-    async def test_adopt_replaces_thumb_urls(self, client, repo, app):
-        first = "https://example.com/a.jpg"
-        second = "https://example.com/b.jpg"
-
+    @staticmethod
+    def _install_fake_web_client(app) -> None:
         async def fake_download(url: str, dest: Path, **kwargs: object) -> bool:
             dest.parent.mkdir(parents=True, exist_ok=True)
             Image.new("RGB", (800, 538), "blue").save(dest)
@@ -375,41 +373,73 @@ class TestImageSelection:
         app.state.runtime.web_client.download = fake_download  # type: ignore[method-assign]
         app.state.runtime.web_client.resolve_final_url = fake_resolve  # type: ignore[method-assign]
 
+    async def test_select_keeps_previous_cover_in_pool(self, client, repo, app):
+        """选第二张当封面后, 原封面仍留在候选池原位 —— 换一次图不该把编号全打乱."""
+        first = "https://example.com/a.jpg"
+        second = "https://example.com/b.jpg"
+        self._install_fake_web_client(app)
+
         meta = await repo.upsert_metadata(number="SEL-001", thumb_urls=[first])
 
-        # 选另一张作封面: 列表被替换成那一张, 不留旧值.
         resp = await client.post(f"metadata/{meta.id}/adopt-thumb", params={"source_url": second})
 
         assert resp.status_code == 200
         data = resp.json()
-        assert data["thumb_urls"] == [second]
-        assert data["thumb_url"] == second
+        assert data["thumb_urls"] == [second]  # 下游只看到当前那一张
+        assert data["thumb_candidates"] == [first, second]  # 原位保留, 新的追加在后
 
-    async def test_remove_clears_thumb(self, client, repo, app):
-        """删掉正在用的封面后列表为空, 而不是顺延到下一张."""
+    async def test_reselect_existing_candidate_does_not_duplicate(self, client, repo, app):
+        """把它再选回来, 池里不应出现第二条同样的地址."""
+        first = "https://example.com/a.jpg"
+        second = "https://example.com/b.jpg"
+        self._install_fake_web_client(app)
+
+        meta = await repo.upsert_metadata(number="SEL-002", thumb_urls=[first])
+        await client.post(f"metadata/{meta.id}/adopt-thumb", params={"source_url": second})
+        resp = await client.post(f"metadata/{meta.id}/adopt-thumb", params={"source_url": first})
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["thumb_candidates"] == [first, second]  # 顺序不变, 没有重复
+        assert data["thumb_urls"] == [first]
+
+    async def test_remove_drops_from_pool_and_clears_selection(self, client, repo, app):
+        """删掉唯一一张后, 池与选中项一起清空."""
         only = "https://example.com/only.jpg"
+        self._install_fake_web_client(app)
 
-        async def fake_download(url: str, dest: Path, **kwargs: object) -> bool:
-            dest.parent.mkdir(parents=True, exist_ok=True)
-            Image.new("RGB", (800, 538), "blue").save(dest)
-            return True
-
-        async def fake_resolve(url: str, **kwargs: object) -> str:
-            return url
-
-        app.state.runtime.web_client.download = fake_download  # type: ignore[method-assign]
-        app.state.runtime.web_client.resolve_final_url = fake_resolve  # type: ignore[method-assign]
-
-        meta = await repo.upsert_metadata(number="SEL-002", thumb_urls=[only])
+        meta = await repo.upsert_metadata(number="SEL-003", thumb_urls=[only])
         store = app.state.runtime.resource_store
-        local = await store.acquire(only, app.state.runtime.web_client)
+        await store.acquire(only, app.state.runtime.web_client)
         internal = f"{RESOURCE_URL_PREFIX}/{ResourceStore.url_hash(only)}"
-        await repo.update_metadata(meta.id, thumb_urls=[internal])
+        await repo.update_metadata(meta.id, thumb_urls=[internal], thumb_candidates=[internal])
 
         resp = await client.request("DELETE", f"metadata/{meta.id}/images", params={"url": internal, "target": "thumb"})
 
         assert resp.status_code == 200
-        assert resp.json()["thumb_urls"] == []
+        data = resp.json()
+        assert data["thumb_urls"] == []
+        assert data["thumb_candidates"] == []
+
+    async def test_remove_middle_item_falls_back_to_pool_head(self, client, repo, app):
+        """删掉的正在用的那张时, 顺延到池里第一张而不是留空."""
+        first = "https://example.com/a.jpg"
+        second = "https://example.com/b.jpg"
+        self._install_fake_web_client(app)
+
+        meta = await repo.upsert_metadata(number="SEL-004", thumb_urls=[first])
+        await client.post(f"metadata/{meta.id}/adopt-thumb", params={"source_url": second})
+
+        store = app.state.runtime.resource_store
+        await store.acquire(second, app.state.runtime.web_client)
+        internal = f"{RESOURCE_URL_PREFIX}/{ResourceStore.url_hash(second)}"
+        await repo.update_metadata(meta.id, thumb_urls=[internal], thumb_candidates=[first, internal])
+
+        resp = await client.request("DELETE", f"metadata/{meta.id}/images", params={"url": internal, "target": "thumb"})
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["thumb_candidates"] == [first]
 
 
 class TestImageInfo:

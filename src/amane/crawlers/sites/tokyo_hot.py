@@ -168,8 +168,11 @@ class TokyoHotCrawler(Crawler):
             tags=tags,
             series=series_names[0] if series_names else None,
             series_names=series_names,
+            # 站点的 ``jacket`` 是 3762×2522 的横版封面 (DVD 封套展开图), 不是竖版海报.
+            # 它该当封面, 海报交给物化阶段按人脸裁; 只填 poster_urls 会让详情页没有封面可显示.
             poster_urls=[jacket_url] if jacket_url else [],
             original_poster_urls=[jacket_url] if jacket_url else [],
+            thumb_urls=[jacket_url] if jacket_url else [],
             extrafanart=extrafanart,
             trailer_urls=[trailer_url] if trailer_url else [],
             source_url=url,

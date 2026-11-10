@@ -1,5 +1,6 @@
 import { ActionIcon, Box, Button, Image, Modal, SimpleGrid, Stack, Text } from "@mantine/core";
 import { IconTrash } from "@tabler/icons-react";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { proxyImageUrl } from "@/lib/utils";
 
@@ -47,6 +48,8 @@ export function ImagePickerDialog({
   onRemove,
 }: ImagePickerDialogProps) {
   const { t } = useTranslation(["metadata", "common"]);
+  // 删除按钮平时压到 5%, 只有指向的那一格才显出来.
+  const [hovered, setHovered] = useState<string | null>(null);
 
   // 按类别重排: 封面 → 剧照 → 自定义. 组内顺序沿用后端给的候选次序.
   const ordered = images
@@ -84,6 +87,8 @@ export function ImagePickerDialog({
                     borderRadius: "var(--mantine-radius-sm)",
                     overflow: "hidden",
                   }}
+                  onMouseEnter={() => setHovered(url)}
+                  onMouseLeave={() => setHovered((cur) => (cur === url ? null : cur))}
                 >
                   <Button
                     variant="transparent"
@@ -101,8 +106,14 @@ export function ImagePickerDialog({
                       color="red"
                       size="md"
                       radius="md"
-                      // light 变体底色默认只有 10%, 叠在缩略图上几乎看不见; 提到 65%.
-                      style={{ position: "absolute", top: 4, right: 4, opacity: 0.65 }}
+                      // 平时 5% 几乎看不见, 指向这张图时才显出来 —— 否则整屏都是红块.
+                      style={{
+                        position: "absolute",
+                        top: 4,
+                        right: 4,
+                        opacity: hovered === url ? 1 : 0.05,
+                        transition: "opacity 120ms",
+                      }}
                       aria-label={String(t("detail.imagePicker.remove"))}
                       onClick={(e) => {
                         // 只删图, 不触发选中.

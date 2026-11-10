@@ -106,7 +106,8 @@ async def test_scrape_maps_multi_series_and_full_size_assets() -> None:
     assert result.series == "問答無用姦"
     assert result.poster_urls == ["https://my.cdn.tokyo-hot.com/media/5770/jacket/n0956.jpg"]
     assert result.original_poster_urls == result.poster_urls
-    assert result.thumb_urls == []
+    # jacket 是横版封套图, 既当封面也当海报源 —— 海报交给物化阶段按人脸裁.
+    assert result.thumb_urls == ["https://my.cdn.tokyo-hot.com/media/5770/jacket/n0956.jpg"]
     assert result.extrafanart == [
         "https://my.cdn.tokyo-hot.com/media/5770/scap/0sample_001/640x480_wlimited.jpg",
         "https://my.cdn.tokyo-hot.com/media/5770/vcap/151/640x480_wlimited.jpg",

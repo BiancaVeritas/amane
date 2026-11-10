@@ -415,7 +415,13 @@ function TitleDetailPage() {
     const source = data?.metadata;
     const seen = new Set<string>();
     const out: string[] = [];
-    for (const url of [...(source?.thumb_urls ?? []), ...(source?.extrafanart ?? [])]) {
+    // 候选池在前 (顺序固定, 换图不重排), 剧照随后. 池里没有时退回 thumb_urls,
+    // 兼容尚未建立候选池的存量条目.
+    for (const url of [
+      ...(source?.thumb_candidates ?? []),
+      ...(source?.thumb_urls ?? []),
+      ...(source?.extrafanart ?? []),
+    ]) {
       if (!url || seen.has(url)) continue;
       seen.add(url);
       out.push(url);

@@ -192,12 +192,18 @@ class TestImageToken:
         assert store.resolve_record.await_count == 0
 
 @pytest.mark.asyncio(loop_scope="function")
-async def test_serve_resource_original_mode_uses_30_day_cache(app: FastAPI, client: AsyncClient):
+async def test_serve_resource_derived_never_gets_long_cache(app: FastAPI, client: AsyncClient):
+    """派生件即使请求 original 模式, 也不给 30 天强缓存.
+
+    派生件的地址只由「源 + 操作 + 参数」决定, 裁切或超分算法升级后内容会变而同址. 长缓存
+    会让浏览器拿着旧图不放, 表现为「重刮了但图没变」.
+    """
     store = app.state.runtime.resource_store
-    h, _ = await _make_derived(store)
+    h, content_hash = await _make_derived(store)
     response = await client.get(f"resources/{h}?mode=original")
     assert response.status_code == 200
-    assert response.headers["cache-control"] == "public, max-age=2592000"
+    assert response.headers["cache-control"] == "public, no-cache"
+    assert response.headers["etag"] == f'"{content_hash}"'
 
 
 @pytest.mark.asyncio(loop_scope="function")
