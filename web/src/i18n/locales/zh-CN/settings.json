@@ -1019,7 +1019,8 @@
     "noCondition": "未填条件 (不生效)",
     "commitHint": "保存后立即生效, 下次刮削按新位置裁切",
     "filenameKeywordHint": "文件名里必须含这个词 (如 BD); 没有文件名时改看番号",
-    "title": "按自定义规则固定裁切"
+    "title": "按自定义规则固定裁切",
+    "editorTitle": "编辑裁切规则"
   },
   "cropCalibrate": {
     "title": "标定裁切窗口",

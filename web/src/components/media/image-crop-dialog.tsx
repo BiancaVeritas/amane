@@ -425,6 +425,49 @@ export function ImageCropDialog({
     commitBox(fitLockedBox(next, naturalSize, aspect, anchor));
   };
 
+  /** 把当前选区收成 aspect 比例: 高度不动, 宽度 = 高度 × 比例, 水平居中到原中心. */
+  const lockToAspect = () => {
+    const canvas = canvasRef.current;
+    if (!canvas || !naturalSize || !crop) return;
+    const scale = displayScale(canvas);
+    // 百分比与像素都可能: 统一换成显示像素再换算.
+    const shown =
+      crop.unit === "px"
+        ? { x: crop.x, y: crop.y, width: crop.width, height: crop.height }
+        : {
+            x: (crop.x / 100) * canvas.clientWidth,
+            y: (crop.y / 100) * canvas.clientHeight,
+            width: (crop.width / 100) * canvas.clientWidth,
+            height: (crop.height / 100) * canvas.clientHeight,
+          };
+    if (shown.width <= 0 || shown.height <= 0) return;
+
+    let naturalHeight = Math.round(shown.height * scale.y);
+    let naturalWidth = Math.max(1, Math.round(naturalHeight * aspectRatio));
+    if (naturalWidth > naturalSize.width) {
+      naturalWidth = naturalSize.width;
+      naturalHeight = Math.max(1, Math.round(naturalWidth / aspectRatio));
+    }
+    if (naturalHeight <= 0) return;
+
+    const centerX = Math.round((shown.x + shown.width / 2) * scale.x);
+    const left = Math.max(
+      0,
+      Math.min(Math.round(centerX - naturalWidth / 2), naturalSize.width - naturalWidth),
+    );
+    const top = Math.max(
+      0,
+      Math.min(Math.round(shown.y * scale.y), naturalSize.height - naturalHeight),
+    );
+
+    const pixel = fromNaturalBox(
+      { left, top, right: left + naturalWidth, bottom: top + naturalHeight },
+      canvas,
+    );
+    setCrop(pixel);
+    setCompletedCrop(pixel);
+  };
+
   const reshapeWithAspect = (nextAspect: number) => {
     const aspect = clampAspect(nextAspect, defaultAspect);
     setAspectRatio(aspect);
@@ -610,54 +653,10 @@ export function ImageCropDialog({
               onChange={(e) => {
                 const checked = e.currentTarget.checked;
                 setLockAspect(checked);
-                const canvas = canvasRef.current;
-                if (!checked || !naturalSize || canvas === null) return;
-                // 开锁定即刻把当前选区调整成该比例.
-                // 单位先归一: ReactCrop 在百分比模式下给出的 x/width 是 0~100 的百分数,
-                // 直接乘 displayScale 会得到几万的假像素值, 选框瞬间炸开.
-                // 按当前选框的**高度**定尺寸: 高度保持不变, 宽度 = 高度 × 比例, 再水平居中
-                // 到原来的框. 这样开锁定只是「把框收成该比例」, 不会跳位置也不会改大小.
-                const picked = completedCrop ?? (crop ? toPixelCrop(crop, canvas) : undefined);
-                if (picked === undefined) return;
-                // ReactCrop 的坐标可能是百分比, 统一换成显示像素再往下算.
-                const shown =
-                  picked.unit === "px"
-                    ? picked
-                    : {
-                        x: (picked.x / 100) * canvas.clientWidth,
-                        y: (picked.y / 100) * canvas.clientHeight,
-                        width: (picked.width / 100) * canvas.clientWidth,
-                        height: (picked.height / 100) * canvas.clientHeight,
-                      };
-                const scale = displayScale(canvas);
-                // 高度保持原样 (ReactCrop 已保证它不超过图片), 宽度按比例反推.
-                // 只有比例本身比图片还宽时, 算出的宽度才会越界 —— 那时按可用宽度收一次,
-                // 高度跟着等比回落.
-                let naturalHeight = Math.round(shown.height * scale.y);
-                let naturalWidth = Math.max(1, Math.round(naturalHeight * aspectRatio));
-                if (naturalWidth > naturalSize.width) {
-                  naturalWidth = naturalSize.width;
-                  naturalHeight = Math.max(1, Math.round(naturalWidth / aspectRatio));
-                }
-                if (naturalHeight <= 0) return;
-                // 水平居中: 保持原框中心不动, 再夹回画面内.
-                const centerX = Math.round((shown.x + shown.width / 2) * scale.x);
-                const naturalLeft = Math.max(
-                  0,
-                  Math.min(
-                    Math.round(centerX - naturalWidth / 2),
-                    naturalSize.width - naturalWidth,
-                  ),
-                );
-                applyNaturalBox(
-                  {
-                    left: naturalLeft,
-                    top: Math.round(shown.y * scale.y),
-                    width: naturalWidth,
-                    height: naturalHeight,
-                  },
-                  { locked: true, aspect: aspectRatio, anchor: "width" },
-                );
+                // 开锁定: 以 crop (ReactCrop 的真值) 为准换算, 不经 box.
+                // box 是 effect 从 crop 异步写出的派生值, 拿它回推会引入滞后误差 —— 反复
+                // 开关时每轮都按上一轮的近似值重算, 选框于是越走越歪.
+                if (checked) lockToAspect();
               }}
             />
           </Stack>

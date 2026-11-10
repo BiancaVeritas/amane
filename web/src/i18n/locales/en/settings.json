@@ -1019,7 +1019,8 @@
     "noCondition": "No condition (inactive)",
     "commitHint": "Takes effect on the next scrape",
     "filenameKeywordHint": "Must appear in the filename (e.g. BD); falls back to the number when unknown",
-    "title": "Fixed crop by custom rules"
+    "title": "Fixed crop by custom rules",
+    "editorTitle": "Edit crop rule"
   },
   "cropCalibrate": {
     "title": "Calibrate crop window",
