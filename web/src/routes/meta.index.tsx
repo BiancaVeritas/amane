@@ -35,6 +35,7 @@ import type {
   SemanticHitInfo,
 } from "@/client/types.gen";
 import { BrowsePageShell } from "@/components/common/browse-page-shell";
+import { ScrollToTop } from "@/components/common/scroll-to-top";
 import { HintedActionIcon } from "@/components/common/hinted-action-icon";
 import { ListPagination } from "@/components/common/list-pagination";
 import { ListDefaultActions } from "@/components/common/list-default-actions";
@@ -411,284 +412,287 @@ function MetaIndexPage() {
     search.saved_query_id != null;
 
   return (
-    <BrowsePageShell
-      fill={isList}
-      // 搜索槽内另有语义切换按钮, 放宽到 560, 使输入框宽度接近其他页面的 480
-      searchMaxWidth={560}
-      title={<Title order={2}>{t("common:nav.meta")}</Title>}
-      actions={<ListDefaultActions update={{ key: "meta", value: metaListDefaults(search) }} />}
-      viewSwitch={
-        <SegmentedControl
-          value={search.view}
-          onChange={(v) =>
-            void navigate({
-              search: (prev) => ({
-                ...prev,
-                view: v === "list" || v === "cover" ? v : "grid",
-                page: 1,
-              }),
-            })
-          }
-          data={[
-            { value: "grid", label: t("view.grid") },
-            { value: "cover", label: t("view.cover") },
-            { value: "list", label: t("view.list") },
-          ]}
-        />
-      }
-      summary={
-        <Text size="sm" c="dimmed">
-          {t("common:pagination.totalItems", { count: total })}
-        </Text>
-      }
-      search={
-        <Group gap="xs" wrap="nowrap" w="100%">
-          <div
-            className={
-              semanticMode
-                ? `${classes.searchBox} ${classes.flowRing} ${classes.semanticInput}`
-                : classes.searchBox
+    <>
+      <BrowsePageShell
+        fill={isList}
+        // 搜索槽内另有语义切换按钮, 放宽到 560, 使输入框宽度接近其他页面的 480
+        searchMaxWidth={560}
+        title={<Title order={2}>{t("common:nav.meta")}</Title>}
+        actions={<ListDefaultActions update={{ key: "meta", value: metaListDefaults(search) }} />}
+        viewSwitch={
+          <SegmentedControl
+            value={search.view}
+            onChange={(v) =>
+              void navigate({
+                search: (prev) => ({
+                  ...prev,
+                  view: v === "list" || v === "cover" ? v : "grid",
+                  page: 1,
+                }),
+              })
             }
-          >
-            <TextInput
-              value={searchInput}
-              onChange={(e) => handleSearchChange(e.currentTarget.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") submitSearch();
-              }}
-              placeholder={semanticMode ? t("semantic.placeholder") : t("search.placeholder")}
-              leftSection={
-                semanticMode ? (
+            data={[
+              { value: "grid", label: t("view.grid") },
+              { value: "cover", label: t("view.cover") },
+              { value: "list", label: t("view.list") },
+            ]}
+          />
+        }
+        summary={
+          <Text size="sm" c="dimmed">
+            {t("common:pagination.totalItems", { count: total })}
+          </Text>
+        }
+        search={
+          <Group gap="xs" wrap="nowrap" w="100%">
+            <div
+              className={
+                semanticMode
+                  ? `${classes.searchBox} ${classes.flowRing} ${classes.semanticInput}`
+                  : classes.searchBox
+              }
+            >
+              <TextInput
+                value={searchInput}
+                onChange={(e) => handleSearchChange(e.currentTarget.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") submitSearch();
+                }}
+                placeholder={semanticMode ? t("semantic.placeholder") : t("search.placeholder")}
+                leftSection={
+                  semanticMode ? (
+                    <span className={classes.glowIcon}>
+                      <IconSparkles size={16} />
+                    </span>
+                  ) : (
+                    <IconSearch size={16} />
+                  )
+                }
+                rightSection={
+                  semanticMode ? (
+                    <ActionIcon
+                      variant="subtle"
+                      color="gray"
+                      aria-label={t("semantic.submit")}
+                      disabled={searchInput.trim().length === 0}
+                      onClick={submitSearch}
+                    >
+                      <IconArrowRight size={16} />
+                    </ActionIcon>
+                  ) : undefined
+                }
+                rightSectionPointerEvents="all"
+              />
+            </div>
+            {semanticMode ? (
+              <Button
+                variant="default"
+                leftSection={<IconArrowLeft size={16} />}
+                onClick={toggleSemantic}
+              >
+                {t("semantic.back")}
+              </Button>
+            ) : semanticAvailable ? (
+              <Button
+                variant="default"
+                className={classes.semanticToggle}
+                leftSection={
                   <span className={classes.glowIcon}>
                     <IconSparkles size={16} />
                   </span>
-                ) : (
-                  <IconSearch size={16} />
-                )
-              }
-              rightSection={
-                semanticMode ? (
-                  <ActionIcon
-                    variant="subtle"
-                    color="gray"
-                    aria-label={t("semantic.submit")}
-                    disabled={searchInput.trim().length === 0}
-                    onClick={submitSearch}
-                  >
-                    <IconArrowRight size={16} />
-                  </ActionIcon>
-                ) : undefined
-              }
-              rightSectionPointerEvents="all"
-            />
-          </div>
-          {semanticMode ? (
-            <Button
-              variant="default"
-              leftSection={<IconArrowLeft size={16} />}
-              onClick={toggleSemantic}
-            >
-              {t("semantic.back")}
-            </Button>
-          ) : semanticAvailable ? (
-            <Button
-              variant="default"
-              className={classes.semanticToggle}
-              leftSection={
-                <span className={classes.glowIcon}>
-                  <IconSparkles size={16} />
-                </span>
-              }
-              onClick={toggleSemantic}
-            >
-              <span className={classes.gradientText}>{t("semantic.toggle")}</span>
-            </Button>
-          ) : null}
-        </Group>
-      }
-      extras={
-        <>
-          {/* 窄屏的筛选在底部面板里常驻展开, 该开关只在宽屏有意义. */}
-          {narrowViewport ? null : (
-            <HintedActionIcon
-              variant={advancedOpen || hasFiles !== null || vr !== null ? "filled" : "default"}
-              size={36}
-              onClick={() => setAdvancedOpen((v) => !v)}
-              label={t("search.advanced")}
-            >
-              <IconFilter size={16} />
-            </HintedActionIcon>
-          )}
-          {semanticMode && (
-            <SegmentedControl
-              value={search.kind ?? "all"}
-              onChange={(v) =>
-                void navigate({
-                  search: (prev) => ({ ...prev, kind: toEmbeddingKind(v), page: 1 }),
-                })
-              }
-              data={SEMANTIC_KIND_OPTIONS.map((value) => ({
-                value,
-                label: t(`semantic.kinds.${value}`),
-              }))}
-            />
-          )}
-          {!isList && !semanticMode && (
-            <SortMenu
-              options={METADATA_SORT_OPTIONS.map((option) => ({
-                value: option.value,
-                label: t(option.labelKey),
-              }))}
-              sortBy={search.sort_by}
-              order={search.order}
-              defaultSortBy="updated_at"
-              defaultOrder="desc"
-              onChange={(sort_by, order) =>
-                void navigate({ search: (prev) => ({ ...prev, sort_by, order, page: 1 }) })
-              }
-            />
-          )}
-          <BrowseDisplaySettings
-            pageSizeKey="metaList"
-            onPageSizeChanged={() => void navigate({ search: (prev) => ({ ...prev, page: 1 }) })}
-          />
-        </>
-      }
-      filterPanel={
-        <FacetFilterControls
-          opened={narrowViewport || advancedOpen}
-          filters={filters}
-          onSelect={appendFacet}
-          hasFiles={hasFiles}
-          onHasFilesChange={setHasFilesFilter}
-          vr={vr}
-          onVrChange={setVrFilter}
-          filePhase={filePhase}
-          onFilePhaseChange={setFilePhaseFilter}
-        />
-      }
-    >
-      {hasActiveFilters && (
-        <Group gap="xs">
-          {search.saved_query_id != null && (
-            <Group gap={4} wrap="nowrap">
-              <Badge variant="outline">
-                {t("common:nav.savedQueries")}: #{search.saved_query_id}
-              </Badge>
-              <ActionIcon
-                size="sm"
-                variant="subtle"
-                component="a"
-                href={`/saved-queries/${search.saved_query_id}`}
-                target="_blank"
-                rel="noreferrer"
-                aria-label={t("savedQueries:openData")}
+                }
+                onClick={toggleSemantic}
               >
-                <IconTable size={14} />
-              </ActionIcon>
-              <ActionIcon
-                size="sm"
-                variant="subtle"
-                color="gray"
-                onClick={() =>
+                <span className={classes.gradientText}>{t("semantic.toggle")}</span>
+              </Button>
+            ) : null}
+          </Group>
+        }
+        extras={
+          <>
+            {/* 窄屏的筛选在底部面板里常驻展开, 该开关只在宽屏有意义. */}
+            {narrowViewport ? null : (
+              <HintedActionIcon
+                variant={advancedOpen || hasFiles !== null || vr !== null ? "filled" : "default"}
+                size={36}
+                onClick={() => setAdvancedOpen((v) => !v)}
+                label={t("search.advanced")}
+              >
+                <IconFilter size={16} />
+              </HintedActionIcon>
+            )}
+            {semanticMode && (
+              <SegmentedControl
+                value={search.kind ?? "all"}
+                onChange={(v) =>
                   void navigate({
-                    search: (prev) => ({ ...prev, saved_query_id: undefined, page: 1 }),
+                    search: (prev) => ({ ...prev, kind: toEmbeddingKind(v), page: 1 }),
                   })
                 }
-                aria-label="clear"
-              >
-                <IconX size={14} />
-              </ActionIcon>
-            </Group>
-          )}
-          {hasFiles !== null && (
-            <ActiveHasFilesChip hasFiles={hasFiles} onClear={() => setHasFilesFilter(null)} />
-          )}
-          {vr !== null && <ActiveVrChip vr={vr} onClear={() => setVrFilter(null)} />}
-          {filePhase.has_subtitle !== null && (
-            <ActiveTriChip
-              label={`${t("search.hasSubtitle")}: ${filePhase.has_subtitle ? t("search.yes") : t("search.no")}`}
-              onClear={() => setFilePhaseFilter({ ...filePhase, has_subtitle: null })}
+                data={SEMANTIC_KIND_OPTIONS.map((value) => ({
+                  value,
+                  label: t(`semantic.kinds.${value}`),
+                }))}
+              />
+            )}
+            {!isList && !semanticMode && (
+              <SortMenu
+                options={METADATA_SORT_OPTIONS.map((option) => ({
+                  value: option.value,
+                  label: t(option.labelKey),
+                }))}
+                sortBy={search.sort_by}
+                order={search.order}
+                defaultSortBy="updated_at"
+                defaultOrder="desc"
+                onChange={(sort_by, order) =>
+                  void navigate({ search: (prev) => ({ ...prev, sort_by, order, page: 1 }) })
+                }
+              />
+            )}
+            <BrowseDisplaySettings
+              pageSizeKey="metaList"
+              onPageSizeChanged={() => void navigate({ search: (prev) => ({ ...prev, page: 1 }) })}
             />
-          )}
-          {filePhase.uncensored !== null && (
-            <ActiveTriChip
-              label={`${t("search.uncensored")}: ${filePhase.uncensored ? t("search.yes") : t("search.no")}`}
-              onClear={() => setFilePhaseFilter({ ...filePhase, uncensored: null })}
-            />
-          )}
-          {filePhase.mosaic != null && (
-            <ActiveTriChip
-              label={`${t("search.mosaic")}: ${t(`search.mosaics.${filePhase.mosaic}`)}`}
-              onClear={() => setFilePhaseFilter({ ...filePhase, mosaic: null })}
-            />
-          )}
-          {filePhase.definition != null && (
-            <ActiveTriChip
-              label={`${t("search.definition")}: ${filePhase.definition}`}
-              onClear={() => setFilePhaseFilter({ ...filePhase, definition: null })}
-            />
-          )}
-          {filePhase.content_type != null && (
-            <ActiveTriChip
-              label={`${t("search.contentType")}: ${t(`search.contentTypes.${filePhase.content_type}`)}`}
-              onClear={() => setFilePhaseFilter({ ...filePhase, content_type: null })}
-            />
-          )}
-          {active.map(({ kind, id }) => (
-            <ActiveFacetChip
-              key={`${kind}-${id}`}
-              kind={kind}
-              id={id}
-              onClear={() => clearFacet(kind, id)}
-            />
-          ))}
-        </Group>
-      )}
+          </>
+        }
+        filterPanel={
+          <FacetFilterControls
+            opened={narrowViewport || advancedOpen}
+            filters={filters}
+            onSelect={appendFacet}
+            hasFiles={hasFiles}
+            onHasFilesChange={setHasFilesFilter}
+            vr={vr}
+            onVrChange={setVrFilter}
+            filePhase={filePhase}
+            onFilePhaseChange={setFilePhaseFilter}
+          />
+        }
+      >
+        {hasActiveFilters && (
+          <Group gap="xs">
+            {search.saved_query_id != null && (
+              <Group gap={4} wrap="nowrap">
+                <Badge variant="outline">
+                  {t("common:nav.savedQueries")}: #{search.saved_query_id}
+                </Badge>
+                <ActionIcon
+                  size="sm"
+                  variant="subtle"
+                  component="a"
+                  href={`/saved-queries/${search.saved_query_id}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  aria-label={t("savedQueries:openData")}
+                >
+                  <IconTable size={14} />
+                </ActionIcon>
+                <ActionIcon
+                  size="sm"
+                  variant="subtle"
+                  color="gray"
+                  onClick={() =>
+                    void navigate({
+                      search: (prev) => ({ ...prev, saved_query_id: undefined, page: 1 }),
+                    })
+                  }
+                  aria-label="clear"
+                >
+                  <IconX size={14} />
+                </ActionIcon>
+              </Group>
+            )}
+            {hasFiles !== null && (
+              <ActiveHasFilesChip hasFiles={hasFiles} onClear={() => setHasFilesFilter(null)} />
+            )}
+            {vr !== null && <ActiveVrChip vr={vr} onClear={() => setVrFilter(null)} />}
+            {filePhase.has_subtitle !== null && (
+              <ActiveTriChip
+                label={`${t("search.hasSubtitle")}: ${filePhase.has_subtitle ? t("search.yes") : t("search.no")}`}
+                onClear={() => setFilePhaseFilter({ ...filePhase, has_subtitle: null })}
+              />
+            )}
+            {filePhase.uncensored !== null && (
+              <ActiveTriChip
+                label={`${t("search.uncensored")}: ${filePhase.uncensored ? t("search.yes") : t("search.no")}`}
+                onClear={() => setFilePhaseFilter({ ...filePhase, uncensored: null })}
+              />
+            )}
+            {filePhase.mosaic != null && (
+              <ActiveTriChip
+                label={`${t("search.mosaic")}: ${t(`search.mosaics.${filePhase.mosaic}`)}`}
+                onClear={() => setFilePhaseFilter({ ...filePhase, mosaic: null })}
+              />
+            )}
+            {filePhase.definition != null && (
+              <ActiveTriChip
+                label={`${t("search.definition")}: ${filePhase.definition}`}
+                onClear={() => setFilePhaseFilter({ ...filePhase, definition: null })}
+              />
+            )}
+            {filePhase.content_type != null && (
+              <ActiveTriChip
+                label={`${t("search.contentType")}: ${t(`search.contentTypes.${filePhase.content_type}`)}`}
+                onClear={() => setFilePhaseFilter({ ...filePhase, content_type: null })}
+              />
+            )}
+            {active.map(({ kind, id }) => (
+              <ActiveFacetChip
+                key={`${kind}-${id}`}
+                kind={kind}
+                id={id}
+                onClear={() => clearFacet(kind, id)}
+              />
+            ))}
+          </Group>
+        )}
 
-      {semanticNotice != null ? (
-        <Alert color="blue" title={t("semantic.unavailableTitle")} maw={720} mx="auto" w="100%">
-          {semanticNotice}
-        </Alert>
-      ) : isList ? (
-        <MetaTable
-          key={listLimit}
-          items={listQuery.data?.items ?? []}
-          isLoading={listQuery.isLoading}
-          total={total}
-          page={search.page}
-          sortBy={search.sort_by}
-          order={search.order}
-          onPageChange={(page) => void navigate({ search: (prev) => ({ ...prev, page }) })}
-          onSort={handleSort}
-        />
-      ) : (
-        <>
-          <PosterGrid
-            cardSize={cardSize}
-            items={gridItems}
-            loading={gridQuery.isLoading && gridItems.length === 0}
-            emptyMessage={t("empty")}
-            imageUrlOf={(item) => {
-              const hit = semanticHits.get(item.id);
-              if (hit?.kind === "still") return hit.resource_url;
-              return search.view === "cover" ? (item.thumb_urls?.[0] ?? null) : undefined;
-            }}
-            imageRatioOf={(item) =>
-              semanticHits.get(item.id)?.kind === "still" || search.view === "cover"
-                ? 16 / 9
-                : undefined
-            }
-            defaultImageRatio={search.view === "cover" ? 16 / 9 : 0.7}
-            imageFit={search.view === "cover" ? "fill" : "cover"}
-          />
-          <ListPagination
-            totalPages={Math.ceil(total / listLimit)}
+        {semanticNotice != null ? (
+          <Alert color="blue" title={t("semantic.unavailableTitle")} maw={720} mx="auto" w="100%">
+            {semanticNotice}
+          </Alert>
+        ) : isList ? (
+          <MetaTable
+            key={listLimit}
+            items={listQuery.data?.items ?? []}
+            isLoading={listQuery.isLoading}
+            total={total}
             page={search.page}
-            onChange={(page) => void navigate({ search: (prev) => ({ ...prev, page }) })}
+            sortBy={search.sort_by}
+            order={search.order}
+            onPageChange={(page) => void navigate({ search: (prev) => ({ ...prev, page }) })}
+            onSort={handleSort}
           />
-        </>
-      )}
-    </BrowsePageShell>
+        ) : (
+          <>
+            <PosterGrid
+              cardSize={cardSize}
+              items={gridItems}
+              loading={gridQuery.isLoading && gridItems.length === 0}
+              emptyMessage={t("empty")}
+              imageUrlOf={(item) => {
+                const hit = semanticHits.get(item.id);
+                if (hit?.kind === "still") return hit.resource_url;
+                return search.view === "cover" ? (item.thumb_urls?.[0] ?? null) : undefined;
+              }}
+              imageRatioOf={(item) =>
+                semanticHits.get(item.id)?.kind === "still" || search.view === "cover"
+                  ? 16 / 9
+                  : undefined
+              }
+              defaultImageRatio={search.view === "cover" ? 16 / 9 : 0.7}
+              imageFit={search.view === "cover" ? "fill" : "cover"}
+            />
+            <ListPagination
+              totalPages={Math.ceil(total / listLimit)}
+              page={search.page}
+              onChange={(page) => void navigate({ search: (prev) => ({ ...prev, page }) })}
+            />
+          </>
+        )}
+      </BrowsePageShell>
+      <ScrollToTop />
+    </>
   );
 }

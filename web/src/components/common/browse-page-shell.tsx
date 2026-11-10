@@ -72,6 +72,8 @@ export function BrowsePageShell({
   return (
     <Stack
       gap="md"
+      // 回顶浮标靠这个标记找到真正的滚动容器: 列表视图下滚动发生在这里, 不是窗口.
+      data-scroll-container={fill ? true : undefined}
       style={{
         minWidth: 0,
         // fill: 高度钉在 Main 内容区; 纵向仍可滚动, 避免 chrome 过高时把分页裁掉.
