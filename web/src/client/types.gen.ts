@@ -2259,6 +2259,10 @@ export type LibraryCreateRequest = {
      */
     extrafanart_template?: string | null;
     /**
+     * Extrafanart Name Template
+     */
+    extrafanart_name_template?: string | null;
+    /**
      * Nfo Template
      */
     nfo_template?: string | null;
@@ -2388,6 +2392,10 @@ export type LibraryResponse = {
      */
     extrafanart_template?: string | null;
     /**
+     * Extrafanart Name Template
+     */
+    extrafanart_name_template?: string | null;
+    /**
      * Nfo Template
      */
     nfo_template?: string | null;
@@ -2491,6 +2499,10 @@ export type LibraryUpdateRequest = {
      * Extrafanart Template
      */
     extrafanart_template?: string | null;
+    /**
+     * Extrafanart Name Template
+     */
+    extrafanart_name_template?: string | null;
     /**
      * Nfo Template
      */
@@ -3312,6 +3324,10 @@ export type OptionalPathTemplateDefaults = {
      * Extrafanart Template
      */
     extrafanart_template: string;
+    /**
+     * Extrafanart Name Template
+     */
+    extrafanart_name_template: string;
     /**
      * Nfo Template
      */

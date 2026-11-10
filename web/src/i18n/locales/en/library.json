@@ -208,7 +208,8 @@
     "extrafanart": "Extrafanart Template",
     "nfo": "NFO Template",
     "trailer": "Trailer Template",
-    "subtitle": "Subtitle Template"
+    "subtitle": "Subtitle Template",
+    "extrafanartName": "Extrafanart file name"
   },
   "cleanup": {
     "tooltip": "Clean up unwanted files, leftover folders and empty folders",

@@ -206,7 +206,8 @@
     "extrafanart": "剧照模板",
     "nfo": "NFO 模板",
     "trailer": "预告片模板",
-    "subtitle": "字幕模板"
+    "subtitle": "字幕模板",
+    "extrafanartName": "剧照文件名"
   },
   "cleanup": {
     "tooltip": "清理无效文件、残留目录与空目录",

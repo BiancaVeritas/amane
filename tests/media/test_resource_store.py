@@ -347,6 +347,8 @@ class _StubResponse:
         self.url = url
         self.content = content
         self.status_code = status
+        # WebClient 丢弃流式应答时会先置中标志再 aclose; 非流式应答为 None.
+        self.quit_now = None
 
 
 class _StubSession:

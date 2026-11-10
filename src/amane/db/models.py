@@ -468,6 +468,7 @@ class Library(SQLModel, table=True):
     poster_template: PathTemplate | None = None
     fanart_template: PathTemplate | None = None
     extrafanart_template: PathTemplate | None = None
+    extrafanart_name_template: str | None = None
     nfo_template: PathTemplate | None = None
     trailer_template: PathTemplate | None = None
     subtitle_template: PathTemplate | None = None

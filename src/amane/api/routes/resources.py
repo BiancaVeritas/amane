@@ -16,21 +16,11 @@ from ..support.http_cache import (
     format_etag,
     maybe_not_modified,
 )
+from ..support.media_type import media_type_and_headers
 
 logger = structlog.get_logger()
 
 router = APIRouter(prefix="/resources", tags=["resources"])
-
-_EXT_TO_MIME = {
-    ".jpg": "image/jpeg",
-    ".jpeg": "image/jpeg",
-    ".png": "image/png",
-    ".webp": "image/webp",
-    ".gif": "image/gif",
-    ".avif": "image/avif",
-    ".mp4": "video/mp4",
-}
-
 
 def _image_response(request: Request, path: Path, content_hash: str | None, cache_mode: str | None = None) -> Response:
     # 一律 ETag 协商: 文件名是 URL 的哈希, 覆盖同一地址后浏览器若不回源就会一直显示旧图.
@@ -38,10 +28,11 @@ def _image_response(request: Request, path: Path, content_hash: str | None, cach
     not_modified = maybe_not_modified(request, content_hash)
     if not_modified is not None:
         return not_modified
-    headers = dict(RESOURCE_CACHE_HEADERS)
+    media_type, headers = media_type_and_headers(path)
+    headers.update(RESOURCE_CACHE_HEADERS)
     if content_hash:
         headers["ETag"] = format_etag(content_hash)
-    return FileResponse(path=path, media_type=_EXT_TO_MIME.get(path.suffix.lower(), "image/jpeg"), headers=headers)
+    return FileResponse(path=path, media_type=media_type, headers=headers)
 
 
 def _cache_mode(runtime: object, requested: str | None) -> str:
@@ -124,8 +115,9 @@ async def serve_resource(
     not_modified = maybe_not_modified(request, record.content_hash)
     if not_modified is not None:
         return not_modified
-    headers = dict(RESOURCE_CACHE_HEADERS)
+    # 资源字节来自第三方, 记录里的 mime 不可信: 按文件头判定, 判不出就按附件下载.
+    media_type, headers = media_type_and_headers(path)
+    headers.update(RESOURCE_CACHE_HEADERS)
     if record.content_hash:
         headers["ETag"] = format_etag(record.content_hash)
-    media_type = record.mime_type or _EXT_TO_MIME.get(path.suffix.lower(), "application/octet-stream")
     return FileResponse(path=path, media_type=media_type, headers=headers)

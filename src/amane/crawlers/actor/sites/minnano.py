@@ -78,15 +78,6 @@ def _detail_index() -> dict[str, dict[str, object]]:
     return {str(k): v for k, v in raw.items() if isinstance(v, dict)}
 
 
-def _index_is_complete(meta: ActorMetadata) -> bool:
-    """索引里的资料是否够用.
-
-    只判**有没有**, 不判对不对 —— 值是网站历史快照, 后来更正过也看不出来. 缺字段说明
-    抓取时那个格子就是空的, 值得再问一次网站.
-    """
-    return all([meta.birthday, meta.height, meta.bust, meta.waist, meta.hip, meta.cup])
-
-
 def _merge_online_over_index(local: ActorMetadata, online: ActorMetadata) -> ActorMetadata:
     """网站数据优先, 索引补齐网站缺失的字段.
 
@@ -212,20 +203,18 @@ class MinnanoActorCrawler(ActorCrawler):
         return None
 
     async def _scrape(self, url: str) -> ActorMetadata | None:
-        """索引资料齐全就直接用, 缺字段才抓详情页补齐.
+        """总是问网站, 索引只在网站失败时兜底.
 
-        省请求的前提是「索引里该有的都有」; 缺字段说明抓取那个格子时它就是空的, 值得再问
-        一次网站. 两者都有时以网站为准, 索引补网站没有的.
+        索引是抓取当时的快照, 字段集也未必覆盖网站的全部项 (例如「出身地」就没收进去).
+        以快照为准会把网站后来更正的值、快照当时漏掉的格子都一起丢掉, 所以顺序是:
+        网站 → 合并索引补齐 → 网站解析失败才整份退回索引.
 
-        索引与「是否复用上次刮削结果」无关: 它省的是定位详情页与读资料这两步网络请求,
-        所以缓存开关不参与这里的判断.
+        索引与「是否复用上次刮削结果」无关, 缓存开关不参与这里的判断.
         """
         local: ActorMetadata | None = None
         if match := _ACTRESS_HREF_RE.search(url):
             actress_id = re.sub(r"\D", "", match.group(0))
             local = metadata_from_index(actress_id, base_url=self.base_url)
-            if local is not None and _index_is_complete(local):
-                return local
 
         text = await self.client.get_html(url, cookies=self.cookies)
         online = parse_minnano_detail(text, page_url=url, base_url=self.base_url)
@@ -248,17 +237,19 @@ def parse_minnano_detail(html_text: str, *, page_url: str, base_url: str) -> Act
     raw_name = extract_text(profile, ".//h2/text()") or extract_text(profile, ".//h2//text()")
     if not raw_name:
         return None
-    name, aliases = _parse_name_line(raw_name, tags)
+    # 名字只取括号前的主体; 括号里的假名 / 罗马音是读音, 不当名字也不当别名.
+    name, _readings = _parse_name_line(raw_name, tags)
     if not name:
         return None
+    aliases: list[str] = []
 
     # 别名行可重复; 每行一个别名 + 读音, 与名字行同构解析.
     for row in profile.xpath('.//tr[td/span[normalize-space()="別名"]]'):
         raw_alias = extract_text(row, "string(./td/p)") or ""
-        alias_name, alias_readings = _parse_name_line(raw_alias.strip(), tags)
+        # 别名的括号里同样是读音, 只留别名主体.
+        alias_name, _alias_readings = _parse_name_line(raw_alias.strip(), tags)
         if alias_name and alias_name not in tags:
             aliases.append(alias_name)
-        aliases.extend(alias_readings)
     aliases = _dedupe_preserve([a for a in aliases if a and a != name])
 
     fields = _profile_fields(profile)

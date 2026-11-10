@@ -13,7 +13,6 @@ import pytest
 from amane.crawlers.actor.sites.minnano import (
     MinnanoActorCrawler,
     _detail_index,
-    _index_is_complete,
     _name_index,
     lookup_actress_id,
     metadata_from_index,
@@ -78,27 +77,22 @@ def test_metadata_from_index_missing_id_returns_none() -> None:
     assert metadata_from_index("999999999", base_url=BASE) is None
 
 
-def test_index_completeness_gate() -> None:
-    """「齐全」= 生日与三围都在; 缺一项就该去问网站."""
-    full = metadata_from_index("551014", base_url=BASE)
-    assert full is not None
-    assert _index_is_complete(full)
-
-    # 綾野カヲル 索引里没有生日.
-    partial = metadata_from_index("471698", base_url=BASE)
-    assert partial is not None
-    assert not _index_is_complete(partial)
-
-
 @pytest.mark.asyncio
-async def test_scrape_skips_detail_page_when_index_complete() -> None:
-    """资料齐全时不发请求."""
-    crawler = MinnanoActorCrawler(client=AsyncMock(), config=None)
+async def test_scrape_falls_back_to_index_when_site_unparseable() -> None:
+    """网站解析不出来时退回索引, 不把已有资料丢掉.
+
+    索引是抓取当时的快照, 字段集也未必覆盖网站全部项; 以快照为准会丢掉网站后来更正的
+    值和快照漏掉的格子, 所以只做兜底.
+    """
+    client = AsyncMock()
+    client.get_html = AsyncMock(return_value="<html>改版了, 没有 act-profile</html>")
+    crawler = MinnanoActorCrawler(client=client, config=None)
+
     meta = await crawler._scrape(f"{BASE}/actress551014.html")
 
     assert meta is not None
     assert meta.name == "竹内咲奈"
-    crawler.client.get_html.assert_not_called()  # type: ignore[attr-defined]
+    client.get_html.assert_called_once()
 
 
 @pytest.mark.asyncio
@@ -124,18 +118,26 @@ async def test_scrape_fetches_when_index_missing_fields() -> None:
 
 
 @pytest.mark.asyncio
-async def test_complete_index_skips_network_regardless_of_cache_flag() -> None:
-    """索引资料齐全时直接返回, 不再请求详情页.
+async def test_complete_index_still_asks_site() -> None:
+    """索引齐全也照样问一次网站: 网站是当前事实, 索引只是快照.
 
-    索引省的是「定位详情页 + 读资料」这两步网络请求, 与是否复用上次刮削结果无关 ——
-    缓存开关不该把它伸进索引里.
+    索引不参与「是否复用上次刮削结果」的判断, 缓存开关也不该把它伸进这里.
+    """
+    online_html = """
+    <div class="act-profile"><table>
+      <tr><td><h2>竹内咲奈 （たけうちさな / Takeuchi Sana）</h2></td></tr>
+      <tr><td><span>生年月日</span><p>2007年11月30日</p></td></tr>
+      <tr><td><span>出身地</span><p>東京都</p></td></tr>
+    </table></div>
     """
     client = AsyncMock()
+    client.get_html = AsyncMock(return_value=online_html)
     crawler = MinnanoActorCrawler(client=client, config=None)
 
     meta = await crawler._scrape(f"{BASE}/actress551014.html")
 
     assert meta is not None
-    assert meta.birthday == "2007-11-30"  # 索引值
-    assert meta.height == 158
-    client.get_html.assert_not_called()
+    assert meta.birthday == "2007-11-30"
+    # 网站提供的出生地拿得到; 索引里没有这一项.
+    assert meta.birthplace == "東京都"
+    client.get_html.assert_called_once()

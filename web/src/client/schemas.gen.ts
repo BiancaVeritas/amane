@@ -4555,6 +4555,17 @@ export const LibraryCreateRequestSchema = {
             ],
             title: 'Extrafanart Template'
         },
+        extrafanart_name_template: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Extrafanart Name Template'
+        },
         nfo_template: {
             anyOf: [
                 {
@@ -4794,6 +4805,17 @@ export const LibraryResponseSchema = {
                 }
             ],
             title: 'Extrafanart Template'
+        },
+        extrafanart_name_template: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Extrafanart Name Template'
         },
         nfo_template: {
             anyOf: [
@@ -5085,6 +5107,17 @@ export const LibraryUpdateRequestSchema = {
                 }
             ],
             title: 'Extrafanart Template'
+        },
+        extrafanart_name_template: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Extrafanart Name Template'
         },
         nfo_template: {
             anyOf: [
@@ -6744,6 +6777,10 @@ export const OptionalPathTemplateDefaultsSchema = {
             type: 'string',
             title: 'Extrafanart Template'
         },
+        extrafanart_name_template: {
+            type: 'string',
+            title: 'Extrafanart Name Template'
+        },
         nfo_template: {
             type: 'string',
             title: 'Nfo Template'
@@ -6763,6 +6800,7 @@ export const OptionalPathTemplateDefaultsSchema = {
         'poster_template',
         'fanart_template',
         'extrafanart_template',
+        'extrafanart_name_template',
         'nfo_template',
         'trailer_template',
         'subtitle_template'

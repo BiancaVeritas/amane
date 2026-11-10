@@ -11788,6 +11788,17 @@
             ],
             "title": "Extrafanart Template"
           },
+          "extrafanart_name_template": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Extrafanart Name Template"
+          },
           "nfo_template": {
             "anyOf": [
               {
@@ -12024,6 +12035,17 @@
               }
             ],
             "title": "Extrafanart Template"
+          },
+          "extrafanart_name_template": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Extrafanart Name Template"
           },
           "nfo_template": {
             "anyOf": [
@@ -12314,6 +12336,17 @@
               }
             ],
             "title": "Extrafanart Template"
+          },
+          "extrafanart_name_template": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Extrafanart Name Template"
           },
           "nfo_template": {
             "anyOf": [
@@ -13944,6 +13977,10 @@
             "type": "string",
             "title": "Extrafanart Template"
           },
+          "extrafanart_name_template": {
+            "type": "string",
+            "title": "Extrafanart Name Template"
+          },
           "nfo_template": {
             "type": "string",
             "title": "Nfo Template"
@@ -13963,6 +14000,7 @@
           "poster_template",
           "fanart_template",
           "extrafanart_template",
+          "extrafanart_name_template",
           "nfo_template",
           "trailer_template",
           "subtitle_template"

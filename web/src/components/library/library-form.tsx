@@ -63,6 +63,7 @@ const OPTIONAL_TEMPLATE_KEYS = [
   "poster_template",
   "fanart_template",
   "extrafanart_template",
+  "extrafanart_name_template",
   "nfo_template",
   "trailer_template",
   "subtitle_template",
@@ -107,6 +108,7 @@ export interface LibraryFormState {
   poster_template: string;
   fanart_template: string;
   extrafanart_template: string;
+  extrafanart_name_template: string;
   nfo_template: string;
   trailer_template: string;
   subtitle_template: string;
@@ -142,6 +144,7 @@ export function emptyLibraryForm(schema?: PathTemplateSchemaResponse | null): Li
     poster_template: defaults?.poster_template ?? "",
     fanart_template: defaults?.fanart_template ?? "",
     extrafanart_template: defaults?.extrafanart_template ?? "",
+    extrafanart_name_template: defaults?.extrafanart_template ?? "",
     nfo_template: defaults?.nfo_template ?? "",
     trailer_template: defaults?.trailer_template ?? "",
     subtitle_template: defaults?.subtitle_template ?? "",
@@ -175,6 +178,7 @@ export function libraryFormFromResponse(lib: LibraryResponse): LibraryFormState 
     poster_template: lib.poster_template ?? "",
     fanart_template: lib.fanart_template ?? "",
     extrafanart_template: lib.extrafanart_template ?? "",
+    extrafanart_name_template: lib.extrafanart_template ?? "",
     nfo_template: lib.nfo_template ?? "",
     trailer_template: lib.trailer_template ?? "",
     subtitle_template: lib.subtitle_template ?? "",
@@ -223,6 +227,7 @@ function libraryFormValues(form: LibraryFormState): Record<string, unknown> {
     poster_template: form.poster_template.trim(),
     fanart_template: form.fanart_template.trim(),
     extrafanart_template: form.extrafanart_template.trim(),
+    extrafanart_name_template: form.extrafanart_template.trim(),
     nfo_template: form.nfo_template.trim(),
     trailer_template: form.trailer_template.trim(),
     subtitle_template: form.subtitle_template.trim(),
@@ -253,6 +258,7 @@ const TPL_I18N = {
   poster_template: "tpl.poster",
   fanart_template: "tpl.fanart",
   extrafanart_template: "tpl.extrafanart",
+  extrafanart_name_template: "tpl.extrafanart",
   nfo_template: "tpl.nfo",
   trailer_template: "tpl.trailer",
   subtitle_template: "tpl.subtitle",

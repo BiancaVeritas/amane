@@ -15,7 +15,9 @@ from ...library import (
     resolve_ingest_cloud_path,
 )
 from ...organize.path_templates import (
+    EXTRAFANART_NAME_TEMPLATE_DEFAULT,
     EXTRAFANART_TEMPLATE_DEFAULT,
+    ExtrafanartNameTemplate,
     FANART_TEMPLATE_DEFAULT,
     NFO_TEMPLATE_DEFAULT,
     PLACEHOLDER_MAP_KEYS,
@@ -53,6 +55,7 @@ class LibraryCreateRequest(BaseModel):
     poster_template: PathTemplate | None = None
     fanart_template: PathTemplate | None = None
     extrafanart_template: PathTemplate | None = None
+    extrafanart_name_template: ExtrafanartNameTemplate | None = None
     nfo_template: PathTemplate | None = None
     trailer_template: PathTemplate | None = None
     subtitle_template: PathTemplate | None = None
@@ -99,6 +102,7 @@ class LibraryResponse(BaseModel):
     poster_template: str | None = None
     fanart_template: str | None = None
     extrafanart_template: str | None = None
+    extrafanart_name_template: str | None = None
     nfo_template: str | None = None
     trailer_template: str | None = None
     subtitle_template: str | None = None
@@ -122,6 +126,7 @@ class OptionalPathTemplateDefaults(BaseModel):
     poster_template: PathTemplate
     fanart_template: PathTemplate
     extrafanart_template: PathTemplate
+    extrafanart_name_template: ExtrafanartNameTemplate
     nfo_template: PathTemplate
     trailer_template: PathTemplate
     subtitle_template: PathTemplate
@@ -132,6 +137,7 @@ OPTIONAL_TEMPLATE_DEFAULTS = OptionalPathTemplateDefaults(
     poster_template=POSTER_TEMPLATE_DEFAULT,
     fanart_template=FANART_TEMPLATE_DEFAULT,
     extrafanart_template=EXTRAFANART_TEMPLATE_DEFAULT,
+    extrafanart_name_template=EXTRAFANART_NAME_TEMPLATE_DEFAULT,
     nfo_template=NFO_TEMPLATE_DEFAULT,
     trailer_template=TRAILER_TEMPLATE_DEFAULT,
     subtitle_template=SUBTITLE_TEMPLATE_DEFAULT,

@@ -73,6 +73,7 @@ async def create_library(req: LibraryCreateRequest, repo: RepoDep, runtime: Runt
             poster_template=req.poster_template,
             fanart_template=req.fanart_template,
             extrafanart_template=req.extrafanart_template,
+            extrafanart_name_template=req.extrafanart_name_template,
             nfo_template=req.nfo_template,
             trailer_template=req.trailer_template,
             subtitle_template=req.subtitle_template,

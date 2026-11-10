@@ -28,6 +28,12 @@ class _TushyActorCrawler(ActorCrawler):
     display_name: str
     ordered: bool = False
 
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        # 同一部片子会用多个查找名 (中文 / 罗马音 / 英文) 反复问同一站, 每次都要翻同样的
+        # 几页. 实例在 factory 里复用, 缓存放实例上才能跨名字生效.
+        self._listing_cache: dict[int, tuple[list[dict[str, Any]], int | None, int | None]] = {}
+
     @classmethod
     def profile(cls) -> CrawlerProfile:
         return CrawlerProfile(
@@ -45,9 +51,14 @@ class _TushyActorCrawler(ActorCrawler):
         page = 1
         last_page_num = 0
         while page <= _MAX_LISTING_PAGES:
-            url = self._listing_url(page)
-            text = await self.client.get_html(url, cookies=self.cookies, headers=self.headers)
-            models, page_num, total_count = _listing_page_from_html(text)
+            cached_page = self._listing_cache.get(page)
+            if cached_page is not None:
+                models, page_num, total_count = cached_page
+            else:
+                url = self._listing_url(page)
+                text = await self.client.get_html(url, cookies=self.cookies, headers=self.headers)
+                models, page_num, total_count = _listing_page_from_html(text)
+                self._listing_cache[page] = (models, page_num, total_count)
             if not models:
                 return None
             for model in models:
