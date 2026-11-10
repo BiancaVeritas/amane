@@ -12,7 +12,7 @@ import {
   Text,
   Title,
 } from "@mantine/core";
-import { IconAlertCircle } from "@tabler/icons-react";
+import { IconAlertCircle, IconCrop } from "@tabler/icons-react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -150,8 +150,9 @@ function SettingsPage() {
                                   </Text>
                                 </Box>
                                 <Button
-                                  size="compact-xs"
+                                  size="xs"
                                   variant="light"
+                                  leftSection={<IconCrop size={14} />}
                                   onClick={() => setCropRulesOpen(true)}
                                 >
                                   {t("cropRules.button")}

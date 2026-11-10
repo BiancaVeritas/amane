@@ -176,6 +176,22 @@ function initialAspectCrop(
   return { unit: "%", x: 0, y: 0, width: 100, height: heightPct };
 }
 
+/** 显示像素选区 → 百分比选区; ReactCrop 的 aspect 在百分比下不会累积取整误差. */
+function toCropPercent(
+  crop: { x: number; y: number; width: number; height: number },
+  canvas: HTMLCanvasElement,
+): Crop {
+  const w = canvas.clientWidth || 1;
+  const h = canvas.clientHeight || 1;
+  return {
+    unit: "%",
+    x: (crop.x / w) * 100,
+    y: (crop.y / h) * 100,
+    width: (crop.width / w) * 100,
+    height: (crop.height / h) * 100,
+  };
+}
+
 /** Percent/pixel Crop → 显示像素 PixelCrop. */
 function toPixelCrop(crop: Crop, canvas: HTMLCanvasElement): PixelCrop {
   if (crop.unit === "px") {
@@ -426,46 +442,29 @@ export function ImageCropDialog({
   };
 
   /** 把当前选区收成 aspect 比例: 高度不动, 宽度 = 高度 × 比例, 水平居中到原中心. */
+  /**
+   * 把当前选区收成 aspect 比例: 高度不动, 宽度 = 高度 × 比例, 水平居中.
+   *
+   * 用**百分比**回写给 ReactCrop, 而不是自己算像素: 像素取整后比例永远差一点点
+   * (1765/2507 = 0.70004 而非 0.7), 而 ``aspect`` 属性会据此反复「修正」选区 ——
+   * onChange 又把修正值送回来重算, 于是选框来回抖. 百分比没有取整误差, 一次到位.
+   */
   const lockToAspect = () => {
     const canvas = canvasRef.current;
     if (!canvas || !naturalSize || !crop) return;
-    const scale = displayScale(canvas);
-    // 百分比与像素都可能: 统一换成显示像素再换算.
-    const shown =
-      crop.unit === "px"
-        ? { x: crop.x, y: crop.y, width: crop.width, height: crop.height }
-        : {
-            x: (crop.x / 100) * canvas.clientWidth,
-            y: (crop.y / 100) * canvas.clientHeight,
-            width: (crop.width / 100) * canvas.clientWidth,
-            height: (crop.height / 100) * canvas.clientHeight,
-          };
-    if (shown.width <= 0 || shown.height <= 0) return;
+    const pct = crop.unit === "px" ? toCropPercent(crop, canvas) : crop;
+    if (pct.width <= 0 || pct.height <= 0) return;
 
-    let naturalHeight = Math.round(shown.height * scale.y);
-    let naturalWidth = Math.max(1, Math.round(naturalHeight * aspectRatio));
-    if (naturalWidth > naturalSize.width) {
-      naturalWidth = naturalSize.width;
-      naturalHeight = Math.max(1, Math.round(naturalWidth / aspectRatio));
-    }
-    if (naturalHeight <= 0) return;
+    // 高度不动, 宽度 = 高度 × (比例 / 图片宽高比); 百分比里的纵横都归一到 0~100.
+    const imageRatio = naturalSize.width / naturalSize.height;
+    const widthPct = Math.min(100, (pct.height * aspectRatio) / imageRatio);
+    const heightPct = (widthPct * imageRatio) / aspectRatio;
+    const centerXPct = pct.x + pct.width / 2;
+    const xPct = Math.max(0, Math.min(centerXPct - widthPct / 2, 100 - widthPct));
+    const yPct = Math.max(0, Math.min(pct.y, 100 - heightPct));
 
-    const centerX = Math.round((shown.x + shown.width / 2) * scale.x);
-    const left = Math.max(
-      0,
-      Math.min(Math.round(centerX - naturalWidth / 2), naturalSize.width - naturalWidth),
-    );
-    const top = Math.max(
-      0,
-      Math.min(Math.round(shown.y * scale.y), naturalSize.height - naturalHeight),
-    );
-
-    const pixel = fromNaturalBox(
-      { left, top, right: left + naturalWidth, bottom: top + naturalHeight },
-      canvas,
-    );
-    setCrop(pixel);
-    setCompletedCrop(pixel);
+    setCrop({ unit: "%", x: xPct, y: yPct, width: widthPct, height: heightPct });
+    setCompletedCrop(undefined);
   };
 
   const reshapeWithAspect = (nextAspect: number) => {
