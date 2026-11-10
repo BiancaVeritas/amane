@@ -505,14 +505,13 @@ async def _apply_thumb(
 async def _apply_poster(
     store: ResourceStore, repo: RepoDep, metadata_id: int, metadata: Metadata, url: str
 ) -> MetadataResponse:
-    """把 ``url`` 设为当前海报. 池的语义同 ``_apply_thumb``."""
-    pool = await _admit(store, metadata.poster_candidates, url, metadata.poster_urls[0] if metadata.poster_urls else None)
-    updated = await repo.update_metadata(
-        metadata_id,
-        mode=WriteMode.MANUAL,
-        poster_urls=[url],
-        poster_candidates=pool,
-    )
+    """把 ``url`` 设为当前海报.
+
+    海报没有候选池: 它由封面裁出 (一次只裁一张), 裁切对话框换的是**图源**而不是海报本身,
+    不存在「换一张海报、想留回上一张」的场景.
+    """
+    del store, metadata
+    updated = await repo.update_metadata(metadata_id, mode=WriteMode.MANUAL, poster_urls=[url])
     assert updated is not None
     return to_resp(MetadataResponse, updated)
 
@@ -670,27 +669,23 @@ async def remove_image(
     posters = [item for item in metadata.poster_urls if item != url]
     fanart = [item for item in metadata.extrafanart if item != url]
     thumb_pool = [item for item in metadata.thumb_candidates if item != url]
-    poster_pool = [item for item in metadata.poster_candidates if item != url]
     if (
         len(thumbs) == len(metadata.thumb_urls)
         and len(posters) == len(metadata.poster_urls)
         and len(fanart) == len(metadata.extrafanart)
         and len(thumb_pool) == len(metadata.thumb_candidates)
-        and len(poster_pool) == len(metadata.poster_candidates)
     ):
         raise HTTPException(status_code=404, detail="该图片不在候选池中")
 
     # 删掉的正好是正在用的那张时, 顺延到池里第一张 (池空则留空).
     thumb_urls = thumbs if url not in metadata.thumb_urls else ([thumb_pool[0]] if thumb_pool else [])
-    poster_urls = posters if url not in metadata.poster_urls else ([poster_pool[0]] if poster_pool else [])
 
     updated = await repo.update_metadata(
         metadata_id,
         mode=WriteMode.MANUAL,
         thumb_urls=thumb_urls,
-        poster_urls=poster_urls,
+        poster_urls=posters,
         thumb_candidates=thumb_pool,
-        poster_candidates=poster_pool,
     )
     assert updated is not None
 

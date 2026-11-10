@@ -296,7 +296,6 @@ class MetadataFields(TypedDict, total=False):
     poster_urls: list[str]
     thumb_urls: list[str]
     thumb_candidates: list[str]
-    poster_candidates: list[str]
     trailer_urls: list[str]
     extrafanart_urls: dict[str, list[str]]
     scores: dict[str, float]

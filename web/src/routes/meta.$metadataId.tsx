@@ -1271,6 +1271,7 @@ function TitleDetailPage() {
             thumbUrl={thumbSrc}
             contentType={item.content_type}
             alternativeSources={coverCandidates.filter((url) => url !== thumbSrc)}
+            infos={imageInfos}
             onSuccess={() => {
               invalidateDetail();
               void queryClient.invalidateQueries({ queryKey: listMetadataQueryKey() });

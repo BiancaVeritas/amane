@@ -25,18 +25,11 @@ export interface ImagePickerDialogProps {
   onRemove?: (url: string) => void;
 }
 
-/** 展示顺序: 封面在前, 剧照居中, 自定义最后; 同组内保持原次序. */
-const KIND_ORDER: Record<NonNullable<ImageInfoItem["kind"]>, number> = {
-  cover: 0,
-  still: 1,
-  custom: 2,
-  other: 3,
-};
-
 /**
  * 从候选池里挑一张, 或把某张移出候选池.
  *
- * 每张只标注来源与分辨率, 不显示序号、不标「当前」—— 选中即应用, 界面不承担额外状态.
+ * 顺序**完全照传入的 ``images``**: 后端已按候选池的顺序给出 (选过的图留在原位),
+ * 这里再排一次会让「点一下、顺序就变」—— 看过哪张是一眼认出来的, 重排等于让人重新找.
  */
 export function ImagePickerDialog({
   opened,
@@ -51,11 +44,7 @@ export function ImagePickerDialog({
   // 删除按钮平时压到 5%, 只有指向的那一格才显出来.
   const [hovered, setHovered] = useState<string | null>(null);
 
-  // 按类别重排: 封面 → 剧照 → 自定义. 组内顺序沿用后端给的候选次序.
-  const ordered = images
-    .map((url, index) => ({ url, index, kind: infos?.get(url)?.kind ?? "other" }))
-    .sort((a, b) => KIND_ORDER[a.kind] - KIND_ORDER[b.kind] || a.index - b.index)
-    .map((entry) => entry.url);
+  const ordered = images;
 
   return (
     <Modal

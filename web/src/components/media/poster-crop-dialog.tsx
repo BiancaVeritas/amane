@@ -7,7 +7,7 @@ import { useTranslation } from "react-i18next";
 import { cropPosterFromThumbMutation } from "@/client/@tanstack/react-query.gen";
 import type { ContentType } from "@/client/types.gen";
 import { ImageCropDialog } from "@/components/media/image-crop-dialog";
-import { ImagePickerDialog } from "@/components/media/image-picker-dialog";
+import { type ImageInfoItem, ImagePickerDialog } from "@/components/media/image-picker-dialog";
 import { useConfig } from "@/hooks/use-config";
 import { extractErrorMessage } from "@/lib/api-error";
 
@@ -21,6 +21,8 @@ export interface PosterCropDialogProps {
   contentType: ContentType;
   /** 其它可用作裁切基准的图 (海报、剧照); 提供时对话框内可切换. */
   alternativeSources?: string[];
+  /** 每张候选的来源与分辨率, 交给选图框显示; 与详情页换图共用同一份. */
+  infos?: Map<string, ImageInfoItem>;
   onSuccess?: () => void;
 }
 
@@ -32,6 +34,7 @@ export function PosterCropDialog({
   thumbUrl,
   contentType,
   alternativeSources = [],
+  infos,
   onSuccess,
 }: PosterCropDialogProps) {
   const { t } = useTranslation(["metadata", "common"]);
@@ -130,6 +133,7 @@ export function PosterCropDialog({
         opened={pickerOpen}
         onClose={() => setPickerOpen(false)}
         images={sources}
+        infos={infos}
         title={t("detail.cropPoster.selectSource")}
         onPick={(url) => {
           setSourceIndex(Math.max(0, sources.indexOf(url)));

@@ -304,7 +304,6 @@ class Metadata(SQLModel, table=True):
     # 候选池: 选过的图都留在这里, 顺序固定 (换图只改 selected, 不重排), 已去重.
     # 与 thumb_urls 分工: 那个只存**正在用的一张**, 供下游 (NFO/整理/媒体库) 直接取.
     thumb_candidates: list[str] = Field(default_factory=list, sa_column=Column(JSON))
-    poster_candidates: list[str] = Field(default_factory=list, sa_column=Column(JSON))
     trailer_urls: list[str] = Field(default_factory=list, sa_column=Column(JSON))
 
     # 按站点分组, 禁止扁平合并.

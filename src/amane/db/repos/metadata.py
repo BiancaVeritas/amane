@@ -783,8 +783,6 @@ class MetadataRepoMixin(RepositoryMixinBase):
                 metadata.thumb_urls = updates["thumb_urls"]
             if "thumb_candidates" in updates:
                 metadata.thumb_candidates = updates["thumb_candidates"]
-            if "poster_candidates" in updates:
-                metadata.poster_candidates = updates["poster_candidates"]
             if "trailer_urls" in updates:
                 metadata.trailer_urls = updates["trailer_urls"]
             if "extrafanart_urls" in updates:
