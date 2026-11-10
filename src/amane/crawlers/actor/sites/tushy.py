@@ -16,9 +16,10 @@ from ...base import CrawlerProfile
 from ..base import ActorCrawler
 from ..models import ActorMetadata
 
-#: 演员列表翻页上限. 站点对越界页仍返回 200 时, 单靠 ``totalCount`` 判不出终点,
-#: 这道硬上限兜底: 按每页 24 条算, 300 页已覆盖七千余名演员, 远超站点实际规模.
-_MAX_LISTING_PAGES = 300
+#: 演员列表翻页上限. 站点每页 18 条、总数 431, 走完要 24 次请求; 而目标是 JAV 演员,
+#: 在欧美站点的名单里几乎不会出现. 搜三页 (约 54 人) 已经覆盖到常见的几位, 再往下翻只是
+#: 白花请求, 所以到第三页就收手.
+_MAX_LISTING_PAGES = 3
 
 
 class _TushyActorCrawler(ActorCrawler):

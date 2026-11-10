@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from amane.crawlers.actor.sites.tushy import (
+    _MAX_LISTING_PAGES,
     TushyActorCrawler,
     TushyRawActorCrawler,
     _listing_webp,
@@ -119,4 +120,4 @@ async def test_fetch_stops_at_page_cap() -> None:
     crawler = TushyActorCrawler(client=client)
 
     assert await crawler.fetch("Jane Doe") is None
-    assert calls == 300  # _MAX_LISTING_PAGES
+    assert calls == _MAX_LISTING_PAGES
