@@ -340,6 +340,30 @@ class SiteConfig(BaseModel):
         return languages
 
 
+class PosterCropRule(BaseModel):
+    """一条固定裁切规则: 命中条件 + 裁切窗口 (按封面高度归一化).
+
+    裁切位置用比例而非绝对像素: 同一系列的封面分辨率不一定相同, 但人物在画面中的相对
+    位置一致. ``left`` / ``top`` / ``width`` / ``height`` 都是相对封面宽高的 0~1 值.
+    """
+
+    model_config = {"extra": "forbid"}
+
+    name: str = Field(default="", description="备注名, 仅用于界面区分")
+    series: str | None = Field(default=None, description="系列名; 空则不限")
+    number_prefix: str | None = Field(default=None, description="番号前缀 (如 ABP); 空则不限")
+    filename_keyword: str | None = Field(
+        default=None,
+        description="文件名里的关键词 (如 BD); 没有文件名时改看番号, 等价于番号里含这个词",
+    )
+    studio: str | None = Field(default=None, description="供应商; 空则不限")
+    publisher: str | None = Field(default=None, description="发行商; 空则不限")
+    left: float = Field(default=0.0, ge=0.0, le=1.0, description="裁切窗口左边距 (占封面宽度)")
+    top: float = Field(default=0.0, ge=0.0, le=1.0, description="裁切窗口上边距 (占封面高度)")
+    width: float = Field(default=1.0, gt=0.0, le=1.0, description="裁切窗口宽度 (占封面宽度)")
+    height: float = Field(default=1.0, gt=0.0, le=1.0, description="裁切窗口高度 (占封面高度)")
+
+
 class ScrapingConfig(BaseModel):
     download_resources: list[DownloadableResource] = Field(
         default_factory=lambda: [r for r in DownloadableResource if r != DownloadableResource.trailer],
@@ -362,6 +386,12 @@ class ScrapingConfig(BaseModel):
 
     关闭则固定取封面右侧 —— 日式封面右半通常是竖版海报, 但人物布局不标准时 (多人合照、
     人物居中) 会裁偏. 检测不到人脸时同样退回取右侧.
+    """
+
+    poster_crop_rules: list[PosterCropRule] = Field(default_factory=list, json_schema_extra={"x-hidden": True})
+    """按系列 / 番号前缀 / 供应商 / 发行商命中的固定裁切位置.
+
+    命中时优先于人脸检测: 同系列封面构图一致, 固定位置比逐张检测更准也更稳.
     """
 
     jpeg_quality: int = Field(default=95, ge=50, le=100, json_schema_extra={"x-hidden": True})

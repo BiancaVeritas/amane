@@ -1,4 +1,5 @@
 import {
+  Button,
   Alert,
   Box,
   Center,
@@ -11,13 +12,14 @@ import {
   Text,
   Title,
 } from "@mantine/core";
-import { IconAlertCircle } from "@tabler/icons-react";
+import { IconAlertCircle, IconCrop } from "@tabler/icons-react";
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { z } from "zod";
 import { isHidden, resolveSchema } from "@/components/schema-form/schema";
 import { SchemaForm } from "@/components/schema-form/schema-form";
+import { type CropRule, CropRulesDialog } from "@/components/settings/crop-rules-dialog";
 import { useConfig, useConfigSchema, useUpdateConfig } from "@/hooks/use-config";
 import { useNarrowViewport } from "@/hooks/use-narrow-viewport";
 import { extractErrorMessage } from "@/lib/api-error";
@@ -39,6 +41,13 @@ function SettingsPage() {
   const { data: schema, isLoading: schemaLoading, error: schemaError } = useConfigSchema();
   const { data: values, isLoading: valuesLoading, error: valuesError } = useConfig();
   const saveMutation = useUpdateConfig();
+  const [cropRulesOpen, setCropRulesOpen] = useState(false);
+
+  const cropRules = useMemo<CropRule[]>(() => {
+    const raw = (values as { scraping?: { poster_crop_rules?: CropRule[] } } | undefined)?.scraping
+      ?.poster_crop_rules;
+    return Array.isArray(raw) ? raw : [];
+  }, [values]);
 
   const resolvedSchema = useMemo(() => (schema ? resolveSchema(schema, schema) : null), [schema]);
 
@@ -119,6 +128,20 @@ function SettingsPage() {
                     {/* Schema 顶层分组名运行时才知, 动态表单例外. */}
                     {t(`tabs.${key}` as never, { defaultValue: key })}
                   </Text>
+                  {key === "scraping" && (
+                    <Group mb="md">
+                      <Button
+                        variant="light"
+                        leftSection={<IconCrop size={16} />}
+                        onClick={() => setCropRulesOpen(true)}
+                      >
+                        {t("cropRules.button")}
+                      </Button>
+                      <Text size="xs" c="dimmed">
+                        {t("cropRules.description")}
+                      </Text>
+                    </Group>
+                  )}
                   <SchemaForm
                     schema={sectionSchema}
                     prefix={key}
@@ -134,6 +157,15 @@ function SettingsPage() {
           </Box>
         </Group>
       )}
+
+      <CropRulesDialog
+        opened={cropRulesOpen}
+        onClose={() => setCropRulesOpen(false)}
+        rules={cropRules}
+        onChange={(next) =>
+          saveMutation.mutate({ body: { scraping: { poster_crop_rules: next } } })
+        }
+      />
     </Stack>
   );
 }

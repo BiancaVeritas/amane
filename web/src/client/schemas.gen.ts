@@ -3160,6 +3160,7 @@ export const HotSettingsSchema = {
                 uncensored_poster_ratio: 0.87,
                 poster_crop_skip_ratio: 0.9,
                 poster_crop_detect_face: true,
+                poster_crop_rules: [],
                 jpeg_quality: 95,
                 content_routes: {
                     amateur: [
@@ -7275,6 +7276,113 @@ export const PluginResponseSchema = {
     title: 'PluginResponse'
 } as const;
 
+export const PosterCropRuleSchema = {
+    properties: {
+        name: {
+            type: 'string',
+            title: 'Name',
+            description: '备注名, 仅用于界面区分',
+            default: ''
+        },
+        series: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Series',
+            description: '系列名; 空则不限'
+        },
+        number_prefix: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Number Prefix',
+            description: '番号前缀 (如 ABP); 空则不限'
+        },
+        filename_keyword: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Filename Keyword',
+            description: '文件名里的关键词 (如 BD); 没有文件名时改看番号, 等价于番号里含这个词'
+        },
+        studio: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Studio',
+            description: '供应商; 空则不限'
+        },
+        publisher: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Publisher',
+            description: '发行商; 空则不限'
+        },
+        left: {
+            type: 'number',
+            maximum: 1,
+            minimum: 0,
+            title: 'Left',
+            description: '裁切窗口左边距 (占封面宽度)',
+            default: 0
+        },
+        top: {
+            type: 'number',
+            maximum: 1,
+            minimum: 0,
+            title: 'Top',
+            description: '裁切窗口上边距 (占封面高度)',
+            default: 0
+        },
+        width: {
+            type: 'number',
+            maximum: 1,
+            exclusiveMinimum: 0,
+            title: 'Width',
+            description: '裁切窗口宽度 (占封面宽度)',
+            default: 1
+        },
+        height: {
+            type: 'number',
+            maximum: 1,
+            exclusiveMinimum: 0,
+            title: 'Height',
+            description: '裁切窗口高度 (占封面高度)',
+            default: 1
+        }
+    },
+    additionalProperties: false,
+    type: 'object',
+    title: 'PosterCropRule',
+    description: '一条固定裁切规则: 命中条件 + 裁切窗口 (按封面高度归一化).\n\n裁切位置用比例而非绝对像素: 同一系列的封面分辨率不一定相同, 但人物在画面中的相对\n位置一致. ``left`` / ``top`` / ``width`` / ``height`` 都是相对封面宽高的 0~1 值.'
+} as const;
+
 export const R18ConfigSchema = {
     properties: {
         dsn: {
@@ -8576,6 +8684,14 @@ export const ScrapingConfigSchema = {
             type: 'boolean',
             title: 'Poster Crop Detect Face',
             default: true
+        },
+        poster_crop_rules: {
+            items: {
+                $ref: '#/components/schemas/PosterCropRule'
+            },
+            type: 'array',
+            title: 'Poster Crop Rules',
+            'x-hidden': true
         },
         jpeg_quality: {
             type: 'integer',

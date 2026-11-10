@@ -287,7 +287,8 @@ export function ImageCropDialog({
     setPrevSession(sessionKey);
     setCompletedCrop(undefined);
     setBox(EMPTY_BOX);
-    setLockAspect(true);
+    // 默认不锁定: 锁定只是「按比例拖」的辅助, 大多数裁切要自己决定宽高.
+    setLockAspect(false);
     setAspectRatio(defaultAspect);
     if (imageKey !== prevImage) {
       setPrevImage(imageKey);
@@ -296,8 +297,10 @@ export function ImageCropDialog({
       setLoadError(false);
       setCrop(undefined);
     } else if (source) {
+      // 重新打开同一个图源: 用**当前**宽高比重建选区, 而不是回合到 defaultAspect ——
+      // 后者会让解除锁定后重开时选区尺寸/形状跳回初始值, 看起来像「选框消失了」.
       const size = rotatedSize(source, rotation);
-      setCrop(initialAspectCrop(size.width, size.height, defaultAspect, initialAnchor));
+      setCrop(initialAspectCrop(size.width, size.height, aspectRatio, initialAnchor));
     }
   }
 
@@ -349,10 +352,16 @@ export function ImageCropDialog({
   }, []);
 
   // 换角度后按新坐标系重绘, 并把选区重置为该比例下的默认框 (原框已不在画布内).
+  // 只在「source 或 rotation 真的变了」时重建选区: 依赖里含 initialAnchor / syncBoxFromCrop,
+  // 而选区随每次交互变化, 无条件重建会让框在多次开关后越铺越大.
+  const cropSessionRef = useRef<string>("");
   useLayoutEffect(() => {
     const canvas = canvasRef.current;
     if (!source || !canvas) return;
     drawRotated(canvas, source, rotation);
+    const key = `${String(source === null)}:${String(rotation)}:${imageKey}`;
+    if (cropSessionRef.current === key) return;
+    cropSessionRef.current = key;
     const next = initialAspectCrop(canvas.width, canvas.height, aspectRef.current, initialAnchor);
     setCrop(next);
     setCompletedCrop(undefined);
@@ -363,7 +372,7 @@ export function ImageCropDialog({
     } else {
       setBox(EMPTY_BOX);
     }
-  }, [source, rotation, initialAnchor, syncBoxFromCrop]);
+  }, [source, rotation, initialAnchor, syncBoxFromCrop, imageKey]);
 
   // 初始 percent crop / 拖拽中同步像素框到 NumberInput
   useEffect(() => {

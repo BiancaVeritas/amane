@@ -16,6 +16,7 @@ from .images import (
     CropRotation,
     crop_box,
     crop_poster,
+    crop_poster_by_rule,
     format_crop_box_args,
     needs_upscale,
     probe_oriented_size,
@@ -26,7 +27,7 @@ from .images import (
 from .resource_store import RESOURCE_URL_PREFIX
 
 if TYPE_CHECKING:
-    from ..config import HotSettings, SrConfig
+    from ..config import HotSettings, PosterCropRule, SrConfig
     from ..db.models import Resource
     from ..net.http import WebClient
     from .resource_store import ResourceStore
@@ -120,12 +121,15 @@ async def materialize_images(
     content_type: ContentType | None = None,
     extrafanart_urls: dict[str, list[str]] | None = None,
     recrop: bool = False,
+    crop_rule: PosterCropRule | None = None,
 ) -> MaterializedImages:
     """仅下载集合内的类型; 未选中的图片类型保留聚合 URL.
 
     预告片是例外: 未启用预告片下载时, 同时清空其 URL, 避免下游仍显示播放入口.
     死 URL 保序置于尾部, 供来源恢复后重试.
     extrafanart 仅下载到 Resource, 站点分组结构不重排.
+
+    ``crop_rule`` 命中时按规则给的固定窗口裁海报, 优先于人脸检测.
     """
     kinds = set(config.scraping.download_resources)
 
@@ -162,10 +166,26 @@ async def materialize_images(
                 if content_type == ContentType.UNCENSORED
                 else config.scraping.poster_ratio
             )
-            args = f"{ratio:.4f}"
             local_thumb = thumb_local
+            # 规则的派生键带上窗口比例, 否则改规则后仍命中旧产物.
+            rule = crop_rule
+            args = (
+                f"rule:{rule.left:.4f},{rule.top:.4f},{rule.width:.4f},{rule.height:.4f}"
+                if rule is not None
+                else f"{ratio:.4f}"
+            )
 
             async def crop_producer(dest: Path) -> bool:
+                if rule is not None:
+                    return crop_poster_by_rule(
+                        local_thumb,
+                        dest,
+                        left=rule.left,
+                        top=rule.top,
+                        width=rule.width,
+                        height=rule.height,
+                        jpeg_quality=config.scraping.jpeg_quality,
+                    )
                 return crop_poster(
                     local_thumb,
                     dest,

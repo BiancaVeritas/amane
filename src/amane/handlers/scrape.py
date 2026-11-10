@@ -10,6 +10,7 @@ from ..crawlers.site_roles import builtin_descriptors
 from ..db.models import MediaIdentityType, TaskType
 from ..enums import ActorGender, MetadataField, SiteName
 from ..media import materialize_images
+from ..media.crop_rules import find_rule
 from ..observability import current
 from ..observability.models import SiteOutcomeKind
 from ..parsing import ContentType
@@ -311,6 +312,16 @@ class ScrapeHandler(TaskHandler[ScrapePayload, ScrapeResult]):
         trailer_out = result.metadata.trailer_urls
         if self._web_client is not None:
             try:
+                # 系列 / 番号前缀 / 供应商 / 发行商命中的固定裁切窗口, 优先于人脸检测.
+                crop_rule = find_rule(
+                    self._config.scraping.poster_crop_rules,
+                    number=result.metadata.number,
+                    series=result.metadata.series,
+                    studio=result.metadata.studio,
+                    publisher=result.metadata.publisher,
+                    # 文件名优先, 没有就退回番号 (见 crop_rules._searchable_text).
+                    media_path=file.path if file is not None else None,
+                )
                 materialized = await materialize_images(
                     result.metadata.poster_urls,
                     result.metadata.thumb_urls,
@@ -324,6 +335,7 @@ class ScrapeHandler(TaskHandler[ScrapePayload, ScrapeResult]):
                     # 强制刮削时把海报重裁一遍: 派生键只含「源 + 比例」, 裁切算法升级后
                     # 旧产物不会自动失效, 不重跑就一直留着旧构图.
                     recrop=not payload.use_cache,
+                    crop_rule=crop_rule,
                 )
                 poster_out = materialized.poster_urls
                 thumb_out = materialized.thumb_urls

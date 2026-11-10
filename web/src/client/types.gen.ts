@@ -3663,6 +3663,77 @@ export type PluginResponse = {
 };
 
 /**
+ * PosterCropRule
+ *
+ * 一条固定裁切规则: 命中条件 + 裁切窗口 (按封面高度归一化).
+ *
+ * 裁切位置用比例而非绝对像素: 同一系列的封面分辨率不一定相同, 但人物在画面中的相对
+ * 位置一致. ``left`` / ``top`` / ``width`` / ``height`` 都是相对封面宽高的 0~1 值.
+ */
+export type PosterCropRule = {
+    /**
+     * Name
+     *
+     * 备注名, 仅用于界面区分
+     */
+    name?: string;
+    /**
+     * Series
+     *
+     * 系列名; 空则不限
+     */
+    series?: string | null;
+    /**
+     * Number Prefix
+     *
+     * 番号前缀 (如 ABP); 空则不限
+     */
+    number_prefix?: string | null;
+    /**
+     * Filename Keyword
+     *
+     * 文件名里的关键词 (如 BD); 没有文件名时改看番号, 等价于番号里含这个词
+     */
+    filename_keyword?: string | null;
+    /**
+     * Studio
+     *
+     * 供应商; 空则不限
+     */
+    studio?: string | null;
+    /**
+     * Publisher
+     *
+     * 发行商; 空则不限
+     */
+    publisher?: string | null;
+    /**
+     * Left
+     *
+     * 裁切窗口左边距 (占封面宽度)
+     */
+    left?: number;
+    /**
+     * Top
+     *
+     * 裁切窗口上边距 (占封面高度)
+     */
+    top?: number;
+    /**
+     * Width
+     *
+     * 裁切窗口宽度 (占封面宽度)
+     */
+    width?: number;
+    /**
+     * Height
+     *
+     * 裁切窗口高度 (占封面高度)
+     */
+    height?: number;
+};
+
+/**
  * R18Config
  *
  * 放 Hot: 修改 dsn 经 AppRuntime.apply_rebuild() 重建只读引擎. 未配置 dsn 时整个数据源禁用.
@@ -4438,6 +4509,10 @@ export type ScrapingConfig = {
      * Poster Crop Detect Face
      */
     poster_crop_detect_face?: boolean;
+    /**
+     * Poster Crop Rules
+     */
+    poster_crop_rules?: Array<PosterCropRule>;
     /**
      * Jpeg Quality
      */

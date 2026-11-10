@@ -2,6 +2,7 @@ import { ActionIcon, Transition } from "@mantine/core";
 import { IconArrowUp } from "@tabler/icons-react";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import classes from "./scroll-to-top.module.css";
 
 /** 走多远才出现; 太早出现会挡住列表顶部的内容. */
 const SHOW_AFTER_PX = 400;
@@ -64,10 +65,13 @@ export function ScrollToTop() {
       {(style) => (
         <ActionIcon
           variant="filled"
-          size="lg"
-          radius="xl"
+          size={44}
+          // 圆角方形: 圆形在满屏缩略图里太像「圆形头像」, 方块更像控件.
+          radius="md"
           aria-label={t("actions.scrollToTop")}
           onClick={backToTop}
+          // 平时半透明让内容透出来, 指上去才全亮.
+          className={classes.fab}
           style={{
             ...style,
             position: "fixed",
@@ -76,7 +80,7 @@ export function ScrollToTop() {
             zIndex: 200,
           }}
         >
-          <IconArrowUp size={20} />
+          <IconArrowUp size={22} />
         </ActionIcon>
       )}
     </Transition>

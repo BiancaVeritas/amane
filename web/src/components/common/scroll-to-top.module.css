@@ -1,0 +1,15 @@
+/* 回到顶部: 平时半透明让缩略图透出来, 指向时才全亮. */
+.fab {
+  opacity: 0.45;
+  transition: opacity 120ms ease;
+}
+
+.fab:hover,
+.fab:focus-visible {
+  opacity: 1;
+}
+
+/* 触屏没有 hover, 按下时也要给反馈. */
+.fab:active {
+  opacity: 1;
+}

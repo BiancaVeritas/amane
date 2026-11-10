@@ -41,7 +41,7 @@ export function ImagePickerDialog({
   onRemove,
 }: ImagePickerDialogProps) {
   const { t } = useTranslation(["metadata", "common"]);
-  // 删除按钮平时压到 5%, 只有指向的那一格才显出来.
+  // 删除按钮平时压到 20% (淡但看得出), 指向那一格时全亮.
   const [hovered, setHovered] = useState<string | null>(null);
 
   const ordered = images;
@@ -100,7 +100,7 @@ export function ImagePickerDialog({
                         position: "absolute",
                         top: 4,
                         right: 4,
-                        opacity: hovered === url ? 1 : 0.05,
+                        opacity: hovered === url ? 1 : 0.2,
                         transition: "opacity 120ms",
                       }}
                       aria-label={String(t("detail.imagePicker.remove"))}

@@ -535,6 +535,42 @@
             }
           }
         }
+      },
+      "poster_crop_rules": {
+        "label": "Precise crop",
+        "description": "Crop matched titles at the pinned window.",
+        "$": {
+          "name": {
+            "label": "Name"
+          },
+          "series": {
+            "label": "Series"
+          },
+          "number_prefix": {
+            "label": "Number prefix"
+          },
+          "studio": {
+            "label": "Studio"
+          },
+          "publisher": {
+            "label": "Publisher"
+          },
+          "left": {
+            "label": "Left"
+          },
+          "top": {
+            "label": "Top"
+          },
+          "width": {
+            "label": "Width"
+          },
+          "height": {
+            "label": "Height"
+          },
+          "filename_keyword": {
+            "label": "Filename keyword"
+          }
+        }
       }
     },
     "network": {
@@ -970,5 +1006,42 @@
         "description": "Turn off for self-signed certificates"
       }
     }
+  },
+  "cropRules": {
+    "button": "Precise crop",
+    "description": "Crop matched titles at the pinned window.",
+    "dialogTitle": "Precise crop rules",
+    "dialogHint": "All filled conditions must match; an empty rule is ignored. Window is 0~1 of the cover.",
+    "empty": "No rules yet.",
+    "add": "Add rule",
+    "match": "Conditions",
+    "window": "Window",
+    "noCondition": "No condition (inactive)",
+    "commitHint": "Takes effect on the next scrape",
+    "filenameKeywordHint": "Must appear in the filename (e.g. BD); falls back to the number when unknown"
+  },
+  "cropCalibrate": {
+    "title": "Calibrate crop window",
+    "hint": "Pick a cover from the same series and drag the window on it; the ratio is stored in the rule.",
+    "fromLibrary": "From library",
+    "fromUpload": "Upload a sample",
+    "uploadHint": "The uploaded image is only used for calibration and is discarded afterwards.",
+    "pickFile": "Pick image",
+    "searchPlaceholder": "Search by number or title",
+    "noFilm": "No film found.",
+    "pick": "Pick",
+    "cropTitle": "Drag the crop window",
+    "useWindow": "Use this window",
+    "needSelection": "Drag a window on the image first",
+    "aspect": "Aspect",
+    "lockAspect": "Lock aspect",
+    "left": "Left",
+    "top": "Top",
+    "width": "Width",
+    "height": "Height",
+    "rotateLeft": "Rotate left",
+    "rotateRight": "Rotate right",
+    "resetRotation": "Reset",
+    "search": "Search"
   }
 }

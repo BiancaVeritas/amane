@@ -190,6 +190,42 @@ def _poster_crop_left(img: Image.Image, target_w: int, *, detect_face: bool) -> 
     return round(min(max(0.0, face_cx - target_w / 2), float(fallback)))
 
 
+def crop_poster_by_rule(
+    thumb_path: Path,
+    poster_path: Path,
+    *,
+    left: float,
+    top: float,
+    width: float,
+    height: float,
+    jpeg_quality: int = _DEFAULT_JPEG_QUALITY,
+) -> bool:
+    """按给定比例框裁出海报 (固定的左上角与宽高, 不做人脸检测).
+
+    这是「精准裁切」规则的执行端: 同系列封面构图一致, 用人眼标定好的位置比逐张检测更稳.
+    """
+    try:
+        with Image.open(thumb_path) as src:
+            img = ImageOps.exif_transpose(src) if _read_orientation(src) != 1 else src
+            w, h = img.size
+            box = (
+                max(0, round(left * w)),
+                max(0, round(top * h)),
+                min(w, round((left + width) * w)),
+                min(h, round((top + height) * h)),
+            )
+            if box[2] <= box[0] or box[3] <= box[1]:
+                logger.warning("rule crop box empty", path=str(thumb_path), box=box, size=(w, h))
+                return False
+            cropped = img.convert("RGB").crop(box)
+            poster_path.parent.mkdir(parents=True, exist_ok=True)
+            _save_jpeg(cropped, poster_path, jpeg_quality)
+        return True
+    except Exception as e:
+        logger.warning("rule crop failed", path=str(thumb_path), error=str(e))
+        return False
+
+
 def crop_box(
     src_path: Path,
     dest_path: Path,

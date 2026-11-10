@@ -535,6 +535,42 @@
             }
           }
         }
+      },
+      "poster_crop_rules": {
+        "label": "精准裁切",
+        "description": "按照规则命中的番剧按照原定好的裁切位置进行精准裁切。",
+        "$": {
+          "name": {
+            "label": "备注"
+          },
+          "series": {
+            "label": "系列"
+          },
+          "number_prefix": {
+            "label": "番号前缀"
+          },
+          "studio": {
+            "label": "供应商"
+          },
+          "publisher": {
+            "label": "发行商"
+          },
+          "left": {
+            "label": "左边距"
+          },
+          "top": {
+            "label": "上边距"
+          },
+          "width": {
+            "label": "宽度"
+          },
+          "height": {
+            "label": "高度"
+          },
+          "filename_keyword": {
+            "label": "文件名关键词"
+          }
+        }
       }
     },
     "network": {
@@ -970,5 +1006,42 @@
         "description": "自签名证书时关闭"
       }
     }
+  },
+  "cropRules": {
+    "button": "精准裁切",
+    "description": "按照规则命中的番剧按照原定好的裁切位置进行精准裁切。",
+    "dialogTitle": "精准裁切规则",
+    "dialogHint": "命中条件全部满足才生效; 全部留空视为不启用。裁切窗口按封面比例的 0~1 填写。",
+    "empty": "还没有规则。",
+    "add": "添加规则",
+    "match": "命中条件",
+    "window": "裁切窗口",
+    "noCondition": "未填条件 (不生效)",
+    "commitHint": "保存后立即生效, 下次刮削按新位置裁切",
+    "filenameKeywordHint": "文件名里必须含这个词 (如 BD); 没有文件名时改看番号"
+  },
+  "cropCalibrate": {
+    "title": "标定裁切窗口",
+    "hint": "选一张同系列的封面, 在图上拖出想要的裁切范围; 比例会写进规则, 之后同条件的影片按它裁切。",
+    "fromLibrary": "从片库选择",
+    "fromUpload": "上传临时图片",
+    "uploadHint": "上传的图片只用于标定, 拿到比例后即丢弃, 不会保存。",
+    "pickFile": "选择图片",
+    "searchPlaceholder": "输入番号或标题搜索",
+    "noFilm": "没有找到影片。",
+    "pick": "选择",
+    "cropTitle": "拖出裁切范围",
+    "useWindow": "用这个窗口",
+    "needSelection": "先在图上拖出裁切范围",
+    "aspect": "宽高比",
+    "lockAspect": "锁定比例",
+    "left": "左边距",
+    "top": "上边距",
+    "width": "宽度",
+    "height": "高度",
+    "rotateLeft": "左转",
+    "rotateRight": "右转",
+    "resetRotation": "复位",
+    "search": "搜索"
   }
 }
