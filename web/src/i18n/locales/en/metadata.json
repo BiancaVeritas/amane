@@ -426,7 +426,7 @@
     "name": "Name",
     "count": "Count",
     "mergeGuide": "Select sources, then click merge on the target",
-    "mergeNeedSources": "Select source items first, then click merge on the target",
+    "mergeNeedSources": "Select at least one other entry as a source first",
     "merge": "Merge into this",
     "mergeConfirm": "Confirm merge",
     "mergeConfirmBody": "Merge {{count}} sources into the target",
@@ -442,7 +442,13 @@
     "ruleTarget": "Target",
     "ruleBlock": "Drop",
     "ruleAlias": "Alias",
-    "ruleRemove": "Remove rule"
+    "ruleRemove": "Remove rule",
+    "mergeEntriesLead": "Merge {{count}} entries into {{number}}?",
+    "mergeEntriesKeep": "Target fields and locks stay unchanged",
+    "mergeEntriesRaw": "Missing site snapshots are filled in from sources, in order",
+    "mergeEntriesLinks": "Files, comments and tags move to the target",
+    "mergeEntriesDelete": "Source entries are deleted after merging",
+    "mergeEntriesRescrape": "Re-scrape the target by its number afterwards (reusing snapshots)"
   },
   "merge": {
     "title": "Compare Sources",

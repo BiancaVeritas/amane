@@ -2870,6 +2870,12 @@ export type MetadataBatchDeleteResponse = {
      * 不存在的 id 数量
      */
     missing: number;
+    /**
+     * Skipped
+     *
+     * 请求内重复的 id 数量; 已去重
+     */
+    skipped?: number;
 };
 
 /**
@@ -2922,6 +2928,12 @@ export type MetadataBatchScrapeResponse = {
      * 不存在的 id 数量
      */
     missing: number;
+    /**
+     * Skipped
+     *
+     * 请求内重复的 id 数量; 已去重
+     */
+    skipped?: number;
     /**
      * Task Ids
      *
@@ -3005,13 +3017,171 @@ export type MetadataDetailResponse = {
 export type MetadataField = 'title' | 'original_title' | 'plot' | 'original_plot' | 'actors' | 'directors' | 'tags' | 'series' | 'release' | 'runtime' | 'publisher' | 'studio' | 'poster_urls' | 'thumb_urls' | 'trailer_urls' | 'extrafanart' | 'score';
 
 /**
+ * MetadataListItem
+ *
+ * 列表与语义检索的条目: 不含 raw / field_sources, 详情才返回全量.
+ */
+export type MetadataListItem = {
+    /**
+     * Id
+     */
+    id: number;
+    /**
+     * Number
+     */
+    number: string;
+    content_type: ContentType;
+    /**
+     * Title
+     */
+    title?: string | null;
+    /**
+     * Original Title
+     */
+    original_title?: string | null;
+    /**
+     * Actors
+     */
+    actors?: Array<string>;
+    /**
+     * Studio
+     */
+    studio?: string | null;
+    /**
+     * Publisher
+     */
+    publisher?: string | null;
+    /**
+     * Release
+     */
+    release?: string | null;
+    /**
+     * Runtime
+     */
+    runtime?: number | null;
+    /**
+     * Tags
+     */
+    tags?: Array<string>;
+    /**
+     * Series
+     */
+    series?: string | null;
+    /**
+     * Series Names
+     */
+    series_names?: Array<string>;
+    /**
+     * Plot
+     */
+    plot?: string | null;
+    /**
+     * Original Plot
+     */
+    original_plot?: string | null;
+    /**
+     * Directors
+     */
+    directors?: Array<string>;
+    /**
+     * Poster Url
+     */
+    poster_url?: string | null;
+    /**
+     * Thumb Url
+     */
+    thumb_url?: string | null;
+    /**
+     * Trailer Url
+     */
+    trailer_url?: string | null;
+    /**
+     * Extrafanart
+     */
+    extrafanart?: Array<string>;
+    /**
+     * Score
+     */
+    score?: number | null;
+    /**
+     * Vr
+     */
+    vr?: boolean;
+    /**
+     * Original Poster Urls
+     */
+    original_poster_urls?: Array<string>;
+    /**
+     * Poster Urls
+     */
+    poster_urls?: Array<string>;
+    /**
+     * Thumb Urls
+     */
+    thumb_urls?: Array<string>;
+    /**
+     * Thumb Candidates
+     */
+    thumb_candidates?: Array<string>;
+    /**
+     * Trailer Urls
+     */
+    trailer_urls?: Array<string>;
+    /**
+     * Extrafanart Urls
+     */
+    extrafanart_urls?: {
+        [key: string]: unknown;
+    };
+    /**
+     * Scores
+     */
+    scores?: {
+        [key: string]: number;
+    };
+    /**
+     * External Ids
+     */
+    external_ids?: {
+        [key: string]: unknown;
+    };
+    /**
+     * Theporndb Uuid
+     */
+    theporndb_uuid?: string | null;
+    /**
+     * Source Urls
+     */
+    source_urls?: {
+        [key: string]: unknown;
+    };
+    /**
+     * Locked Fields
+     */
+    locked_fields?: Array<MetadataField>;
+    /**
+     * File Count
+     */
+    file_count?: number;
+    file_phase?: FilePhaseSummary;
+    /**
+     * Created At
+     */
+    created_at?: string | null;
+    /**
+     * Updated At
+     */
+    updated_at?: string | null;
+};
+
+/**
  * MetadataListResponse
  */
 export type MetadataListResponse = {
     /**
      * Items
      */
-    items: Array<MetadataResponse>;
+    items: Array<MetadataListItem>;
     /**
      * Total
      */
@@ -3042,6 +3212,30 @@ export type MetadataLocksRequest = {
      * 锁定的字段集合; 空集解除全部锁定
      */
     fields?: Array<MetadataField>;
+};
+
+/**
+ * MetadataMergeEntriesRequest
+ */
+export type MetadataMergeEntriesRequest = {
+    /**
+     * Target Id
+     *
+     * 合并目标 Metadata ID; 其字段与已有站点快照保持不变
+     */
+    target_id: number;
+    /**
+     * Source Ids
+     *
+     * 待合并的 Metadata ID 列表; 按顺序补入 raw 快照
+     */
+    source_ids: Array<number>;
+    /**
+     * Rescrape
+     *
+     * 合并后按当前优先级对目标番号入队 SCRAPE, 复用 raw 缓存重新聚合字段
+     */
+    rescrape?: boolean;
 };
 
 /**
@@ -3144,6 +3338,8 @@ export type MetadataPartial = {
 
 /**
  * MetadataResponse
+ *
+ * 详情与单条写接口的全量条目: 在列表项之上补 raw / field_sources.
  */
 export type MetadataResponse = {
     /**
@@ -3280,18 +3476,6 @@ export type MetadataResponse = {
         [key: string]: unknown;
     };
     /**
-     * Field Sources
-     */
-    field_sources?: {
-        [key: string]: unknown;
-    };
-    /**
-     * Raw
-     */
-    raw?: {
-        [key: string]: unknown;
-    };
-    /**
      * Locked Fields
      */
     locked_fields?: Array<MetadataField>;
@@ -3308,6 +3492,18 @@ export type MetadataResponse = {
      * Updated At
      */
     updated_at?: string | null;
+    /**
+     * Field Sources
+     */
+    field_sources?: {
+        [key: string]: unknown;
+    };
+    /**
+     * Raw
+     */
+    raw?: {
+        [key: string]: unknown;
+    };
 };
 
 /**
@@ -3337,6 +3533,36 @@ export type MetadataUserTagsRequest = {
      * attach 为并入, detach 为移除; 两者均幂等
      */
     action: 'attach' | 'detach';
+};
+
+/**
+ * MetadataUserTagsResponse
+ */
+export type MetadataUserTagsResponse = {
+    /**
+     * Changed
+     *
+     * 至少一处挂载关系发生变更的条目数
+     */
+    changed: number;
+    /**
+     * Unchanged
+     *
+     * 已处于目标态、未修改的条目数
+     */
+    unchanged: number;
+    /**
+     * Missing
+     *
+     * 不存在的条目 id 数
+     */
+    missing: number;
+    /**
+     * Skipped
+     *
+     * 请求内重复的条目 id 数量; 已去重
+     */
+    skipped?: number;
 };
 
 /**
@@ -5011,7 +5237,7 @@ export type SemanticDiagnosticsResponse = {
 /**
  * SemanticHitInfo
  *
- * 语义检索的命中图片: 与列表项按 id 对应, 不扩展 ``MetadataResponse`` 本身.
+ * 语义检索的命中图片: 与列表项按 id 对应, 不扩展列表项模型本身.
  */
 export type SemanticHitInfo = {
     /**
@@ -7049,10 +7275,35 @@ export type BatchMetadataUserTagsResponses = {
     /**
      * Successful Response
      */
-    200: UserTagLinksResponse;
+    200: MetadataUserTagsResponse;
 };
 
 export type BatchMetadataUserTagsResponse = BatchMetadataUserTagsResponses[keyof BatchMetadataUserTagsResponses];
+
+export type MergeMetadataEntriesData = {
+    body: MetadataMergeEntriesRequest;
+    path?: never;
+    query?: never;
+    url: '/api/metadata/merge-entries';
+};
+
+export type MergeMetadataEntriesErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type MergeMetadataEntriesError = MergeMetadataEntriesErrors[keyof MergeMetadataEntriesErrors];
+
+export type MergeMetadataEntriesResponses = {
+    /**
+     * Successful Response
+     */
+    200: MetadataResponse;
+};
+
+export type MergeMetadataEntriesResponse = MergeMetadataEntriesResponses[keyof MergeMetadataEntriesResponses];
 
 export type DeleteMetadataData = {
     body?: never;
@@ -9056,12 +9307,6 @@ export type ProxyImageData = {
          * External image URL to proxy
          */
         url: string;
-        /**
-         * Mode
-         *
-         * Browser cache mode
-         */
-        mode?: string | null;
     };
     url: '/api/resources/proxy';
 };
@@ -9090,14 +9335,7 @@ export type ServeResourceData = {
          */
         url_hash: string;
     };
-    query?: {
-        /**
-         * Mode
-         *
-         * Browser cache mode
-         */
-        mode?: string | null;
-    };
+    query?: never;
     url: '/api/resources/{url_hash}';
 };
 

@@ -13,7 +13,7 @@ from ...utils.model import anyof_extras, create_partial_model, kv
 from .comments import CommentResponse
 from .crop import CropBoxRequest
 from .media import MediaFileResponse
-from .user_tags import UserTagResponse
+from .user_tags import UserTagLinksResponse, UserTagResponse
 
 _METADATA_FIELD_VALUES = frozenset(str(field) for field in MetadataField)
 
@@ -29,7 +29,9 @@ class FilePhaseSummary(BaseModel):
     ltx: bool = False
 
 
-class MetadataResponse(BaseModel):
+class MetadataListItem(BaseModel):
+    """列表与语义检索的条目: 不含 raw / field_sources, 详情才返回全量."""
+
     id: int
     number: str
     content_type: ContentType
@@ -63,8 +65,6 @@ class MetadataResponse(BaseModel):
     external_ids: dict = {}
     theporndb_uuid: str | None = None
     source_urls: dict = {}
-    field_sources: dict = {}
-    raw: dict = {}
     locked_fields: list[MetadataField] = []
 
     @field_validator("locked_fields", mode="before")
@@ -79,6 +79,13 @@ class MetadataResponse(BaseModel):
     file_phase: FilePhaseSummary = Field(default_factory=FilePhaseSummary)
     created_at: datetime | None = None
     updated_at: datetime | None = None
+
+
+class MetadataResponse(MetadataListItem):
+    """详情与单条写接口的全量条目: 在列表项之上补 raw / field_sources."""
+
+    field_sources: dict = {}
+    raw: dict = {}
 
 
 if TYPE_CHECKING:
@@ -115,7 +122,7 @@ PartialMetadata = create_partial_model(
 
 
 class SemanticHitInfo(BaseModel):
-    """语义检索的命中图片: 与列表项按 id 对应, 不扩展 ``MetadataResponse`` 本身."""
+    """语义检索的命中图片: 与列表项按 id 对应, 不扩展列表项模型本身."""
 
     id: int
     kind: EmbeddingKind
@@ -126,7 +133,7 @@ class SemanticHitInfo(BaseModel):
 
 
 class MetadataListResponse(BaseModel):
-    items: list[MetadataResponse]
+    items: list[MetadataListItem]
     total: int
     actor_display_names: dict[str, str] = Field(
         default_factory=dict,
@@ -156,6 +163,17 @@ class MetadataDetailResponse(BaseModel):
 
 class MergeRequest(BaseModel):
     selections: dict[str, str] = Field(description="field_name -> source_key 映射")
+
+
+class MetadataMergeEntriesRequest(BaseModel):
+    target_id: int = Field(description="合并目标 Metadata ID; 其字段与已有站点快照保持不变")
+    source_ids: list[int] = Field(
+        min_length=1, max_length=1000, description="待合并的 Metadata ID 列表; 按顺序补入 raw 快照"
+    )
+    rescrape: bool = Field(
+        default=False,
+        description="合并后按当前优先级对目标番号入队 SCRAPE, 复用 raw 缓存重新聚合字段",
+    )
 
 
 class MetadataLocksRequest(BaseModel):
@@ -213,16 +231,17 @@ class CropPosterRequest(CropBoxRequest):
 
 
 class MetadataBatchIdsRequest(BaseModel):
-    ids: list[int] = Field(min_length=1, description="Metadata ID 列表")
+    ids: list[int] = Field(min_length=1, max_length=1000, description="Metadata ID 列表")
 
 
 class MetadataBatchDeleteResponse(BaseModel):
     deleted: int = Field(description="成功删除的数量")
     missing: int = Field(description="不存在的 id 数量")
+    skipped: int = Field(default=0, description="请求内重复的 id 数量; 已去重")
 
 
 class MetadataBatchScrapeRequest(BaseModel):
-    ids: list[int] = Field(min_length=1, description="Metadata ID 列表")
+    ids: list[int] = Field(min_length=1, max_length=1000, description="Metadata ID 列表")
     content_type: ContentType | None = Field(
         default=None, description="内容类型; None = 用条目已落定的类型 (不重新推断)"
     )
@@ -235,10 +254,15 @@ class MetadataBatchScrapeRequest(BaseModel):
 class MetadataBatchScrapeResponse(BaseModel):
     submitted: int = Field(description="成功提交的任务数")
     missing: int = Field(description="不存在的 id 数量")
+    skipped: int = Field(default=0, description="请求内重复的 id 数量; 已去重")
     task_ids: list[int] = Field(description="提交的任务 id 列表")
 
 
 class MetadataUserTagsRequest(BaseModel):
-    ids: list[int] = Field(min_length=1, description="Metadata ID 列表")
-    user_tag_ids: list[int] = Field(min_length=1, description="用户标签 ID 列表")
+    ids: list[int] = Field(min_length=1, max_length=1000, description="Metadata ID 列表")
+    user_tag_ids: list[int] = Field(min_length=1, max_length=1000, description="用户标签 ID 列表")
     action: Literal["attach", "detach"] = Field(description="attach 为并入, detach 为移除; 两者均幂等")
+
+
+class MetadataUserTagsResponse(UserTagLinksResponse):
+    skipped: int = Field(default=0, description="请求内重复的条目 id 数量; 已去重")

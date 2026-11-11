@@ -22,6 +22,7 @@ from ...media.upload import StoredUpload, UploadRejected, store_upload
 from ...parsing import ContentType, summarize_file_phases
 from ...parsing import FilePhaseSummary as ParsedFilePhase
 from ...semantic import SemanticUnavailable
+from ...utils.collections import unique_ids
 from ...utils.dates import normalize_calendar_date
 from ...utils.model import to_resp
 from ..deps import RepoDep, RuntimeDep
@@ -39,13 +40,15 @@ from ..models import (
     MetadataBatchScrapeRequest,
     MetadataBatchScrapeResponse,
     MetadataDetailResponse,
+    MetadataListItem,
     MetadataListResponse,
     MetadataLocksRequest,
+    MetadataMergeEntriesRequest,
     MetadataResponse,
     MetadataUserTagsRequest,
+    MetadataUserTagsResponse,
     PartialMetadata,
     SemanticHitInfo,
-    UserTagLinksResponse,
     UserTagResponse,
     to_media_file_response,
 )
@@ -63,13 +66,16 @@ router = APIRouter(prefix="/metadata", tags=["metadata"])
 
 async def build_metadata_responses(
     repo: RepoDep, items: Sequence[Metadata], runtime: RuntimeDep
-) -> list[MetadataResponse]:
-    """列表与语义检索共用: 补 file_count / file_phase 聚合."""
+) -> list[MetadataListItem]:
+    """列表与语义检索共用: 补 file_count / file_phase 聚合; 列表项不含 raw / field_sources."""
     summaries = await repo.summarize_media_by_metadata(items)
-    responses: list[MetadataResponse] = []
+    responses: list[MetadataListItem] = []
     for m in items:
         summary = summaries.get(m.id) if m.id is not None else None
-        response = to_resp(MetadataResponse, m).model_copy(update={"tags": runtime.tag_mappings.map_tags(m.tags)})
+        # 列表项也要中文映射: 片库卡片直接显示这些标签.
+        response = to_resp(MetadataListItem, m).model_copy(
+            update={"tags": runtime.tag_mappings.map_tags(m.tags)}
+        )
         if summary is not None:
             response = response.model_copy(
                 update={
@@ -236,19 +242,23 @@ async def _semantic_list(
 
 @router.post("/batch/delete")
 async def batch_delete_metadata(req: MetadataBatchIdsRequest, repo: RepoDep) -> MetadataBatchDeleteResponse:
-    """级联行为与单条删除一致."""
-    deleted, missing = await repo.batch_delete_metadata(req.ids)
-    logger.info("metadata batch deleted", deleted=deleted, missing=missing)
-    return MetadataBatchDeleteResponse(deleted=deleted, missing=missing)
+    """级联行为与单条删除一致; 重复 id 去重后只处理一次."""
+    ids = unique_ids(req.ids)
+    deleted, missing = await repo.batch_delete_metadata(ids)
+    skipped = len(req.ids) - len(ids)
+    logger.info("metadata batch deleted", deleted=deleted, missing=missing, skipped=skipped)
+    return MetadataBatchDeleteResponse(deleted=deleted, missing=missing, skipped=skipped)
 
 
 @router.post("/batch/scrape", status_code=202)
 async def batch_scrape_metadata(req: MetadataBatchScrapeRequest, repo: RepoDep) -> MetadataBatchScrapeResponse:
-    """以各自 Metadata ID / ThePornDB UUID 重新刮削."""
+    """以各自 Metadata ID / ThePornDB UUID 重新刮削; 重复 id 去重后只提交一次."""
+    ids = unique_ids(req.ids)
+    metadata_by_id = {meta.id: meta for meta in await repo.get_metadata_by_ids(ids) if meta.id is not None}
     missing = 0
     payloads: list[ScrapePayload] = []
-    for metadata_id in req.ids:
-        metadata = await repo.get_metadata(metadata_id)
+    for metadata_id in ids:
+        metadata = metadata_by_id.get(metadata_id)
         if metadata is None:
             missing += 1
             continue
@@ -270,25 +280,60 @@ async def batch_scrape_metadata(req: MetadataBatchScrapeRequest, repo: RepoDep) 
     # 批量提交动辄数百条, 逐条提交会重复付出事务开销
     tasks = await repo.create_tasks(TaskType.SCRAPE, payloads)
     task_ids = [task.id for task in tasks if task.id is not None]
-    logger.info("metadata batch scrape submitted", submitted=len(task_ids), missing=missing)
-    return MetadataBatchScrapeResponse(submitted=len(task_ids), missing=missing, task_ids=task_ids)
+    skipped = len(req.ids) - len(ids)
+    logger.info("metadata batch scrape submitted", submitted=len(task_ids), missing=missing, skipped=skipped)
+    return MetadataBatchScrapeResponse(submitted=len(task_ids), missing=missing, skipped=skipped, task_ids=task_ids)
 
 
 @router.post("/batch/user-tags")
-async def batch_metadata_user_tags(req: MetadataUserTagsRequest, repo: RepoDep) -> UserTagLinksResponse:
+async def batch_metadata_user_tags(req: MetadataUserTagsRequest, repo: RepoDep) -> MetadataUserTagsResponse:
     """把一组用户标签应用到一组影片; 未知标签 id 返回 404, 不存在的影片 id 计入 missing."""
+    ids = unique_ids(req.ids)
     try:
-        result = await repo.apply_metadata_user_tags(req.ids, req.user_tag_ids, action=req.action)
+        result = await repo.apply_metadata_user_tags(ids, req.user_tag_ids, action=req.action)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
+    skipped = len(req.ids) - len(ids)
     logger.info(
         "metadata user tags applied",
         action=req.action,
         changed=result.changed,
         unchanged=result.unchanged,
         missing=result.missing,
+        skipped=skipped,
     )
-    return UserTagLinksResponse(changed=result.changed, unchanged=result.unchanged, missing=result.missing)
+    return MetadataUserTagsResponse(
+        changed=result.changed, unchanged=result.unchanged, missing=result.missing, skipped=skipped
+    )
+
+
+@router.post("/merge-entries")
+async def merge_metadata_entries(req: MetadataMergeEntriesRequest, repo: RepoDep) -> MetadataResponse:
+    """把来源条目的 raw 快照补入目标并删除来源: 目标字段不变, 关联记录迁入目标.
+
+    ``rescrape`` 要求合并提交后再按目标番号入队 SCRAPE: 只有 raw 已落库, 复用快照的聚合
+    才能按当前优先级重建字段与站点级字典.
+    """
+    try:
+        metadata = await repo.merge_metadata_entries(req.target_id, req.source_ids)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    if metadata is None:
+        raise HTTPException(status_code=404, detail="影片不存在")
+    rescrape_task_id: int | None = None
+    if req.rescrape:
+        task = await repo.create_task(
+            TaskType.SCRAPE,
+            ScrapePayload(number=metadata.number, content_type=metadata.content_type),
+        )
+        rescrape_task_id = task.id
+    logger.info(
+        "metadata entries merged",
+        target_id=req.target_id,
+        source_ids=req.source_ids,
+        rescrape_task_id=rescrape_task_id,
+    )
+    return to_resp(MetadataResponse, metadata)
 
 
 @router.get("/{metadata_id}")

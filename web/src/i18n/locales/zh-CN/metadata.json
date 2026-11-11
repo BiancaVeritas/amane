@@ -407,7 +407,7 @@
     "name": "名称",
     "count": "数量",
     "mergeGuide": "勾选来源后点击目标行的合并图标",
-    "mergeNeedSources": "请先勾选要合并的来源项, 再点目标项的合并",
+    "mergeNeedSources": "请先选中至少一个其它条目作为来源",
     "merge": "合并到此项",
     "mergeConfirm": "确认合并",
     "mergeConfirmBody": "将把 {{count}} 个来源合并到目标项",
@@ -421,7 +421,13 @@
     "ruleTarget": "目标",
     "ruleBlock": "剔除",
     "ruleAlias": "别名",
-    "ruleRemove": "移除规则"
+    "ruleRemove": "移除规则",
+    "mergeEntriesLead": "将 {{count}} 个条目合并到 {{number}}?",
+    "mergeEntriesKeep": "目标的字段与锁定状态保持不变",
+    "mergeEntriesRaw": "来源的站点快照按顺序补入目标缺失的站点",
+    "mergeEntriesLinks": "来源的文件、评论与标签改挂到目标",
+    "mergeEntriesDelete": "来源条目合并后删除",
+    "mergeEntriesRescrape": "合并后按目标番号重新刮削（复用快照）"
   },
   "merge": {
     "title": "对比来源",

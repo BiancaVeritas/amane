@@ -3,8 +3,10 @@ from datetime import datetime
 from typing import Unpack, cast
 
 import structlog
-from sqlalchemy import ColumnElement, func, or_, text
+from sqlalchemy import ColumnElement, distinct, func, or_, text, update
+from sqlalchemy import delete as sqla_delete
 from sqlalchemy import update as sqla_update
+from sqlalchemy.orm import Mapped
 from sqlalchemy.sql.functions import count
 from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -14,6 +16,7 @@ from ...parsing import ContentType, Mosaic, infer_content_type
 from ...utils.collections import unique_ids
 from ...utils.text import normalize_long_text
 from ..models import (
+    Comment,
     MediaFile,
     MediaFileStatus,
     MediaIdentity,
@@ -41,7 +44,7 @@ from ..repo_types import (
     _metadata_uncensored_predicate,
     _utcnow,
 )
-from .base import RepositoryMixinBase
+from .base import RepositoryMixinBase, acquire_write_lock, chunks
 from .facet_helpers import (
     apply_facet_rules_to_metadata,
     cascade_delete_metadata,
@@ -69,6 +72,40 @@ def _normalize_text_fields(fields: MetadataFields) -> MetadataFields:
 def _image_signature(metadata: Metadata) -> tuple[list[str], list[str], dict[str, list[str]]]:
     """封面与剧照的来源字段; 变化即向量失效 (缩略图作为封面回退, 一并纳入)."""
     return (metadata.poster_urls, metadata.thumb_urls, metadata.extrafanart_urls)
+
+
+def _merge_raw_snapshots(
+    target: Mapping[str, Mapping[str, object]],
+    sources: Sequence[Mapping[str, Mapping[str, object]]],
+) -> dict[str, dict[str, object]]:
+    """按站点补入来源快照: 目标已有的站点保持不变, 来源之间按传入顺序先到先得."""
+    merged = {site: dict(snapshot) for site, snapshot in target.items()}
+    for source in sources:
+        for site, snapshot in source.items():
+            merged.setdefault(site, dict(snapshot))
+    return merged
+
+
+def _facet_link_condition(
+    link_metadata_id: Mapped[int],
+    facet_column: Mapped[int],
+    facet_ids: Sequence[int] | None,
+) -> ColumnElement[bool] | None:
+    """同一 kind 的多个 id 聚合成一条子查询: 条目必须挂满全部去重后的 id (AND).
+
+    逐 id 各生成一条子查询会线性增加表达式深度, 约 1000 个 id 时 SQLite 报表达式过大;
+    聚合写法的语义不变: 未知 id 使计数不足, 结果为空; 空入参不生成条件.
+    """
+    id_list = list(unique_ids(facet_ids))
+    if not id_list:
+        return None
+    matched = (
+        select(link_metadata_id)
+        .where(facet_column.in_(id_list))
+        .group_by(link_metadata_id)
+        .having(count(distinct(facet_column)) == len(id_list))
+    )
+    return col(Metadata.id).in_(matched)
 
 
 # 锁字段 (MetadataField) ↔ Metadata 列名; 仅 extrafanart / score 两名不同.
@@ -166,24 +203,15 @@ class MetadataRepoMixin(RepositoryMixinBase):
             conditions.append(
                 or_(col(Metadata.number).ilike(search_pattern), col(Metadata.title).ilike(search_pattern))
             )
-        conditions.extend(
-            col(Metadata.id).in_(select(MetadataActor.metadata_id).where(MetadataActor.actor_id == actor_id))
-            for actor_id in unique_ids(actor_ids)
-        )
-        conditions.extend(
-            col(Metadata.id).in_(
-                select(MetadataDirector.metadata_id).where(MetadataDirector.director_id == director_id)
-            )
-            for director_id in unique_ids(director_ids)
-        )
-        conditions.extend(
-            col(Metadata.id).in_(select(MetadataTag.metadata_id).where(MetadataTag.tag_id == tag_id))
-            for tag_id in unique_ids(tag_ids)
-        )
-        conditions.extend(
-            col(Metadata.id).in_(select(MetadataUserTag.metadata_id).where(MetadataUserTag.user_tag_id == user_tag_id))
-            for user_tag_id in unique_ids(user_tag_ids)
-        )
+        for link_metadata_id, facet_column, facet_ids in (
+            (col(MetadataActor.metadata_id), col(MetadataActor.actor_id), actor_ids),
+            (col(MetadataDirector.metadata_id), col(MetadataDirector.director_id), director_ids),
+            (col(MetadataTag.metadata_id), col(MetadataTag.tag_id), tag_ids),
+            (col(MetadataUserTag.metadata_id), col(MetadataUserTag.user_tag_id), user_tag_ids),
+        ):
+            condition = _facet_link_condition(link_metadata_id, facet_column, facet_ids)
+            if condition is not None:
+                conditions.append(condition)
         studio_names = await resolve_scalar_facet_names(session, Studio, studio_ids)
         if studio_ids and not studio_names:
             return None
@@ -352,6 +380,18 @@ class MetadataRepoMixin(RepositoryMixinBase):
     async def get_metadata(self, metadata_id: int) -> Metadata | None:
         async with self._session() as session:
             return await session.get(Metadata, metadata_id)
+
+    async def get_metadata_by_ids(self, ids: Sequence[int]) -> list[Metadata]:
+        """按 id 批量取回, 顺序不保证; 调用方按需重排. 每批用 ``chunks`` 控制绑定变量数."""
+        id_list = list(unique_ids(ids))
+        if not id_list:
+            return []
+        async with self._session() as session:
+            result: list[Metadata] = []
+            for chunk in chunks(id_list):
+                rows = (await session.exec(select(Metadata).where(col(Metadata.id).in_(chunk)))).all()
+                result.extend(rows)
+            return result
 
     async def get_metadata_by_number(self, number: str, *, content_type: ContentType | None = None) -> Metadata | None:
         """大小写不敏感查询番号. WESTERN 同番号可能有多条, 未指定类型且结果歧义时返回 None."""
@@ -878,7 +918,7 @@ class MetadataRepoMixin(RepositoryMixinBase):
         removed: list[int] = []
         async with self._session() as session:
             missing = 0
-            for metadata_id in ids:
+            for metadata_id in unique_ids(ids):
                 metadata = await session.get(Metadata, metadata_id)
                 if metadata is None:
                     missing += 1
@@ -898,3 +938,70 @@ class MetadataRepoMixin(RepositoryMixinBase):
             await self._embeddings.delete_metadata(metadata_ids)
         except Exception:
             logger.warning("embedding cleanup failed", metadata_ids=metadata_ids, exc_info=True)
+
+    async def merge_metadata_entries(self, target_id: int, source_ids: Sequence[int]) -> Metadata | None:
+        """把来源条目的 raw 快照补入目标, 迁移关联记录后删除来源.
+
+        目标字段与锁定集合不变: raw 以目标为准, 来源按传入顺序补入目标缺失的站点, 不重新聚合.
+        媒体文件 / 评论 / 用户标签改挂目标 (标签去重), 分类投影随来源删除.
+        target 不存在返回 None; 来源为空 / 含 target / 不存在则抛 ``ValueError``.
+        """
+        source_id_list = list(dict.fromkeys(source_ids))
+        if target_id in source_id_list:
+            raise ValueError("合并目标不能是来源之一")
+        if not source_id_list:
+            raise ValueError("未提供要合并的影片")
+
+        async with self._session() as session:
+            # 来源判定、raw 合并与关联迁移同处一个写事务: 否则会按旧快照整体写回 raw.
+            await acquire_write_lock(session)
+            target = await session.get(Metadata, target_id)
+            if target is None:
+                return None
+            sources: list[Metadata] = []
+            for source_id in source_id_list:
+                source = await session.get(Metadata, source_id)
+                if source is None:
+                    raise ValueError(f"影片 {source_id} 不存在")
+                sources.append(source)
+
+            target.raw = _merge_raw_snapshots(target.raw or {}, [source.raw or {} for source in sources])
+            target.updated_at = _utcnow()
+            session.add(target)
+
+            target_tag_ids = set(
+                (
+                    await session.exec(
+                        select(MetadataUserTag.user_tag_id).where(col(MetadataUserTag.metadata_id) == target_id)
+                    )
+                ).all()
+            )
+            now = _utcnow()
+            for source in sources:
+                assert source.id is not None
+                source_id = source.id
+                await session.exec(
+                    update(Comment).where(col(Comment.metadata_id) == source_id).values(metadata_id=target_id)
+                )
+                await session.exec(
+                    update(MediaFile)
+                    .where(col(MediaFile.metadata_id) == source_id)
+                    .values(metadata_id=target_id, updated_at=now)
+                )
+                source_tag_ids = set(
+                    (
+                        await session.exec(
+                            select(MetadataUserTag.user_tag_id).where(col(MetadataUserTag.metadata_id) == source_id)
+                        )
+                    ).all()
+                )
+                for tag_id in source_tag_ids - target_tag_ids:
+                    session.add(MetadataUserTag(metadata_id=target_id, user_tag_id=tag_id))
+                    target_tag_ids.add(tag_id)
+                await session.exec(sqla_delete(MetadataUserTag).where(col(MetadataUserTag.metadata_id) == source_id))
+                await cascade_delete_metadata(session, source)
+
+            await session.commit()
+            await session.refresh(target)
+        await self._drop_embeddings(source_id_list)
+        return target
