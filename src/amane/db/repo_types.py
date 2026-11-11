@@ -327,7 +327,12 @@ class LibraryUpdates(TypedDict, total=False):
     recursive: bool
     patterns: list[str]
     move_mode: MoveMode
+    watch_dir_enabled: bool
+    watch_path: str | None
+    watch_rename: bool
     video_template: str
+    use_jinja_template: bool
+    jinja_video_template: str | None
     custom_placeholders: dict[str, str]
     link_template: str | None
     link_mode: LinkMode

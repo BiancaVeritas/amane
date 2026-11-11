@@ -34,6 +34,7 @@ dependencies = [
     "numpy>=2.5.0",
     "onnxruntime>=1.31.0; sys_platform != 'darwin'",
     "tokenizers>=0.23.0",
+    "jinja2>=3.1.6",
     "pyobjc-framework-CoreML>=12.2.0; sys_platform == 'darwin'",
 ]
 

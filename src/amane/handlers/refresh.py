@@ -167,3 +167,34 @@ class RefreshHandler(TaskHandler[RefreshPayload, RefreshResult]):
         assert media.id is not None
         await self._repo.update_media_file(media.id, has_external_subtitle=hit.has_companion_subtitle)
         return 1
+
+
+def _scrape_targets(files: Sequence[MediaFile]) -> list[MediaFile]:
+    """挑出该发 SCRAPE 的文件: 多盘片只留 CD1.
+
+    同一番号的 CD1/CD2/CD3 共用一份元数据 (刮削结果按番号找), 每张各发一次只是把同一批
+    站点重打若干遍. 整组没有 CD1 时不刮 — 缺首盘通常是抓取不完整, 让用户自己判断比按 CD2
+    的数据落库更安全.
+
+    无 CD 标记的文件原样保留.
+    """
+    singles: list[MediaFile] = []
+    # 番号 → 该组里 CD 编号与文件的对应
+    grouped: dict[str, dict[int, MediaFile]] = {}
+    for f in files:
+        parsed = parse_file_info(f.path)
+        if parsed.number is None:
+            continue
+        if parsed.cd is None:
+            singles.append(f)
+            continue
+        grouped.setdefault(parsed.number, {})[parsed.cd] = f
+
+    picked = list(singles)
+    for number, by_cd in grouped.items():
+        first = by_cd.get(1)
+        if first is not None:
+            picked.append(first)
+        else:
+            logger.info("multi-disc first disc missing, skip scraping", number=number, cds=sorted(by_cd))
+    return picked

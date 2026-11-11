@@ -15,6 +15,7 @@ from ..models import (
     LibraryUpdateRequest,
     PathTemplateSchemaResponse,
     path_template_schema,
+    to_forward_slash_path,
 )
 from ..support.path_validation import validate_directory_path
 
@@ -48,6 +49,8 @@ async def list_libraries(repo: RepoDep) -> LibraryListResponse:
 
 @router.post("", status_code=201)
 async def create_library(req: LibraryCreateRequest, repo: RepoDep, runtime: RuntimeDep) -> LibraryResponse:
+    # 分隔符统一成 /: 从 Windows 复制的反斜杠路径就地转换, 免得库里出现两种写法.
+    watch_path = to_forward_slash_path(req.watch_path)
     # 校验路径: 须存在、是目录、位于 safe_dirs 内
     await validate_directory_path(req.path, runtime.safe_dirs)
 
@@ -64,7 +67,12 @@ async def create_library(req: LibraryCreateRequest, repo: RepoDep, runtime: Runt
             recursive=req.recursive,
             patterns=req.patterns,
             move_mode=req.move_mode,
+            watch_dir_enabled=req.watch_dir_enabled,
+            watch_path=watch_path,
+            watch_rename=req.watch_rename,
             video_template=req.video_template,
+            use_jinja_template=req.use_jinja_template,
+            jinja_video_template=req.jinja_video_template,
             custom_placeholders=req.custom_placeholders,
             link_template=req.link_template,
             link_mode=req.link_mode,
@@ -140,6 +148,8 @@ async def update_library(
     # 仅 path 被显式更新时才校验
     if "path" in updates and updates["path"] is not None:
         await validate_directory_path(updates["path"], runtime.safe_dirs)
+    if "watch_path" in updates:
+        updates["watch_path"] = to_forward_slash_path(updates["watch_path"])
 
     try:
         lib = await repo.update_library(library_id, **updates)

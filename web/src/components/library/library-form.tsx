@@ -32,6 +32,7 @@ import type {
   PathTemplateSchemaResponse,
 } from "@/client/types.gen";
 import { PathPicker } from "@/components/path-picker";
+import { MultilineTemplateInput } from "./multiline-template-input";
 import { encodeFormBody } from "@/components/schema-form/encode";
 import { EnumToggle } from "@/components/common/enum-toggle";
 import { FieldChrome } from "@/components/schema-form/fields/field-chrome";
@@ -69,6 +70,9 @@ const OPTIONAL_TEMPLATE_KEYS = [
   "subtitle_template",
 ] as const satisfies readonly (keyof OptionalPathTemplateDefaults)[];
 
+const JINJA_VIDEO_TEMPLATE_DEFAULT =
+  "{{studio}}/{{number}}/{{number}}{% if cd %}-CD{{cd}}{% endif %}{% if sub %}-C{% endif %}.{{ext}}";
+
 const MOVE_MODES: readonly LibraryResponse["move_mode"][] = ["move", "copy", "hardlink", "symlink"];
 
 const BYTES_PER_MB = 1024 * 1024;
@@ -87,12 +91,24 @@ export const LIBRARY_AUTOMATION_BADGE_COLOR = {
   scrape: "teal",
 } as const satisfies Record<LibraryAutomation, string>;
 
+/** 路径统一用 / 分隔; 反斜杠就地转换, 与后端 to_forward_slash_path 同取向. */
+function toForwardSlashPath(value: string): string {
+  if (!value) return value;
+  const converted = value.replaceAll("\\", "/");
+  // UNC 的 //host 是前缀, 内部重复斜杠收敛成一个.
+  const prefix = converted.startsWith("//") ? "//" : "";
+  return prefix + converted.slice(prefix.length).replaceAll("//", "/");
+}
+
 export interface LibraryFormState {
   name: string;
   path: string;
   recursive: boolean;
   patterns: string;
   move_mode: LibraryResponse["move_mode"];
+  watch_dir_enabled: boolean;
+  watch_path: string;
+  watch_rename: boolean;
   link_template: string;
   link_mode: LibraryResponse["link_mode"];
   strm_content_template: string;
@@ -103,6 +119,8 @@ export interface LibraryFormState {
   min_file_size: number;
   subtitle_extensions: string;
   video_template: string;
+  use_jinja_template: boolean;
+  jinja_video_template: string;
   custom_placeholders: Record<string, string>;
   thumb_template: string;
   poster_template: string;
@@ -127,6 +145,9 @@ export function emptyLibraryForm(schema?: PathTemplateSchemaResponse | null): Li
     recursive: true,
     patterns: "",
     move_mode: "move",
+    watch_dir_enabled: false,
+    watch_path: "",
+    watch_rename: false,
     link_template: "",
     link_mode: "strm",
     strm_content_template: "",
@@ -139,6 +160,8 @@ export function emptyLibraryForm(schema?: PathTemplateSchemaResponse | null): Li
       schema?.subtitle_extensions_default ?? [".srt", ".ass", ".ssa", ".vtt", ".sub"]
     ).join(", "),
     video_template: schema?.video_default ?? "{studio}/{number}/{number}[-CD{cd?}][-{sub?}].{ext}",
+    use_jinja_template: false,
+    jinja_video_template: JINJA_VIDEO_TEMPLATE_DEFAULT,
     custom_placeholders: {},
     thumb_template: defaults?.thumb_template ?? "",
     poster_template: defaults?.poster_template ?? "",
@@ -163,6 +186,9 @@ export function libraryFormFromResponse(lib: LibraryResponse): LibraryFormState 
     recursive: lib.recursive,
     patterns: lib.patterns?.join(", ") ?? "",
     move_mode: lib.move_mode,
+    watch_dir_enabled: lib.watch_dir_enabled,
+    watch_path: lib.watch_path ?? "",
+    watch_rename: lib.watch_rename,
     link_template: lib.link_template ?? "",
     link_mode: lib.link_mode,
     strm_content_template: lib.strm_content_template ?? "",
@@ -173,6 +199,8 @@ export function libraryFormFromResponse(lib: LibraryResponse): LibraryFormState 
     min_file_size: lib.min_file_size ?? 0,
     subtitle_extensions: lib.subtitle_extensions?.join(", ") ?? "",
     video_template: lib.video_template,
+    use_jinja_template: lib.use_jinja_template,
+    jinja_video_template: lib.jinja_video_template ?? JINJA_VIDEO_TEMPLATE_DEFAULT,
     custom_placeholders: { ...lib.custom_placeholders },
     thumb_template: lib.thumb_template ?? "",
     poster_template: lib.poster_template ?? "",
@@ -212,6 +240,9 @@ function libraryFormValues(form: LibraryFormState): Record<string, unknown> {
     recursive: form.recursive,
     patterns: parseLibraryPatterns(form.patterns),
     move_mode: form.move_mode,
+    watch_dir_enabled: form.watch_dir_enabled,
+    watch_path: form.watch_path || null,
+    watch_rename: form.watch_rename,
     link_template: form.link_template.trim(),
     link_mode: form.link_mode,
     strm_content_template: form.strm_content_template.trim(),
@@ -222,6 +253,8 @@ function libraryFormValues(form: LibraryFormState): Record<string, unknown> {
     min_file_size: form.min_file_size,
     subtitle_extensions: parseLibraryPatterns(form.subtitle_extensions),
     video_template: form.video_template.trim(),
+    use_jinja_template: form.use_jinja_template,
+    jinja_video_template: form.jinja_video_template.trim() || null,
     custom_placeholders: form.custom_placeholders,
     thumb_template: form.thumb_template.trim(),
     poster_template: form.poster_template.trim(),
@@ -297,8 +330,12 @@ export function LibraryFormFields({ value, onChange, showCreateOnly }: LibraryFo
     onChange({ ...value, custom_placeholders: next });
   };
 
+  /** 占位符在 UI 上的显示形式: 开监控目录时用 Jinja2 写法, 带 ? 的名字去掉问号. */
+  const placeholderText = (name: string): string =>
+    value.watch_dir_enabled ? "{{" + name.replaceAll("?", "") + "}}" : `{${name}}`;
+
   const copyPlaceholder = async (name: string) => {
-    const text = `{${name}}`;
+    const text = placeholderText(name);
     // HTTP + IP 访问时 navigator.clipboard 不可用, copyText 会退回 execCommand.
     if (await copyText(text)) {
       notifications.show({
@@ -326,8 +363,28 @@ export function LibraryFormFields({ value, onChange, showCreateOnly }: LibraryFo
           style={{ flex: "1 1 12rem" }}
         />
       </Group>
+      <FieldChrome label={t("watchEnabled.title")} description={t("watchEnabled.hint")}>
+        <Switch
+          checked={value.watch_dir_enabled}
+          onChange={(e) => onChange({ ...value, watch_dir_enabled: e.currentTarget.checked })}
+          aria-label={t("watchEnabled.title")}
+        />
+      </FieldChrome>
+      {value.watch_dir_enabled && (
+        <>
+          <FieldChrome label={t("watchPath.label")} description={t("watchPath.hint")}>
+            <PathPicker
+              value={value.watch_path}
+              onChange={(watch_path) =>
+                onChange({ ...value, watch_path: toForwardSlashPath(watch_path) })
+              }
+              placeholder={t("watchPath.placeholder")}
+            />
+          </FieldChrome>
+        </>
+      )}
       <PathPicker
-        label={t("fieldPath")}
+        label={value.watch_dir_enabled ? t("fieldTargetPath") : t("fieldPath")}
         placeholder={t("placeholder")}
         value={value.path}
         onChange={(path) => onChange({ ...value, path })}
@@ -358,6 +415,16 @@ export function LibraryFormFields({ value, onChange, showCreateOnly }: LibraryFo
             value={value.cloud_path}
             onChange={(e) => onChange({ ...value, cloud_path: e.currentTarget.value })}
           />
+        )}
+        {/* 是否让目标目录里的文件按模板改名; 与下载目录无关, 始终可选. */}
+        {value.watch_dir_enabled && (
+          <FieldChrome label={t("watchRename.label")} description={t("watchRename.hint")}>
+            <Switch
+              checked={value.watch_rename}
+              onChange={(e) => onChange({ ...value, watch_rename: e.currentTarget.checked })}
+              aria-label={t("watchRename.label")}
+            />
+          </FieldChrome>
         )}
       </SimpleGrid>
       <Stack gap="sm">
@@ -451,13 +518,25 @@ export function LibraryFormFields({ value, onChange, showCreateOnly }: LibraryFo
           ))}
         </Group>
       </Checkbox.Group>
+      {/* 原模板始终保留在原位; 开了监控目录只置灰, 不替换也不挪动. */}
       <TemplateInput
         label={t("fieldVideoTemplate")}
         description={t("fieldVideoTemplateHint")}
         catalog={catalog}
         value={value.video_template}
+        disabled={value.watch_dir_enabled}
         onChange={(e) => onChange({ ...value, video_template: e.currentTarget.value })}
       />
+      {value.watch_dir_enabled && (
+        <MultilineTemplateInput
+          label={t("fieldJinjaVideoTemplate")}
+          description={t("fieldJinjaVideoTemplateHint")}
+          value={value.jinja_video_template}
+          placeholder={JINJA_VIDEO_TEMPLATE_DEFAULT}
+          rows={3}
+          onChange={(e) => onChange({ ...value, jinja_video_template: e.currentTarget.value })}
+        />
+      )}
       <TemplateInput
         label={t("fieldLinkTemplate")}
         description={t("fieldLinkTemplateHint")}
@@ -532,7 +611,7 @@ export function LibraryFormFields({ value, onChange, showCreateOnly }: LibraryFo
                     }
                     onClick={() => void copyPlaceholder(p.name)}
                   >
-                    {`{${p.name}}`}
+                    {placeholderText(p.name)}
                   </Badge>
                 </Tooltip>
               );
@@ -621,22 +700,30 @@ export function LibraryFormFields({ value, onChange, showCreateOnly }: LibraryFo
             getLabel={(level) => t(`automation.${level}`)}
           />
         </FieldChrome>
-        <FieldChrome label={t("autoOrganize.label")} description={t("autoOrganize.hint")}>
-          <Switch
-            checked={value.auto_organize}
-            onChange={(e) => onChange({ ...value, auto_organize: e.currentTarget.checked })}
-            aria-label={t("autoOrganize.label")}
-          />
-        </FieldChrome>
-        {showCreateOnly && (
-          <FieldChrome label={t("fieldInitialRefresh")}>
+        <Group align="flex-start" gap="xl" wrap="wrap">
+          <FieldChrome
+            label={t("autoOrganize.label")}
+            description={
+              value.watch_dir_enabled ? t("autoOrganize.forcedHint") : t("autoOrganize.hint")
+            }
+          >
             <Switch
-              checked={value.scan}
-              onChange={(e) => onChange({ ...value, scan: e.currentTarget.checked })}
-              aria-label={t("fieldInitialRefresh")}
+              checked={value.auto_organize || value.watch_dir_enabled}
+              disabled={value.watch_dir_enabled}
+              onChange={(e) => onChange({ ...value, auto_organize: e.currentTarget.checked })}
+              aria-label={t("autoOrganize.label")}
             />
           </FieldChrome>
-        )}
+          {showCreateOnly && (
+            <FieldChrome label={t("fieldInitialRefresh")}>
+              <Switch
+                checked={value.scan}
+                onChange={(e) => onChange({ ...value, scan: e.currentTarget.checked })}
+                aria-label={t("fieldInitialRefresh")}
+              />
+            </FieldChrome>
+          )}
+        </Group>
       </SimpleGrid>
     </Stack>
   );

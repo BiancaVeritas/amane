@@ -48,6 +48,8 @@ interface TemplateInputProps {
   onChange: (event: ChangeEvent<HTMLInputElement>) => void;
   catalog?: TemplateCatalog;
   id?: string;
+  /** 置灰并禁止编辑; 着色层一并隐藏, 否则会盖住灰底. */
+  disabled?: boolean;
 }
 
 /** 路径 / STRM 模板输入: 透明字叠着色层, 外观与 TextInput 相同. */
@@ -59,6 +61,7 @@ export function TemplateInput({
   onChange,
   catalog,
   id,
+  disabled = false,
 }: TemplateInputProps) {
   const uid = useId(id);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -99,7 +102,12 @@ export function TemplateInput({
   return (
     <Input.Wrapper label={label} description={description} id={uid}>
       <div className={classes.shell}>
-        <div ref={highlightRef} className={classes.highlight} aria-hidden>
+        <div
+          ref={highlightRef}
+          className={classes.highlight}
+          aria-hidden={disabled || undefined}
+          hidden={disabled}
+        >
           <span className={classes.highlightInner}>
             {tokens.map((token, index) => (
               <span key={index} className={KIND_CLASS[token.kind]}>
@@ -115,8 +123,9 @@ export function TemplateInput({
           placeholder={placeholder}
           spellCheck={false}
           autoComplete="off"
+          disabled={disabled}
           classNames={{
-            input: filled ? `${classes.input} ${classes.inputFilled}` : classes.input,
+            input: filled && !disabled ? `${classes.input} ${classes.inputFilled}` : classes.input,
           }}
           onChange={(event) => {
             onChange(event);

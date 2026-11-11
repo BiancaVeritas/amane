@@ -3,12 +3,13 @@ from .file import OrganizeResult, PlaceOutcome, TargetCheck, TargetState, execut
 from .link import create_video_link
 from .path_templates import (
     EXTRAFANART_NAME_TEMPLATE_DEFAULT,
+    JINJA_VIDEO_TEMPLATE_DEFAULT,
     VIDEO_TEMPLATE_DEFAULT,
     ExtrafanartNameTemplate,
     PathTemplate,
     ResolvedPaths,
-    render_extrafanart_names,
     normalize_link_template,
+    render_extrafanart_names,
     render_path_template,
     resolve_paths,
     resolve_subtitle_path,
@@ -25,6 +26,7 @@ from .subtitles import SubtitleConflict, discover_subtitles, place_subtitles
 
 __all__ = [
     "EXTRAFANART_NAME_TEMPLATE_DEFAULT",
+    "JINJA_VIDEO_TEMPLATE_DEFAULT",
     "VIDEO_TEMPLATE_DEFAULT",
     "ExtrafanartNameTemplate",
     "MoveMode",

@@ -17,8 +17,8 @@ from ...library import (
 from ...organize.path_templates import (
     EXTRAFANART_NAME_TEMPLATE_DEFAULT,
     EXTRAFANART_TEMPLATE_DEFAULT,
-    ExtrafanartNameTemplate,
     FANART_TEMPLATE_DEFAULT,
+    JINJA_VIDEO_TEMPLATE_DEFAULT,
     NFO_TEMPLATE_DEFAULT,
     PLACEHOLDER_MAP_KEYS,
     PLACEHOLDERS,
@@ -27,10 +27,30 @@ from ...organize.path_templates import (
     THUMB_TEMPLATE_DEFAULT,
     TRAILER_TEMPLATE_DEFAULT,
     VIDEO_TEMPLATE_DEFAULT,
+    ExtrafanartNameTemplate,
     PathTemplate,
 )
 from ...organize.strm_content import StrmContentTemplate
 from ...utils.model import create_partial_model, subset_of
+
+
+def to_forward_slash_path(value: str | None) -> str | None:
+    """路径统一用 ``/`` 分隔; 反斜杠（含 UNC 前缀）就地转换.
+
+    与 ``normalize_cloud_path`` 同一取向: 从 Windows 复制的路径带反斜杠, 直接存下来会让同一
+    目录出现两种写法, 比较与前缀判断都要额外兼容.
+    """
+    if value is None:
+        return None
+    converted = value.strip().replace("\\", "/")
+    if not converted:
+        return None
+    # UNC 前缀 \\host 转完是 //host, 保留它; 其余重复斜杠收敛成一个.
+    prefix = "//" if converted.startswith("//") else ""
+    body = converted[len(prefix) :]
+    while "//" in body:
+        body = body.replace("//", "/")
+    return prefix + body
 
 
 class LibraryCreateRequest(BaseModel):
@@ -45,7 +65,17 @@ class LibraryCreateRequest(BaseModel):
     recursive: bool = True
     patterns: list[str] = []
     move_mode: MoveMode = MoveMode.MOVE
+    watch_dir_enabled: bool = False
+    """启用独立监控目录: 目标目录转为原地模式, 另由 ``watch_path`` 承接下载目录."""
+    watch_path: str | None = None
+    """下载目录; 留空表示只开启目标目录的原地模式. 反斜杠在保存时转为 ``/``."""
+    watch_rename: bool = False
+    """原地模式下是否允许按模板重命名."""
     video_template: PathTemplate = VIDEO_TEMPLATE_DEFAULT
+    use_jinja_template: bool = False
+    """启用 Jinja2 命名模板; 开启后 video_template 不再参与渲染."""
+    jinja_video_template: str | None = None
+    """Jinja2 语法下的视频命名模板."""
     custom_placeholders: dict[str, str] = Field(default_factory=dict)
     """自定义占位符: 名字 → 文件名里要匹配的字面串. 名字须是合法标识符."""
     link_template: PathTemplate | None = None
@@ -93,7 +123,12 @@ class LibraryResponse(BaseModel):
     recursive: bool
     patterns: list[str] = []
     move_mode: MoveMode
+    watch_dir_enabled: bool
+    watch_path: str | None
+    watch_rename: bool
     video_template: str
+    use_jinja_template: bool
+    jinja_video_template: str | None
     custom_placeholders: dict[str, str] = Field(default_factory=dict)
     link_template: str | None = None
     link_mode: LinkMode
@@ -158,6 +193,7 @@ class PathTemplateSchemaResponse(BaseModel):
     """与 resolve_paths 同源."""
 
     video_default: str
+    jinja_video_default: str
     optional_defaults: OptionalPathTemplateDefaults
     placeholders: list[PathTemplatePlaceholder]
     subtitle_extensions_default: list[str]
@@ -178,6 +214,7 @@ def path_template_schema(
     ]
     return PathTemplateSchemaResponse(
         video_default=VIDEO_TEMPLATE_DEFAULT,
+        jinja_video_default=JINJA_VIDEO_TEMPLATE_DEFAULT,
         optional_defaults=OPTIONAL_TEMPLATE_DEFAULTS,
         placeholders=[*builtin, *extra],
         subtitle_extensions_default=list(DEFAULT_SUBTITLE_EXTENSIONS),

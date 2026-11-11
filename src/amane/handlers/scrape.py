@@ -7,15 +7,16 @@ from structlog.contextvars import bind_contextvars
 from ..aggregate import SCALAR_FIELDS, AggregatedMetadata, CrawlerLike, FieldLanguage, aggregate, compile_priority
 from ..crawlers.models import SearchQuery
 from ..crawlers.site_roles import builtin_descriptors
-from ..db.models import MediaIdentityType, TaskType
+from ..db.models import MediaFileStatus, MediaIdentityType, TaskType
 from ..enums import ActorGender, MetadataField, SiteName
 from ..media import materialize_images
 from ..media.crop_rules import find_rule
 from ..observability import current
 from ..observability.models import SiteOutcomeKind
-from ..parsing import ContentType
+from ..parsing import ContentType, parse_file_info
 from ..plugins.models import SourceDescriptor, SourceTrait
 from ..utils.litepan_strm import read_litepan_115_file_id
+from ..utils.path import path_is_under
 from ._common import ensure_oshash, finalize_media_file
 from .models import ActorScrapePayload, CacheKind, OrganizePayload, ScrapePayload, ScrapeResult
 from .protocol import FollowupTask, TaskHandler, TaskResult
@@ -414,7 +415,7 @@ class ScrapeHandler(TaskHandler[ScrapePayload, ScrapeResult]):
         # 为尚未刮削的演员扇出 ACTOR_SCRAPE.
         actor_followups = await self._actor_scrape_followups(meta.actors)
         # 库开启自动整理时为本次刮削的文件扇出 ORGANIZE.
-        organize_followups = await self._auto_organize_followups(payload, file)
+        organize_followups = await self._auto_organize_followups(payload, file, meta.id)
 
         await self.report_progress(progress_total, progress_total, "done")
 
@@ -451,7 +452,38 @@ class ScrapeHandler(TaskHandler[ScrapePayload, ScrapeResult]):
             outcomes=outcomes,
         )
 
-    async def _auto_organize_followups(self, payload: ScrapePayload, file: MediaFile | None) -> list[FollowupTask]:
+    async def _adopt_sibling_discs(self, first: MediaFile, metadata_id: int) -> list[int]:
+        """把同番号的后续盘片并入本次整理, 并把首盘的元数据挂到它们身上.
+
+        后续盘片按设计不发 SCRAPE (同番号共用一份元数据), 不在这里接手就会一直停在原处,
+        既没命名也没搬走.
+        """
+        if first.id is None or first.library_id is None:
+            return []
+        first_parsed = parse_file_info(first.path)
+        if first_parsed.number is None:
+            return []
+
+        candidates = await self._repo.list_media_files(library_id=first.library_id, limit=None)
+        adopted: list[int] = []
+        for candidate in candidates:
+            if candidate.id is None or candidate.id == first.id:
+                continue
+            parsed = parse_file_info(candidate.path)
+            if parsed.number != first_parsed.number or parsed.cd is None or parsed.cd == 1:
+                continue
+            await self._repo.update_media_file(
+                candidate.id,
+                metadata_id=metadata_id,
+                number=first.number,
+                status=MediaFileStatus.SCRAPED,
+            )
+            adopted.append(candidate.id)
+        return adopted
+
+    async def _auto_organize_followups(
+        self, payload: ScrapePayload, file: MediaFile | None, metadata_id: int
+    ) -> list[FollowupTask]:
         """库开启自动整理时为本次刮削的那一个文件描述 ORGANIZE 后继.
 
         范围只有该文件, 且后继只在父成功后创建, 因此整理必然发生在它刮削完成之后.
@@ -472,9 +504,20 @@ class ScrapeHandler(TaskHandler[ScrapePayload, ScrapeResult]):
             if library is None:
                 current().debug("auto organize skipped: library missing", library_id=file.library_id)
                 return []
-            if not library.auto_organize:
+            # 启用监控目录后整理不再由 auto_organize 决定 (界面那开关跟着置灰).
+            # 下载目录进来的文件必须整理, 否则永远落不到库路径;
+            # 目标目录内的文件是否整理, 取决于 watch_rename (只改名不搬动).
+            from_download = bool(library.watch_path) and path_is_under(Path(file.path), Path(library.watch_path))
+            if library.watch_dir_enabled:
+                if not from_download and not library.watch_rename:
+                    current().debug("auto organize skipped: in-place mode", library_id=library.id)
+                    return []
+            elif not library.auto_organize:
                 return []
-            organize = OrganizePayload(library_id=file.library_id, media_file_ids=[file.id])
+            # 多盘片的后续张不发 SCRAPE, 靠首盘这次的元数据一起落盘. 同番号、同库、
+            # 还没整理的行都并进来, 否则 CD2 会永远留在原处.
+            siblings = await self._adopt_sibling_discs(file, metadata_id)
+            organize = OrganizePayload(library_id=file.library_id, media_file_ids=[file.id, *siblings])
             return [
                 FollowupTask(
                     key=f"organize:{file.id}",

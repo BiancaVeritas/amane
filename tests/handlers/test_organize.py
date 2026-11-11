@@ -467,7 +467,11 @@ class _FakeImageClient:
 async def test_organize_writes_subtitle_tag_for_external_subtitle(
     repo: Repository, resource_store: ResourceStore, tmp_path: Path
 ) -> None:
-    """源文件名无 -C 但同目录有字幕时, 落盘写出 -C, 封面与海报也打中字角标."""
+    """源文件名无 -C 时, 即使同目录有字幕, 落盘名也不加 -C; 中字角标仍打在封面与海报上.
+
+    文件名里的 ``-C`` 是「这个名字标了中字」的声明, 外挂字幕只是「旁边有文件」;
+    把两者混成一个会让整理出的名字凭空多出标记.
+    """
     lib_root = tmp_path / "lib"
     src_dir = lib_root / "incoming"
     src_dir.mkdir(parents=True)
@@ -512,7 +516,7 @@ async def test_organize_writes_subtitle_tag_for_external_subtitle(
     assert result.result is not None
     assert (result.result.organized, result.result.failed) == (1, 0)
 
-    dest = paths_dir / "MIDV-123-C.mp4"
+    dest = paths_dir / "MIDV-123.mp4"
     assert dest.exists()
     assert (paths_dir / "MIDV-123.srt").exists()
     updated = await repo.get_media_file(source.id)

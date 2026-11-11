@@ -89,7 +89,8 @@
   },
   "autoOrganize": {
     "label": "Auto organize",
-    "hint": "Organize the file automatically once it is scraped"
+    "hint": "Organize the file automatically once it is scraped",
+    "forcedHint": "Watch directory is enabled, so files are always organized after scraping"
   },
   "ingest": {
     "label": "File discovery",
@@ -175,9 +176,9 @@
       "suffix": "Catalog number without the prefix. e.g. MIDV-123 → 123",
       "title": "Title",
       "actor": "First actor",
-      "actors": "All actors, comma-separated",
+      "actors": "All actors, comma separated",
       "actress": "First actress",
-      "actresses": "Actresses, comma-separated",
+      "actresses": "Actresses, comma separated",
       "studio": "Studio",
       "publisher": "Publisher",
       "series": "Series",
@@ -198,7 +199,11 @@
       "video_relpath": "Rendered video path relative to the library root. Link, sidecar, and STRM content templates",
       "link_dir": "Directory of the link; same as {video_dir} when the link template is unset",
       "link_name": "Rendered link filename (no extension); same as {video_name} when the link template is unset",
-      "raw_srt_name": "Source subtitle filename. e.g. A/foo.zh.srt → foo.zh"
+      "raw_srt_name": "Source subtitle filename. e.g. A/foo.zh.srt → foo.zh",
+      "actor_cn": "First actor, Chinese mapping",
+      "actors_cn": "All actors, comma separated, Chinese mapping",
+      "actress_cn": "First actress, Chinese mapping",
+      "actresses_cn": "Actresses, comma separated, Chinese mapping"
     }
   },
   "tpl": {
@@ -274,5 +279,24 @@
     "noiseHint": "Created by the OS or a sync tool; deleted along with the folder",
     "blocked": "{{count}} more folders were left out: unrecognized files",
     "showNoise": "Show system files"
-  }
+  },
+  "watchEnabled": {
+    "title": "Watch directory",
+    "label": "Watch directory",
+    "hint": "The library path switches to in-place mode: watch and scrape only, no moving or renaming; set a download directory to pull new files in"
+  },
+  "watchPath": {
+    "label": "Download directory",
+    "hint": "Leave empty for in-place mode on the library path; when set, new files here are scraped and placed into the target directory using the library's move mode",
+    "placeholder": "Empty = in-place mode"
+  },
+  "watchRename": {
+    "label": "Allow in-place rename",
+    "hint": "Whether files already in the target directory get renamed by the template, without moving them"
+  },
+  "fieldTargetPath": "Target directory",
+  "fieldUseJinja": "Enable Jinja2 naming template",
+  "fieldUseJinjaHint": "Use Jinja2 syntax for the video path; the template above is disabled. Placeholders keep their names; conditionals look like {% if cd %}-CD{{ cd }}{% endif %}.",
+  "fieldJinjaVideoTemplate": "Jinja2 video naming template",
+  "fieldJinjaVideoTemplateHint": "Used when a watch directory is enabled. Jinja2 syntax, see https://jinja.palletsprojects.com/en/3.0.x/templates"
 }

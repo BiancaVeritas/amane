@@ -3,6 +3,7 @@ from typing import NamedTuple, Unpack
 
 from sqlalchemy import delete as sqla_delete
 from sqlalchemy import func, or_
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.functions import count
 from sqlmodel import col, select
 from sqlmodel.sql.expression import SelectOfScalar
@@ -22,6 +23,8 @@ def _apply_path_phase(media: MediaFile) -> None:
     ``handlers._common.refresh_external_subtitle`` 写入.
     """
     phase = file_phase_from_path(media.path)
+    # 文件名是 path 的投影, 按名查重靠它走索引; 与相位列一同回填.
+    media.filename = media.path.replace("\\", "/").rsplit("/", 1)[-1]
     media.mosaic = phase["mosaic"]
     media.has_subtitle_in_name = phase["has_subtitle"]
     media.definition = phase["definition"]
@@ -65,6 +68,21 @@ class MediaRepoMixin(RepositoryMixinBase):
             stmt = select(MediaFile).where(MediaFile.path == nfc_path(path))
             result = await session.exec(stmt)
             return result.first()
+
+    async def has_scraped_with_filename(self, library_id: int, filename: str) -> bool:
+        """同库内是否已有一份同名且已刮削的记录.
+
+        等值命中 ``ix_media_files_filename``, 十万条量级也不退化成全表扫描.
+        """
+        async with self._session() as session:
+            stmt = (
+                select(col(MediaFile.id))
+                .where(MediaFile.library_id == library_id)
+                .where(MediaFile.filename == filename)
+                .where(MediaFile.status == MediaFileStatus.SCRAPED)
+                .limit(1)
+            )
+            return (await session.exec(stmt)).first() is not None
 
     async def get_valid(self, disk_paths: Iterable[str]) -> Sequence[MediaFile]:
         """路径按 ``chunks`` 分批 IN, 避开绑定变量上限. 比较前统一 NFC."""

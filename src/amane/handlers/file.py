@@ -130,11 +130,16 @@ async def execute_file_operations(
     if library is not None:
         subtitles = await discover_subtitles(source_path, library.subtitle_extensions, file_info)
 
+    # 原地模式 (开启独立监控、没配下载目录、但允许改名): 只换文件名, 不搬到库结构里.
+    # 目标目录取源文件所在目录 —— 沿用同一套落盘逻辑, 不必另写一条改路径.
+    # 这里恒用 MOVE: copy / hardlink / symlink 都会在原处留下旧文件, 那样不算「原地改名」.
+    in_place = library is not None and library.watch_dir_enabled and not library.watch_path
+
     org_result = await execute_organize(
         source=source_path,
-        target_dir=paths.video.parent,
+        target_dir=source_path.parent if in_place else paths.video.parent,
         target_stem=paths.video.stem,
-        mode=move_mode,
+        mode=MoveMode.MOVE if in_place else move_mode,
     )
 
     if org_result.outcome is PlaceOutcome.CONFLICT:
@@ -205,6 +210,7 @@ async def apply_file_operations(
     safe_dirs: Sequence[Path] | None = (),
     watermark_dir: Path | None = None,
     tag_mapping_path: Path | None = None,
+    actor_mapping_path: Path | None = None,
 ) -> FileOperationsResult | None:
     """缺少 media_file_id 或对应记录时返回 None (跳过, 不视为失败).
     Library 由 MediaFile.library_id 派生.
@@ -226,11 +232,21 @@ async def apply_file_operations(
         library,
         metadata,
         ext=ext,
+        # 多盘片的 -CD1 / -CD2 由模板里的 {cd?} 决定; 不传这里就恒为空, 同番号的几张会
+        # 渲染出同一个目标名, 后一张覆盖前一张.
+        cd=file_info.cd,
         file_info=file_info,
         source_path=Path(media_file.path),
         safe_dirs=safe_dirs,
         actor_genders=actor_genders,
+        actor_mapping_path=actor_mapping_path,
     )
+    # 多盘片的后续张只搬视频与字幕: 元数据、封面、海报、NFO 都由首盘那套文件代表整部作品,
+    # 每张再生成一遍只是重复下载与重复写盘.
+    later_disc = file_info.cd is not None and file_info.cd != 1
+
+    # 落盘方式只有一份: 下载目录进来的文件与库内文件都用 library.move_mode.
+    # 原地模式 (watch_dir_enabled 且没配下载目录) 由 execute_file_operations 内部改为只改名.
     return await execute_file_operations(
         media_file,
         metadata,
@@ -238,8 +254,8 @@ async def apply_file_operations(
         library.move_mode,
         resource_store,
         file_info,
-        download_images=True,
-        write_nfo=write_nfo,
+        download_images=not later_disc,
+        write_nfo=write_nfo and not later_disc,
         copy_resources=copy_resources,
         web_client=web_client,
         config=config,
@@ -452,9 +468,7 @@ async def _download_images_via_store(
     extrafanart_targets: list[tuple[str, Path]] = []
     if extrafanart:
         template = library.extrafanart_name_template if library is not None else None
-        names = render_extrafanart_names(
-            template or EXTRAFANART_NAME_TEMPLATE_DEFAULT, paths.context, len(extrafanart)
-        )
+        names = render_extrafanart_names(template or EXTRAFANART_NAME_TEMPLATE_DEFAULT, paths.context, len(extrafanart))
         extrafanart_targets = list(zip(names, extrafanart, strict=True))
 
     await _place_library_images(
@@ -491,6 +505,7 @@ class OrganizeHandler(TaskHandler[OrganizePayload, OrganizeResult]):
         safe_dirs: Sequence[Path] | None = (),
         watermark_dir: Path | None = None,
         tag_mapping_path: Path | None = None,
+        actor_mapping_path: Path | None = None,
         *,
         library_locks: LibraryTaskLocks | None = None,
     ):
@@ -502,6 +517,7 @@ class OrganizeHandler(TaskHandler[OrganizePayload, OrganizeResult]):
         self._safe_dirs = safe_dirs
         self._watermark_dir = watermark_dir
         self._tag_mapping_path = tag_mapping_path
+        self._actor_mapping_path = actor_mapping_path
         self._library_locks = library_locks if library_locks is not None else LibraryTaskLocks()
 
     async def _load_scope(self, payload: OrganizePayload, library: Library) -> list[MediaFile]:
@@ -553,7 +569,13 @@ class OrganizeHandler(TaskHandler[OrganizePayload, OrganizeResult]):
                 if mf.id is not None:
                     mf_path = Path(mf.path)
                     missing = await existing_disk_path(mf_path, follow_symlinks=False) is None
-                    if missing or not is_descendant(mf_path, library_root) or is_in_trash(mf_path):
+                    # 下载目录里的文件同样合法: 它们先入库, 再由本任务搬进 library_root.
+                    # 只看 library_root 会把它们当越界行删掉, 监控目录就永远整理不出东西.
+                    watch_root = Path(library.watch_path) if library.watch_dir_enabled and library.watch_path else None
+                    in_scope = is_descendant(mf_path, library_root) or (
+                        watch_root is not None and is_descendant(mf_path, watch_root)
+                    )
+                    if missing or not in_scope or is_in_trash(mf_path):
                         await self._repo.delete_media_file(mf.id)
                     else:
                         kind = await _classify_indexed(mf_path, scan)
@@ -607,6 +629,7 @@ class OrganizeHandler(TaskHandler[OrganizePayload, OrganizeResult]):
                     safe_dirs=self._safe_dirs,
                     watermark_dir=self._watermark_dir,
                     tag_mapping_path=self._tag_mapping_path,
+                    actor_mapping_path=self._actor_mapping_path,
                 )
                 if fop_result is None:
                     skipped += 1

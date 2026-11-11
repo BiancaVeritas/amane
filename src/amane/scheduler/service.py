@@ -21,7 +21,9 @@ from .clouddrive import CloudDriveChange, CloudDriveRoute, local_for, match_rout
 from .watcher import FileWatcher
 
 if TYPE_CHECKING:
+    from ..db.models import MediaFile
     from ..db.repository import Repository
+    from ..parsing import FilePhase
 
 logger = structlog.get_logger()
 
@@ -184,6 +186,22 @@ class WatcherService:
                         skip_patterns=[lib.trailer_pattern, *(lib.blacklist_patterns or [])],
                         min_file_size=lib.min_file_size,
                     )
+                    # 独立下载目录: 同一 library_id 再挂一个 watch, 文件照常经
+                    # on_file_found 入库; 之后按库的 move_mode 落到 lib.path.
+                    if lib.watch_dir_enabled and lib.watch_path:
+                        logger.info(
+                            "watching download directory",
+                            library_id=lib.id,
+                            path=lib.watch_path,
+                        )
+                        self._watcher.watch(
+                            lib.watch_path,
+                            library_id=lib.id,
+                            recursive=lib.recursive,
+                            patterns=lib.patterns,
+                            skip_patterns=[lib.trailer_pattern, *(lib.blacklist_patterns or [])],
+                            min_file_size=lib.min_file_size,
+                        )
             except OSError as exc:
                 self._log_observer_start_error(exc)
                 self._abandon_watcher()
@@ -229,6 +247,7 @@ class WatcherService:
             patterns=lib.patterns,
             skip_patterns=[lib.trailer_pattern, *(lib.blacklist_patterns or [])],
             min_file_size=lib.min_file_size,
+            watch_path=lib.watch_path if lib.watch_dir_enabled else None,
         )
 
     def add_library(
@@ -239,8 +258,13 @@ class WatcherService:
         patterns: list[str] | None = None,
         skip_patterns: Sequence[str | None] | None = None,
         min_file_size: int = 0,
+        watch_path: str | None = None,
     ) -> None:
-        """运行时热添加 native 监控库. clouddrive 库经 ``sync_library``."""
+        """运行时热添加 native 监控库. clouddrive 库经 ``sync_library``.
+
+        ``watch_path`` 是独立的下载目录, 与 ``path`` 一起挂: 只挂 ``path`` 会让保存设置之后的
+        监控范围悄悄缩回目标目录.
+        """
         self._cloud_routes.pop(library_id, None)
         if self._watcher is None:
             self._watcher = self._new_watcher()
@@ -253,6 +277,15 @@ class WatcherService:
                     skip_patterns=skip_patterns,
                     min_file_size=min_file_size,
                 )
+                if watch_path:
+                    self._watcher.watch(
+                        watch_path,
+                        library_id=library_id,
+                        recursive=recursive,
+                        patterns=patterns,
+                        skip_patterns=skip_patterns,
+                        min_file_size=min_file_size,
+                    )
             except OSError as exc:
                 self._log_observer_start_error(exc)
                 self._abandon_watcher()
@@ -279,7 +312,17 @@ class WatcherService:
             skip_patterns=skip_patterns,
             min_file_size=min_file_size,
         )
-        logger.info("library watch added", library_id=library_id, path=path, recursive=recursive)
+        # 与启动路径同一套: 保存设置时也要把下载目录重新挂上, 否则改一次配置就静默失效.
+        if watch_path:
+            self._watcher.watch(
+                watch_path,
+                library_id=library_id,
+                recursive=recursive,
+                patterns=patterns,
+                skip_patterns=skip_patterns,
+                min_file_size=min_file_size,
+            )
+        logger.info("library watch added", library_id=library_id, path=path, watch_path=watch_path, recursive=recursive)
 
     def remove_library(self, library_id: int) -> None:
         """运行时热移除监控库; watcher 未启动或该库未监控则为无操作."""
@@ -441,6 +484,14 @@ class WatcherService:
             if self._accept_cloud_file(dest_route, dest):
                 await self._on_file_found(dest, dest_route.library_id)
 
+    async def _seen_same_name(self, filename: str, library_id: int) -> bool:
+        """同库内是否已有一份同名文件且已刮削.
+
+        复制 / 硬链接整理后源文件不会消失, 每轮都会被当成新文件重新刮削; 以文件名当键挡住
+        这种重复. 删掉记录后名字不再命中, 下次仍会重新处理.
+        """
+        return await self._repo.has_scraped_with_filename(library_id, filename)
+
     def _on_file_found_sync(self, path: Path, library_id: int) -> None:
         self._schedule_async(self._on_file_found(path, library_id))
 
@@ -468,6 +519,12 @@ class WatcherService:
             logger.debug("file already tracked", path=path_str)
             return
 
+        # 按源文件名查重: 复制 / 硬链接整理后源文件仍留在原处, 换成新路径会被再次当成新文件.
+        # 以文件名为键而不是路径, 换目录同名也算同一份, 免得每轮扫描都重刮一遍.
+        if await self._seen_same_name(path.name, library_id):
+            logger.info("file already processed under same name", path=path_str)
+            return
+
         library = await self._repo.get_library(library_id)
         media = await register_media_file(self._repo, library_id, path, library=library)
         assert media.id is not None
@@ -481,7 +538,12 @@ class WatcherService:
 
         if parsed is not None and parsed.number is not None:
             await self._repo.update_media_file(media.id, number=parsed.number)
-            if library is not None and library.automation == LibraryAutomation.SCRAPE:
+            # 多盘片只有首盘值得刮: 同番号的 CD2/CD3 拿到的是同一份元数据, 各自再发一次
+            # 只是把同一批站点重打若干遍. 缺 CD1 时先不刮, 等补齐或用整库扫描统一判断.
+            is_later_disc = parsed.cd is not None and parsed.cd != 1
+            if is_later_disc:
+                logger.info("later disc discovered, scrape deferred to its CD1", number=parsed.number, cd=parsed.cd)
+            if library is not None and library.automation == LibraryAutomation.SCRAPE and not is_later_disc:
                 task = await self._repo.create_task(
                     task_type=TaskType.SCRAPE,
                     payload=ScrapePayload(
@@ -504,6 +566,18 @@ class WatcherService:
 
         await self._event_bus.emit(EventType.FILE_REMOVED, {"path": path_str, "media_file_id": media.id})
 
+    async def _queue_scrape_for_rename(self, media: MediaFile, parsed: FilePhase) -> None:
+        """改名后番号变了: 按新番号重发一次刮削.
+
+        旧番号的元数据已经毫无意义, 不重发就会一直挂在那条错记录上.
+        """
+        assert media.id is not None
+        task = await self._repo.create_task(
+            task_type=TaskType.SCRAPE,
+            payload=ScrapePayload(media_file_id=media.id, number=parsed.number, content_type=parsed.content_type),
+        )
+        logger.info("scrape task submitted after rename", task_id=task.id, number=parsed.number, path=media.path)
+
     async def _on_file_moved(self, src: Path, dest: Path, library_id: int) -> None:
         src_str = str(src)
         dest_str = str(dest)
@@ -515,10 +589,28 @@ class WatcherService:
 
         assert media.id is not None
         library = await self._repo.get_library(library_id)
-        updated = await self._repo.update_media_file(media.id, path=dest_str)
+        # 改名常是为了改番号: 只换 path 会把旧番号留在行上, 后续按它去找元数据, 永远对不上.
+        parsed = parse_file_info(dest_str)
+        changed_number = parsed.number is not None and parsed.number != media.number
+        updated = await self._repo.update_media_file(
+            media.id,
+            path=dest_str,
+            **({"number": parsed.number} if changed_number else {}),
+        )
         if updated is not None and library is not None:
             await refresh_external_subtitle(self._repo, updated, library)
-        logger.info("file path updated", src=src_str, dest=dest_str, media_file_id=media.id)
+        logger.info(
+            "file path updated",
+            src=src_str,
+            dest=dest_str,
+            media_file_id=media.id,
+            number=parsed.number,
+            number_changed=changed_number,
+        )
+        # 与首次发现同一口径: 多盘片只有首盘值得刮.
+        later_disc = parsed.cd is not None and parsed.cd != 1
+        if changed_number and not later_disc and library is not None and library.automation == LibraryAutomation.SCRAPE:
+            await self._queue_scrape_for_rename(updated if updated is not None else media, parsed)
 
     async def _debounce_loop(self) -> None:
         while self._running:

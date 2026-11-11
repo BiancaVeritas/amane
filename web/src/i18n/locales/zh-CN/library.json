@@ -87,7 +87,8 @@
   },
   "autoOrganize": {
     "label": "自动整理",
-    "hint": "刮削完成后自动整理相应文件"
+    "hint": "刮削完成后自动整理相应文件",
+    "forcedHint": "已启用监控目录，刮削完成后必定整理"
   },
   "ingest": {
     "label": "文件发现方式",
@@ -196,7 +197,11 @@
       "video_relpath": "整理后视频相对库根目录的路径. 链接模板、附属资源模板与 STRM 内容模板可用",
       "link_dir": "链接所在目录; 未设置链接模板时同 {video_dir}",
       "link_name": "整理后链接文件名 (不含扩展名); 未设置链接模板时同 {video_name}",
-      "raw_srt_name": "字幕源文件名. 例 A/foo.zh.srt → foo.zh"
+      "raw_srt_name": "字幕源文件名. 例 A/foo.zh.srt → foo.zh",
+      "actor_cn": "第一位演员 中文映射版",
+      "actors_cn": "全部演员, 逗号分隔 中文映射版",
+      "actress_cn": "第一位女演员 中文映射版",
+      "actresses_cn": "女演员, 逗号分隔 中文映射版"
     }
   },
   "tpl": {
@@ -262,5 +267,24 @@
     "noise": "系统文件",
     "noiseHint": "操作系统或同步工具生成的产物, 会随目录一起删除",
     "showNoise": "显示系统文件"
-  }
+  },
+  "watchEnabled": {
+    "title": "监控目录",
+    "label": "监控目录",
+    "hint": "开启后目标目录转为原地模式：只监控与刮削，不移动也不改名；另填下载目录可把新文件搬进目标目录"
+  },
+  "watchPath": {
+    "label": "下载目录",
+    "hint": "留空表示只开启目标目录的原地模式；填写后该目录里的新文件会被刮削，并按库的整理方式落到目标目录",
+    "placeholder": "留空 = 原地模式"
+  },
+  "watchRename": {
+    "label": "允许原地重命名",
+    "hint": "目标目录内的文件是否按命名模板改名，不移动位置"
+  },
+  "fieldTargetPath": "目标目录",
+  "fieldUseJinja": "启用 Jinja2 命名模板",
+  "fieldUseJinjaHint": "开启后改用 Jinja2 语法渲染视频命名，上方模板置灰不再生效。占位符同名，条件写法如 {％ if cd ％}-CD{％ cd ％}{％ endif ％}。",
+  "fieldJinjaVideoTemplate": "Jinja2 视频命名模板",
+  "fieldJinjaVideoTemplateHint": "启用监控目录时使用 Jinja2 语法，格式参考：https://jinja.palletsprojects.com/en/3.0.x/templates"
 }

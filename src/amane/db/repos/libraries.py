@@ -16,6 +16,7 @@ from ...library import (
     validate_trailer_pattern,
 )
 from ...organize.path_templates import (
+    JINJA_VIDEO_TEMPLATE_DEFAULT,
     VIDEO_TEMPLATE_DEFAULT,
     normalize_link_template,
     validate_extrafanart_name_template,
@@ -26,6 +27,14 @@ from ...utils.path import resolved_path
 from ..models import Library, MediaFile
 from ..repo_types import LibraryUpdates
 from .base import RepositoryMixinBase
+
+
+def _blank_to_none(value: str | None) -> str | None:
+    """空白串按「未设置」存, 免得库里留下空路径让监控去挂空目录."""
+    if value is None:
+        return None
+    stripped = value.strip()
+    return stripped or None
 
 
 def _path_template_or_none(value: str | None) -> str | None:
@@ -72,7 +81,12 @@ class LibrariesRepoMixin(RepositoryMixinBase):
         recursive: bool = True,
         patterns: list[str] | None = None,
         move_mode: MoveMode = MoveMode.MOVE,
+        watch_dir_enabled: bool = False,
+        watch_path: str | None = None,
+        watch_rename: bool = False,
         video_template: str = VIDEO_TEMPLATE_DEFAULT,
+        use_jinja_template: bool = False,
+        jinja_video_template: str | None = None,
         custom_placeholders: dict[str, str] | None = None,
         link_template: str | None = None,
         link_mode: LinkMode = LinkMode.STRM,
@@ -118,7 +132,13 @@ class LibrariesRepoMixin(RepositoryMixinBase):
                 recursive=recursive,
                 patterns=patterns if patterns is not None else [],
                 move_mode=move_mode,
+                watch_dir_enabled=watch_dir_enabled,
+                watch_path=_blank_to_none(watch_path),
+                watch_rename=watch_rename,
                 video_template=video_template,
+                use_jinja_template=use_jinja_template,
+                jinja_video_template=_blank_to_none(jinja_video_template)
+                or (JINJA_VIDEO_TEMPLATE_DEFAULT if watch_dir_enabled else None),
                 custom_placeholders=dict(custom_placeholders or {}),
                 link_template=normalize_link_template(link_template),
                 link_mode=link_mode,
@@ -223,8 +243,21 @@ class LibrariesRepoMixin(RepositoryMixinBase):
                 lib.patterns = patterns if patterns is not None else []
             if "move_mode" in updates:
                 lib.move_mode = updates["move_mode"]
+            if "watch_dir_enabled" in updates:
+                lib.watch_dir_enabled = updates["watch_dir_enabled"]
+            if "watch_path" in updates:
+                lib.watch_path = _blank_to_none(updates["watch_path"])
+            if "watch_rename" in updates:
+                lib.watch_rename = updates["watch_rename"]
             if "video_template" in updates:
                 lib.video_template = validate_path_template(updates["video_template"])
+            if "use_jinja_template" in updates:
+                lib.use_jinja_template = updates["use_jinja_template"]
+            if "jinja_video_template" in updates:
+                lib.jinja_video_template = _blank_to_none(updates["jinja_video_template"])
+            # 打开监控目录即切到 Jinja2 语法; 模板没填时补默认, 免得渲染成空路径.
+            if updates.get("watch_dir_enabled") and not lib.jinja_video_template:
+                lib.jinja_video_template = JINJA_VIDEO_TEMPLATE_DEFAULT
             if "custom_placeholders" in updates:
                 lib.custom_placeholders = dict(updates["custom_placeholders"] or {})
             if "link_template" in updates:

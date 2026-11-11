@@ -465,6 +465,8 @@ _ROUNDTRIP = [
                 "fanart_template",
                 "extrafanart_template",
                 "extrafanart_name_template",
+                "use_jinja_template",
+                "jinja_video_template",
                 "nfo_template",
                 "trailer_template",
                 "subtitle_template",

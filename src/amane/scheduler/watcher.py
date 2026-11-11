@@ -196,6 +196,9 @@ class FileWatcher:
         self._handlers: list[_Handler] = []
         self._watching: list[tuple[str, bool, list[str] | None]] = []
         self._watches: dict[int, ObservedWatch] = {}
+        # 同一个库可能有多个监控目录 (目标目录 + 下载目录), _watches 只能存一个;
+        # 这里按库累积全部 watch, unwatch 时逐个取消.
+        self._extra_watches: dict[int, list[ObservedWatch]] = {}
 
     @property
     def is_running(self) -> bool:
@@ -231,13 +234,22 @@ class FileWatcher:
         if self._observer is None:
             observer_class = PollingObserver if self._use_polling else _NativeObserver
             self._observer = observer_class(timeout=self._observer_timeout)
-        self._watches[library_id] = self._observer.schedule(handler, path, recursive=recursive)
+        scheduled = self._observer.schedule(handler, path, recursive=recursive)
+        previous = self._watches.get(library_id)
+        if previous is None:
+            self._watches[library_id] = scheduled
+        else:
+            # 同一库的第二个目录: 首个留在 _watches, 其余进 _extra_watches.
+            self._extra_watches.setdefault(library_id, []).append(scheduled)
 
     def unwatch(self, library_id: int) -> None:
         """取消该 library_id 的监控; 未在监控中则为无操作."""
         watch = self._watches.pop(library_id, None)
         if watch is not None and self._observer is not None:
             self._observer.unschedule(watch)
+        for extra in self._extra_watches.pop(library_id, []):
+            if self._observer is not None:
+                self._observer.unschedule(extra)
         self._handlers = [h for h in self._handlers if h.library_id != library_id]
 
     def start(self) -> None:

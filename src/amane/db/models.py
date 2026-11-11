@@ -193,6 +193,12 @@ class MediaFile(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     # 库内身份为 NFC. 写入与按路径查找只经 Repository (`nfc_path`).
     path: str = Field(unique=True, nullable=False, index=True)
+    filename: str = Field(default="", nullable=False, index=True)
+    """path 的文件名部分, 与 path 一同维护.
+
+    按文件名查重需要等值比较; 对 path 做 ``LIKE '%x'`` 用不上索引, 十万条量级会退化成全表
+    扫描, 所以把这个投影单独存一份并建索引.
+    """
     oshash: str | None = Field(default=None, index=True)
     size: int | None = None
     duration: float | None = None
@@ -448,7 +454,36 @@ class Library(SQLModel, table=True):
     recursive: bool = Field(default=True)
     patterns: list[str] = Field(default_factory=list, sa_column=Column(JSON, nullable=False))
     move_mode: MoveMode = Field(default=MoveMode.MOVE)
+
+    watch_dir_enabled: bool = Field(default=False)
+    """启用独立监控目录.
+
+    关闭时行为与上游完全一致: 只监 ``path``, 文件按 ``auto_organize`` + ``move_mode`` 整理.
+    开启后 ``path`` 转为原地模式 (只监控与刮削, 不移动也不改名, 除非 ``watch_rename``),
+    另由 ``watch_path`` 承接下载目录 → 目标目录的搬移.
+    """
+
+    watch_path: str | None = None
+    """下载目录; 有文件进来时按库的 ``move_mode`` 落到 ``path``.
+
+    留空表示没有独立下载目录 —— 此时开启 ``watch_dir_enabled`` 即「目标目录原地模式」.
+    """
+
+    watch_rename: bool = Field(default=False)
+    """原地模式下是否按模板重命名 (仍不移动). 关闭时文件保持原名."""
+
     video_template: PathTemplate = Field(default=VIDEO_TEMPLATE_DEFAULT)
+
+    use_jinja_template: bool = Field(default=False)
+    """启用 Jinja2 命名模板.
+
+    关闭时用 ``video_template`` (本项目自己的占位符语法); 开启后改读 ``jinja_video_template``,
+    两者互斥 —— 同时生效会让「用的是哪一份」变成需要推断的事.
+    """
+
+    jinja_video_template: str | None = None
+    """Jinja2 语法下的视频命名模板. 占位符与 ``video_template`` 同名, 可直接沿用."""
+
     custom_placeholders: dict[str, str] = Field(
         default_factory=dict, sa_column=Column(JSON, nullable=False, server_default=text("'{}'"))
     )
