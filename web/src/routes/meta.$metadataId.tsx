@@ -88,6 +88,10 @@ import { PlaybackPanel } from "@/components/media/playback-panel";
 import { LazyPlaybackPlayer } from "@/components/media/playback-player-lazy";
 import type { SeekRequest } from "@/components/media/playback-player";
 
+/** 关联文件按路径自然序展示: 入库顺序取决于抓取先后, 会让 CD2 排在 CD1 前面. */
+function sortedFiles<T extends { path: string }>(files: T[]): T[] {
+  return files.toSorted((a, b) => a.path.localeCompare(b.path, undefined, { numeric: true }));
+}
 /** 番号的厂商前缀: 取第一个分隔符之前的部分; 没有分隔符时保留原样. */
 function vendorPrefix(number: string | null | undefined): string | null {
   const raw = (number ?? "").trim();
@@ -967,6 +971,7 @@ function TitleDetailPage() {
                     kind="actor"
                     id={data.actor_ids?.[a]}
                     name={a}
+                    displayName={data.actor_display_names?.[a]}
                     gender={data.actor_genders?.[a]}
                   />
                 ))}
@@ -1194,7 +1199,7 @@ function TitleDetailPage() {
             </Text>
           ) : (
             <Stack gap={6}>
-              {data.files.map((f) => (
+              {sortedFiles(data.files).map((f) => (
                 <Group key={f.id} justify="space-between" gap="xs" wrap="nowrap">
                   <Stack gap={4} style={{ minWidth: 0, flex: 1 }}>
                     <Text size="sm" truncate="end" ff="monospace">

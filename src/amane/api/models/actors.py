@@ -32,6 +32,7 @@ class ActorResponse(BaseModel):
 
     id: int
     name: str
+    display_name: str | None = Field(default=None, description="映射后的显示名; 仅展示用, 不影响搜索与去重")
     count: int = 0
     aliases: list[str] = Field(default_factory=list, description="别名行 (保序; 不含展示名)")
     user_tags: list[UserTagResponse] = Field(default_factory=list, description="用户标签 (仅详情)")

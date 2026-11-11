@@ -635,7 +635,17 @@ export function ActorTable({
                     style={{ textDecoration: "none", color: "inherit", display: "block" }}
                   >
                     <Text span c="brand" size="sm" truncate title={actor.name}>
-                      {actor.name}
+                      {actor.display_name ? (
+                        <>
+                          {actor.display_name}
+                          <Text span size="xs" c="dimmed" fw={600}>
+                            {" "}
+                            ({actor.name})
+                          </Text>
+                        </>
+                      ) : (
+                        actor.name
+                      )}
                     </Text>
                   </Link>
                 </Table.Td>

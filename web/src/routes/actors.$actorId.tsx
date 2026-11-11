@@ -351,7 +351,7 @@ function ActorDetailPage() {
         </Anchor>
         {actor && (
           <Text size="sm" c="dimmed">
-            {actor.name}
+            {actor.display_name ?? actor.name}
           </Text>
         )}
       </Breadcrumbs>
@@ -406,6 +406,7 @@ function ActorDetailPage() {
         loading={isLoading && items.length === 0}
         emptyMessage={t("empty")}
         actorBirthday={actor?.birthday}
+        actorDisplayNames={actor?.display_name ? { [actor.name]: actor.display_name } : undefined}
       />
 
       {items.length > 0 && (
@@ -580,7 +581,19 @@ function ActorHero({
       {/* basis 不能为 0: 换行按 flex-basis 判定, 取 0 时信息列永不换行, 窄屏只会被压成几十像素宽. */}
       <Stack gap="sm" style={{ flex: "1 1 20rem", minWidth: 0 }}>
         <Group gap="sm" align="center">
-          <Title order={2}>{actor.name}</Title>
+          <Title order={2}>
+            {actor.display_name ? (
+              <>
+                {actor.display_name}
+                <Text span size="lg" c="dimmed" fw={600}>
+                  {" "}
+                  ({actor.name})
+                </Text>
+              </>
+            ) : (
+              actor.name
+            )}
+          </Title>
           <Badge size="lg" variant="light">
             {t("browse.count", { count: actor.count })}
           </Badge>

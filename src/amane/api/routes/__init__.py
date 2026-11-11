@@ -1,5 +1,6 @@
 from fastapi import APIRouter
 
+from .actor_name_mappings import router as actor_name_mappings_router
 from .actors import router as actors_router
 from .agent import router as agent_router
 from .agent_agui import router as agent_agui_router
@@ -50,6 +51,7 @@ router.include_router(schedules_router)
 router.include_router(system_router)
 router.include_router(tasks_router)
 router.include_router(tag_mappings_router)
+router.include_router(actor_name_mappings_router)
 router.include_router(tools_router)
 router.include_router(libraries_router)
 router.include_router(webhooks_router)

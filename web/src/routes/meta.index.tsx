@@ -668,6 +668,7 @@ function MetaIndexPage() {
           <PosterGrid
             cardSize={cardSize}
             items={gridItems}
+            actorDisplayNames={gridQuery.data?.actor_display_names}
             loading={gridQuery.isLoading && gridItems.length === 0}
             emptyMessage={t("empty")}
             imageUrlOf={(item) => {

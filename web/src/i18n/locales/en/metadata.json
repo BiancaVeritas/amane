@@ -457,5 +457,27 @@
     "unlocked": "Unlocked",
     "toggleLocked": "Unlock field",
     "toggleUnlocked": "Lock field"
+  },
+  "actorNameMapping": {
+    "button": "Actor name mapping",
+    "title": "Actor name mapping",
+    "hint": "Display only: search, dedup and scraping still use the original name.",
+    "search": "Search actors",
+    "stats": "Mapped {{mapped}} / {{all}}",
+    "original": "Original",
+    "translation": "Display name",
+    "placeholder": "Leave empty to clear",
+    "save": "Save",
+    "clear": "Delete this mapping",
+    "export": "Export mappings",
+    "import": "Import mappings",
+    "empty": "No mappings yet",
+    "pickActor": "Pick an actor to map",
+    "noCandidates": "No actors left to add",
+    "filterExisting": "Filter list",
+    "manual": "Add manually",
+    "manualHint": "Type any name yourself instead of picking from the actor index",
+    "manualOriginal": "Original name",
+    "manualTranslation": "Chinese name"
   }
 }

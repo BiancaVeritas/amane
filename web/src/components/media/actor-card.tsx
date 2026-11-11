@@ -96,7 +96,17 @@ export const ActorCard = memo(function ActorCard({ item }: ActorCardProps) {
         </Box>
         <Stack gap={4} p="xs">
           <Text size="sm" fw={600} lineClamp={1} title={item.name}>
-            {item.name}
+            {item.display_name ? (
+              <>
+                {item.display_name}
+                <Text span size="xs" c="dimmed" fw={600}>
+                  {" "}
+                  ({item.name})
+                </Text>
+              </>
+            ) : (
+              item.name
+            )}
           </Text>
           {/* 生日与三围行常有缺失; 两行都固定 20px 并让内容垂直居中, 缺失时留空占位.
               两行必须同构, 否则图标行与纯文字行的基线对不齐. */}

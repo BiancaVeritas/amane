@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+import json
 import os
 import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path, PureWindowsPath
 from typing import TYPE_CHECKING, TypedDict, cast
+
+import structlog
+from jinja2 import Environment, StrictUndefined, TemplateError, meta
 
 from ..enums import ActorGender
 from ..parsing.file_info import (
@@ -83,9 +87,13 @@ TemplateVariables = TypedDict(
         "suffix": str,
         "title": str,
         "actor": str,
+        "actor_cn": str,
         "actors": str,
+        "actors_cn": str,
         "actress": str,
+        "actress_cn": str,
         "actresses": str,
+        "actresses_cn": str,
         "studio": str,
         "publisher": str,
         "series": str,
@@ -371,6 +379,41 @@ def custom_variable_values(
     return values
 
 
+def _load_actor_names(path: Path | None) -> dict[str, str]:
+    """读演员显示名映射; 文件缺失或损坏时返回空表, 让模板回退原名."""
+    if path is None or not path.is_file():
+        return {}
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except OSError, ValueError:
+        logger.warning("actor name mapping unreadable; falling back to original names", path=str(path))
+        return {}
+    entries = raw.get("entries")
+    if not isinstance(entries, dict):
+        return {}
+    names: dict[str, str] = {}
+    for original, value in entries.items():
+        if isinstance(original, str) and isinstance(value, dict):
+            translation = value.get("translation")
+            if isinstance(translation, str) and translation.strip():
+                names[original] = translation.strip()
+    return names
+
+
+def _join_display(names: Sequence[str], mapping: Mapping[str, str]) -> str:
+    """逗号拼接显示名; 空列表回落到 unknown 占位, 与原名版一致."""
+    if not names:
+        return _UNKNOWN
+    return ",".join(_display_actor(name, mapping) or name for name in names)
+
+
+def _display_actor(name: str | None, names: Mapping[str, str]) -> str | None:
+    """有映射用映射, 没有就用原名."""
+    if name is None:
+        return None
+    return names.get(name, name)
+
+
 def _build_variables(
     metadata: Metadata,
     ext: str = "",
@@ -380,8 +423,10 @@ def _build_variables(
     actor_genders: Mapping[str, ActorGender] | None = None,
     library_root: Path | None = None,
     custom_placeholders: Mapping[str, CustomPlaceholder] | None = None,
+    actor_mapping_path: Path | None = None,
 ) -> TemplateVariables:
     year = metadata.release[:4] if metadata.release and len(metadata.release) >= 4 else None
+    actor_names = _load_actor_names(actor_mapping_path)
     actor = metadata.actors[0] if metadata.actors else None
     actresses = actress_names(metadata.actors, actor_genders)
     actress = actresses[0] if actresses else None
@@ -405,9 +450,13 @@ def _build_variables(
         "suffix": suffix,
         "title": _safe(metadata.title) or metadata.number,
         "actor": _safe(actor) or _UNKNOWN,
+        "actor_cn": _safe(_display_actor(actor, actor_names)) or _UNKNOWN,
         "actors": ",".join(metadata.actors) if metadata.actors else _UNKNOWN,
+        "actors_cn": _join_display(metadata.actors, actor_names),
         "actress": _safe(actress) or _UNKNOWN,
+        "actress_cn": _safe(_display_actor(actress, actor_names)) or _UNKNOWN,
         "actresses": ",".join(actresses) if actresses else _UNKNOWN,
+        "actresses_cn": _join_display(actresses, actor_names),
         "studio": _safe(metadata.studio) or _UNKNOWN,
         "publisher": _safe(metadata.publisher) or _UNKNOWN,
         "series": _safe(metadata.series) or _UNKNOWN,
@@ -423,7 +472,9 @@ def _build_variables(
         "raw_name": raw_name,
         "raw_relpath": _relpath_or_empty(source_path, library_root),
         "cd?": str(cd) if cd is not None else "",
-        "sub?": "C" if file_info is not None and file_info.has_subtitle else "",
+        # 只看文件名里的标记: 外挂字幕会跟着视频改名落地, 但归档名不该因此变成 -C,
+        # 那会把「有字幕文件」与「文件名标了中字」两件事混成一个.
+        "sub?": "C" if file_info is not None and file_info.has_subtitle_in_name else "",
         "content_type": str(metadata.content_type),
         "mosaic?": str(nature)
         if (nature := mosaic_nature(file_info.mosaic if file_info else None, metadata.content_type))
@@ -464,9 +515,18 @@ class TemplateContext:
         actor_genders: Mapping[str, ActorGender] | None = None,
         library_root: Path | None = None,
         custom_placeholders: Mapping[str, CustomPlaceholder] | None = None,
+        actor_mapping_path: Path | None = None,
     ) -> TemplateContext:
         built = _build_variables(
-            metadata, ext, source_path, file_info, cd, actor_genders, library_root, custom_placeholders
+            metadata,
+            ext,
+            source_path,
+            file_info,
+            cd,
+            actor_genders,
+            library_root,
+            custom_placeholders,
+            actor_mapping_path,
         )
         variables = cast(dict[str, str], {**built})
         # {dir} 是 {raw_dir} 的别名, 不下发 schema.
@@ -554,6 +614,15 @@ class TemplateEngine:
         return self.clean(self.fill(ctx), ctx)
 
 
+def _jinja_env() -> Environment:
+    """Jinja2 环境: 关掉未定义变量静默, 让模板里写错名字时直接报错而不是渲染成空串."""
+    return Environment(
+        undefined=StrictUndefined,
+        autoescape=False,  # 输出是文件路径, 不是 HTML
+        keep_trailing_newline=False,
+    )
+
+
 class PathEngine(TemplateEngine):
     """路径输出: 填值时截断 title / actor / actors / actress / actresses, 按 Windows 创建结果规范化每个路径段, 再按库根目录 / safe_dirs 写成字面绝对路径."""
 
@@ -589,6 +658,47 @@ class PathEngine(TemplateEngine):
             followed = candidate.resolve()
             raise ValueError(f"路径越界: 渲染结果 {followed} 超出基准目录 {base_path}")
         return candidate
+
+
+class JinjaPathEngine(PathEngine):
+    """Jinja2 语法的路径模板.
+
+    取值与规范化沿用 ``PathEngine``: 只把「填值」换成 Jinja2 渲染, 截断、路径段规范化与库根
+    约束一字不动, 两种语法写出的结果因此可比.
+    """
+
+    def __init__(self, source: str) -> None:
+        # 不走 Parser: ``{% %}`` / ``{{ }}`` 不是本项目的占位符语法.
+        self.source = source
+        self.tree = ()
+        try:
+            self._parsed = _jinja_env().parse(source)
+            self._template = _jinja_env().from_string(source)
+        except TemplateError as exc:
+            raise ValueError(f"Jinja2 模板语法错误: {exc}") from exc
+
+    def uses(self, name: str) -> bool:
+        """模板是否引用某个占位符.
+
+        以 AST 里未被声明的变量为准: 注释与字符串字面量里的同名片段不算引用.
+        """
+        return name in meta.find_undeclared_variables(self._parsed)
+
+    def fill(self, ctx: TemplateContext) -> str:
+        variables: dict[str, str] = {}
+        for name, value in ctx.variables.items():
+            variables[name] = _clip_field(value) if name in _CLIP_KEYS else value
+            # 带 ? 的占位符 (cd? / sub? / def? / mosaic?) 不是合法 Jinja2 标识符,
+            # 同时给一份去问号的同名别名, 模板里就能写 {% if cd %} 而不是查字典.
+            if name.endswith("?"):
+                variables[name.rstrip("?")] = variables[name]
+        try:
+            return self._template.render(**variables)
+        except TemplateError as exc:
+            raise ValueError(f"Jinja2 模板渲染失败: {exc}") from exc
+
+
+logger = structlog.get_logger()
 
 
 class StrmEngine(TemplateEngine):

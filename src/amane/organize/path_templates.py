@@ -13,7 +13,7 @@ from ..parsing.file_info import FileInfo
 from ..utils.path import is_descendant, path_key
 from .template import PLACEHOLDER_MAP_KEYS as PLACEHOLDER_MAP_KEYS
 from .template import PLACEHOLDERS as PLACEHOLDERS
-from .template import CustomPlaceholder, Parser, PathEngine, TemplateContext
+from .template import CustomPlaceholder, JinjaPathEngine, Parser, PathEngine, TemplateContext
 
 if TYPE_CHECKING:
     from ..db.models import Library, Metadata
@@ -34,6 +34,10 @@ class ResolvedPaths:
 
 
 VIDEO_TEMPLATE_DEFAULT = "{studio}/{number}/{number}[-CD{cd?}][-{sub?}].{ext}"
+JINJA_VIDEO_TEMPLATE_DEFAULT = (
+    "{{studio}}/{{number}}/{{number}}{% if cd %}-CD{{cd}}{% endif %}{% if sub %}-C{% endif %}.{{ext}}"
+)
+"""Jinja2 语法的同名默认模板; 与 ``VIDEO_TEMPLATE_DEFAULT`` 渲染结果一致."""
 THUMB_TEMPLATE_DEFAULT = "{link_dir}/thumb.jpg"
 POSTER_TEMPLATE_DEFAULT = "{link_dir}/poster.jpg"
 FANART_TEMPLATE_DEFAULT = "{link_dir}/fanart.jpg"
@@ -154,6 +158,7 @@ def resolve_paths(
     file_info: FileInfo | None = None,
     safe_dirs: Sequence[Path] | None = (),
     actor_genders: Mapping[str, ActorGender] | None = None,
+    actor_mapping_path: Path | None = None,
 ) -> ResolvedPaths:
     """``safe_dirs is None`` 时不限制绝对模板写出的路径; 相对模板仍须在 base_path 下."""
     base_path = Path(library.path)
@@ -166,13 +171,21 @@ def resolve_paths(
         actor_genders=actor_genders,
         library_root=base_path,
         custom_placeholders=_custom_placeholders(library),
+        actor_mapping_path=actor_mapping_path,
     )
 
     # 先渲染视频, 注入 `{video_*}` 后再渲染链接与刮削产物.
-    video = PathEngine(library.video_template).resolve(ctx, base_path, safe_dirs)
+    # 两种语法互斥, 由监控目录开关决定: 开了独立监控目录即用 Jinja2, 否则沿用原占位符语法.
+    use_jinja = library.watch_dir_enabled
+    video_engine: PathEngine = (
+        JinjaPathEngine(library.jinja_video_template or JINJA_VIDEO_TEMPLATE_DEFAULT)
+        if use_jinja
+        else PathEngine(library.video_template)
+    )
+    video = video_engine.resolve(ctx, base_path, safe_dirs)
     if path_key(video) == path_key(base_path):
         # 空模板或唯一占位符取值落空时, 视频路径退化为库根目录; 后续会以与原因无关的错误失败, 或按库根名在库外落盘.
-        raise ValueError(f"视频模板解析为库根目录: {library.video_template!r}")
+        raise ValueError(f"视频模板解析为库根目录: {video_engine.source!r}")
     ctx.apply_video(video, base_path)
     link = _resolve_link_path(library, ctx, base_path, safe_dirs)
     ctx.apply_link(link)

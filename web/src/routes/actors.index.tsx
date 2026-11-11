@@ -1,5 +1,14 @@
-import { ActionIcon, Badge, Group, SegmentedControl, Text, TextInput, Title } from "@mantine/core";
-import { IconFilter, IconSearch, IconTable, IconX } from "@tabler/icons-react";
+import {
+  ActionIcon,
+  Badge,
+  Button,
+  Group,
+  SegmentedControl,
+  Text,
+  TextInput,
+  Title,
+} from "@mantine/core";
+import { IconFilter, IconSearch, IconTable, IconUserEdit, IconX } from "@tabler/icons-react";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, stripSearchParams } from "@tanstack/react-router";
 import type { ParseKeys } from "i18next";
@@ -16,6 +25,7 @@ import { BrowseDisplaySettings } from "@/components/common/browse-display-settin
 import { SortMenu } from "@/components/common/sort-menu";
 import { ActorFilterControls } from "@/components/media/actor-filter-controls";
 import { ActorGrid } from "@/components/media/actor-grid";
+import { ActorNameMappingDialog } from "@/components/media/actor-name-mapping-dialog";
 import { ActorTable } from "@/components/media/actor-table";
 import {
   ACTOR_RANGE_FILTERS,
@@ -213,11 +223,25 @@ function ActorsIndexPage() {
     });
   }
 
+  const [mappingOpen, setMappingOpen] = useState(false);
+
   return (
     <BrowsePageShell
       fill={isList}
       title={<Title order={2}>{t("actors.title")}</Title>}
-      actions={<ListDefaultActions update={{ key: "actors", value: actorListDefaults(search) }} />}
+      actions={
+        <Group gap="xs">
+          <Button
+            size="sm"
+            variant="light"
+            leftSection={<IconUserEdit size={16} />}
+            onClick={() => setMappingOpen(true)}
+          >
+            {t("actorNameMapping.button")}
+          </Button>
+          <ListDefaultActions update={{ key: "actors", value: actorListDefaults(search) }} />
+        </Group>
+      }
       viewSwitch={
         <SegmentedControl
           value={search.view}
@@ -406,6 +430,7 @@ function ActorsIndexPage() {
         </>
       )}
       <ScrollToTop />
+      <ActorNameMappingDialog opened={mappingOpen} onClose={() => setMappingOpen(false)} />
     </BrowsePageShell>
   );
 }

@@ -434,5 +434,27 @@
     "unlocked": "未锁定",
     "toggleLocked": "解锁字段",
     "toggleUnlocked": "锁定字段"
+  },
+  "actorNameMapping": {
+    "button": "演员中文映射",
+    "title": "演员中文映射",
+    "hint": "只改页面显示：搜索、去重与刮削仍使用原始名。",
+    "search": "搜索演员",
+    "stats": "已映射 {{mapped}} / {{all}}",
+    "original": "原始名",
+    "translation": "中文映射",
+    "placeholder": "留空表示不映射",
+    "save": "保存",
+    "clear": "删除这条映射",
+    "export": "导出映射",
+    "import": "导入映射",
+    "empty": "没有映射记录",
+    "pickActor": "选择演员加入映射",
+    "noCandidates": "没有可添加的演员",
+    "filterExisting": "筛选已登记",
+    "manual": "手动新增",
+    "manualHint": "不依赖索引里已有的演员: 自己填原始名和中文名",
+    "manualOriginal": "原始名",
+    "manualTranslation": "中文名"
   }
 }

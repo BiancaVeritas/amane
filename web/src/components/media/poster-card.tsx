@@ -14,6 +14,8 @@ import { proxyImageUrl } from "@/lib/utils";
 
 interface PosterCardProps {
   item: MetadataResponse;
+  /** 演员显示名映射; 有映射的演员在海报上只显示中文名, 不附原始名. */
+  actorDisplayNames?: Record<string, string>;
   /** 传入时按影片发行日标注演员当时年龄 (演员详情出演墙). */
   actorBirthday?: string | null;
   /** 覆盖卡片图片 (语义检索命中剧照); 未给则使用条目的海报. */
@@ -27,6 +29,7 @@ interface PosterCardProps {
 /** 加载失败退化为番号占位块. */
 export function PosterCard({
   item,
+  actorDisplayNames,
   actorBirthday,
   imageUrl,
   imageRatio = 0.7,
@@ -40,7 +43,9 @@ export function PosterCard({
   const showImage = posterUrl && !errored;
   const actors = item.actors ?? [];
   // 顿号作并列分隔, 中日文里本就常用, 比间隔号窄且不突兀.
-  const actorsLabel = actors.length > 0 ? actors.join("、") : null;
+  // 海报空间小, 有映射时只放中文名; 原始名在详情页看得到.
+  const shownActors = actors.map((name) => actorDisplayNames?.[name] ?? name);
+  const actorsLabel = shownActors.length > 0 ? shownActors.join("、") : null;
   const releaseLabel = formatReleaseYearMonth(item.release);
   const ageThen = ageAtRelease(actorBirthday, item.release);
 

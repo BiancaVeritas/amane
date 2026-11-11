@@ -152,7 +152,19 @@ async def list_metadata(
         content_type=filters.content_type,
         id_subquery_sql=id_subquery_sql,
     )
-    return MetadataListResponse(items=await build_metadata_responses(repo, items, runtime), total=total)
+    return MetadataListResponse(
+        items=await build_metadata_responses(repo, items, runtime),
+        total=total,
+        actor_display_names=_actor_names_of(runtime, items),
+    )
+
+
+def _actor_names_of(runtime, items) -> dict[str, str]:
+    """把这一页出现过的演员名收敛成一次映射查询, 避免逐条取."""
+    names: set[str] = set()
+    for item in items:
+        names.update(item.actors or [])
+    return runtime.actor_names.display_map(sorted(names)) if names else {}
 
 
 async def _semantic_list(
@@ -208,6 +220,7 @@ async def _semantic_list(
     return MetadataListResponse(
         items=[responses[hit.metadata_id] for hit in hits if hit.metadata_id in responses],
         total=total,
+        actor_display_names=_actor_names_of(runtime, ordered),
         semantic_hits=[
             SemanticHitInfo(
                 id=hit.metadata_id,
@@ -313,6 +326,7 @@ async def get_metadata(metadata_id: int, repo: RepoDep, runtime: RuntimeDep) -> 
         comments=[to_resp(CommentResponse, c) for c in comments],
         actor_ids=actor_ids,
         actor_genders=actor_genders,
+        actor_display_names=runtime.actor_names.display_map(list(metadata.actors or [])),
         director_ids=director_ids,
         tag_ids=tag_ids,
         studio_id=studio_id,

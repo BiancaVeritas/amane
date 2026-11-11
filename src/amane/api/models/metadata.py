@@ -128,6 +128,10 @@ class SemanticHitInfo(BaseModel):
 class MetadataListResponse(BaseModel):
     items: list[MetadataResponse]
     total: int
+    actor_display_names: dict[str, str] = Field(
+        default_factory=dict,
+        description="演员显示名映射 (原始名 → 中文名); 仅展示用",
+    )
     semantic_hits: list[SemanticHitInfo] = Field(default_factory=list)
 
 
@@ -138,6 +142,10 @@ class MetadataDetailResponse(BaseModel):
     comments: list[CommentResponse] = []
     actor_ids: dict[str, int] = {}
     actor_genders: dict[str, ActorGender] = {}
+    actor_display_names: dict[str, str] = Field(
+        default_factory=dict,
+        description="演员显示名映射 (原始名 → 中文名); 仅展示用",
+    )
     director_ids: dict[str, int] = {}
     tag_ids: dict[str, int] = {}
     studio_id: int | None = None

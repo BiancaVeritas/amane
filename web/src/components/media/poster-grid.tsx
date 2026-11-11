@@ -5,6 +5,8 @@ import { PosterCard } from "./poster-card";
 interface PosterGridProps {
   cardSize?: "xs" | "sm" | "small" | "medium" | "default" | "large" | "xl" | "xxl";
   items: MetadataResponse[];
+  /** 演员显示名映射; 有映射时海报只显示中文名. */
+  actorDisplayNames?: Record<string, string>;
   loading?: boolean;
   emptyMessage?: string;
   /** 传入时海报显示演员出演时年龄. */
@@ -20,6 +22,7 @@ interface PosterGridProps {
 
 export function PosterGrid({
   items,
+  actorDisplayNames,
   loading = false,
   emptyMessage,
   actorBirthday,
@@ -76,6 +79,7 @@ export function PosterGrid({
     <SimpleGrid cols={1} spacing="md" style={gridStyle}>
       {items.map((item) => (
         <PosterCard
+          actorDisplayNames={actorDisplayNames}
           key={item.id}
           item={item}
           actorBirthday={actorBirthday}

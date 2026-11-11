@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
@@ -94,6 +95,26 @@ def _read_portrait(path: Path) -> tuple[bytes, str | None]:
     return data, detect_media_type_bytes(data)
 
 
+def _load_actor_names(path: Path | None) -> dict[str, str]:
+    """读演员显示名映射; 文件缺失或损坏时返回空表, 推送保持原样."""
+    if path is None or not path.is_file():
+        return {}
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except OSError, ValueError:
+        return {}
+    entries = raw.get("entries")
+    if not isinstance(entries, dict):
+        return {}
+    names: dict[str, str] = {}
+    for original, value in entries.items():
+        if isinstance(original, str) and isinstance(value, dict):
+            translation = value.get("translation")
+            if isinstance(translation, str) and translation.strip():
+                names[original] = translation.strip()
+    return names
+
+
 class ActorPushHandler(TaskHandler[ActorPushPayload, ActorPushResult]):
     def __init__(
         self,
@@ -101,12 +122,15 @@ class ActorPushHandler(TaskHandler[ActorPushPayload, ActorPushResult]):
         resource_store: ResourceStore,
         config: HotSettings,
         client_factory: Callable[[MediaServerConfig], MediaServerClientLike] = MediaServerClient,
+        actor_mapping_path: Path | None = None,
     ) -> None:
         super().__init__(payload_t=ActorPushPayload, result_t=ActorPushResult)
         self._repo = repo
         self._resource_store = resource_store
         self._config = config
         self._client_factory = client_factory
+        # 与模板渲染共用同一份映射文件: 有映射就把 Emby 里的人物名换成中文, 没有就不动.
+        self._actor_names = _load_actor_names(actor_mapping_path)
 
     async def handle(self, payload: ActorPushPayload) -> TaskResult[ActorPushResult]:
         cfg = self._config.media_server
@@ -266,7 +290,7 @@ class ActorPushHandler(TaskHandler[ActorPushPayload, ActorPushResult]):
         force: bool,
         counts: _Counts,
     ) -> None:
-        updates = _profile_updates(actor, person, force=force)
+        updates = _profile_updates(actor, person, force=force, display_name=self._actor_names.get(actor.name))
         needs_image = portrait is not None and (force or not person.has_primary_image)
         if not updates and not needs_image:
             counts.skipped += 1
@@ -316,9 +340,19 @@ class ActorPushHandler(TaskHandler[ActorPushPayload, ActorPushResult]):
         )
 
 
-def _profile_updates(actor: Actor, person: MediaPerson, *, force: bool) -> dict[str, object]:
-    """按覆盖规则给出目标字段; 不把空值写成清空动作."""
+def _profile_updates(
+    actor: Actor, person: MediaPerson, *, force: bool, display_name: str | None = None
+) -> dict[str, object]:
+    """按覆盖规则给出目标字段; 不把空值写成清空动作.
+
+    ``display_name`` 来自演员映射: 人物是按原名找到的, 找到之后才把名字换成中文.
+    """
     updates: dict[str, object] = {}
+    # 期望名: 有映射用映射, 没有就用原名. 两者不同才写一次, 免得每轮推送重复改名.
+    # 映射被删掉之后这里自然回落到原名, 于是 Emby 里的中文名会被改回去, 不会一直停在旧值.
+    desired_name = display_name or actor.name
+    if desired_name and desired_name != person.name:
+        updates["Name"] = desired_name
     if actor.overview and (force or not _has_text(person.overview)):
         updates["Overview"] = actor.overview
 

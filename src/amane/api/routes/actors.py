@@ -36,11 +36,12 @@ logger = structlog.get_logger()
 router = APIRouter(prefix="/actors", tags=["actors"])
 
 
-def _from_browse(item: ActorBrowseItem) -> ActorResponse:
+def _from_browse(item: ActorBrowseItem, *, display_name: str | None = None) -> ActorResponse:
     """列表只填卡片/表格字段; 简介/别名/标签/源字典见详情."""
     return ActorResponse(
         id=item.id,
         name=item.name,
+        display_name=display_name,
         count=item.count,
         gender=item.gender,
         birthday=item.birthday,
@@ -62,11 +63,13 @@ def _from_actor(
     aliases: list[str] | None = None,
     user_tags: list[UserTagResponse] | None = None,
     include_raw: bool = False,
+    display_name: str | None = None,
 ) -> ActorResponse:
     assert actor.id is not None
     return ActorResponse(
         id=actor.id,
         name=actor.name,
+        display_name=display_name,
         count=count,
         aliases=list(aliases or []),
         user_tags=list(user_tags or []),
@@ -94,23 +97,34 @@ async def _actor_user_tags(repo: RepoDep, actor_id: int) -> list[UserTagResponse
     return [to_resp(UserTagResponse, tag) for tag in await repo.list_actor_user_tags(actor_id)]
 
 
-async def _detail_response(repo: RepoDep, actor: Actor) -> ActorResponse:
+async def _detail_response(repo: RepoDep, actor: Actor, display_name: str | None = None) -> ActorResponse:
     """详情全量响应: count / 别名 / 用户标签 / raw 均补齐."""
     assert actor.id is not None
     item = await repo.get_facet(FacetKind.ACTOR, actor.id)
     count = item.count if item is not None else 0
     aliases = await repo.get_actor_aliases(actor.id)
     user_tags = await _actor_user_tags(repo, actor.id)
-    return _from_actor(actor, count=count, aliases=aliases, user_tags=user_tags, include_raw=True)
+    return _from_actor(
+        actor,
+        count=count,
+        aliases=aliases,
+        user_tags=user_tags,
+        include_raw=True,
+        display_name=display_name,
+    )
 
 
 @router.get("")
-async def list_actors(repo: RepoDep, params: Annotated[ActorBrowseParams, Query()]) -> ActorListResponse:
+async def list_actors(
+    repo: RepoDep, runtime: RuntimeDep, params: Annotated[ActorBrowseParams, Query()]
+) -> ActorListResponse:
     id_subquery_sql = None
     if params.saved_query_id is not None:
         id_subquery_sql = await resolve_saved_query_id_subquery(repo, params.saved_query_id, SavedQueryEntity.ACTOR)
     items, total = await repo.browse_actors(params, id_subquery_sql=id_subquery_sql)
-    return ActorListResponse(items=[_from_browse(i) for i in items], total=total)
+    # 映射只换显示名; name 仍是原始名, 前端用它做搜索与跳转.
+    display = runtime.actor_names.display_map([i.name for i in items])
+    return ActorListResponse(items=[_from_browse(i, display_name=display.get(i.name)) for i in items], total=total)
 
 
 @router.post("/batch/user-tags")
@@ -147,16 +161,25 @@ async def batch_clear_actor_person(req: ActorClearPersonBatchRequest, repo: Repo
 
 
 @router.get("/{actor_id}")
-async def get_actor(actor_id: int, repo: RepoDep) -> ActorResponse:
+async def get_actor(
+    actor_id: int,
+    repo: RepoDep,
+    runtime: RuntimeDep,
+) -> ActorResponse:
     item = await repo.get_facet(FacetKind.ACTOR, actor_id)
     actor = await repo.get_actor(actor_id)
     if item is None or actor is None:
         raise HTTPException(status_code=404, detail="演员不存在")
-    return await _detail_response(repo, actor)
+    return await _detail_response(repo, actor, runtime.actor_names.display(actor.name))
 
 
 @router.patch("/{actor_id}")
-async def update_actor(actor_id: int, req: ActorUpdateRequest, repo: RepoDep) -> ActorResponse:
+async def update_actor(
+    actor_id: int,
+    req: ActorUpdateRequest,
+    repo: RepoDep,
+    runtime: RuntimeDep,
+) -> ActorResponse:
     """更新演员规范人物字段 (不含 name/raw/field_sources); 写入字段自动加锁."""
     updates = cast("ActorPersonFields", req.model_dump(exclude_unset=True))
     if not updates:
@@ -175,27 +198,36 @@ async def update_actor(actor_id: int, req: ActorUpdateRequest, repo: RepoDep) ->
     actor = await repo.update_actor(actor_id, mode=WriteMode.MANUAL, **updates)
     if actor is None:
         raise HTTPException(status_code=404, detail="演员不存在")
-    return await _detail_response(repo, actor)
+    return await _detail_response(repo, actor, runtime.actor_names.display(actor.name))
 
 
 @router.put("/{actor_id}/locks")
-async def set_actor_locks(actor_id: int, req: ActorLocksRequest, repo: RepoDep) -> ActorResponse:
+async def set_actor_locks(
+    actor_id: int,
+    req: ActorLocksRequest,
+    repo: RepoDep,
+    runtime: RuntimeDep,
+) -> ActorResponse:
     """整体替换锁定字段集合."""
     actor = await repo.set_actor_locks(actor_id, req.fields)
     if actor is None:
         raise HTTPException(status_code=404, detail="演员不存在")
     logger.info("actor locks updated", actor_id=actor_id, fields=[str(field) for field in req.fields])
-    return await _detail_response(repo, actor)
+    return await _detail_response(repo, actor, runtime.actor_names.display(actor.name))
 
 
 @router.post("/{actor_id}/clear-person", deprecated=True)
-async def clear_actor_person(actor_id: int, repo: RepoDep) -> ActorResponse:
+async def clear_actor_person(
+    actor_id: int,
+    repo: RepoDep,
+    runtime: RuntimeDep,
+) -> ActorResponse:
     """已弃用: 改用 `POST /actors/batch/clear-person` 的单元素列表 (只回计数)."""
     actor = await repo.clear_actor_person(actor_id)
     if actor is None:
         raise HTTPException(status_code=404, detail="演员不存在")
     logger.info("actor person cleared", actor_id=actor_id)
-    return await _detail_response(repo, actor)
+    return await _detail_response(repo, actor, runtime.actor_names.display(actor.name))
 
 
 @router.post("/{actor_id}/crop-avatar")
@@ -237,11 +269,13 @@ async def crop_actor_avatar(
     if updated is None:
         raise HTTPException(status_code=404, detail="演员不存在")
     logger.info("actor avatar cropped", actor_id=actor_id, box=box, rotation=req.rotation, image_url=cropped_url)
-    return await _detail_response(repo, updated)
+    return await _detail_response(repo, updated, runtime.actor_names.display(updated.name))
 
 
 @router.post("/{actor_id}/scrape", status_code=202, deprecated=True)
-async def scrape_actor(actor_id: int, repo: RepoDep, req: ActorScrapeRequest | None = None) -> TaskResponse:
+async def scrape_actor(
+    actor_id: int, repo: RepoDep, runtime: RuntimeDep, req: ActorScrapeRequest | None = None
+) -> TaskResponse:
     """已弃用: 改用 `POST /tasks/batch/submit` 的单元素 `actor_scrape` 提交."""
     actor = await repo.get_actor(actor_id)
     if actor is None:

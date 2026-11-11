@@ -132,6 +132,7 @@ function FacetDetailPage() {
             items={items}
             loading={isLoading && items.length === 0}
             emptyMessage={t("empty")}
+            actorDisplayNames={data?.pages[0]?.actor_display_names}
           />
           {items.length > 0 && (
             <InfiniteScrollSentinel
