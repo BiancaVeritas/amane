@@ -49,6 +49,7 @@ from .facet_helpers import (
     apply_facet_rules_to_metadata,
     cascade_delete_metadata,
     clean_actor_names,
+    load_rules_by_kind,
     resolve_scalar_facet_names,
     sync_metadata_facets,
 )
@@ -693,9 +694,10 @@ class MetadataRepoMixin(RepositoryMixinBase):
             )
             fields["series"] = fields["series_names"][0] if fields["series_names"] else None
         async with self._session() as session:
-            # pysqlite 只在 DML 之前发出 BEGIN; 判定与写入必须处于同一写事务.
-            connection = await session.connection()
-            await connection.exec_driver_sql("BEGIN IMMEDIATE")
+            # pysqlite 只在 DML 之前发出 BEGIN, 查号落在事务之外时并发同号写入会双双判定为「无行」,
+            # 后者在插入时违反 ix_metadata_number. 手工取得写锁后判定与写入同处一个事务.
+            await acquire_write_lock(session)
+            rules_by_kind = await load_rules_by_kind(session)
             stmt = select(Metadata).where(metadata_number_predicate(number))
             if content_type is not None:
                 stmt = stmt.where(Metadata.content_type != ContentType.WESTERN)
@@ -722,8 +724,8 @@ class MetadataRepoMixin(RepositoryMixinBase):
                 existing.updated_at = _utcnow()
                 session.add(existing)
                 await session.flush()
-                await clean_actor_names(session, existing, actor_genders)
-                await apply_facet_rules_to_metadata(session, existing)
+                await clean_actor_names(session, existing, actor_genders, rules_by_kind)
+                await apply_facet_rules_to_metadata(session, existing, rules_by_kind)
                 await sync_metadata_facets(session, existing)
                 await session.commit()
                 await session.refresh(existing)
@@ -734,8 +736,8 @@ class MetadataRepoMixin(RepositoryMixinBase):
             meta = Metadata(number=number, content_type=resolved_type, **fields)
             session.add(meta)
             await session.flush()
-            await clean_actor_names(session, meta, actor_genders)
-            await apply_facet_rules_to_metadata(session, meta)
+            await clean_actor_names(session, meta, actor_genders, rules_by_kind)
+            await apply_facet_rules_to_metadata(session, meta, rules_by_kind)
             await sync_metadata_facets(session, meta)
             await session.commit()
             await session.refresh(meta)
@@ -781,6 +783,9 @@ class MetadataRepoMixin(RepositoryMixinBase):
         """不存在返回 None; 写入策略见 WriteMode."""
         updates = _normalize_text_fields(updates)
         async with self._session() as session:
+            # 读改写须同事务: 锁定集合合并、投影重建都依据本次读到的值, 见 docs/dev/database.md.
+            await acquire_write_lock(session)
+            rules_by_kind = await load_rules_by_kind(session)
             metadata = await session.get(Metadata, metadata_id)
             if metadata is None:
                 return None
@@ -880,64 +885,14 @@ class MetadataRepoMixin(RepositoryMixinBase):
             metadata.updated_at = _utcnow()
             session.add(metadata)
             await session.flush()
-            await clean_actor_names(session, metadata, actor_genders)
-            await apply_facet_rules_to_metadata(session, metadata)
+            await clean_actor_names(session, metadata, actor_genders, rules_by_kind)
+            await apply_facet_rules_to_metadata(session, metadata, rules_by_kind)
             await sync_metadata_facets(session, metadata)
             await session.commit()
             await session.refresh(metadata)
             if _image_signature(metadata) != before:
                 await self.notify_media_changed(metadata_id)
             return metadata
-
-    async def set_metadata_locks(self, metadata_id: int, fields: Collection[MetadataField]) -> Metadata | None:
-        """整体替换锁定字段集合, 不修改 ``updated_at``. 不存在返回 None."""
-        async with self._session() as session:
-            metadata = await session.get(Metadata, metadata_id)
-            if metadata is None:
-                return None
-            wanted = set(fields)
-            metadata.locked_fields = [str(field) for field in MetadataField if field in wanted]
-            session.add(metadata)
-            await session.commit()
-            await session.refresh(metadata)
-            return metadata
-
-    async def delete_metadata(self, metadata_id: int) -> bool:
-        """级联见 ``cascade_delete_metadata``. 不存在返回 False."""
-        async with self._session() as session:
-            metadata = await session.get(Metadata, metadata_id)
-            if metadata is None:
-                return False
-            await cascade_delete_metadata(session, metadata)
-            await session.commit()
-        await self._drop_embeddings([metadata_id])
-        return True
-
-    async def batch_delete_metadata(self, ids: list[int]) -> tuple[int, int]:
-        """级联与 :meth:`delete_metadata` 一致, 单个事务. 不存在的 id 计入 missing."""
-        removed: list[int] = []
-        async with self._session() as session:
-            missing = 0
-            for metadata_id in unique_ids(ids):
-                metadata = await session.get(Metadata, metadata_id)
-                if metadata is None:
-                    missing += 1
-                    continue
-                await cascade_delete_metadata(session, metadata)
-                removed.append(metadata_id)
-            await session.commit()
-        await self._drop_embeddings(removed)
-        return len(removed), missing
-
-    async def _drop_embeddings(self, metadata_ids: list[int]) -> None:
-        """主库提交之后清除 sidecar: 跨库没有事务, 先删除向量会在主库回滚时丢弃仍有效的数据.
-        清理失败只留下孤儿行: 检索侧回查主库时会将其过滤, 下次全量索引再删除, 因此仅记录日志."""
-        if self._embeddings is None or not metadata_ids:
-            return
-        try:
-            await self._embeddings.delete_metadata(metadata_ids)
-        except Exception:
-            logger.warning("embedding cleanup failed", metadata_ids=metadata_ids, exc_info=True)
 
     async def merge_metadata_entries(self, target_id: int, source_ids: Sequence[int]) -> Metadata | None:
         """把来源条目的 raw 快照补入目标, 迁移关联记录后删除来源.
@@ -1005,3 +960,53 @@ class MetadataRepoMixin(RepositoryMixinBase):
             await session.refresh(target)
         await self._drop_embeddings(source_id_list)
         return target
+
+    async def set_metadata_locks(self, metadata_id: int, fields: Collection[MetadataField]) -> Metadata | None:
+        """整体替换锁定字段集合, 不修改 ``updated_at``. 不存在返回 None."""
+        async with self._session() as session:
+            metadata = await session.get(Metadata, metadata_id)
+            if metadata is None:
+                return None
+            wanted = set(fields)
+            metadata.locked_fields = [str(field) for field in MetadataField if field in wanted]
+            session.add(metadata)
+            await session.commit()
+            await session.refresh(metadata)
+            return metadata
+
+    async def delete_metadata(self, metadata_id: int) -> bool:
+        """级联见 ``cascade_delete_metadata``. 不存在返回 False."""
+        async with self._session() as session:
+            metadata = await session.get(Metadata, metadata_id)
+            if metadata is None:
+                return False
+            await cascade_delete_metadata(session, metadata)
+            await session.commit()
+        await self._drop_embeddings([metadata_id])
+        return True
+
+    async def batch_delete_metadata(self, ids: list[int]) -> tuple[int, int]:
+        """级联与 :meth:`delete_metadata` 一致, 单个事务. 不存在的 id 计入 missing."""
+        removed: list[int] = []
+        async with self._session() as session:
+            missing = 0
+            for metadata_id in unique_ids(ids):
+                metadata = await session.get(Metadata, metadata_id)
+                if metadata is None:
+                    missing += 1
+                    continue
+                await cascade_delete_metadata(session, metadata)
+                removed.append(metadata_id)
+            await session.commit()
+        await self._drop_embeddings(removed)
+        return len(removed), missing
+
+    async def _drop_embeddings(self, metadata_ids: list[int]) -> None:
+        """主库提交之后清除 sidecar: 跨库没有事务, 先删除向量会在主库回滚时丢弃仍有效的数据.
+        清理失败只留下孤儿行: 检索侧回查主库时会将其过滤, 下次全量索引再删除, 因此仅记录日志."""
+        if self._embeddings is None or not metadata_ids:
+            return
+        try:
+            await self._embeddings.delete_metadata(metadata_ids)
+        except Exception:
+            logger.warning("embedding cleanup failed", metadata_ids=metadata_ids, exc_info=True)
