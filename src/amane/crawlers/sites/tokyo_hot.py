@@ -14,7 +14,9 @@ from ..models import FetchOptions, MediaMetadata, SearchQuery, film_actors
 
 _BASE_URL = "https://my.tokyo-hot.com"
 _CDN_URL = "https://my.cdn.tokyo-hot.com"
-_NUMBER_RE = re.compile(r"^N\d+$", re.IGNORECASE)
+# Tokyo-Hot 的番号只有 k / n 两个系列, 字母必须在第一位. 只按 N 判会把 k0794 这类
+# 全部拒在搜索之前, 日志里只留一条 search miss, 看不出是被本地正则拦下的.
+_NUMBER_RE = re.compile(r"^[KN]\d+$", re.IGNORECASE)
 _DETAIL_PATH_RE = re.compile(r"/product/(\d+)/?(?:\?.*)?$")
 _NUMBER_LABEL_RE = re.compile(r"作品番号\s*[:：]\s*([A-Z]\d+)", re.IGNORECASE)
 

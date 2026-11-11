@@ -113,3 +113,27 @@ async def test_scrape_maps_multi_series_and_full_size_assets() -> None:
         "https://my.cdn.tokyo-hot.com/media/5770/vcap/151/640x480_wlimited.jpg",
     ]
     assert result.trailer_urls == ["https://my.cdn.tokyo-hot.com/media/samples/5770.mp4"]
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        # 站上只有 k / n 两个系列, 两种都要能进搜索.
+        ("k0794", "K0794"),
+        ("K0794", "K0794"),
+        ("n1138", "N1138"),
+        ("n0687", "N0687"),
+        # 其它字母、字母不在第一位、缺数字: 都不是本站番号.
+        ("a1234", None),
+        ("e0001", None),
+        ("xk0794", None),
+        ("kn0794", None),
+        ("0794", None),
+        ("k", None),
+        ("k-0794", None),
+        ("", None),
+    ],
+)
+def test_normalize_number_accepts_only_k_and_n(raw: str, expected: str | None) -> None:
+    """番号前缀只有 k / n 且必须在第一位; 放宽成任意字母会让别家的号混进搜索."""
+    assert _normalize_number(raw) == expected
