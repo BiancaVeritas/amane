@@ -4,7 +4,12 @@ import pytest
 
 from amane.crawlers import registry
 from amane.crawlers.models import SearchQuery
-from amane.crawlers.sites.tokyo_hot import TokyoHotCrawler, _normalize_number, _parse_runtime
+from amane.crawlers.sites.tokyo_hot import (
+    TokyoHotCrawler,
+    _normalize_number,
+    _parse_runtime,
+    _search_result,
+)
 from amane.enums import SiteName
 
 
@@ -137,3 +142,15 @@ async def test_scrape_maps_multi_series_and_full_size_assets() -> None:
 def test_normalize_number_accepts_only_k_and_n(raw: str, expected: str | None) -> None:
     """番号前缀只有 k / n 且必须在第一位; 放宽成任意字母会让别家的号混进搜索."""
     assert _normalize_number(raw) == expected
+
+
+def test_search_result_returns_listing_thumb() -> None:
+    """搜索页的列表缩略图要能取出: 详情页两处封面都缺时靠它兜底."""
+    assert _search_result(SEARCH_HTML, "N0956", "https://my.tokyo-hot.com/product/") == (
+        "https://my.tokyo-hot.com/product/5770/?lang=ja",
+        "https://my.tokyo-hot.com/thumb/220x124_default.jpg",
+    )
+
+
+def test_search_result_has_no_thumb_for_other_number() -> None:
+    assert _search_result(SEARCH_HTML, "K9999", "https://my.tokyo-hot.com/product/") == (None, None)

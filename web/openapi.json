@@ -6177,6 +6177,214 @@
         }
       }
     },
+    "/api/actor-name-mappings": {
+      "get": {
+        "tags": [
+          "actor-name-mappings"
+        ],
+        "summary": "List Actor Name Mappings",
+        "operationId": "list_actor_name_mappings",
+        "parameters": [
+          {
+            "name": "search",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "",
+              "title": "Search"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "default": 200,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response List Actor Name Mappings"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "actor-name-mappings"
+        ],
+        "summary": "Save Actor Name Mapping",
+        "operationId": "save_actor_name_mapping",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ActorNameUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Save Actor Name Mapping"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/actor-name-mappings/{original}": {
+      "delete": {
+        "tags": [
+          "actor-name-mappings"
+        ],
+        "summary": "Delete Actor Name Mapping",
+        "operationId": "delete_actor_name_mapping",
+        "parameters": [
+          {
+            "name": "original",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Original"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/actor-name-mappings/export": {
+      "get": {
+        "tags": [
+          "actor-name-mappings"
+        ],
+        "summary": "Export Actor Name Mappings",
+        "operationId": "export_actor_name_mappings",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/actor-name-mappings/import": {
+      "post": {
+        "tags": [
+          "actor-name-mappings"
+        ],
+        "summary": "Import Actor Name Mappings",
+        "operationId": "import_actor_name_mappings",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "type": "object",
+                "title": "Payload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Import Actor Name Mappings"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/tools": {
       "get": {
         "tags": [
@@ -7488,6 +7696,33 @@
         "title": "ActorLocksRequest",
         "description": "整体替换锁定字段集合."
       },
+      "ActorNameUpdate": {
+        "properties": {
+          "original": {
+            "type": "string",
+            "maxLength": 300,
+            "minLength": 1,
+            "title": "Original"
+          },
+          "translation": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Translation"
+          }
+        },
+        "type": "object",
+        "required": [
+          "original"
+        ],
+        "title": "ActorNameUpdate"
+      },
       "ActorPushResult": {
         "properties": {
           "type": {
@@ -7592,6 +7827,18 @@
           "name": {
             "type": "string",
             "title": "Name"
+          },
+          "display_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Name",
+            "description": "映射后的显示名; 仅展示用, 不影响搜索与去重"
           },
           "count": {
             "type": "integer",
@@ -11706,10 +11953,47 @@
             "$ref": "#/components/schemas/MoveMode",
             "default": "move"
           },
+          "watch_dir_enabled": {
+            "type": "boolean",
+            "title": "Watch Dir Enabled",
+            "default": false
+          },
+          "watch_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Watch Path"
+          },
+          "watch_rename": {
+            "type": "boolean",
+            "title": "Watch Rename",
+            "default": false
+          },
           "video_template": {
             "type": "string",
             "title": "Video Template",
             "default": "{studio}/{number}/{number}[-CD{cd?}][-{sub?}].{ext}"
+          },
+          "use_jinja_template": {
+            "type": "boolean",
+            "title": "Use Jinja Template",
+            "default": false
+          },
+          "jinja_video_template": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Jinja Video Template"
           },
           "custom_placeholders": {
             "additionalProperties": {
@@ -11956,9 +12240,43 @@
           "move_mode": {
             "$ref": "#/components/schemas/MoveMode"
           },
+          "watch_dir_enabled": {
+            "type": "boolean",
+            "title": "Watch Dir Enabled"
+          },
+          "watch_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Watch Path"
+          },
+          "watch_rename": {
+            "type": "boolean",
+            "title": "Watch Rename"
+          },
           "video_template": {
             "type": "string",
             "title": "Video Template"
+          },
+          "use_jinja_template": {
+            "type": "boolean",
+            "title": "Use Jinja Template"
+          },
+          "jinja_video_template": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Jinja Video Template"
           },
           "custom_placeholders": {
             "additionalProperties": {
@@ -12124,7 +12442,12 @@
           "ingest",
           "recursive",
           "move_mode",
+          "watch_dir_enabled",
+          "watch_path",
+          "watch_rename",
           "video_template",
+          "use_jinja_template",
+          "jinja_video_template",
           "link_mode",
           "subtitle_extensions",
           "write_nfo",
@@ -12236,6 +12559,39 @@
               }
             ]
           },
+          "watch_dir_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Watch Dir Enabled"
+          },
+          "watch_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Watch Path"
+          },
+          "watch_rename": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Watch Rename"
+          },
           "video_template": {
             "anyOf": [
               {
@@ -12246,6 +12602,28 @@
               }
             ],
             "title": "Video Template"
+          },
+          "use_jinja_template": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Use Jinja Template"
+          },
+          "jinja_video_template": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Jinja Video Template"
           },
           "custom_placeholders": {
             "anyOf": [
@@ -13057,6 +13435,14 @@
             "title": "Actor Genders",
             "default": {}
           },
+          "actor_display_names": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Actor Display Names",
+            "description": "演员显示名映射 (原始名 → 中文名); 仅展示用"
+          },
           "director_ids": {
             "additionalProperties": {
               "type": "integer"
@@ -13156,6 +13542,14 @@
           "total": {
             "type": "integer",
             "title": "Total"
+          },
+          "actor_display_names": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Actor Display Names",
+            "description": "演员显示名映射 (原始名 → 中文名); 仅展示用"
           },
           "semantic_hits": {
             "items": {
@@ -14209,6 +14603,10 @@
             "type": "string",
             "title": "Video Default"
           },
+          "jinja_video_default": {
+            "type": "string",
+            "title": "Jinja Video Default"
+          },
           "optional_defaults": {
             "$ref": "#/components/schemas/OptionalPathTemplateDefaults"
           },
@@ -14230,6 +14628,7 @@
         "type": "object",
         "required": [
           "video_default",
+          "jinja_video_default",
           "optional_defaults",
           "placeholders",
           "subtitle_extensions_default"

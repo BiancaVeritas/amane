@@ -158,6 +158,34 @@ export const ActorLocksRequestSchema = {
     description: '整体替换锁定字段集合.'
 } as const;
 
+export const ActorNameUpdateSchema = {
+    properties: {
+        original: {
+            type: 'string',
+            maxLength: 300,
+            minLength: 1,
+            title: 'Original'
+        },
+        translation: {
+            anyOf: [
+                {
+                    type: 'string',
+                    maxLength: 300
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Translation'
+        }
+    },
+    type: 'object',
+    required: [
+        'original'
+    ],
+    title: 'ActorNameUpdate'
+} as const;
+
 export const ActorPushResultSchema = {
     properties: {
         type: {
@@ -264,6 +292,18 @@ export const ActorResponseSchema = {
         name: {
             type: 'string',
             title: 'Name'
+        },
+        display_name: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Display Name',
+            description: '映射后的显示名; 仅展示用, 不影响搜索与去重'
         },
         count: {
             type: 'integer',
@@ -4473,10 +4513,47 @@ export const LibraryCreateRequestSchema = {
             $ref: '#/components/schemas/MoveMode',
             default: 'move'
         },
+        watch_dir_enabled: {
+            type: 'boolean',
+            title: 'Watch Dir Enabled',
+            default: false
+        },
+        watch_path: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Watch Path'
+        },
+        watch_rename: {
+            type: 'boolean',
+            title: 'Watch Rename',
+            default: false
+        },
         video_template: {
             type: 'string',
             title: 'Video Template',
             default: '{studio}/{number}/{number}[-CD{cd?}][-{sub?}].{ext}'
+        },
+        use_jinja_template: {
+            type: 'boolean',
+            title: 'Use Jinja Template',
+            default: false
+        },
+        jinja_video_template: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Jinja Video Template'
         },
         custom_placeholders: {
             additionalProperties: {
@@ -4726,9 +4803,43 @@ export const LibraryResponseSchema = {
         move_mode: {
             $ref: '#/components/schemas/MoveMode'
         },
+        watch_dir_enabled: {
+            type: 'boolean',
+            title: 'Watch Dir Enabled'
+        },
+        watch_path: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Watch Path'
+        },
+        watch_rename: {
+            type: 'boolean',
+            title: 'Watch Rename'
+        },
         video_template: {
             type: 'string',
             title: 'Video Template'
+        },
+        use_jinja_template: {
+            type: 'boolean',
+            title: 'Use Jinja Template'
+        },
+        jinja_video_template: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Jinja Video Template'
         },
         custom_placeholders: {
             additionalProperties: {
@@ -4894,7 +5005,12 @@ export const LibraryResponseSchema = {
         'ingest',
         'recursive',
         'move_mode',
+        'watch_dir_enabled',
+        'watch_path',
+        'watch_rename',
         'video_template',
+        'use_jinja_template',
+        'jinja_video_template',
         'link_mode',
         'subtitle_extensions',
         'write_nfo',
@@ -5007,6 +5123,39 @@ export const LibraryUpdateRequestSchema = {
                 }
             ]
         },
+        watch_dir_enabled: {
+            anyOf: [
+                {
+                    type: 'boolean'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Watch Dir Enabled'
+        },
+        watch_path: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Watch Path'
+        },
+        watch_rename: {
+            anyOf: [
+                {
+                    type: 'boolean'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Watch Rename'
+        },
         video_template: {
             anyOf: [
                 {
@@ -5017,6 +5166,28 @@ export const LibraryUpdateRequestSchema = {
                 }
             ],
             title: 'Video Template'
+        },
+        use_jinja_template: {
+            anyOf: [
+                {
+                    type: 'boolean'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Use Jinja Template'
+        },
+        jinja_video_template: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Jinja Video Template'
         },
         custom_placeholders: {
             anyOf: [
@@ -5846,6 +6017,14 @@ export const MetadataDetailResponseSchema = {
             title: 'Actor Genders',
             default: {}
         },
+        actor_display_names: {
+            additionalProperties: {
+                type: 'string'
+            },
+            type: 'object',
+            title: 'Actor Display Names',
+            description: '演员显示名映射 (原始名 → 中文名); 仅展示用'
+        },
         director_ids: {
             additionalProperties: {
                 type: 'integer'
@@ -5947,6 +6126,14 @@ export const MetadataListResponseSchema = {
         total: {
             type: 'integer',
             title: 'Total'
+        },
+        actor_display_names: {
+            additionalProperties: {
+                type: 'string'
+            },
+            type: 'object',
+            title: 'Actor Display Names',
+            description: '演员显示名映射 (原始名 → 中文名); 仅展示用'
         },
         semantic_hits: {
             items: {
@@ -7015,6 +7202,10 @@ export const PathTemplateSchemaResponseSchema = {
             type: 'string',
             title: 'Video Default'
         },
+        jinja_video_default: {
+            type: 'string',
+            title: 'Jinja Video Default'
+        },
         optional_defaults: {
             $ref: '#/components/schemas/OptionalPathTemplateDefaults'
         },
@@ -7036,6 +7227,7 @@ export const PathTemplateSchemaResponseSchema = {
     type: 'object',
     required: [
         'video_default',
+        'jinja_video_default',
         'optional_defaults',
         'placeholders',
         'subtitle_extensions_default'

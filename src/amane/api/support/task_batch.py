@@ -98,6 +98,25 @@ async def execute_task_batch(
     )
 
 
+async def _drop_media_files_of(repo: Repository, tasks: Sequence[Task]) -> None:
+    """删除任务对应的文件索引行.
+
+    任务 payload 里 SCRAPE 存单个 ``media_file_id``, ORGANIZE 存 ``media_file_ids``;
+    两处都要收. 索引留着会让「同名已刮削」的判断一直成立, 用户删了任务也重新刮不动.
+    """
+    media_ids: set[int] = set()
+    for task in tasks:
+        payload = task.payload or {}
+        single = payload.get("media_file_id")
+        if isinstance(single, int):
+            media_ids.add(single)
+        many = payload.get("media_file_ids")
+        if isinstance(many, list):
+            media_ids.update(i for i in many if isinstance(i, int))
+    if media_ids:
+        await repo.batch_delete_media_files(sorted(media_ids))
+
+
 async def _apply_found(
     *,
     action: TaskBatchAction,
@@ -128,9 +147,11 @@ async def _apply_found(
         if deleted and deleted < len(ids):
             leftover_ids = {task.id for task in await repo.find_tasks(task_ids=ids) if task.id is not None}
         if deleted:
-            for task in eligible:
-                if task.id is not None and task.id not in leftover_ids:
-                    cleanup_task_artifacts(task, log_dir)
+            gone = [task for task in eligible if task.id is not None and task.id not in leftover_ids]
+            for task in gone:
+                cleanup_task_artifacts(task, log_dir)
+            # 任务删掉后对应的索引行也要清掉, 否则按文件名查重会一直命中, 删了记录也刮不动.
+            await _drop_media_files_of(repo, gone)
         # 有集合外后裔的行被跳过, 计入 skipped (与 status 不合格的 skipped 相加).
         return TaskBatchResponse(affected=deleted, skipped=skipped + (len(eligible) - deleted), missing=missing)
 

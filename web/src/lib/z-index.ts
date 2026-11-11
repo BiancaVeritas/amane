@@ -29,4 +29,11 @@ export const Z_INDEX = {
    * 统一给到最高.
    */
   dropdown: 500,
+  /**
+   * 提示气泡.
+   *
+   * Mantine 的 Tooltip 默认跟着父级算层级, 弹框里使用时会被弹框本身盖住; 统一抬到最高,
+   * 免得「删除」「导出」「导入」这类图标按钮的说明看不见.
+   */
+  tooltip: 600,
 } as const;

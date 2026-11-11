@@ -72,7 +72,8 @@ def _parse_runtime(value: str | None) -> int | None:
     return round((hours * 3600 + minutes * 60 + seconds) / 60)
 
 
-def _search_result_url(text: str, requested_number: str, page_url: str) -> str | None:
+def _search_result(text: str, requested_number: str, page_url: str) -> tuple[str | None, str | None]:
+    """搜索结果里与 ``requested_number`` 对应的 (详情页地址, 列表缩略图)."""
     html = Selector(text=text)
     for item in html.xpath('//li[contains(concat(" ", normalize-space(@class), " "), " detail ")]'):
         href = item.xpath('.//a[contains(concat(" ", normalize-space(@class), " "), " rm ")]/@href').get()
@@ -83,10 +84,17 @@ def _search_result_url(text: str, requested_number: str, page_url: str) -> str |
             match_number = _normalize_number(image_number)
         else:
             match_number = _normalize_number(match.group(1))
-        if match_number == requested_number and href:
-            detail_url = urljoin(page_url, href)
-            return f"{detail_url}?lang=ja" if "?" not in detail_url else detail_url
-    return None
+        if match_number != requested_number or not href:
+            continue
+        detail_url = urljoin(page_url, href)
+        absolute = f"{detail_url}?lang=ja" if "?" not in detail_url else detail_url
+        thumb = item.xpath('.//a[contains(@class,"rm")]/img/@src').get()
+        return absolute, (urljoin(page_url, thumb) if thumb else None)
+    return None, None
+
+
+def _search_result_url(text: str, requested_number: str, page_url: str) -> str | None:
+    return _search_result(text, requested_number, page_url)[0]
 
 
 class TokyoHotCrawler(Crawler):
@@ -104,6 +112,18 @@ class TokyoHotCrawler(Crawler):
         if not text:
             return None
         return _search_result_url(text, number, search_url)
+
+    async def _listing_thumb(self, number: str) -> str | None:
+        """再查一次搜索页, 取该条目的列表缩略图.
+
+        只有详情页的两处封面都缺时才走到这里, 属于罕见路径; 宁可多一次请求, 也好过让条目
+        一张图都没有.
+        """
+        search_url = f"{self.base_url}/product/?q={quote(number.lower())}&lang=ja"
+        text = await self.client.get_html(search_url)
+        if not text:
+            return None
+        return _search_result(text, number, search_url)[1]
 
     async def _scrape(self, url: str, options: FetchOptions | None = None) -> MediaMetadata | None:
         del options
@@ -142,10 +162,20 @@ class TokyoHotCrawler(Crawler):
         release = normalize_calendar_date(release_raw.replace("/", "-") if release_raw else None)
         runtime = _parse_runtime(_label_text(html, "収録時間"))
 
+        # 封面有两个来源: 侧栏 jacket 链接 (3762×2522 的 DVD 封套) 与播放器的 data-poster
+        # (站点按片生成的 820×462 横版图). 前者并非每部都有 —— ``li.package`` 会整段留空,
+        # 只认它就会让这类条目一张封面都拿不到, 所以后者兜底.
         jacket = html.xpath(
             '//ul[contains(@class,"control")]//li[contains(@class,"package")]//a[contains(@href,"/jacket/")]/@href'
         ).get()
-        jacket_url = urljoin(url, jacket) if jacket else None
+        if jacket:
+            jacket_url = urljoin(url, jacket)
+        else:
+            poster = html.xpath('//div[contains(@class,"sample-player-shell")]/@data-poster').get()
+            jacket_url = urljoin(_CDN_URL, poster) if poster else None
+            if jacket_url is None:
+                # 两处都没有时再回搜索页取列表缩略图: 它是 220×124 的小图, 但好过没有封面.
+                jacket_url = await self._listing_thumb(actual_number)
         extrafanart = _dedupe(
             [
                 urljoin(url, href)

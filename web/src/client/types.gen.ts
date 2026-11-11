@@ -115,6 +115,20 @@ export type ActorLocksRequest = {
 };
 
 /**
+ * ActorNameUpdate
+ */
+export type ActorNameUpdate = {
+    /**
+     * Original
+     */
+    original: string;
+    /**
+     * Translation
+     */
+    translation?: string | null;
+};
+
+/**
  * ActorPushResult
  */
 export type ActorPushResult = {
@@ -200,6 +214,12 @@ export type ActorResponse = {
      * Name
      */
     name: string;
+    /**
+     * Display Name
+     *
+     * 映射后的显示名; 仅展示用, 不影响搜索与去重
+     */
+    display_name?: string | null;
     /**
      * Count
      */
@@ -2224,9 +2244,29 @@ export type LibraryCreateRequest = {
     patterns?: Array<string>;
     move_mode?: MoveMode;
     /**
+     * Watch Dir Enabled
+     */
+    watch_dir_enabled?: boolean;
+    /**
+     * Watch Path
+     */
+    watch_path?: string | null;
+    /**
+     * Watch Rename
+     */
+    watch_rename?: boolean;
+    /**
      * Video Template
      */
     video_template?: string;
+    /**
+     * Use Jinja Template
+     */
+    use_jinja_template?: boolean;
+    /**
+     * Jinja Video Template
+     */
+    jinja_video_template?: string | null;
     /**
      * Custom Placeholders
      */
@@ -2357,9 +2397,29 @@ export type LibraryResponse = {
     patterns?: Array<string>;
     move_mode: MoveMode;
     /**
+     * Watch Dir Enabled
+     */
+    watch_dir_enabled: boolean;
+    /**
+     * Watch Path
+     */
+    watch_path: string | null;
+    /**
+     * Watch Rename
+     */
+    watch_rename: boolean;
+    /**
      * Video Template
      */
     video_template: string;
+    /**
+     * Use Jinja Template
+     */
+    use_jinja_template: boolean;
+    /**
+     * Jinja Video Template
+     */
+    jinja_video_template: string | null;
     /**
      * Custom Placeholders
      */
@@ -2465,9 +2525,29 @@ export type LibraryUpdateRequest = {
     patterns?: Array<string> | null;
     move_mode?: MoveMode | null;
     /**
+     * Watch Dir Enabled
+     */
+    watch_dir_enabled?: boolean | null;
+    /**
+     * Watch Path
+     */
+    watch_path?: string | null;
+    /**
+     * Watch Rename
+     */
+    watch_rename?: boolean | null;
+    /**
      * Video Template
      */
     video_template?: string | null;
+    /**
+     * Use Jinja Template
+     */
+    use_jinja_template?: boolean | null;
+    /**
+     * Jinja Video Template
+     */
+    jinja_video_template?: string | null;
     /**
      * Custom Placeholders
      */
@@ -2880,6 +2960,14 @@ export type MetadataDetailResponse = {
         [key: string]: ActorGender;
     };
     /**
+     * Actor Display Names
+     *
+     * 演员显示名映射 (原始名 → 中文名); 仅展示用
+     */
+    actor_display_names?: {
+        [key: string]: string;
+    };
+    /**
      * Director Ids
      */
     director_ids?: {
@@ -2928,6 +3016,14 @@ export type MetadataListResponse = {
      * Total
      */
     total: number;
+    /**
+     * Actor Display Names
+     *
+     * 演员显示名映射 (原始名 → 中文名); 仅展示用
+     */
+    actor_display_names?: {
+        [key: string]: string;
+    };
     /**
      * Semantic Hits
      */
@@ -3484,6 +3580,10 @@ export type PathTemplateSchemaResponse = {
      * Video Default
      */
     video_default: string;
+    /**
+     * Jinja Video Default
+     */
+    jinja_video_default: string;
     optional_defaults: OptionalPathTemplateDefaults;
     /**
      * Placeholders
@@ -9516,6 +9616,155 @@ export type SuggestMappingsResponses = {
      */
     200: unknown;
 };
+
+export type ListActorNameMappingsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Search
+         */
+        search?: string;
+        /**
+         * Offset
+         */
+        offset?: number;
+        /**
+         * Limit
+         */
+        limit?: number;
+    };
+    url: '/api/actor-name-mappings';
+};
+
+export type ListActorNameMappingsErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListActorNameMappingsError = ListActorNameMappingsErrors[keyof ListActorNameMappingsErrors];
+
+export type ListActorNameMappingsResponses = {
+    /**
+     * Response List Actor Name Mappings
+     *
+     * Successful Response
+     */
+    200: {
+        [key: string]: unknown;
+    };
+};
+
+export type ListActorNameMappingsResponse = ListActorNameMappingsResponses[keyof ListActorNameMappingsResponses];
+
+export type SaveActorNameMappingData = {
+    body: ActorNameUpdate;
+    path?: never;
+    query?: never;
+    url: '/api/actor-name-mappings';
+};
+
+export type SaveActorNameMappingErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type SaveActorNameMappingError = SaveActorNameMappingErrors[keyof SaveActorNameMappingErrors];
+
+export type SaveActorNameMappingResponses = {
+    /**
+     * Response Save Actor Name Mapping
+     *
+     * Successful Response
+     */
+    200: {
+        [key: string]: unknown;
+    };
+};
+
+export type SaveActorNameMappingResponse = SaveActorNameMappingResponses[keyof SaveActorNameMappingResponses];
+
+export type DeleteActorNameMappingData = {
+    body?: never;
+    path: {
+        /**
+         * Original
+         */
+        original: string;
+    };
+    query?: never;
+    url: '/api/actor-name-mappings/{original}';
+};
+
+export type DeleteActorNameMappingErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type DeleteActorNameMappingError = DeleteActorNameMappingErrors[keyof DeleteActorNameMappingErrors];
+
+export type DeleteActorNameMappingResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type DeleteActorNameMappingResponse = DeleteActorNameMappingResponses[keyof DeleteActorNameMappingResponses];
+
+export type ExportActorNameMappingsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/actor-name-mappings/export';
+};
+
+export type ExportActorNameMappingsResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
+export type ImportActorNameMappingsData = {
+    /**
+     * Payload
+     */
+    body: {
+        [key: string]: unknown;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/actor-name-mappings/import';
+};
+
+export type ImportActorNameMappingsErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ImportActorNameMappingsError = ImportActorNameMappingsErrors[keyof ImportActorNameMappingsErrors];
+
+export type ImportActorNameMappingsResponses = {
+    /**
+     * Response Import Actor Name Mappings
+     *
+     * Successful Response
+     */
+    200: {
+        [key: string]: unknown;
+    };
+};
+
+export type ImportActorNameMappingsResponse = ImportActorNameMappingsResponses[keyof ImportActorNameMappingsResponses];
 
 export type GetToolCatalogData = {
     body?: never;

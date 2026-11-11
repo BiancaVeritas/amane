@@ -661,14 +661,34 @@ export function ImageCropDialog({
             >
               <ReactCrop
                 crop={crop}
-                onChange={(c) => setCrop(snapCrop(c, canvasRef.current))}
+                onChange={(c) => {
+                  const snapped = snapCrop(c, canvasRef.current);
+                  setCrop(snapped);
+                  // 拖动过程中就跟着更新比例, 不必等松手.
+                  if (!lockAspect && canvasRef.current && snapped.width > 0 && snapped.height > 0) {
+                    setAspectRatio(
+                      Number(
+                        clampAspect(snapped.width / snapped.height, aspectRef.current).toFixed(3),
+                      ),
+                    );
+                  }
+                }}
                 onComplete={(c) => {
                   // 松手时也走一次吸附: 拖动过程中的浮点残留不该落进输入框.
                   // completedCrop 只用于「有选区」的判断, 保持 ReactCrop 给的像素值;
                   // 吸附后的整数框由 syncBoxFromCrop 写进 box.
                   setCompletedCrop(c);
                   if (canvasRef.current && c.width > 0 && c.height > 0) {
-                    syncBoxFromCrop(snapCrop(c, canvasRef.current), canvasRef.current);
+                    const snapped = snapCrop(c, canvasRef.current);
+                    syncBoxFromCrop(snapped, canvasRef.current);
+                    // 自由拖动时把宽高比跟着选区走: 左上角那个数值要能读到刚拖出来的实际比例.
+                    if (!lockAspect && snapped.height > 0) {
+                      setAspectRatio(
+                        Number(
+                          clampAspect(snapped.width / snapped.height, aspectRef.current).toFixed(3),
+                        ),
+                      );
+                    }
                   }
                 }}
                 aspect={lockAspect ? aspectRatio : undefined}
