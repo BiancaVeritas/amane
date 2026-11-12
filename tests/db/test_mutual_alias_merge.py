@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING
 import pytest
 
 from amane.db.actor_lookup import find_mutual_alias_pairs, resolve_actor_by_name
-from amane.db.models import Actor, Metadata
+from amane.db.models import Actor, Metadata, MetadataActor
 from amane.db.repos.facet_helpers import add_actor_aliases, clean_actor_names
 
 if TYPE_CHECKING:
@@ -28,6 +28,18 @@ async def _actor(repo: Repository, name: str, aliases: list[str] | None = None) 
             await add_actor_aliases(session, actor, aliases)
             await session.commit()
     return actor
+
+
+
+async def _attach_work(repo: Repository, actor_id: int, number: str) -> None:
+    """给演员挂一部影片, 用来比较作品数."""
+    meta = Metadata(number=number, actors=[])
+    async with repo._session() as session:
+        session.add(meta)
+        await session.commit()
+        await session.refresh(meta)
+        session.add(MetadataActor(metadata_id=meta.id, actor_id=actor_id, position=0))
+        await session.commit()
 
 
 class TestMutualAliasDetection:
@@ -90,6 +102,33 @@ class TestMutualAliasMerge:
             survivor = await resolve_actor_by_name(session, "山本玲奈")
         assert survivor is not None
         assert survivor.id == a.id
+
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_work_count_decides_target(self, repo: Repository) -> None:
+        """作品数多的那个当目标, 哪怕它在刮削列表里排在后面."""
+        # 「山本玲奈」先出现但只有 1 部; 「白咲碧」后出现却有 3 部.
+        fewer = await _actor(repo, "山本玲奈", ["白咲碧"])
+        more = await _actor(repo, "白咲碧", ["山本玲奈"])
+        assert fewer.id is not None and more.id is not None
+        for index in range(3):
+            await _attach_work(repo, more.id, f"KEEP-{index}")
+        await _attach_work(repo, fewer.id, "DROP-0")
+
+        meta = Metadata(number="TEST-003", actors=["山本玲奈", "白咲碧"])
+        async with repo._session() as session:
+            session.add(meta)
+            await session.commit()
+            await session.refresh(meta)
+            await clean_actor_names(session, meta)
+            await session.commit()
+            await session.refresh(meta)
+            names = list(meta.actors)
+
+        assert names == ["白咲碧"], "目标应是作品更多的那个"
+        async with repo._session() as session:
+            assert await session.get(Actor, fewer.id) is None
+            assert await session.get(Actor, more.id) is not None
 
     @pytest.mark.asyncio(loop_scope="function")
     async def test_one_way_alias_kept_apart(self, repo: Repository) -> None:

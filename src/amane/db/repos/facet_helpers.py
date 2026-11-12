@@ -1106,10 +1106,19 @@ async def clean_actor_names(
     await session.flush()
 
 
+async def _actor_work_count(session: AsyncSession, actor_id: int) -> int:
+    """某演员挂了多少部影片."""
+    total = (
+        await session.exec(select(count()).select_from(MetadataActor).where(col(MetadataActor.actor_id) == actor_id))
+    ).one()
+    return int(total or 0)
+
+
 async def _merge_mutual_alias_actors(session: AsyncSession, names: list[str]) -> list[str]:
     """把互为别名的演员并成一个, 返回合并后的展示名列表.
 
-    命中时以先出现的那个为目标 (列表顺序即刮削来源的优先级), 其余并入并改写真值.
+    以**作品数多的那个为目标**: 保留条目更全的一边, 少的那边并进来. 作品数相同时
+    按列表顺序 (刮削来源优先级) 取先出现的.
     合并不会跨事务: 全部动作都落在调用方已有的写事务里.
     """
     if len(names) < 2:
@@ -1124,13 +1133,20 @@ async def _merge_mutual_alias_actors(session: AsyncSession, names: list[str]) ->
         for peer in peers:
             if peer.id is None or peer.name in merged_away:
                 continue
+            target, source = actor, peer
+            if await _actor_work_count(session, peer.id) > await _actor_work_count(session, actor.id):
+                target, source = peer, actor
             logger.info(
                 "mutual alias actors merged",
-                target=actor.name,
-                source=peer.name,
+                target=target.name,
+                source=source.name,
             )
-            await merge_link_facets(session, LINK_FACETS[FacetKind.ACTOR], actor.id, {peer.id})
-            merged_away[peer.name] = actor.name
+            assert target.id is not None and source.id is not None
+            await merge_link_facets(session, LINK_FACETS[FacetKind.ACTOR], target.id, {source.id})
+            merged_away[source.name] = target.name
+            if target.name != actor.name:
+                # 被并掉的是当前遍历到的这个, 目标换成了对方.
+                merged_away[actor.name] = target.name
     for name in names:
         final = merged_away.get(name, name)
         if final not in survivors:
