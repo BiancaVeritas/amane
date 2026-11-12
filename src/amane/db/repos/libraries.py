@@ -20,6 +20,7 @@ from ...organize.path_templates import (
     VIDEO_TEMPLATE_DEFAULT,
     normalize_link_template,
     validate_extrafanart_name_template,
+    validate_jinja_template,
     validate_path_template,
 )
 from ...organize.strm_content import normalize_strm_content_template, validate_strm_content_template
@@ -28,6 +29,13 @@ from ..models import Library, MediaFile
 from ..repo_types import LibraryUpdates
 from .base import RepositoryMixinBase
 
+
+def _validated_or_default_jinja(value: str | None, watch_dir_enabled: bool) -> str | None:
+    """校验 Jinja2 模板; 空值在开启监控目录时补默认."""
+    template = validate_jinja_template(_blank_to_none(value) or "")
+    if template:
+        return template
+    return JINJA_VIDEO_TEMPLATE_DEFAULT if watch_dir_enabled else None
 
 def _blank_to_none(value: str | None) -> str | None:
     """空白串按「未设置」存, 免得库里留下空路径让监控去挂空目录."""
@@ -137,8 +145,9 @@ class LibrariesRepoMixin(RepositoryMixinBase):
                 watch_rename=watch_rename,
                 video_template=video_template,
                 use_jinja_template=use_jinja_template,
-                jinja_video_template=_blank_to_none(jinja_video_template)
-                or (JINJA_VIDEO_TEMPLATE_DEFAULT if watch_dir_enabled else None),
+                jinja_video_template=_validated_or_default_jinja(
+                    jinja_video_template, watch_dir_enabled
+                ),
                 custom_placeholders=dict(custom_placeholders or {}),
                 link_template=normalize_link_template(link_template),
                 link_mode=link_mode,
@@ -254,7 +263,10 @@ class LibrariesRepoMixin(RepositoryMixinBase):
             if "use_jinja_template" in updates:
                 lib.use_jinja_template = updates["use_jinja_template"]
             if "jinja_video_template" in updates:
-                lib.jinja_video_template = _blank_to_none(updates["jinja_video_template"])
+                # 保存前就校验语法: 坏模板要等到整理文件时才炸, 那时表现是「文件全都不动」.
+                lib.jinja_video_template = validate_jinja_template(
+                    _blank_to_none(updates["jinja_video_template"]) or ""
+                ) or None
             # 打开监控目录即切到 Jinja2 语法; 模板没填时补默认, 免得渲染成空路径.
             if updates.get("watch_dir_enabled") and not lib.jinja_video_template:
                 lib.jinja_video_template = JINJA_VIDEO_TEMPLATE_DEFAULT

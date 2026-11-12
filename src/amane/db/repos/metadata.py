@@ -4,6 +4,7 @@ from typing import Unpack, cast
 
 import structlog
 from sqlalchemy import ColumnElement, func, or_, text
+from sqlalchemy import update as sqla_update
 from sqlalchemy.sql.functions import count
 from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -631,6 +632,7 @@ class MetadataRepoMixin(RepositoryMixinBase):
         *,
         content_type: ContentType | None = None,
         actor_genders: Mapping[str, ActorGender] | None = None,
+        mode: WriteMode = WriteMode.AUTO,
         **kwargs: Unpack[MetadataFields],
     ) -> Metadata:
         """查重忽略大小写; 已存在时不改写 number 的原始大小写, 也不改写类型.
@@ -665,8 +667,17 @@ class MetadataRepoMixin(RepositoryMixinBase):
             existing = rows[0] if rows else None
             if existing:
                 before = _image_signature(existing)
-                fields = _filter_locked(fields, _locked_fields_of(existing), existing.field_sources or {})
+                if mode is WriteMode.MANUAL:
+                    # 手动搜索: 无视既有锁定, 但也不新增锁 ——
+                    # 用户要的是「这次听我的」, 不是把这批字段永久钉住.
+                    pass
+                else:
+                    fields = _filter_locked(fields, _locked_fields_of(existing), existing.field_sources or {})
                 for key, value in fields.items():
+                    if key == "source_urls":
+                        # 显式重建: setattr 走 SQLAlchemy 属性描述符, JSON 列的键序在这里会丢.
+                        existing.source_urls = dict(value)
+                        continue
                     setattr(existing, key, value)
                 existing.updated_at = _utcnow()
                 session.add(existing)
@@ -693,11 +704,37 @@ class MetadataRepoMixin(RepositoryMixinBase):
                 await self.notify_media_changed(meta.id)
             return meta
 
+    async def reorder_source_urls(self, metadata_id: int, site: str) -> bool:
+        """把指定站点挪到 ``source_urls`` 第一位, 直接写 JSON 列.
+
+        不走 ORM 属性赋值: identity map 里已有该行时, 赋值后再读会拿回缓存里的旧值,
+        键序看着像没变. 这里自己序列化再整列回写, 顺序由字典本身决定.
+        """
+        async with self._session() as session:
+            row = (
+                await session.exec(
+                    select(col(Metadata.source_urls)).where(col(Metadata.id) == metadata_id)
+                )
+            ).first()
+            urls = dict(row or {})
+            if site not in urls:
+                return False
+            ordered = {site: urls[site]}
+            ordered.update({k: v for k, v in urls.items() if k != site})
+            await session.exec(
+                sqla_update(Metadata)
+                .where(col(Metadata.id) == metadata_id)
+                .values(source_urls=ordered)
+            )
+            await session.commit()
+            return True
+
     async def update_metadata(
         self,
         metadata_id: int,
         *,
         mode: WriteMode = WriteMode.AUTO,
+        force: bool = False,
         actor_genders: Mapping[str, ActorGender] | None = None,
         **updates: Unpack[MetadataFields],
     ) -> Metadata | None:
@@ -709,7 +746,10 @@ class MetadataRepoMixin(RepositoryMixinBase):
                 return None
             before = _image_signature(metadata)
             locked = _locked_fields_of(metadata)
-            if mode is WriteMode.AUTO:
+            if force:
+                # 清理动作 (删图等): 锁拦不住显式操作, 也不因此新增锁.
+                pass
+            elif mode is WriteMode.AUTO:
                 updates = _filter_locked(updates, locked, metadata.field_sources or {})
             else:
                 metadata.locked_fields = _merge_auto_locks(updates, locked)

@@ -3249,13 +3249,13 @@ export const HotSettingsSchema = {
                     ],
                     uncensored: [
                         'aventertainments',
+                        'caribbeancompr',
                         'd2pass',
+                        'tokyo_hot',
                         '10musume',
                         '1pondo',
                         'caribbeancom',
-                        'pacopacomama',
-                        'tokyo_hot',
-                        'caribbeancompr'
+                        'pacopacomama'
                     ],
                     western: [
                         'theporndb'
@@ -4537,7 +4537,7 @@ export const LibraryCreateRequestSchema = {
         video_template: {
             type: 'string',
             title: 'Video Template',
-            default: '{studio}/{number}/{number}[-CD{cd?}][-{sub?}].{ext}'
+            default: '{actress}/{number}/{number} [[{def?}]][-{mosaic?|ltx=LTX,cracked=破解,leaked=流出,censored=,uncensored=}][-CD{cd?}][-{sub?}].{ext}'
         },
         use_jinja_template: {
             type: 'boolean',
@@ -8786,6 +8786,133 @@ export const ScheduleUpdateRequestSchema = {
     title: 'ScheduleUpdateRequest'
 } as const;
 
+export const ScrapePreviewItemSchema = {
+    properties: {
+        site: {
+            type: 'string',
+            title: 'Site'
+        },
+        number: {
+            type: 'string',
+            title: 'Number'
+        },
+        title: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Title'
+        },
+        release: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Release'
+        },
+        studio: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Studio'
+        },
+        poster_url: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Poster Url'
+        },
+        thumb_url: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Thumb Url'
+        },
+        source_url: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Source Url'
+        }
+    },
+    type: 'object',
+    required: [
+        'site',
+        'number'
+    ],
+    title: 'ScrapePreviewItem',
+    description: '一个来源命中的候选; 只回展示需要的字段.'
+} as const;
+
+export const ScrapePreviewRequestSchema = {
+    properties: {
+        number: {
+            type: 'string',
+            title: 'Number'
+        },
+        content_type: {
+            anyOf: [
+                {
+                    $ref: '#/components/schemas/ContentType'
+                },
+                {
+                    type: 'null'
+                }
+            ]
+        }
+    },
+    type: 'object',
+    required: [
+        'number'
+    ],
+    title: 'ScrapePreviewRequest'
+} as const;
+
+export const ScrapePreviewResponseSchema = {
+    properties: {
+        items: {
+            items: {
+                $ref: '#/components/schemas/ScrapePreviewItem'
+            },
+            type: 'array',
+            title: 'Items'
+        }
+    },
+    type: 'object',
+    required: [
+        'items'
+    ],
+    title: 'ScrapePreviewResponse'
+} as const;
+
 export const ScrapeResultSchema = {
     properties: {
         type: {
@@ -8891,6 +9018,24 @@ export const ScrapeSubmissionSchema = {
             uniqueItems: true,
             title: 'Use Cache',
             description: '启用的缓存种类 (metadata: 复用 DB per-site 快照; trans: 复用译文). 空集 = 全部强制刷新'
+        },
+        manual: {
+            type: 'boolean',
+            title: 'Manual',
+            description: '手动搜索提交: 无视既有字段锁定并反过来锁住所写字段',
+            default: false
+        },
+        preferred_site: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Preferred Site',
+            description: '手动搜索选中的来源; 该站点的来源链接排到第一位'
         },
         type: {
             type: 'string',

@@ -281,18 +281,22 @@ def _stamp_stems(
     definition: str | None,
     ltx: bool = False,
 ) -> list[str]:
-    """相位 → PNG 主干, 顺序: 中字 / 无码 / 破解 / 流出 / LTX / 分辨率."""
+    """相位 → PNG 主干, 顺序: 中字 / 无码 / 性质 / 分辨率.
+
+    性质在 LTX 与破解 / 流出之间只出一枚: 两者本就是对同一段后缀的两种说法,
+    同时叠会在图上并排出现, 与模板里的 ``-LTX-破解`` 是同一类重复。
+    """
     stems: list[str] = []
     if has_subtitle:
         stems.append("subtitle")
     if uncensored:
         stems.append("uncensored")
-    if mosaic is Mosaic.CRACKED:
+    if ltx:
+        stems.append("ltx")
+    elif mosaic is Mosaic.CRACKED:
         stems.append("cracked")
     elif mosaic is Mosaic.LEAKED:
         stems.append("leaked")
-    if ltx:
-        stems.append("ltx")
     if definition:
         stems.append(definition.casefold())
     return stems

@@ -12,6 +12,7 @@ import {
   Stack,
   Text,
   Title,
+  Tooltip,
 } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
 import { notifications } from "@mantine/notifications";
@@ -32,6 +33,7 @@ import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tansta
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { type ReactNode, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useMediaServerReady } from "@/hooks/use-media-server-ready";
 import {
   batchClearActorPersonMutation,
   batchSubmitTasksMutation,
@@ -375,6 +377,13 @@ function ActorDetailPage() {
             })
           }
           onEdit={() => setEditOpen(true)}
+          onPush={(force) =>
+            scrapeMutation.mutate({
+              body: {
+                submissions: [{ type: "actor_push", actor_ids: [id], force }],
+              },
+            })
+          }
           onCrop={() => setCropOpen(true)}
           onClear={() => void handleClear()}
           onDelete={() => void handleDelete()}
@@ -453,6 +462,7 @@ function ActorHero({
   onApplyLocks,
   onScrape,
   onEdit,
+  onPush,
   onCrop,
   onClear,
   onDelete,
@@ -469,12 +479,15 @@ function ActorHero({
   onApplyLocks: (fields: readonly ActorField[]) => void;
   onScrape: (useCache: CacheKind[]) => void;
   onEdit: () => void;
+  /** 把本演员资料推到媒体服务器; force=true 覆盖已有字段. */
+  onPush: (force: boolean) => void;
   onCrop: () => void;
   onClear: () => void;
   onDelete: () => void;
   onSetDisplay: (alias: string) => void;
 }) {
   const { t } = useTranslation(["metadata", "common"]);
+  const mediaServer = useMediaServerReady();
   const [lightboxOpen, lightbox] = useDisclosure(false);
   const imageUrls = actor.image_urls ?? [];
   const primaryImage = imageUrls[0];
@@ -582,7 +595,8 @@ function ActorHero({
       <Stack gap="sm" style={{ flex: "1 1 20rem", minWidth: 0 }}>
         <Group gap="sm" align="center">
           <Title order={2}>
-            {actor.display_name ? (
+            {/* 没有中文映射时 display_name 会和原名相同, 那就只写一次, 免得出现「名 (名)」. */}
+            {actor.display_name && actor.display_name !== actor.name ? (
               <>
                 {actor.display_name}
                 <Text span size="lg" c="dimmed" fw={600}>
@@ -752,6 +766,36 @@ function ActorHero({
           <Button size="xs" variant="light" leftSection={<IconPencil size={14} />} onClick={onEdit}>
             {t("common:actions.edit")}
           </Button>
+          {/* 只同步这一个演员: 悬停给两种口径. 媒体服务器没配 API Key 时置灰并提示. */}
+          <Tooltip label={mediaServer.reason} disabled={mediaServer.ready} withArrow>
+            <Box>
+              <Menu
+                shadow="md"
+                position="bottom-start"
+                trigger="hover"
+                openDelay={100}
+                closeDelay={200}
+                disabled={!mediaServer.ready}
+              >
+                <Menu.Target>
+                  <Button
+                    size="xs"
+                    variant="light"
+                    leftSection={<IconRefresh size={14} />}
+                    disabled={!mediaServer.ready}
+                  >
+                    {t("actors.push.action")}
+                  </Button>
+                </Menu.Target>
+                <Menu.Dropdown>
+                  <Menu.Item onClick={() => onPush(true)}>{t("actors.push.force")}</Menu.Item>
+                  <Menu.Item onClick={() => onPush(false)}>
+                    {t("actors.push.incremental")}
+                  </Menu.Item>
+                </Menu.Dropdown>
+              </Menu>
+            </Box>
+          </Tooltip>
           <Menu shadow="md" position="bottom-start">
             <Menu.Target>
               <Button

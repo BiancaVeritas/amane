@@ -704,9 +704,12 @@ async def remove_image(
     # 删掉的正好是正在用的那张时, 顺延到池里第一张 (池空则留空).
     thumb_urls = thumbs if url not in metadata.thumb_urls else ([thumb_pool[0]] if thumb_pool else [])
 
+    # 从候选池移除图片不是手动改字段, 不该顺带锁定:
+    # MANUAL 会把写入的每一列都加锁, 于是删一张图就把封面与海报一起锁上.
     updated = await repo.update_metadata(
         metadata_id,
-        mode=WriteMode.MANUAL,
+        mode=WriteMode.AUTO,
+        force=True,
         thumb_urls=thumb_urls,
         poster_urls=posters,
         thumb_candidates=thumb_pool,

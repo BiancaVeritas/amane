@@ -2,7 +2,8 @@
   "actions": {
     "cancelTask": "取消任务",
     "record": "任务记录",
-    "submit": "提交任务"
+    "submit": "提交任务",
+    "manualScrape": "手动搜索"
   },
   "batch": {
     "cancel": "已取消 {{count}} 个",
@@ -247,6 +248,14 @@
             "trans": "译文缓存"
           }
         }
+      },
+      "manual": {
+        "label": "手动搜索",
+        "description": "无视既有字段锁定, 并锁住这次写到的字段"
+      },
+      "preferred_site": {
+        "label": "优先来源",
+        "description": "手动搜索选中的站点; 其来源链接排到第一位"
       }
     },
     "upscale": {
@@ -446,5 +455,22 @@
   },
   "type": {
     "actor_push": "推送演员"
+  },
+  "manualScrape": {
+    "title": "手动搜索刮削",
+    "hint": "先搜索, 再从结果里挑一条写入。不受已有记录与锁定影响。",
+    "label": "标题番号 / 地址 / UUID",
+    "placeholder": "例如 ABC-123 或 00000000-0000-0000-0000-000000000000",
+    "submit": "开始刮削",
+    "submitted": "已提交刮削任务",
+    "failed": "提交失败",
+    "emptyInput": "请输入番号、UUID 或地址",
+    "search": "搜索",
+    "noResult": "各来源都没有找到结果",
+    "pickOne": "找到 {{count}} 条结果, 选一条作为主元数据",
+    "useThis": "使用这条"
+  },
+  "scrape": {
+    "manual": "手动搜索"
   }
 }

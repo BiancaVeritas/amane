@@ -85,7 +85,7 @@ async def test_organize_target_occupied_skips_and_reports(
 ) -> None:
     """目标被别的文件占用时不改名、不动磁盘: 行留在源路径, 冲突写进结果; 幽灵行仍被清掉."""
     lib_root = tmp_path / "lib"
-    dest_dir = lib_root / "Studio" / "NSFS-039"
+    dest_dir = lib_root / "Unknown" / "NSFS-039"
     dest_dir.mkdir(parents=True)
     dest = dest_dir / "NSFS-039.mp4"
     dest.write_bytes(b"first")
@@ -133,7 +133,7 @@ async def test_organize_unknown_target_state_counts_failed(
 ) -> None:
     """读不出目标状态时记为失败而不是冲突: 不写冲突条目, 行留在源路径, 不动磁盘."""
     lib_root = tmp_path / "lib"
-    dest_dir = lib_root / "Studio" / "NSFS-039"
+    dest_dir = lib_root / "Unknown" / "NSFS-039"
     dest_dir.mkdir(parents=True)
     dest = dest_dir / "NSFS-039.mp4"
     dest.write_bytes(b"first")
@@ -182,7 +182,7 @@ async def test_organize_subtitle_target_occupied_is_reported(
     sub = src_dir / "NSFS-039.srt"
     sub.write_text("new subtitle", encoding="utf-8")
 
-    dest_dir = lib_root / "Studio" / "NSFS-039"
+    dest_dir = lib_root / "Unknown" / "NSFS-039"
     dest_dir.mkdir(parents=True)
     occupied_sub = dest_dir / "NSFS-039.srt"
     occupied_sub.write_text("existing subtitle", encoding="utf-8")
@@ -292,7 +292,7 @@ async def test_organize_appends_cd_suffix(repo: Repository, resource_store: Reso
     assert result.result is not None
     assert result.result.failed == 0
 
-    dest = lib_root / "Studio" / "NSFS-039" / "NSFS-039-CD1.mp4"
+    dest = lib_root / "Unknown" / "NSFS-039" / "NSFS-039-CD1.mp4"
     assert dest.exists()
     assert not src.exists()
     updated = await repo.get_media_file(source.id)
@@ -324,7 +324,7 @@ async def test_organize_dash_number_suffix(repo: Repository, resource_store: Res
     assert result.result is not None
     assert result.result.failed == 0
 
-    dest = lib_root / "Studio" / "NSFS-039" / "NSFS-039-CD2.mp4"
+    dest = lib_root / "Unknown" / "NSFS-039" / "NSFS-039-CD2.mp4"
     assert dest.exists()
     assert not src.exists()
     updated = await repo.get_media_file(source.id)
@@ -362,7 +362,7 @@ async def test_organize_cd_pair_no_collision(repo: Repository, resource_store: R
     assert result.result.failed == 0
     assert result.result.organized == 2
 
-    dest_dir = lib_root / "Studio" / "NSFS-039"
+    dest_dir = lib_root / "Unknown" / "NSFS-039"
     dest1 = dest_dir / "NSFS-039-CD1.mp4"
     dest2 = dest_dir / "NSFS-039-CD2.mp4"
     assert dest1.exists()
@@ -441,8 +441,8 @@ async def test_organize_writes_subtitle_tag(repo: Repository, resource_store: Re
     assert result.result is not None
     assert result.result.failed == 0
 
-    dest_c = lib_root / "Studio" / "NSFS-039" / "NSFS-039-C.mp4"
-    dest_b = lib_root / "Studio" / "NSFS-040" / "NSFS-040.mp4"
+    dest_c = lib_root / "Unknown" / "NSFS-039" / "NSFS-039-C.mp4"
+    dest_b = lib_root / "Unknown" / "NSFS-040" / "NSFS-040.mp4"
     assert dest_c.exists()
     assert dest_b.exists()
     updated_c = await repo.get_media_file(src_c.id)
@@ -599,7 +599,7 @@ async def test_organize_does_not_trash_blacklisted(
     assert result.result.organized == 1
     assert ad.exists()
     assert not (lib_root / ".amane_trash").exists()
-    assert (lib_root / "Studio" / "NSFS-039" / "NSFS-039.mp4").exists()
+    assert (lib_root / "Unknown" / "NSFS-039" / "NSFS-039.mp4").exists()
 
 
 @pytest.mark.asyncio(loop_scope="function")
@@ -633,7 +633,7 @@ async def test_organize_media_file_ids_only(repo: Repository, resource_store: Re
     assert result.result.organized == 1
     assert keep.exists()
     assert not target.exists()
-    assert (lib_root / "Studio" / "NSFS-039" / "NSFS-039.mp4").exists()
+    assert (lib_root / "Unknown" / "NSFS-039" / "NSFS-039.mp4").exists()
     remaining = await repo.get_media_file(kept.id)
     assert remaining is not None and remaining.path == str(keep)
 
@@ -770,7 +770,7 @@ async def test_organize_skips_rule_hits(
     result = await org.handle(OrganizePayload(library_id=lib.id, path=str(lib_root)))
     assert result.success is True
     assert result.result is not None
-    dest = lib_root / "Studio" / "NSFS-039" / "NSFS-039.mp4"
+    dest = lib_root / "Unknown" / "NSFS-039" / "NSFS-039.mp4"
     assert not dest.exists()
     assert src.exists()
     if case == "in_trash":
@@ -810,7 +810,7 @@ async def test_organize_serializes_same_library(
         org.handle(OrganizePayload(library_id=lib.id, path=str(lib_root))),
     )
     assert first.success is True and second.success is True
-    assert (lib_root / "Studio" / "NSFS-039" / "NSFS-039.mp4").exists()
+    assert (lib_root / "Unknown" / "NSFS-039" / "NSFS-039.mp4").exists()
 
 
 @pytest.mark.asyncio(loop_scope="function")
@@ -905,7 +905,7 @@ async def test_organize_moves_same_dir_subtitles(
     assert result.result is not None
     assert result.result.failed == 0
 
-    dest_dir = lib_root / "Studio" / "NSFS-039"
+    dest_dir = lib_root / "Unknown" / "NSFS-039"
     assert (dest_dir / "NSFS-039.mp4").exists()
     assert (dest_dir / "chs.srt").read_text() == "sub1"
     assert (dest_dir / "NSFS-039.zh.ass").read_text() == "sub2"
@@ -943,7 +943,7 @@ async def test_organize_subtitles_follow_cd(repo: Repository, resource_store: Re
     assert result.result is not None
     assert result.result.failed == 0
 
-    dest_dir = lib_root / "Studio" / "NSFS-039"
+    dest_dir = lib_root / "Unknown" / "NSFS-039"
     assert (dest_dir / "a-CD1.srt").read_text() == "cd1sub"
     assert (dest_dir / "chs.srt").read_text() == "unparsed"
     assert (dest_dir / "b-CD2.ass").read_text() == "cd2sub"
@@ -974,7 +974,7 @@ async def test_organize_empty_subtitle_extensions_leaves_subs(
     result = await org.handle(OrganizePayload(library_id=lib.id, path=str(src_dir)))
     assert result.success is True
     assert sub.exists()
-    assert not (lib_root / "Studio" / "NSFS-039" / "chs.srt").exists()
+    assert not (lib_root / "Unknown" / "NSFS-039" / "chs.srt").exists()
 
 
 @pytest.mark.asyncio(loop_scope="function")
@@ -1012,8 +1012,8 @@ async def test_organize_pairs_flat_subtitles_by_number(
     assert result.result is not None
     assert result.result.failed == 0
 
-    dest_a = lib_root / "Studio" / "ABC-123"
-    dest_b = lib_root / "Studio" / "DEF-456"
+    dest_a = lib_root / "Unknown" / "ABC-123"
+    dest_b = lib_root / "Unknown" / "DEF-456"
     assert (dest_a / "ABC-123.srt").read_text() == "first"
     assert (dest_b / "DEF-456.srt").read_text() == "second"
     assert not (dest_a / "DEF-456.srt").exists()
@@ -1065,8 +1065,8 @@ async def test_organize_pairs_number_and_cd_with_multi_lang(
     assert result.result is not None
     assert result.result.failed == 0
 
-    dest_a = lib_root / "Studio" / "ABC-123"
-    dest_b = lib_root / "Studio" / "DEF-456"
+    dest_a = lib_root / "Unknown" / "ABC-123"
+    dest_b = lib_root / "Unknown" / "DEF-456"
     assert (dest_a / "ABC-123-CD1.chs.srt").read_text() == "a1-chs"
     assert (dest_a / "ABC-123-CD1.en.srt").read_text() == "a1-en"
     assert (dest_a / "ABC-123-CD2.chs.srt").read_text() == "a2-chs"
@@ -1112,7 +1112,7 @@ async def test_organize_writes_strm_and_nfo_next_to_link(
     assert result.result.organized == 1
     assert result.result.failed == 0
 
-    dest = lib_root / "Studio" / "NSFS-039" / "NSFS-039.mp4"
+    dest = lib_root / "Unknown" / "NSFS-039" / "NSFS-039.mp4"
     strm = local / "Studio" / "NSFS-039" / "NSFS-039.strm"
     nfo = local / "Studio" / "NSFS-039" / "NSFS-039.nfo"
     assert dest.exists()
@@ -1157,10 +1157,10 @@ async def test_organize_strm_content_template_uses_actual_dest(
     org = OrganizeHandler(repo, HotSettings(), resource_store, safe_dirs=[tmp_path])
     result = await org.handle(OrganizePayload(library_id=lib.id, path=str(src.parent)))
     assert result.success is True
-    dest = lib_root / "Studio" / "NSFS-039" / "NSFS-039.mp4"
+    dest = lib_root / "Unknown" / "NSFS-039" / "NSFS-039.mp4"
     strm = local / "NSFS-039.strm"
     assert dest.exists()
-    assert strm.read_text(encoding="utf-8") == "/Studio/NSFS-039/NSFS-039.mp4\n"
+    assert strm.read_text(encoding="utf-8") == "/Unknown/NSFS-039/NSFS-039.mp4\n"
 
 
 @pytest.mark.asyncio(loop_scope="function")
@@ -1252,7 +1252,7 @@ async def test_commit_organized_media_file(repo: Repository, tmp_path: Path, cas
 
     src = lib_root / "incoming" / "NSFS-039.mp4"
     src.parent.mkdir()
-    placed = lib_root / "Studio" / "NSFS-039" / "NSFS-039.mp4"
+    placed = lib_root / "Unknown" / "NSFS-039" / "NSFS-039.mp4"
     outside = tmp_path / "other" / "NSFS-039.mp4"
 
     if case == "inside_update":
@@ -1425,7 +1425,7 @@ async def test_organize_prunes_emptied_source_dir(
     assert not src.exists()
     assert not src.parent.exists()
     assert lib_root.is_dir()
-    assert (lib_root / "Studio" / "NSFS-039" / "NSFS-039.mp4").exists()
+    assert (lib_root / "Unknown" / "NSFS-039" / "NSFS-039.mp4").exists()
 
 
 @pytest.mark.asyncio(loop_scope="function")

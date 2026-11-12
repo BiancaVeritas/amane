@@ -86,13 +86,13 @@ _DEFAULT_CONTENT_ROUTES: dict[ContentType, list[SiteName]] = {
     ],
     ContentType.UNCENSORED: [
         SiteName.AVENTERTAINMENTS,
+        SiteName.CARIBBEANCOMPR,
         SiteName.D2PASS,
+        SiteName.TOKYO_HOT,
         SiteName.TENMUSUME,
         SiteName.PONDO,
         SiteName.CARIBBEANCOM,
         SiteName.PACOPACOMAMA,
-        SiteName.TOKYO_HOT,
-        SiteName.CARIBBEANCOMPR,
     ],
     ContentType.FC2: [
         SiteName.JAVDB,

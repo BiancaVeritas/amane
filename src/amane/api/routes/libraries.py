@@ -169,6 +169,9 @@ async def update_library(
         "trailer_pattern",
         "blacklist_patterns",
         "min_file_size",
+        # 独立下载目录也要重新挂: 少了这两项, 界面上开了监控目录也不会开始监视.
+        "watch_dir_enabled",
+        "watch_path",
     }
     if runtime.watcher_service and watch_fields & updates.keys():
         runtime.watcher_service.sync_library(lib)

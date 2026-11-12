@@ -84,7 +84,8 @@ def _search_result(text: str, requested_number: str, page_url: str) -> tuple[str
             match_number = _normalize_number(image_number)
         else:
             match_number = _normalize_number(match.group(1))
-        if match_number != requested_number or not href:
+        # 番号统一小写存储后, 调用方传进来的可能是大写; 比番号不该区分大小写.
+        if match_number is None or match_number.casefold() != requested_number.casefold() or not href:
             continue
         detail_url = urljoin(page_url, href)
         absolute = f"{detail_url}?lang=ja" if "?" not in detail_url else detail_url

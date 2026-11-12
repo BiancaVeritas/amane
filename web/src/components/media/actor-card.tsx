@@ -96,7 +96,8 @@ export const ActorCard = memo(function ActorCard({ item }: ActorCardProps) {
         </Box>
         <Stack gap={4} p="xs">
           <Text size="sm" fw={600} lineClamp={1} title={item.name}>
-            {item.display_name ? (
+            {/* 没有中文映射时 display_name 与原名相同, 只显示一次. */}
+            {item.display_name && item.display_name !== item.name ? (
               <>
                 {item.display_name}
                 <Text span size="xs" c="dimmed" fw={600}>

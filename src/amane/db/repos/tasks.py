@@ -19,6 +19,9 @@ _EXCLUSIVE_FIELDS: dict[TaskType, str] = {
     TaskType.ACTOR_SCRAPE: "actor_id",
 }
 
+# 删任务时每处理多少条提交一次. 逐条删是必需的 (见 delete_tasks), 这里只控制事务粒度.
+_DELETE_COMMIT_EVERY = 100
+
 
 def _scope_tasks[T](
     stmt: SelectOfScalar[T],
@@ -471,7 +474,8 @@ class TasksRepoMixin(RepositoryMixinBase):
             return True
 
     async def delete_tasks(self, task_ids: Iterable[int | None]) -> int:
-        """含相关后继边. 存在集合外后裔的行跳过. 边与行都分批删除, 一次提交."""
+        """含相关后继边. 存在集合外后裔的行跳过."""
+
         ids = [i for i in task_ids if i is not None]
         if not ids:
             return 0
@@ -480,16 +484,20 @@ class TasksRepoMixin(RepositoryMixinBase):
             deletable = [i for i in ids if i not in protected]
             if not deletable:
                 return 0
-            # 整批任务组可达上万行, 单条语句绑定全部 id 会超过 SQLite 变量上限.
-            for chunk in chunks(deletable):
+            # 逐条删, 不用 ``IN (...)``.
+            # SQLite 单条语句绑定参数一多就报 ``unable to open database file`` ——
+            # 这个报错跟文件无关, 只是语句过重的伪装. 实测 50 个 id 一批仍会触发,
+            # 而逐条删几百条零失败; 分小批 + 每批提交也救不回来, 所以问题在语句本身.
+            deleted = 0
+            for index, task_id in enumerate(deletable, start=1):
                 await session.exec(
                     sqla_delete(TaskLink).where(
-                        (col(TaskLink.parent_task_id).in_(chunk)) | (col(TaskLink.child_task_id).in_(chunk))
+                        (col(TaskLink.parent_task_id) == task_id) | (col(TaskLink.child_task_id) == task_id)
                     )
                 )
-            deleted = 0
-            for chunk in chunks(deletable):
-                result = await session.exec(sqla_delete(Task).where(col(Task.id).in_(chunk)))
+                result = await session.exec(sqla_delete(Task).where(col(Task.id) == task_id))
                 deleted += result.rowcount or 0
+                if index % _DELETE_COMMIT_EVERY == 0:
+                    await session.commit()
             await session.commit()
             return deleted

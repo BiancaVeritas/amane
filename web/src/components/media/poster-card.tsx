@@ -84,7 +84,7 @@ export function PosterCard({
           </AspectRatio>
           <FilePhaseOverlay
             phase={item.file_phase}
-            bottomExtra={
+            topExtra={
               ageThen != null ? (
                 <OverlayChip>
                   <IconUser size={12} color="var(--mantine-color-grape-3)" />

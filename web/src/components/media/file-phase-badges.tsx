@@ -173,12 +173,14 @@ const CORNER_GROUP = { zIndex: 1, maxWidth: "68%" } as const;
 
 interface FilePhaseOverlayProps {
   phase: FilePhaseLike | FilePhaseSummary | null | undefined;
-  /** 左下角追加 (出演年龄), 与中字/分辨率同组. */
+  /** 左下角顶部追加 (出演年龄): 排在中字/分辨率之上. */
+  topExtra?: ReactNode;
+  /** 左下角底部追加: 排在中字/分辨率之下. */
   bottomExtra?: ReactNode;
 }
 
 /** 海报/封面 CSS 水印. 左上马赛克组, 左下中字+分辨率; 样式对齐评分/日期 chip. */
-export function FilePhaseOverlay({ phase, bottomExtra }: FilePhaseOverlayProps) {
+export function FilePhaseOverlay({ phase, topExtra, bottomExtra }: FilePhaseOverlayProps) {
   const { t } = useTranslation("metadata");
   const mosaic = phase != null ? mosaicChips(phase, t) : [];
   const media = phase != null ? mediaChips(phase, t) : [];
@@ -200,7 +202,7 @@ export function FilePhaseOverlay({ phase, bottomExtra }: FilePhaseOverlayProps) 
           ))}
         </Group>
       )}
-      {(media.length > 0 || bottomExtra != null) && (
+      {(media.length > 0 || topExtra != null || bottomExtra != null) && (
         <Group
           pos="absolute"
           bottom={6}
@@ -210,6 +212,8 @@ export function FilePhaseOverlay({ phase, bottomExtra }: FilePhaseOverlayProps) 
           align="flex-start"
           style={{ ...CORNER_GROUP, flexDirection: "column" }}
         >
+          {/* 顺序即视觉顺序: 年龄在上, 中字/分辨率在下. */}
+          {topExtra}
           {media.map((chip) => (
             <PhaseOverlayChip key={chip.key} chip={chip} />
           ))}

@@ -827,14 +827,12 @@ function TitleDetailPage() {
                 >
                   {t("detail.upload.fromFile")}
                 </Menu.Item>
-                {coverCandidates.length > 0 && (
-                  <Menu.Item
-                    leftSection={<IconPhoto size={14} />}
-                    onClick={() => setPickerTarget("thumb")}
-                  >
-                    {t("detail.upload.fromStill")}
-                  </Menu.Item>
-                )}
+                <Menu.Item
+                  leftSection={<IconPhoto size={14} />}
+                  onClick={() => setPickerTarget("thumb")}
+                >
+                  {t("detail.upload.fromStill")}
+                </Menu.Item>
                 <Menu.Divider />
                 <Menu.Label>{t("detail.upload.poster")}</Menu.Label>
                 <Menu.Item
@@ -1287,7 +1285,8 @@ function TitleDetailPage() {
         onMerged={invalidateDetail}
       />
 
-      {thumbSrc && (
+      {/* 不挂 thumbSrc: 没有封面但有条目时也要能换图, 否则点了没反应. */}
+      {item && (
         <>
           <ImagePickerDialog
             opened={pickerTarget !== null}
@@ -1306,31 +1305,33 @@ function TitleDetailPage() {
               applyImageSource(url, target);
             }}
           />
-          <PosterCropDialog
-            opened={cropOpen}
-            onClose={() => setCropOpen(false)}
-            metadataId={id}
-            thumbUrl={thumbSrc}
-            contentType={item.content_type}
-            alternativeSources={coverCandidates.filter((url) => url !== thumbSrc)}
-            infos={imageInfos}
-            onAddRule={(win) => {
-              // 把当前裁切位置带进规则编辑器: 用户只需补命中条件.
-              // 裁切窗保持打开, 保存规则后能接着按「确定」把海报存下来.
-              setRuleDraft({
-                use_aspect: false,
-                aspect: 0.7,
-                align: "right",
-                // 预填厂商前缀 (S2MBD-047 → S2MBD), 而不是完整番号: 规则本来就是按系列命中.
-                number_prefix: vendorPrefix(item.number),
-                ...win,
-              });
-            }}
-            onSuccess={() => {
-              invalidateDetail();
-              void queryClient.invalidateQueries({ queryKey: listMetadataQueryKey() });
-            }}
-          />
+          {thumbSrc && (
+            <PosterCropDialog
+              opened={cropOpen}
+              onClose={() => setCropOpen(false)}
+              metadataId={id}
+              thumbUrl={thumbSrc}
+              contentType={item.content_type}
+              alternativeSources={coverCandidates.filter((url) => url !== thumbSrc)}
+              infos={imageInfos}
+              onAddRule={(win) => {
+                // 把当前裁切位置带进规则编辑器: 用户只需补命中条件.
+                // 裁切窗保持打开, 保存规则后能接着按「确定」把海报存下来.
+                setRuleDraft({
+                  use_aspect: false,
+                  aspect: 0.7,
+                  align: "right",
+                  // 预填厂商前缀 (S2MBD-047 → S2MBD), 而不是完整番号: 规则本来就是按系列命中.
+                  number_prefix: vendorPrefix(item.number),
+                  ...win,
+                });
+              }}
+              onSuccess={() => {
+                invalidateDetail();
+                void queryClient.invalidateQueries({ queryKey: listMetadataQueryKey() });
+              }}
+            />
+          )}
         </>
       )}
 

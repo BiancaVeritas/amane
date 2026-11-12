@@ -15,7 +15,7 @@ import {
   Tooltip,
 } from "@mantine/core";
 import { IconChevronDown, IconChevronRight, IconPlus, IconX } from "@tabler/icons-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { notifications } from "@mantine/notifications";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
@@ -69,9 +69,6 @@ const OPTIONAL_TEMPLATE_KEYS = [
   "trailer_template",
   "subtitle_template",
 ] as const satisfies readonly (keyof OptionalPathTemplateDefaults)[];
-
-const JINJA_VIDEO_TEMPLATE_DEFAULT =
-  "{{studio}}/{{number}}/{{number}}{% if cd %}-CD{{cd}}{% endif %}{% if sub %}-C{% endif %}.{{ext}}";
 
 const MOVE_MODES: readonly LibraryResponse["move_mode"][] = ["move", "copy", "hardlink", "symlink"];
 
@@ -159,9 +156,9 @@ export function emptyLibraryForm(schema?: PathTemplateSchemaResponse | null): Li
     subtitle_extensions: (
       schema?.subtitle_extensions_default ?? [".srt", ".ass", ".ssa", ".vtt", ".sub"]
     ).join(", "),
-    video_template: schema?.video_default ?? "{studio}/{number}/{number}[-CD{cd?}][-{sub?}].{ext}",
+    video_template: schema?.video_default ?? "",
     use_jinja_template: false,
-    jinja_video_template: JINJA_VIDEO_TEMPLATE_DEFAULT,
+    jinja_video_template: schema?.jinja_video_default ?? "",
     custom_placeholders: {},
     thumb_template: defaults?.thumb_template ?? "",
     poster_template: defaults?.poster_template ?? "",
@@ -200,7 +197,7 @@ export function libraryFormFromResponse(lib: LibraryResponse): LibraryFormState 
     subtitle_extensions: lib.subtitle_extensions?.join(", ") ?? "",
     video_template: lib.video_template,
     use_jinja_template: lib.use_jinja_template,
-    jinja_video_template: lib.jinja_video_template ?? JINJA_VIDEO_TEMPLATE_DEFAULT,
+    jinja_video_template: lib.jinja_video_template ?? "",
     custom_placeholders: { ...lib.custom_placeholders },
     thumb_template: lib.thumb_template ?? "",
     poster_template: lib.poster_template ?? "",
@@ -323,6 +320,28 @@ export function LibraryFormFields({ value, onChange, showCreateOnly }: LibraryFo
   }, [schema?.placeholders, value.custom_placeholders]);
   const catalog = useMemo(() => templateCatalogFromPlaceholders(placeholders), [placeholders]);
   const optionalDefaults = schema?.optional_defaults;
+
+  // schema 是异步拿的, 而表单初值在它之前就算好了, 于是模板字段可能留空. 这里只补一次:
+  // 补过就不再管, 否则用户把内容删空后会被立刻填回来, 等于删不掉.
+  const seededRef = useRef(false);
+  useEffect(() => {
+    if (!schema || seededRef.current) {
+      return;
+    }
+    seededRef.current = true;
+    const patch: Partial<LibraryFormState> = {};
+    if (!value.video_template && schema.video_default) {
+      patch.video_template = schema.video_default;
+    }
+    if (!value.jinja_video_template && schema.jinja_video_default) {
+      patch.jinja_video_template = schema.jinja_video_default;
+    }
+    if (Object.keys(patch).length > 0) {
+      onChange({ ...value, ...patch });
+    }
+    // 依赖故意只留 schema: 补种是一次性动作, 不该跟着 value 变化反复触发.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [schema]);
 
   const removeCustomPlaceholder = (name: string) => {
     const next = { ...value.custom_placeholders };
@@ -532,7 +551,7 @@ export function LibraryFormFields({ value, onChange, showCreateOnly }: LibraryFo
           label={t("fieldJinjaVideoTemplate")}
           description={t("fieldJinjaVideoTemplateHint")}
           value={value.jinja_video_template}
-          placeholder={JINJA_VIDEO_TEMPLATE_DEFAULT}
+          placeholder={schema?.jinja_video_default ?? ""}
           rows={3}
           onChange={(e) => onChange({ ...value, jinja_video_template: e.currentTarget.value })}
         />

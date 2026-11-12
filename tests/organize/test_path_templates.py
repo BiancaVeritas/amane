@@ -19,6 +19,7 @@ from amane.organize import (
     render_path_template,
     resolve_paths,
     resolve_subtitle_path,
+    validate_jinja_template,
     validate_path_template,
 )
 from amane.organize.template import (
@@ -77,11 +78,11 @@ class _RenderCase(NamedTuple):
 # 模板 + 源文件 → 整理后相对库根目录的路径. 标记来自 source; metadata 字段来自 _meta, 可由 meta 覆盖.
 RENDER_CASES: tuple[_RenderCase, ...] = (
     # --- 默认模板: [-CD{cd?}][-{sub?}] 两个并列组 ---
-    _RenderCase("MIDV-123.mp4", VIDEO_TEMPLATE_DEFAULT, "StudioX/ABC-123/ABC-123.mp4"),
-    _RenderCase("MIDV-123-CD1.mp4", VIDEO_TEMPLATE_DEFAULT, "StudioX/ABC-123/ABC-123-CD1.mp4"),
-    _RenderCase("MIDV-123-C.mp4", VIDEO_TEMPLATE_DEFAULT, "StudioX/ABC-123/ABC-123-C.mp4"),
-    _RenderCase("MIDV-123-CD1-C.mp4", VIDEO_TEMPLATE_DEFAULT, "StudioX/ABC-123/ABC-123-CD1-C.mp4"),
-    _RenderCase("MIDV-123-UC.mp4", VIDEO_TEMPLATE_DEFAULT, "StudioX/ABC-123/ABC-123-C.mp4"),
+    _RenderCase("MIDV-123.mp4", VIDEO_TEMPLATE_DEFAULT, "Actor1/ABC-123/ABC-123.mp4"),
+    _RenderCase("MIDV-123-CD1.mp4", VIDEO_TEMPLATE_DEFAULT, "Actor1/ABC-123/ABC-123-CD1.mp4"),
+    _RenderCase("MIDV-123-C.mp4", VIDEO_TEMPLATE_DEFAULT, "Actor1/ABC-123/ABC-123-C.mp4"),
+    _RenderCase("MIDV-123-CD1-C.mp4", VIDEO_TEMPLATE_DEFAULT, "Actor1/ABC-123/ABC-123-CD1-C.mp4"),
+    _RenderCase("MIDV-123-UC.mp4", VIDEO_TEMPLATE_DEFAULT, "Actor1/ABC-123/ABC-123-破解-C.mp4"),
     # --- 单占位符可选组: 空则连字面量一起省略 ---
     _RenderCase("MIDV-123-CD2.mp4", "{number}/{number}[-Part {cd?}].{ext}", "ABC-123/ABC-123-Part 2.mp4"),
     _RenderCase("MIDV-123.mp4", "{number}/{number}[-Part {cd?}].{ext}", "ABC-123/ABC-123.mp4"),
@@ -129,7 +130,7 @@ RENDER_CASES: tuple[_RenderCase, ...] = (
     _RenderCase("[流出]MIDV-123.mp4", "{mosaic?}/{number}.{ext}", "leaked/ABC-123.mp4"),
     _RenderCase("MIDV-123_4K_无码.mp4", "{mosaic?}/{def?}/{number}.{ext}", "uncensored/4K/ABC-123.mp4"),
     _RenderCase("/media/uncensored/MIDV-123.mp4", "{mosaic?}/{def?}/{number}.{ext}", "uncensored/ABC-123.mp4"),
-    _RenderCase("/media/4K/MIDV-123.mp4", "{mosaic?}/{def?}/{number}.{ext}", "ABC-123.mp4"),
+    _RenderCase("/media/4K/MIDV-123.mp4", "{mosaic?}/{def?}/{number}.{ext}", "4K/ABC-123.mp4"),
     _RenderCase(None, "{mosaic?}/{def?}/{number}.{ext}", "ABC-123.mp4"),
     _RenderCase("HEYZO-123-流出.mp4", "{mosaic?}/{number}.{ext}", "leaked/ABC-123.mp4"),
     _RenderCase("MIDV-123.mp4", "{mosaic?}/{number}.{ext}", "ABC-123.mp4"),
@@ -673,7 +674,7 @@ class TestPathTraversalProtection:
         src = media / "incoming" / "ABC-123.mp4"
         src.parent.mkdir()
         src.write_bytes(b"x")
-        dest_dir = media / "StudioX" / "ABC-123"
+        dest_dir = media / "Actor1" / "ABC-123"
         dest_dir.mkdir(parents=True)
         dest = dest_dir / "ABC-123.mp4"
         dest.symlink_to(src)
@@ -698,7 +699,7 @@ class TestPathTraversalProtection:
         etc.mkdir()
         outside = etc / "secret.mp4"
         outside.write_bytes(b"x")
-        dest_dir = media / "StudioX" / "ABC-123"
+        dest_dir = media / "Actor1" / "ABC-123"
         dest_dir.mkdir(parents=True)
         (dest_dir / "ABC-123.mp4").symlink_to(outside)
         wp = Library(name="t", path=str(media), video_template=VIDEO_TEMPLATE_DEFAULT)
@@ -1252,6 +1253,7 @@ def test_actress_names(case: _ActressCase) -> None:
     ("actors", "genders", "actress", "actresses"),
     [
         (["F", "M"], {"F": ActorGender.FEMALE, "M": ActorGender.MALE}, "F", "F"),
+        # 全男时没有可用的女演员, 落 Unknown; 不拿男演员充数.
         (["M"], {"M": ActorGender.MALE}, "Unknown", "Unknown"),
         ([], None, "Unknown", "Unknown"),
         (["A", "B"], None, "A", "A,B"),
@@ -1301,3 +1303,16 @@ def test_resolve_paths_uses_actress_placeholder(media: Path) -> None:
         actor_genders={"F": ActorGender.FEMALE, "M": ActorGender.MALE},
     )
     assert result.video == media / "F" / "ABC-123.mp4"
+
+
+class TestValidateJinjaTemplate:
+    """保存前就拦住坏模板: 否则要等到整理文件时才炸, 表现是「文件全都不动」."""
+
+    def test_valid_and_blank(self):
+        tpl = "{{actress}}/{{number}}{% if def %} [{{def}}]{% endif %}.{{ext}}"
+        assert validate_jinja_template(tpl) == tpl
+        assert validate_jinja_template("") == ""
+
+    def test_unclosed_if(self):
+        with pytest.raises(ValueError, match="Jinja2 模板语法错误"):
+            validate_jinja_template("{{number}}{% if def %} [{{def}}]{{ext}}")

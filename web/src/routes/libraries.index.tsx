@@ -128,7 +128,14 @@ function LibrariesPage() {
     <Stack gap="md">
       <Group justify="space-between">
         <Title order={2}>{t("title")}</Title>
-        <Button leftSection={<IconPlus size={16} />} onClick={() => setCreateOpen(true)}>
+        <Button
+          leftSection={<IconPlus size={16} />}
+          onClick={() => {
+            // 每次开窗都从空白表单开始: 上次关窗留下的开关与路径不该带过来.
+            setCreateForm(emptyLibraryForm());
+            setCreateOpen(true);
+          }}
+        >
           {t("common:actions.add")}
         </Button>
       </Group>
@@ -154,7 +161,10 @@ function LibrariesPage() {
 
       <Modal
         opened={createOpen}
-        onClose={() => setCreateOpen(false)}
+        onClose={() => {
+          setCreateOpen(false);
+          setCreateForm(emptyLibraryForm());
+        }}
         title={t("common:actions.add")}
         size={LIBRARY_FORM_MODAL_SIZE}
         centered

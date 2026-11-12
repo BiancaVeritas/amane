@@ -216,7 +216,16 @@ class ActorPushHandler(TaskHandler[ActorPushPayload, ActorPushResult]):
         force: bool,
         counts: _Counts,
     ) -> None:
+        # 搜索词: 原始名 + 别名 + 映射里的中文名.
+        # 中文名也参与, 是因为人物名可能已经被本工具或用户改成中文了; 只按原始名搜的话,
+        # 那条记录会彻底匹配不上 (Emby 检索是模糊的, 但精确过滤只比 Name 字段).
+        # 搜索词: 原始名 + 别名 + 映射里的中文名.
+        # 中文名也参与, 是因为人物名可能已经被本工具或用户改成中文了; 只按原始名搜的话,
+        # 那条记录会彻底匹配不上 (Emby 检索是模糊的, 但精确过滤只比 Name 字段).
+        display_name = self._actor_names.get(actor.name)
         names = [actor.name, *aliases]
+        if display_name and display_name not in names:
+            names.append(display_name)
         try:
             persons = await self._find_persons(client, index, names)
         except MediaServerError as exc:
@@ -236,7 +245,9 @@ class ActorPushHandler(TaskHandler[ActorPushPayload, ActorPushResult]):
                 continue
             seen_persons.add(person.id)
             counts.matched += 1
-            await self._sync_person(actor, person, portrait, client, force=force, counts=counts)
+            await self._sync_person(
+                actor, person, portrait, client, aliases=aliases, force=force, counts=counts
+            )
 
     async def _find_persons(
         self,
@@ -287,16 +298,26 @@ class ActorPushHandler(TaskHandler[ActorPushPayload, ActorPushResult]):
         portrait: _PortraitSource | None,
         client: MediaServerClientLike,
         *,
+        aliases: Sequence[str],
         force: bool,
         counts: _Counts,
     ) -> None:
-        updates = _profile_updates(actor, person, force=force, display_name=self._actor_names.get(actor.name))
+        updates = _profile_updates(
+            actor,
+            person,
+            force=force,
+            display_name=self._actor_names.get(actor.name),
+            aliases=aliases,
+        )
         needs_image = portrait is not None and (force or not person.has_primary_image)
         if not updates and not needs_image:
             counts.skipped += 1
             return
 
         person_failed = False
+        # 只有标签变化时不算「更新了一条资料」: 标签是附带产物, 若让它计入 updated,
+        # 头像失败会被误判成整体成功 (success 判定里有 ``updated > 0``).
+        only_tags = bool(updates) and set(updates) <= {"Tags"}
         if updates:
             try:
                 await client.update_person(person, updates)
@@ -305,7 +326,8 @@ class ActorPushHandler(TaskHandler[ActorPushPayload, ActorPushResult]):
                 person_failed = True
                 counts.failure(f"{actor.name} / {person.name}", f"字段写入失败: {exc}")
             else:
-                counts.updated += 1
+                if not only_tags:
+                    counts.updated += 1
 
         if needs_image:
             assert portrait is not None
@@ -341,7 +363,12 @@ class ActorPushHandler(TaskHandler[ActorPushPayload, ActorPushResult]):
 
 
 def _profile_updates(
-    actor: Actor, person: MediaPerson, *, force: bool, display_name: str | None = None
+    actor: Actor,
+    person: MediaPerson,
+    *,
+    force: bool,
+    display_name: str | None = None,
+    aliases: Sequence[str] = (),
 ) -> dict[str, object]:
     """按覆盖规则给出目标字段; 不把空值写成清空动作.
 
@@ -364,6 +391,15 @@ def _profile_updates(
 
     if actor.birthplace and (force or not _has_text_list(person.production_locations)):
         updates["ProductionLocations"] = [actor.birthplace]
+
+    # 名字写进 Tags: Emby 的人物条目没有专门的别名字段, Tags 是唯一能存多个的地方.
+    # 顺序为「原始名 > 别名」, 中文映射不写 —— 那是显示层的东西, 不该混进服务器元数据.
+    # Tags 不参与人物匹配 (搜索只看 Name), 这里纯粹是给人在服务器界面上看的;
+    # 保留服务器上已有的其它标签, 只做并集, 不清空.
+    wanted_tags = list(dict.fromkeys([actor.name, *aliases]))
+    merged = list(dict.fromkeys([*person.tags, *wanted_tags]))
+    if merged != person.tags:
+        updates["Tags"] = merged
     return updates
 
 

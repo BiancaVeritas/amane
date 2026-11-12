@@ -2,7 +2,8 @@
   "actions": {
     "cancelTask": "Cancel Task",
     "record": "Task record",
-    "submit": "Submit Task"
+    "submit": "Submit Task",
+    "manualScrape": "Manual search"
   },
   "batch": {
     "cancel": "Cancelled {{count}}",
@@ -279,6 +280,14 @@
             "trans": "Translation Cache"
           }
         }
+      },
+      "manual": {
+        "label": "Manual search",
+        "description": "Ignore existing field locks and lock what this run writes"
+      },
+      "preferred_site": {
+        "label": "Preferred source",
+        "description": "Site picked in manual search; its link goes first"
       }
     },
     "upscale": {
@@ -479,5 +488,22 @@
   },
   "type": {
     "actor_push": "Push actors"
+  },
+  "manualScrape": {
+    "title": "Manual scrape",
+    "hint": "Search first, then pick one result to write. Ignores existing records and field locks.",
+    "label": "Number / URL / UUID",
+    "placeholder": "e.g. ABC-123 or 00000000-0000-0000-0000-000000000000",
+    "submit": "Start scrape",
+    "submitted": "Scrape task submitted",
+    "failed": "Submit failed",
+    "emptyInput": "Enter a number, UUID or URL",
+    "search": "Search",
+    "noResult": "No results from any source",
+    "pickOne": "{{count}} result(s) found — pick one to use",
+    "useThis": "Use this"
+  },
+  "scrape": {
+    "manual": "Manual search"
   }
 }

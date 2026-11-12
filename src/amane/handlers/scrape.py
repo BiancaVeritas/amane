@@ -8,6 +8,7 @@ from ..aggregate import SCALAR_FIELDS, AggregatedMetadata, CrawlerLike, FieldLan
 from ..crawlers.models import SearchQuery
 from ..crawlers.site_roles import builtin_descriptors
 from ..db.models import MediaFileStatus, MediaIdentityType, TaskType
+from ..db.repo_types import WriteMode
 from ..enums import ActorGender, MetadataField, SiteName
 from ..media import materialize_images
 from ..media.crop_rules import find_rule
@@ -66,6 +67,34 @@ class CrawlerFactoryLike(Protocol):
     async def get_crawlers(self, names: Iterable[str]) -> dict[str, CrawlerLike]: ...
 
 
+def _prioritize_source_urls(
+    source_urls: dict[str, str],
+    field_sources: dict[str, str],
+    *,
+    manual: bool,
+    preferred_site: str | None = None,
+) -> dict[str, str]:
+    """手动搜索时把用户选中的站点排到最前.
+
+    来源列表按 dict 插入顺序展示; 手动搜索里用户已经挑了具体一条, 那一条就该在最前.
+    没指定站点时退回「按贡献字段排序」, 非手动保持原顺序免得自动刮削结果抖动.
+    """
+    if not manual or not source_urls:
+        return source_urls
+    if preferred_site and preferred_site in source_urls:
+        first = {preferred_site: source_urls[preferred_site]}
+        return {**first, **{k: v for k, v in source_urls.items() if k != preferred_site}}
+    used = {site for site in field_sources.values() if site}
+    if not used:
+        return source_urls
+    first = {site: url for site, url in source_urls.items() if site in used}
+    rest = {site: url for site, url in source_urls.items() if site not in used}
+    return {**first, **rest}
+
+
+
+
+
 class ScrapeHandler(TaskHandler[ScrapePayload, ScrapeResult]):
     """不移动库内文件; 库目录落盘由 ORGANIZE 负责."""
 
@@ -93,6 +122,40 @@ class ScrapeHandler(TaskHandler[ScrapePayload, ScrapeResult]):
         self._multi_language_sources = frozenset(d.id for d in catalog if SourceTrait.MULTI_LANGUAGE in d.traits)
         self._partial_sources = frozenset(d.id for d in catalog if SourceTrait.NEEDS_PARTIAL in d.traits)
         self._file_hash_sources = frozenset(d.id for d in catalog if SourceTrait.USES_FILE_HASH in d.traits)
+
+    async def preview(self, number: str, content_type: ContentType) -> list[dict]:
+        """只抓不写: 按番号问一遍各来源, 把命中项原样交回调用方.
+
+        手动搜索要让用户先挑再落库, 所以这里不碰 DB / 文件; 数据交回 UI 由用户决定.
+        """
+        route = self._config.scraping.content_routes.get(content_type)
+        if not route:
+            return []
+        crawlers = await self._factory.get_crawlers(route)
+        if not crawlers:
+            return []
+        q = SearchQuery(number, None, None, content_type)
+        out: list[dict] = []
+        for name, crawler in crawlers.items():
+            try:
+                meta = await crawler.fetch(q)
+            except Exception:
+                continue
+            if meta is None:
+                continue
+            out.append(
+                {
+                    "site": name,
+                    "number": meta.number,
+                    "title": meta.title,
+                    "release": meta.release,
+                    "studio": meta.studio,
+                    "poster_url": meta.poster_urls[0] if meta.poster_urls else None,
+                    "thumb_url": meta.thumb_urls[0] if meta.thumb_urls else None,
+                    "source_url": meta.source_url,
+                }
+            )
+        return out
 
     async def handle(self, payload: ScrapePayload) -> TaskResult[ScrapeResult]:
         bind_contextvars(number=payload.number)
@@ -370,7 +433,13 @@ class ScrapeHandler(TaskHandler[ScrapePayload, ScrapeResult]):
             extrafanart_urls=result.metadata.extrafanart_urls,
             scores={s.site: s.score for s in result.metadata.scores},
             external_ids=result.metadata.external_ids,
-            source_urls=result.metadata.source_urls,
+            # 手动搜索把这次命中的站点提到最前: 来源列表按插入顺序展示, 用户最想看到刚抓的那一条.
+            source_urls=_prioritize_source_urls(
+                result.metadata.source_urls,
+                result.field_sources,
+                manual=payload.manual,
+                preferred_site=payload.preferred_site,
+            ),
             field_sources=result.field_sources,
             raw=result.raw,
         )
@@ -403,6 +472,7 @@ class ScrapeHandler(TaskHandler[ScrapePayload, ScrapeResult]):
             meta = await self._repo.upsert_metadata(
                 number=payload.number,
                 content_type=payload.content_type,
+                mode=WriteMode.MANUAL if payload.manual else WriteMode.AUTO,
                 **metadata_fields,
             )
 
@@ -411,6 +481,15 @@ class ScrapeHandler(TaskHandler[ScrapePayload, ScrapeResult]):
 
         if payload.content_type != ContentType.WESTERN:
             await finalize_media_file(self._repo, payload.media_file_id, meta.id)
+
+        # 手动搜索: 用户点的那条来源排到第一位.
+        # 走 repo 的专用方法直接回写 JSON 列; ORM 赋值在 identity map 命中时会拿回缓存顺序,
+        # 看着像没写进去.
+        if payload.manual and payload.preferred_site:
+            await self._repo.reorder_source_urls(meta.id, payload.preferred_site)
+            refreshed = await self._repo.get_metadata(meta.id)
+            if refreshed is not None:
+                meta = refreshed
 
         # 为尚未刮削的演员扇出 ACTOR_SCRAPE.
         actor_followups = await self._actor_scrape_followups(meta.actors)

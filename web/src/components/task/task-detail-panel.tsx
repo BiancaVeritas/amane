@@ -16,6 +16,7 @@ import {
   IconDownload,
   IconPlayerStop,
   IconRefresh,
+  IconSearch,
   IconTrash,
 } from "@tabler/icons-react";
 import { type ReactNode, useState } from "react";
@@ -26,6 +27,7 @@ import { client } from "@/client/client.gen";
 import type { TaskListItem } from "@/client/types.gen";
 import { HintedActionIcon } from "@/components/common/hinted-action-icon";
 import { TaskLogView } from "@/components/log/task-log-view";
+import { ManualScrapeDialog } from "@/components/task/manual-scrape-dialog";
 import { TaskResultPanel } from "@/components/task/task-result-panel";
 import { formatDuration } from "@/lib/format-duration";
 import { statusColor } from "@/lib/task/display";
@@ -91,6 +93,8 @@ export function TaskDetailPanel({ task, linkKey, actions }: TaskDetailPanelProps
   const isTerminal = task.status === "done" || task.status === "failed";
   const hasPayload = Object.keys(detail?.payload ?? {}).length > 0;
   const hasResult = detail?.result != null;
+  // 手动搜索常驻可用: 不要求本任务处于某个状态.
+  const [manualOpen, setManualOpen] = useState(false);
 
   return (
     <Stack gap="sm" p="sm">
@@ -198,6 +202,14 @@ export function TaskDetailPanel({ task, linkKey, actions }: TaskDetailPanelProps
             {t("common:actions.retry")}
           </Button>
         )}
+        <Button
+          size="xs"
+          variant="light"
+          leftSection={<IconSearch size={14} />}
+          onClick={() => setManualOpen(true)}
+        >
+          {t("actions.manualScrape")}
+        </Button>
         {isTerminal && (
           <Button
             size="xs"
@@ -222,6 +234,7 @@ export function TaskDetailPanel({ task, linkKey, actions }: TaskDetailPanelProps
           </Button>
         )}
       </Group>
+      <ManualScrapeDialog opened={manualOpen} onClose={() => setManualOpen(false)} />
     </Stack>
   );
 }

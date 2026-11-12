@@ -29,7 +29,7 @@ import {
 } from "@tabler/icons-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import type { ParseKeys } from "i18next";
 import { useTranslation } from "react-i18next";
 import {
@@ -145,6 +145,16 @@ export interface ActorTableProps {
   order: SortOrder | undefined;
   onPageChange: (page: number) => void;
   onSort: (field: ActorSortField) => void;
+  /** 外部接管多选时传入; 不给就用组件内部状态. */
+  selection?: ActorSelection;
+}
+
+/** 多选状态; 由页面持有, 便于工具栏上的「演员同步」读到选中项. */
+export interface ActorSelection {
+  selected: ReadonlySet<number>;
+  selectedIds: number[];
+  setSelected: (next: Set<number> | ((prev: Set<number>) => Set<number>)) => void;
+  clear: () => void;
 }
 
 function cellValue(actor: ActorResponse, field: SortableColumn): string {
@@ -185,6 +195,7 @@ export function ActorTable({
   order,
   onPageChange,
   onSort,
+  selection,
 }: ActorTableProps) {
   const { t } = useTranslation(["metadata", "common"]);
   const queryClient = useQueryClient();
@@ -201,7 +212,29 @@ export function ActorTable({
     onChange: setActorColumnWidths,
   });
 
-  const { selected, selectedIds, toggleAll, isAllSelected, clear, setSelected } = useIdSelection();
+  const internal: ReturnType<typeof useIdSelection> = useIdSelection();
+  // 页面要读选中项来做「演员同步」, 因此允许外部接管; 没传就照旧用组件内部状态.
+  const { selected, selectedIds, toggleAll, isAllSelected, clear, setSelected } = useMemo(() => {
+    if (selection == null) {
+      return internal;
+    }
+    const ids = [...selection.selected];
+    return {
+      selected: selection.selected as Set<number>,
+      selectedIds: ids,
+      toggleOne: internal.toggleOne,
+      toggleAll: (pageIdList: readonly number[]) =>
+        selection.setSelected(
+          pageIdList.length > 0 && pageIdList.every((id) => selection.selected.has(id))
+            ? new Set()
+            : new Set(pageIdList),
+        ),
+      isAllSelected: (pageIdList: readonly number[]) =>
+        pageIdList.length > 0 && pageIdList.every((id) => selection.selected.has(id)),
+      clear: selection.clear,
+      setSelected: selection.setSelected,
+    };
+  }, [selection, internal]);
   const selectionAnchorId = useRef<number | null>(null);
 
   function handleRowSelection(id: number, checked: boolean, shiftKey: boolean) {
@@ -635,7 +668,8 @@ export function ActorTable({
                     style={{ textDecoration: "none", color: "inherit", display: "block" }}
                   >
                     <Text span c="brand" size="sm" truncate title={actor.name}>
-                      {actor.display_name ? (
+                      {/* 没有中文映射时 display_name 与原名相同, 只显示一次. */}
+                      {actor.display_name && actor.display_name !== actor.name ? (
                         <>
                           {actor.display_name}
                           <Text span size="xs" c="dimmed" fw={600}>

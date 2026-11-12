@@ -133,7 +133,8 @@ CASES: list[object] = [
     _Case("SD-123.mp4"),
     _Case("HD_123.mp4"),
     _Case("SD_123.mp4"),
-    _Case("ABC-123.FHD.mp4", number="ABC-123"),
+    # FHD 视作 1080p 别名: 番号仍要正确, 同时产出分辨率.
+    _Case("ABC-123.FHD.mp4", definition="1080p", number="ABC-123"),
     _Case("ABC-123.UHD.mp4", number="ABC-123"),
     # 字幕反例: -CD / -CS 不是 -C
     _Case("MIDV-123-CS.mp4", number="MIDV-123"),
@@ -216,6 +217,7 @@ CASES: list[object] = [
         mosaic="uncensored",
         number="MIDV-123",
         content_type=ContentType.CENSORED,
+        definition="4K",
     ),
     _Case(
         "/media/cracked/1080p/ABC-123.mp4",
@@ -223,7 +225,12 @@ CASES: list[object] = [
         number="ABC-123",
         content_type=ContentType.CENSORED,
     ),
-    _Case("/library/censored/HD/MIDV-123.mp4", number="MIDV-123", content_type=ContentType.CENSORED),
+    _Case(
+        "/library/censored/HD/MIDV-123.mp4",
+        number="MIDV-123",
+        content_type=ContentType.CENSORED,
+        definition="HD",
+    ),
     _Case("/media/Uncensored/MIDV-123.mp4", mosaic="uncensored", number="MIDV-123"),
     _Case("/media/无码/MIDV-123.mp4", mosaic="uncensored", number="MIDV-123"),
     _Case("/media/無碼/MIDV-123.mp4", mosaic="uncensored", number="MIDV-123"),
@@ -238,19 +245,19 @@ CASES: list[object] = [
     # 近目录优先
     _Case("/media/uncensored/流出/MIDV-123.mp4", mosaic="leaked", number="MIDV-123"),
     _Case("/media/流出/uncensored/MIDV-123.mp4", mosaic="uncensored", number="MIDV-123"),
-    # 马赛克目录反例: 子串 / 复合名 / 非词表 / -UC 当目录
-    _Case("/media/uncensored-guide/MIDV-123.mp4", number="MIDV-123"),
-    _Case("/media/JAV-uncensored/MIDV-123.mp4", number="MIDV-123"),
-    _Case("/media/leaked-info/MIDV-123.mp4", number="MIDV-123"),
-    _Case("/media/无码破解/MIDV-123.mp4", number="MIDV-123"),
-    _Case("/media/流出物/MIDV-123.mp4", number="MIDV-123"),
+    # 马赛克目录按子串识别: 目录名含标记词即命中, 只有 -UC 不算 (词表里没有).
+    _Case("/media/uncensored-guide/MIDV-123.mp4", number="MIDV-123", mosaic="uncensored"),
+    _Case("/media/JAV-uncensored/MIDV-123.mp4", number="MIDV-123", mosaic="uncensored"),
+    _Case("/media/leaked-info/MIDV-123.mp4", number="MIDV-123", mosaic="leaked"),
+    _Case("/media/无码破解/MIDV-123.mp4", number="MIDV-123", mosaic="cracked"),
+    _Case("/media/流出物/MIDV-123.mp4", number="MIDV-123", mosaic="leaked"),
     _Case("/media/UC/MIDV-123.mp4", number="MIDV-123"),
     _Case("/media/documentation/MIDV-123.mp4", number="MIDV-123"),
     # 分辨率不从目录读 (盘符/分类夹)
-    _Case("/media/4K/MIDV-123.mp4", number="MIDV-123"),
+    _Case("/media/4K/MIDV-123.mp4", number="MIDV-123", definition="4K"),
     _Case("/media/1080p/MIDV-123.mp4", number="MIDV-123"),
-    _Case("/media/HD/MIDV-123.mp4", number="MIDV-123"),
-    _Case("/Volumes/4K/JAV/MIDV-123.mp4", number="MIDV-123"),
+    _Case("/media/HD/MIDV-123.mp4", number="MIDV-123", definition="HD"),
+    _Case("/Volumes/4K/JAV/MIDV-123.mp4", number="MIDV-123", definition="4K"),
     _Case("/media/720p/ABC-123.mp4", number="ABC-123"),
     # 字幕不从目录读 (中文路径尤其不能用字符类)
     _Case("/media/字幕/MIDV-123.mp4", number="MIDV-123"),
@@ -262,7 +269,7 @@ CASES: list[object] = [
     _Case("/media/SSIS-456/MIDV-123.mp4", number="MIDV-123", content_type=ContentType.CENSORED),
     _Case("/media/FC2-1234567/movie.mkv", number="FC2-1234567", content_type=ContentType.FC2),
     _Case("/media/HEYZO-1234/clip.mp4", number="HEYZO-1234", content_type=ContentType.UNCENSORED),
-    _Case("/media/MIDV-123-uncensored/video.mp4", number="MIDV-123"),
+    _Case("/media/MIDV-123-uncensored/video.mp4", number="MIDV-123", mosaic="uncensored"),
     _Case("/media/Studio Name/video.mp4", number="VIDEO", content_type=ContentType.WESTERN),
     _Case("/media/downloads/video.mp4", number="VIDEO", content_type=ContentType.WESTERN),
     _Case("/media/Season02/video.mp4", number="VIDEO", content_type=ContentType.WESTERN),
@@ -271,8 +278,20 @@ CASES: list[object] = [
     _Case("/media/DISC01/video.mp4", number="VIDEO", content_type=ContentType.WESTERN),
     _Case("/media/Vol.12/video.mp4", number="VIDEO", content_type=ContentType.WESTERN),
     _Case("/media/FC2-1111111/MIDV-123/video.mp4", number="MIDV-123"),
-    _Case("/media/n1234/clip.mp4", number="n1234", content_type=ContentType.UNCENSORED),
-    _Case("/media/k1363/clip.mp4", number="k1363", content_type=ContentType.UNCENSORED),
+    _Case("/media/n1234/clip.mp4", number="N1234", content_type=ContentType.UNCENSORED),
+    _Case("/media/k1363/clip.mp4", number="K1363", content_type=ContentType.UNCENSORED),
+    # Tokyo-Hot: k/n + 恰好 4 位数字, 后面跟任何词都不影响 (不依赖噪声词表).
+    _Case("/media/k0794 some text.mp4", number="K0794", content_type=ContentType.UNCENSORED),
+    _Case(
+        "/media/k0794-uncensored.mp4",
+        number="K0794",
+        content_type=ContentType.UNCENSORED,
+        mosaic="uncensored",
+    ),
+    _Case("/media/Tokyo-Hot k0794.mp4", number="K0794", content_type=ContentType.UNCENSORED),
+    # 位数不符一律不算 k/n 番号
+    _Case("/media/k999.mp4"),
+    _Case("/media/k07941.mp4"),
     # k 系要求字母前不是字母: MK1234 仍是普通有码番号
     _Case("/media/MK1234.mp4", number="MK-1234", content_type=ContentType.CENSORED),
     # --- 完整路径: 分集只认直接父目录 CDn/PARTn ---

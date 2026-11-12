@@ -168,6 +168,14 @@ class ScrapeRequest(BaseModel):
         default_factory=lambda: {CacheKind.metadata, CacheKind.trans},
         description="启用的缓存种类 (metadata: 复用 DB per-site 快照; trans: 复用译文). 空集 = 全部强制刷新",
     )
+    manual: bool = Field(
+        default=False,
+        description="手动搜索提交: 无视既有字段锁定并反过来锁住所写字段",
+    )
+    preferred_site: str | None = Field(
+        default=None,
+        description="手动搜索选中的来源; 该站点的来源链接排到第一位",
+    )
 
     @field_validator("theporndb_uuid", mode="before")
     @classmethod
@@ -211,6 +219,8 @@ class ScrapeRequest(BaseModel):
                     media_file_id=self.media_id,
                     theporndb_uuid=self.theporndb_uuid,
                     use_cache=self.use_cache,
+                    manual=self.manual,
+                    preferred_site=self.preferred_site,
                 )
             parsed = parse_file_info(media.path)
             assert parsed.number is not None
@@ -220,6 +230,8 @@ class ScrapeRequest(BaseModel):
                 media_file_id=self.media_id,
                 theporndb_uuid=self.theporndb_uuid,
                 use_cache=self.use_cache,
+                manual=self.manual,
+                preferred_site=self.preferred_site,
             )
         assert self.number is not None
         return ScrapePayload(
@@ -227,6 +239,8 @@ class ScrapeRequest(BaseModel):
             content_type=self.content_type or infer_content_type(self.number),
             theporndb_uuid=self.theporndb_uuid,
             use_cache=self.use_cache,
+            manual=self.manual,
+            preferred_site=self.preferred_site,
         )
 
 

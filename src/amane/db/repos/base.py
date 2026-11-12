@@ -15,13 +15,15 @@ if TYPE_CHECKING:
 SQL_IN_CHUNK_SIZE = 500
 
 
-def chunks[T](items: list[T]) -> Iterator[list[T]]:
-    """按 ``SQL_IN_CHUNK_SIZE`` 分批绑定数量随数据增长的 id 列表.
+def chunks[T](items: list[T], *, size: int = SQL_IN_CHUNK_SIZE) -> Iterator[list[T]]:
+    """按 ``size`` 分批绑定数量随数据增长的 id 列表.
 
-    整批 id 放进一条语句会超过 SQLite 的绑定变量上限, 报 ``too many SQL variables``.
+    超出 SQLite 绑定变量上限会报 ``too many SQL variables``; 而语句只是「重」但没超限时,
+    Windows 上还会报一个更误导的 ``unable to open database file``. 删除这类多列 OR
+    条件尤其容易撞上, 所以允许调用方给更小的批.
     """
-    for start in range(0, len(items), SQL_IN_CHUNK_SIZE):
-        yield items[start : start + SQL_IN_CHUNK_SIZE]
+    for start in range(0, len(items), size):
+        yield items[start : start + size]
 
 
 class RepositoryMixinBase:

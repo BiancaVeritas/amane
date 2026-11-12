@@ -42,15 +42,17 @@ class Mosaic(StrEnum):
 
 
 class MosaicNature(StrEnum):
-    """马赛克性质: 展示口径的 有码 / 无码 / 破解 / 流出, 不落库.
+    """马赛克性质: 展示口径的 有码 / 无码 / 破解 / 流出 / LTX, 不落库.
 
-    比 ``Mosaic`` 多一个 ``CENSORED``: 标记是这一份文件自己的证据, 性质是标记与条目类型合成后的结果.
+    比 ``Mosaic`` 多 ``CENSORED``: 标记是这一份文件自己的证据, 性质是标记与条目类型合成后的结果.
+    ``LTX`` 也在这一层: 它在文件名里与其它标记同形, 合成后只该留一个值.
     """
 
     CENSORED = "censored"
     UNCENSORED = "uncensored"
     CRACKED = "cracked"
     LEAKED = "leaked"
+    LTX = "ltx"
 
 
 @dataclass(frozen=True)
@@ -220,6 +222,10 @@ _CATALOG_NUMBER = re.compile(r"[A-Z]{2,}-\d{2,}[Z]?")
 #: 字母与数字同在前缀内的番号 (R18-292). 过宽回退会匹配其中的 18-292, 因此须在其之前按整段提取.
 _DIGIT_PREFIX_CATALOG = re.compile(r"[A-Z]{1,4}\d{1,4}-\d{2,4}[A-Z]?")
 _DMM_CONCAT = re.compile(r"([A-Z]{2,})00(\d{3})")
+#: Tokyo-Hot 番号: k / n 前缀 + 恰好 4 位数字. 这条必须独立于噪声词表 ——
+#: 靠剥除 FHD/HD 之类的词来「让 k0794 浮出来」太脆, 任何没列进表的后缀
+#: (uncensored、任意英文) 都会把番号拼成 0794-XXX.
+_TOKYO_HOT_NUMBER = re.compile(r"(?<![A-Z0-9])([KN]\d{4})(?![0-9])", re.IGNORECASE)
 _TMA_NUMBER = re.compile(r"T\d{2}-?\d{3,}")
 _SIX_DIGIT_CATALOG = re.compile(r"(?<!\d)\d{6}[-_]\d{2,4}(?!\d)")
 _WESTERN_PROBE = re.compile(r"([A-Z0-9_]{2,})[-.]2?0?(\d{2}[-.]\d{2}[-.]\d{2})")
@@ -253,20 +259,6 @@ _ESCAPE_MARKERS = (
 
 _ROOT_PARTS = frozenset({"/", ".", ""})
 _CD_DIR = re.compile(r"^(?:CD|PART)(\d{1,2})$", re.IGNORECASE)
-_DIR_BRACKET_STRIP = "[]【】()（）"
-
-_MOSAIC_DIR_TOKENS: dict[str, Mosaic] = {
-    k.casefold(): v
-    for k, v in (
-        ("uncensored", Mosaic.UNCENSORED),
-        ("無碼", Mosaic.UNCENSORED),
-        ("无码", Mosaic.UNCENSORED),
-        ("cracked", Mosaic.CRACKED),
-        ("破解", Mosaic.CRACKED),
-        ("leaked", Mosaic.LEAKED),
-        ("流出", Mosaic.LEAKED),
-    )
-}
 MOSAIC_VALUES: tuple[Mosaic, ...] = tuple(Mosaic)
 MOSAIC_NATURE_VALUES: tuple[MosaicNature, ...] = tuple(MosaicNature)
 CONTENT_TYPE_VALUES: tuple[ContentType, ...] = tuple(ContentType)
@@ -281,6 +273,8 @@ _DEFINITION_MARKERS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("4K", re.compile(r"\b2160P(?:\d+)?\b")),
     ("1440p", re.compile(r"\b1440P(?:\d+)?\b")),
     ("1080p", re.compile(r"\b1080P(?:\d+)?\b")),
+    # FHD 是 1080p 的常见别名, 归到同一档.
+    ("1080p", re.compile(r"\bFHD\b(?![.-]\d)")),
     ("720p", re.compile(r"\b720P(?:\d+)?\b")),
     ("480p", re.compile(r"\b480P(?:\d+)?\b")),
     ("HD", re.compile(r"\bHD\b(?![.-]\d)")),
@@ -342,8 +336,9 @@ def parse_file_info(
         has_subtitle_in_name=_detect_subtitle(basename),
         has_external_subtitle=has_external_subtitle,
         mosaic=mosaic,
-        definition=_detect_definition(basename),
-        ltx=_detect_ltx(basename),
+        # 文件名优先, 读不到再从父目录读; 两边都没有就是空.
+        definition=_detect_definition(basename) or _detect_definition_from_dirs(dirs),
+        ltx=_detect_ltx(basename) or _detect_ltx_from_dirs(dirs),
     )
 
 
@@ -414,8 +409,16 @@ def shows_uncensored(mosaic: Mosaic | None, content_type: ContentType | None) ->
     return mosaic is Mosaic.UNCENSORED or content_type is ContentType.UNCENSORED
 
 
-def mosaic_nature(mosaic: Mosaic | None, content_type: ContentType | None) -> MosaicNature | None:
-    """马赛克性质: 标记优先, 没命中时继承条目类型的有码 / 无码, 其余类型为空."""
+def mosaic_nature(
+    mosaic: Mosaic | None, content_type: ContentType | None, *, ltx: bool = False
+) -> MosaicNature | None:
+    """马赛克性质: LTX 最优先, 其次文件名标记, 再次条目类型, 其余为空.
+
+    LTX 与其他标记同在文件名里时只留 LTX: 两者本来就是同一段后缀的两种说法,
+    各写一次会渲染成 ``-LTX-破解`` 这种重复。
+    """
+    if ltx:
+        return MosaicNature.LTX
     if mosaic is not None:
         return MosaicNature(mosaic)
     if content_type is ContentType.CENSORED:
@@ -528,6 +531,11 @@ def _identify(
 
 def _match(basename: str, escape_strings: list[str], *, generic: bool) -> tuple[str, ContentType] | None:
     """命中已知形态则 (番号, 类型), 否则 None. 不含文件名回退."""
+    # Tokyo-Hot: k / n + 恰好 4 位数字, 最高优先.
+    # 先于一切噪声剥除, 因此 k0794 后面跟任何词都不影响识别; 位数不符则一律不算.
+    if m := _TOKYO_HOT_NUMBER.search(basename):
+        return m.group(1)[0].upper() + m.group(1)[1:], ContentType.UNCENSORED
+
     t = _prepare(basename, escape_strings)
     c, escaped, dated = t.catalog, t.escaped, t.dated
 
@@ -775,11 +783,30 @@ def _detect_ltx(basename: str) -> bool:
 
 
 def _detect_mosaic_from_dirs(dir_names: tuple[str, ...]) -> Mosaic | None:
+    """从最近的父目录起找马赛克标记.
+
+    与文件名同一套判定: 目录名里出现 ``CRACKED`` / ``破解`` 这类词就算,
+    不要求整个目录名等于它 —— ``ABC-123-cracked`` 与 ``cracked`` 是同一件事.
+    """
     for name in reversed(dir_names):
-        token = name.strip().strip(_DIR_BRACKET_STRIP).casefold()
-        if token in _MOSAIC_DIR_TOKENS:
-            return _MOSAIC_DIR_TOKENS[token]
+        value = _detect_mosaic(name.strip().upper())
+        if value is not None:
+            return value
     return None
+
+
+def _detect_definition_from_dirs(dir_names: tuple[str, ...]) -> str | None:
+    """从最近的父目录起找分辨率; 路径里没有就返回空."""
+    for name in reversed(dir_names):
+        value = _detect_definition(name)
+        if value is not None:
+            return value
+    return None
+
+
+def _detect_ltx_from_dirs(dir_names: tuple[str, ...]) -> bool:
+    """父目录名里是否带 LTX; 同一套边界规则."""
+    return any(_detect_ltx(name) for name in dir_names)
 
 
 def _normalize_markers(text: str) -> str:

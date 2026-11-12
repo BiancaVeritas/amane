@@ -108,6 +108,11 @@ class ScrapePayload(BaseModel):
     metadata_id: int | None = None
     theporndb_uuid: str | None = None
     use_cache: set[CacheKind] = {CacheKind.metadata, CacheKind.trans}
+    manual: bool = False
+    """手动搜索提交的刮削: 无视已有锁定并反过来锁住所写字段."""
+
+    preferred_site: str | None = None
+    """手动搜索里用户选中的来源; 该站点的来源链接排到第一位."""
 
 
 def build_feed_scrape_payload(feed: Feed, number: str) -> ScrapePayload:

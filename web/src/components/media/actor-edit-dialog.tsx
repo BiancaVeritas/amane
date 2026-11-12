@@ -3,6 +3,7 @@ import {
   Anchor,
   Button,
   Group,
+  Input,
   Modal,
   NumberInput,
   Select,
@@ -11,13 +12,14 @@ import {
   Text,
   TextInput,
   Textarea,
-  TagsInput,
 } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
+import { IconPlus } from "@tabler/icons-react";
 import { useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { ActorGender, ActorResponse, ActorUpdateRequest } from "@/client/types.gen";
 import { UnsavedChangesBar } from "@/components/common/unsaved-changes-bar";
+import { DraggableChips } from "@/components/schema-form/fields/draggable-chips";
 import { FanartLightbox } from "@/components/media/fanart-lightbox";
 import { SortableImageList } from "@/components/media/sortable-image-list";
 import { useResettingState } from "@/hooks/use-resetting-state";
@@ -105,6 +107,7 @@ export function ActorEditDialog({
   const formKey = opened ? actor.id : "closed";
   const [draft, setDraft] = useResettingState(() => draftFromActor(actor), formKey);
   const [newImageUrl, setNewImageUrl] = useResettingState(() => "", formKey);
+  const [aliasInput, setAliasInput] = useResettingState(() => "", formKey);
   const [lightboxOpen, { open: openLightbox, close: closeLightbox }] = useDisclosure(false);
   const [lightboxIndex, setLightboxIndex] = useState(0);
 
@@ -120,6 +123,27 @@ export function ActorEditDialog({
 
   function patchDraft(partial: Partial<ActorDraft>) {
     setDraft((prev) => ({ ...prev, ...partial }));
+  }
+
+  /** 输入框按回车或失焦时入库; 支持一次粘多行. */
+  function addAliases(raw: string) {
+    const parts = raw
+      .split(/[,\uff0c\n]/)
+      .map((item) => item.trim())
+      .filter(Boolean);
+    if (parts.length === 0) {
+      return;
+    }
+    setDraft((prev) => {
+      const merged = [...prev.aliases];
+      for (const part of parts) {
+        if (!merged.includes(part)) {
+          merged.push(part);
+        }
+      }
+      return { ...prev, aliases: merged };
+    });
+    setAliasInput("");
   }
 
   function handleSave() {
@@ -220,14 +244,36 @@ export function ActorEditDialog({
           minRows={3}
           autosize
         />
-        <TagsInput
-          label={t("browse.person.aliases")}
-          description={t("actors.aliasesHint")}
-          value={draft.aliases}
-          onChange={(aliases) => patchDraft({ aliases })}
-          splitChars={[",", "，", "\n"]}
-          clearable
-        />
+        {/* 别名顺序有意义 (第一个会被当成原名推送), 所以用可拖动列表而不是标签框. */}
+        <Input.Wrapper label={t("browse.person.aliases")} description={t("actors.aliasesHint")}>
+          <Stack gap={6}>
+            {draft.aliases.length > 0 && (
+              <DraggableChips
+                items={draft.aliases}
+                getKey={(item, index) => `${index}:${item}`}
+                getLabel={(item) => item}
+                onChange={(aliases) => patchDraft({ aliases })}
+                onDelete={(_, index) =>
+                  patchDraft({ aliases: draft.aliases.filter((_v, i) => i !== index) })
+                }
+              />
+            )}
+            <TextInput
+              placeholder={t("actors.aliasesAddPlaceholder")}
+              value={aliasInput}
+              leftSection={<IconPlus size={14} />}
+              onChange={(event) => setAliasInput(event.currentTarget.value)}
+              onKeyDown={(event) => {
+                if (event.key !== "Enter") {
+                  return;
+                }
+                event.preventDefault();
+                addAliases(aliasInput);
+              }}
+              onBlur={() => addAliases(aliasInput)}
+            />
+          </Stack>
+        </Input.Wrapper>
 
         <Stack gap="xs">
           <Text size="sm" fw={500}>

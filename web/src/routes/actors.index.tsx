@@ -1,20 +1,35 @@
 import {
   ActionIcon,
   Badge,
+  Box,
   Button,
   Group,
+  Menu,
+  Tooltip,
   SegmentedControl,
   Text,
   TextInput,
   Title,
 } from "@mantine/core";
-import { IconFilter, IconSearch, IconTable, IconUserEdit, IconX } from "@tabler/icons-react";
-import { useQuery } from "@tanstack/react-query";
+import {
+  IconFilter,
+  IconRefresh,
+  IconSearch,
+  IconTable,
+  IconUserEdit,
+  IconX,
+} from "@tabler/icons-react";
+import { notifications } from "@mantine/notifications";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { createFileRoute, stripSearchParams } from "@tanstack/react-router";
 import type { ParseKeys } from "i18next";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { getFacetOptions, listActorsOptions } from "@/client/@tanstack/react-query.gen";
+import {
+  batchSubmitTasksMutation,
+  getFacetOptions,
+  listActorsOptions,
+} from "@/client/@tanstack/react-query.gen";
 import type { ActorGender, ActorSortField } from "@/client/types.gen";
 import { BrowsePageShell } from "@/components/common/browse-page-shell";
 import { ScrollToTop } from "@/components/common/scroll-to-top";
@@ -48,6 +63,9 @@ import { useNarrowViewport } from "@/hooks/use-narrow-viewport";
 import { exhaustiveRecord } from "@/lib/exhaustive";
 import { ACTOR_SORT_FIELDS } from "@/lib/exhaustive-maps";
 import { actorListDefaults } from "@/lib/nav-defaults";
+import { extractErrorMessage } from "@/lib/api-error";
+import { confirm } from "@/lib/confirm";
+import { useMediaServerReady } from "@/hooks/use-media-server-ready";
 import { useUIStore } from "@/stores/ui";
 
 const ACTOR_SORT_I18N_KEY = exhaustiveRecord<ActorSortField>()({
@@ -224,6 +242,43 @@ function ActorsIndexPage() {
   }
 
   const [mappingOpen, setMappingOpen] = useState(false);
+  // 多选提到页面层: 工具栏的「演员同步」要读它来决定同步范围.
+  const mediaServer = useMediaServerReady();
+  const [picked, setPicked] = useState<Set<number>>(() => new Set());
+  const clearPicked = useCallback(() => setPicked(new Set()), []);
+
+  const pushMutation = useMutation({
+    ...batchSubmitTasksMutation(),
+    onSuccess: (res) => {
+      notifications.show({
+        message: res.submitted > 0 ? t("actors.push.queued") : t("common:toast.operationFailed"),
+        color: res.submitted > 0 ? "blue" : "red",
+      });
+      clearPicked();
+    },
+    onError: (err) =>
+      notifications.show({
+        message: extractErrorMessage(err, t("common:toast.operationFailed")),
+        color: "red",
+      }),
+  });
+
+  /** 选中若干演员就同步这几个; 一个都没选就是全部 (需二次确认). */
+  const handlePush = async (force: boolean) => {
+    const ids = [...picked];
+    if (ids.length === 0) {
+      const ok = await confirm({
+        title: t("actors.push.confirmTitle"),
+        message: t("actors.push.confirmBody"),
+      });
+      if (!ok) {
+        return;
+      }
+    }
+    pushMutation.mutate({
+      body: { submissions: [{ type: "actor_push", actor_ids: ids, force }] },
+    });
+  };
 
   return (
     <BrowsePageShell
@@ -231,6 +286,41 @@ function ActorsIndexPage() {
       title={<Title order={2}>{t("actors.title")}</Title>}
       actions={
         <Group gap="xs">
+          {/* 悬停给两种口径: 强制覆盖 / 强制增量. 选中若干就只同步这些, 空选则是全部.
+              媒体服务器没配 API Key 时置灰, 悬停说明原因 (禁用后 Menu 不展开, 提示才看得到). */}
+          <Tooltip label={mediaServer.reason} disabled={mediaServer.ready} withArrow>
+            <Box>
+              <Menu
+                shadow="md"
+                position="bottom-start"
+                trigger="hover"
+                openDelay={100}
+                closeDelay={200}
+                disabled={!mediaServer.ready}
+              >
+                <Menu.Target>
+                  <Button
+                    size="sm"
+                    variant="light"
+                    leftSection={<IconRefresh size={16} />}
+                    loading={pushMutation.isPending}
+                    disabled={!mediaServer.ready}
+                  >
+                    {t("actors.push.action")}
+                    {picked.size > 0 ? ` (${picked.size})` : ""}
+                  </Button>
+                </Menu.Target>
+                <Menu.Dropdown>
+                  <Menu.Item onClick={() => void handlePush(true)}>
+                    {t("actors.push.force")}
+                  </Menu.Item>
+                  <Menu.Item onClick={() => void handlePush(false)}>
+                    {t("actors.push.incremental")}
+                  </Menu.Item>
+                </Menu.Dropdown>
+              </Menu>
+            </Box>
+          </Tooltip>
           <Button
             size="sm"
             variant="light"
@@ -413,6 +503,12 @@ function ActorsIndexPage() {
           order={search.order}
           onPageChange={(page) => void navigate({ search: (prev) => ({ ...prev, page }) })}
           onSort={onSort}
+          selection={{
+            selected: picked,
+            selectedIds: [...picked],
+            setSelected: setPicked,
+            clear: clearPicked,
+          }}
         />
       ) : (
         <>

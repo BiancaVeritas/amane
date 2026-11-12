@@ -122,6 +122,7 @@ class MediaPerson(BaseModel):
     premiere_date: str | None = None
     production_year: int | None = None
     production_locations: list[str] = Field(default_factory=list)
+    tags: list[str] = Field(default_factory=list)
     raw: dict[str, Any] = Field(default_factory=dict)
 
     @classmethod
@@ -134,6 +135,7 @@ class MediaPerson(BaseModel):
         image_tags = value.get("ImageTags")
         locations = value.get("ProductionLocations")
         production_year = value.get("ProductionYear")
+        tags = value.get("Tags")
         return cls(
             id=person_id,
             name=name,
@@ -144,6 +146,7 @@ class MediaPerson(BaseModel):
             production_locations=[item for item in locations if isinstance(item, str)]
             if isinstance(locations, list)
             else [],
+            tags=[item for item in tags if isinstance(item, str)] if isinstance(tags, list) else [],
             raw=dict(value),
         )
 

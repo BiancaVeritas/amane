@@ -332,7 +332,16 @@
     "filmography_other": "Filmography ({{count}})",
     "viewAll": "View all {{count}}",
     "viewAll_one": "View all {{count}}",
-    "viewAll_other": "View all {{count}}"
+    "viewAll_other": "View all {{count}}",
+    "push": {
+      "action": "Sync actors",
+      "force": "Force sync",
+      "incremental": "Incremental sync",
+      "confirmTitle": "Confirm full sync",
+      "confirmBody": "This will sync every actor to the media server. Continue?",
+      "queued": "Actor sync queued"
+    },
+    "aliasesAddPlaceholder": "Type an alias and press Enter"
   },
   "notFound": "Film not found",
   "invalidId": "Invalid film ID",

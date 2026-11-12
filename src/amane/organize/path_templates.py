@@ -33,11 +33,25 @@ class ResolvedPaths:
     """渲染剧照文件名需要的同一份取值 (含 ``{video_*}`` / ``{link_*}``); 手工构造时可为 None."""
 
 
-VIDEO_TEMPLATE_DEFAULT = "{studio}/{number}/{number}[-CD{cd?}][-{sub?}].{ext}"
+VIDEO_TEMPLATE_DEFAULT = (
+    "{actress}/{number}/{number} [[{def?}]]"
+    "[-{mosaic?|ltx=LTX,cracked=破解,leaked=流出,censored=,uncensored=}]"
+    "[-CD{cd?}][-{sub?}].{ext}"
+)
+"""默认视频命名: 女演员/番号/番号[分辨率]-性质-CD-中字.
+
+``[[...]]`` 组内有内容才带方括号, 全空时整组消失 (含组内空格), 因此不会留下空 ``[]``.
+"""
 JINJA_VIDEO_TEMPLATE_DEFAULT = (
-    "{{studio}}/{{number}}/{{number}}{% if cd %}-CD{{cd}}{% endif %}{% if sub %}-C{% endif %}.{{ext}}"
+    "{{actress}}/{{number}}/{{number}}"
+    "{% if def %} [{{def}}]{% endif %}"
+    "{{{'ltx':'-LTX','cracked':'-破解','leaked':'-流出'}.get(mosaic, '')}}"
+    "{% if cd %}-CD{{cd}}{% endif %}"
+    "{% if sub %}-C{% endif %}"
+    ".{{ext}}"
 )
 """Jinja2 语法的同名默认模板; 与 ``VIDEO_TEMPLATE_DEFAULT`` 渲染结果一致."""
+
 THUMB_TEMPLATE_DEFAULT = "{link_dir}/thumb.jpg"
 POSTER_TEMPLATE_DEFAULT = "{link_dir}/poster.jpg"
 FANART_TEMPLATE_DEFAULT = "{link_dir}/fanart.jpg"
@@ -61,6 +75,17 @@ def normalize_link_template(value: str | None) -> str | None:
 def validate_path_template(value: str) -> str:
     """空串合法."""
     Parser(value).parse()
+    return value
+
+
+def validate_jinja_template(value: str) -> str:
+    """保存前校验 Jinja2 语法, 空串合法.
+
+    不校验就落库的话, 坏模板要等到真正整理文件时才炸 —— 那时任务已经排队,
+    表现是「文件全都不动」, 很难看出根因是模板. 这里前置拦住.
+    """
+    if value.strip():
+        JinjaPathEngine(value)
     return value
 
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import TYPE_CHECKING, Self
 
 import pytest
@@ -137,6 +138,7 @@ def _person(
     premiere_date: str | None = None,
     production_year: int | None = None,
     locations: list[str] | None = None,
+    tags: list[str] | None = None,
     image: bool = False,
     person_id: str | None = None,
 ) -> MediaPerson:
@@ -145,6 +147,7 @@ def _person(
         name=name,
         has_primary_image=image,
         overview=overview,
+        tags=tags or [],
         premiere_date=premiere_date,
         production_year=production_year,
         production_locations=locations or [],
@@ -169,7 +172,7 @@ async def test_fills_missing_and_skips_existing(
     client = _FakeClient(
         [
             _person("Alice"),
-            _person("Bob", overview="old", image=True),
+            _person("Bob", overview="old", image=True, tags=["Bob"]),
         ]
     )
 
@@ -191,6 +194,8 @@ async def test_fills_missing_and_skips_existing(
         "PremiereDate": "1990-01-01",
         "ProductionYear": 1990,
         "ProductionLocations": ["Tokyo"],
+        # 原始名随每轮推送写进标签 (服务器上原本没有).
+        "Tags": ["Alice"],
     }
     assert client.images == [("p-Alice", "image/png")]
     assert client.list_calls == 1
@@ -484,3 +489,30 @@ async def test_same_name_persons_all_update_once(repo: Repository, resource_stor
     assert result.result.matched == 2
     assert result.result.updated == 2
     assert [call[0] for call in client.updates] == ["p1", "p2"]
+
+
+@pytest.mark.asyncio(loop_scope="function")
+async def test_matches_person_renamed_to_display_name(
+    repo: Repository, resource_store: ResourceStore, tmp_path: Path
+) -> None:
+    """Emby 里的人物名已被改成中文映射名时仍要匹配上.
+
+    精确过滤只比 Name 字段, 所以中文名必须一起进搜索词, 否则那条记录会彻底失联.
+    """
+    await _actor(repo, "Yui Hatano", aliases=["Hatano Yui"])
+    mapping = tmp_path / "actor_name_mappings.json"
+    mapping.write_text(
+        json.dumps({"entries": {"Yui Hatano": {"translation": "波多野结衣"}}}, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    client = _FakeClient([_person("波多野结衣")])
+
+    handler = ActorPushHandler(
+        repo, resource_store, _hot(), client_factory=lambda _: client, actor_mapping_path=mapping
+    )
+    result = await handler.handle(ActorPushPayload())
+
+    assert result.success
+    assert result.result is not None
+    assert result.result.matched == 1
+    assert result.result.not_found == 0

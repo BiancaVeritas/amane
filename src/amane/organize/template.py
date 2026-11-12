@@ -101,7 +101,6 @@ TemplateVariables = TypedDict(
         "year": str,
         "release": str,
         "ext": str,
-        "ltx": str,
         "raw_dir": str,
         "raw_name": str,
         "raw_relpath": str,
@@ -261,6 +260,14 @@ def _resolve(node: _Placeholder, variables: dict[str, str]) -> str:
     return mapped.get(raw, raw)
 
 
+def _drop_trailing_space(parts: list[str]) -> None:
+    """组被省略时去掉紧邻的前导空格, 避免路径里留尾随空格."""
+    if parts and parts[-1].endswith(" "):
+        parts[-1] = parts[-1].rstrip(" ")
+        if not parts[-1]:
+            parts.pop()
+
+
 def _render_nodes(nodes: Sequence[_Node], variables: dict[str, str]) -> str:
     parts: list[str] = []
     for node in nodes:
@@ -271,8 +278,14 @@ def _render_nodes(nodes: Sequence[_Node], variables: dict[str, str]) -> str:
         else:
             slots = _direct_placeholders(node.children)
             if slots and all(_resolve(item, variables) == "" for item in slots):
+                _drop_trailing_space(parts)
                 continue
             inner = _render_nodes(node.children, variables)
+            # 组内只剩空白也算空, 并把紧挨着的前导空格一并去掉:
+            # 否则 ``X [[{def?}]]`` 在 def 为空时会留下 ``X `` 的尾随空格.
+            if not inner.strip():
+                _drop_trailing_space(parts)
+                continue
             parts.append(f"[{inner}]" if node.wrap else inner)
     return "".join(parts)
 
@@ -353,7 +366,10 @@ def video_relpath(dest: Path, library_root: Path) -> str:
 
 
 def actress_names(actors: Sequence[str], genders: Mapping[str, ActorGender] | None = None) -> list[str]:
-    """按 ``Metadata.actors`` 顺序排除明确 ``male``; 未入表或 ``unknown`` 保留."""
+    """按 ``Metadata.actors`` 顺序排除明确 ``male``; 未入表或 ``unknown`` 保留.
+
+    女演员与未标性别的演员视为同一档: 没填性别不代表是男的, 没理由把它排除在外.
+    """
     if not actors:
         return []
     if genders is None:
@@ -453,6 +469,8 @@ def _build_variables(
         "actor_cn": _safe(_display_actor(actor, actor_names)) or _UNKNOWN,
         "actors": ",".join(metadata.actors) if metadata.actors else _UNKNOWN,
         "actors_cn": _join_display(metadata.actors, actor_names),
+        # actress_names 已经做了三级回退 (女性 > 未标性别 > 排除男性), 这里不再退回全部演员,
+        # 否则会把明确的男演员算进来.
         "actress": _safe(actress) or _UNKNOWN,
         "actress_cn": _safe(_display_actor(actress, actor_names)) or _UNKNOWN,
         "actresses": ",".join(actresses) if actresses else _UNKNOWN,
@@ -467,7 +485,6 @@ def _build_variables(
         "year": year or _UNKNOWN,
         "release": _safe(metadata.release) or _UNKNOWN,
         "ext": ext,
-        "ltx": "LTX" if file_info is not None and file_info.ltx else "",
         "raw_dir": raw_dir,
         "raw_name": raw_name,
         "raw_relpath": _relpath_or_empty(source_path, library_root),
@@ -477,7 +494,13 @@ def _build_variables(
         "sub?": "C" if file_info is not None and file_info.has_subtitle_in_name else "",
         "content_type": str(metadata.content_type),
         "mosaic?": str(nature)
-        if (nature := mosaic_nature(file_info.mosaic if file_info else None, metadata.content_type))
+        if (
+            nature := mosaic_nature(
+                file_info.mosaic if file_info else None,
+                metadata.content_type,
+                ltx=file_info.ltx if file_info else False,
+            )
+        )
         else "",
         "def?": file_info.definition if file_info is not None and file_info.definition else "",
         "video_dir": _UNKNOWN,

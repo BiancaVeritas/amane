@@ -14,6 +14,7 @@ from .path_templates import (
     resolve_paths,
     resolve_subtitle_path,
     validate_extrafanart_name_template,
+    validate_jinja_template,
     validate_path_template,
 )
 from .strm_content import (

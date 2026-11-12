@@ -1,0 +1,128 @@
+/*
+ * 多行模板输入: 透明 textarea 叠着色层.
+ *
+ * 两层必须逐字符对齐. 任何影响字宽的属性 (font-family / font-size / letter-spacing /
+ * font-feature-settings / tab-size) 都要显式写在两边, 不要靠 inherit: <pre> 与
+ * <textarea> 的浏览器默认字体不同, inherit 不足以让它们一致.
+ */
+.shell {
+  position: relative;
+  border: 1px solid var(--mantine-color-default-border);
+  border-radius: var(--mantine-radius-sm);
+  background-color: var(--mantine-color-body);
+  overflow: hidden;
+}
+
+.shell:focus-within {
+  border-color: var(--mantine-color-blue-filled);
+}
+
+.layer,
+.input {
+  /* 逐项写死, 不用 inherit / 不依赖浏览器默认值. */
+  margin: 0;
+  border: 0;
+  padding: 8px 12px;
+  font-family:
+    ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 13px;
+  font-weight: 400;
+  font-style: normal;
+  line-height: 22px;
+  letter-spacing: normal;
+  word-spacing: normal;
+  text-transform: none;
+  text-indent: 0;
+  text-align: left;
+  tab-size: 2;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: break-word;
+  box-sizing: border-box;
+}
+
+.layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  color: var(--mantine-color-text);
+}
+
+.input {
+  position: relative;
+  display: block;
+  width: 100%;
+  outline: none;
+  color: var(--mantine-color-text);
+  background: transparent;
+  caret-color: var(--mantine-color-text);
+  /* 只允许竖向拖动, 横向不出现滚动条 (内容按 word-break 折行). */
+  resize: vertical;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+/*
+ * 有高亮层时文字透明: 可见的字由下层 <pre> 提供.
+ * 选区背景压成半透明 —— 否则 textarea 会铺一层实心蓝, 把下层的彩色文字整个盖住,
+ * 看起来就像「高亮消失了」.
+ */
+.input {
+  color: transparent;
+}
+
+.input::selection {
+  background: color-mix(in srgb, var(--mantine-color-blue-4) 45%, transparent);
+  color: transparent;
+}
+
+.input::-moz-selection {
+  background: color-mix(in srgb, var(--mantine-color-blue-4) 45%, transparent);
+  color: transparent;
+}
+
+/* 没有高亮层时用正常前景色. */
+.input[data-plain] {
+  color: var(--mantine-color-text);
+}
+
+.input::placeholder {
+  color: var(--mantine-color-placeholder);
+}
+
+/* token 配色 */
+.text {
+  color: var(--mantine-color-text);
+}
+
+.delimiter {
+  color: light-dark(var(--mantine-color-grape-7), var(--mantine-color-grape-4));
+  font-weight: 600;
+}
+
+.variable {
+  color: light-dark(var(--mantine-color-blue-7), var(--mantine-color-blue-4));
+}
+
+.keyword {
+  color: light-dark(var(--mantine-color-orange-7), var(--mantine-color-orange-4));
+  font-weight: 600;
+}
+
+.string {
+  color: light-dark(var(--mantine-color-teal-7), var(--mantine-color-teal-4));
+}
+
+.number {
+  color: light-dark(var(--mantine-color-cyan-7), var(--mantine-color-cyan-4));
+}
+
+.operator {
+  color: var(--mantine-color-dimmed);
+}
+
+.error {
+  color: var(--mantine-color-red-6);
+  text-decoration: wavy underline;
+}

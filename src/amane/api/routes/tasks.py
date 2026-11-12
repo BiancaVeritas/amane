@@ -8,8 +8,9 @@ from pydantic import BaseModel, TypeAdapter
 
 from ...db import MediaFile, Repository
 from ...db.models import SortOrder, Task, TaskSortField, TaskStatus, TaskType
-from ...handlers import ActorScrapePayload, ScrapePayload
+from ...handlers import ActorScrapePayload, ScrapeHandler, ScrapePayload
 from ...observability import build_record_zip
+from ...parsing import ContentType, infer_content_type
 from ...utils.model import to_resp
 from ..deps import ConfigDep, RepoDep, RuntimeDep
 from ..models import (
@@ -30,6 +31,28 @@ from ..support.task_batch import execute_task_batch
 from ..support.task_resolve import resolve_submission
 
 logger = structlog.get_logger()
+
+class ScrapePreviewItem(BaseModel):
+    """一个来源命中的候选; 只回展示需要的字段."""
+
+    site: str
+    number: str
+    title: str | None = None
+    release: str | None = None
+    studio: str | None = None
+    poster_url: str | None = None
+    thumb_url: str | None = None
+    source_url: str | None = None
+
+
+class ScrapePreviewRequest(BaseModel):
+    number: str
+    content_type: ContentType | None = None
+
+
+class ScrapePreviewResponse(BaseModel):
+    items: list[ScrapePreviewItem]
+
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
 
@@ -173,6 +196,23 @@ async def get_task_children(
         ],
         total=total,
     )
+
+
+@router.post("/scrape/preview")
+async def preview_scrape(req: ScrapePreviewRequest, runtime: RuntimeDep) -> ScrapePreviewResponse:
+    """按番号问一遍各来源, 只回结果不落库.
+
+    手动搜索要先让用户挑一个, 所以这里不写 DB 也不下载图.
+    """
+    content_type = req.content_type or infer_content_type(req.number)
+    handler = ScrapeHandler(
+        runtime.repo,
+        runtime.factory,
+        runtime.resource_store,
+        runtime.config.hot,
+    )
+    items = await handler.preview(req.number, content_type)
+    return ScrapePreviewResponse(items=[ScrapePreviewItem(**item) for item in items])
 
 
 @router.post("", status_code=202)

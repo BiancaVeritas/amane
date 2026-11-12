@@ -4555,6 +4555,67 @@ export type ScheduleUpdateRequest = {
 };
 
 /**
+ * ScrapePreviewItem
+ *
+ * 一个来源命中的候选; 只回展示需要的字段.
+ */
+export type ScrapePreviewItem = {
+    /**
+     * Site
+     */
+    site: string;
+    /**
+     * Number
+     */
+    number: string;
+    /**
+     * Title
+     */
+    title?: string | null;
+    /**
+     * Release
+     */
+    release?: string | null;
+    /**
+     * Studio
+     */
+    studio?: string | null;
+    /**
+     * Poster Url
+     */
+    poster_url?: string | null;
+    /**
+     * Thumb Url
+     */
+    thumb_url?: string | null;
+    /**
+     * Source Url
+     */
+    source_url?: string | null;
+};
+
+/**
+ * ScrapePreviewRequest
+ */
+export type ScrapePreviewRequest = {
+    /**
+     * Number
+     */
+    number: string;
+    content_type?: ContentType | null;
+};
+
+/**
+ * ScrapePreviewResponse
+ */
+export type ScrapePreviewResponse = {
+    /**
+     * Items
+     */
+    items: Array<ScrapePreviewItem>;
+};
+
+/**
  * ScrapeResult
  */
 export type ScrapeResult = {
@@ -4612,6 +4673,18 @@ export type ScrapeSubmission = {
      * 启用的缓存种类 (metadata: 复用 DB per-site 快照; trans: 复用译文). 空集 = 全部强制刷新
      */
     use_cache?: Array<CacheKind>;
+    /**
+     * Manual
+     *
+     * 手动搜索提交: 无视既有字段锁定并反过来锁住所写字段
+     */
+    manual?: boolean;
+    /**
+     * Preferred Site
+     *
+     * 手动搜索选中的来源; 该站点的来源链接排到第一位
+     */
+    preferred_site?: string | null;
     /**
      * Type
      */
@@ -9267,6 +9340,31 @@ export type GetTaskChildrenResponses = {
 };
 
 export type GetTaskChildrenResponse = GetTaskChildrenResponses[keyof GetTaskChildrenResponses];
+
+export type PreviewScrapeData = {
+    body: ScrapePreviewRequest;
+    path?: never;
+    query?: never;
+    url: '/api/tasks/scrape/preview';
+};
+
+export type PreviewScrapeErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type PreviewScrapeError = PreviewScrapeErrors[keyof PreviewScrapeErrors];
+
+export type PreviewScrapeResponses = {
+    /**
+     * Successful Response
+     */
+    200: ScrapePreviewResponse;
+};
+
+export type PreviewScrapeResponse = PreviewScrapeResponses[keyof PreviewScrapeResponses];
 
 export type GetTaskSchemaData = {
     body?: never;
