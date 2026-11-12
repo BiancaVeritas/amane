@@ -234,6 +234,31 @@ def has_subtitle_predicate() -> ColumnElement[bool]:
     return or_(col(MediaFile.has_subtitle_in_name).is_(True), col(MediaFile.has_external_subtitle).is_(True))
 
 
+class ScrapedFilename(SQLModel, table=True):
+    """同名不重刮的登记表.
+
+    与 ``media_files`` 彻底解耦: 那张表会随整理、清理、覆盖而增删, 靠它判断「这个名字
+    刮过没有」会在文件被挪动两轮之后失效. 这里只记「这个库的这份文件名刮过了」,
+    要重刮必须显式清掉这一行.
+    """
+
+    __tablename__ = "scraped_filenames"  # type: ignore[assignment]
+    __table_args__ = (UniqueConstraint("library_id", "filename", name="uq_scraped_filenames_library_name"),)
+
+    id: int | None = Field(default=None, primary_key=True)
+    library_id: int = Field(foreign_key="libraries.id", index=True)
+    filename: str = Field(nullable=False, index=True)
+    """入库时的文件主名 (不含扩展名), 判重就比这个."""
+    renamed: str = Field(default="", nullable=False)
+    """整理后的文件名; 还没整理时为空, 界面据此显示「待整理」."""
+    source_path: str = Field(default="", nullable=False)
+    """入库时所在路径, 显示成库内相对路径用."""
+    target_path: str = Field(default="", nullable=False)
+    """整理后的路径, 同样按库内相对路径显示; 空表示还没整理."""
+    created_at: datetime = Field(default_factory=_utcnow)
+
+
+
 class _VrProperty(property):
     """``Metadata.vr`` 的实现, 只允许实例访问.
 

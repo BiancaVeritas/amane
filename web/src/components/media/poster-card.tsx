@@ -83,7 +83,8 @@ export function PosterCard({
             )}
           </AspectRatio>
           <FilePhaseOverlay
-            phase={item.file_phase}
+            // 标签一并传入: FC2 这类条目类型不带无码标记, 只靠「無碼」标签区分.
+            phase={item.file_phase ? { ...item.file_phase, tags: item.tags } : item.file_phase}
             topExtra={
               ageThen != null ? (
                 <OverlayChip>

@@ -134,7 +134,6 @@ async def _apply_found(
             # 只清日志等任务产物, 不动 media_files.
             # 任务记录是执行流水, 媒体文件索引是库的资产; 清流水不该连带删资产 ——
             # 那样一清任务, 详情页的「关联文件」就全空了, 而磁盘上的文件还在.
-        # 有集合外后裔的行被跳过, 计入 skipped (与 status 不合格的 skipped 相加).
         return TaskBatchResponse(affected=deleted, skipped=skipped + (len(eligible) - deleted), missing=missing)
 
     created = await repo.retry_tasks(eligible)

@@ -1,0 +1,40 @@
+/*
+ * 文件记录列表.
+ *
+ * 每行是独立的可悬停条目, 删除按钮固定在右侧; 不放 Stack 里是因为那样行与行之间
+ * 没有边界, 按钮会看起来像浮在滚动条上.
+ */
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.row {
+  padding: 4px 6px;
+  border-radius: var(--mantine-radius-sm);
+  /* 右侧留出滚动条的位置, 删除按钮不会被它压住. */
+  padding-right: 10px;
+}
+
+.row:hover {
+  background-color: var(--mantine-color-default-hover);
+}
+
+/* 文件名单行省略: 名字可能很长, 换行会把行高撑乱. */
+.name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 两行名字 (原始名 / 整理后) 纵向排, 各自单行省略. */
+.names {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  flex: 1;
+  min-width: 0;
+}

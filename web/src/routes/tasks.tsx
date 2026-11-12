@@ -22,6 +22,7 @@ import {
   IconChevronUp,
   IconDots,
   IconFilter,
+  IconDatabase,
   IconListDetails,
   IconPlayerPause,
   IconPlayerPlay,
@@ -51,6 +52,7 @@ import { ListToolbar } from "@/components/common/list-toolbar";
 import { PageSizeSelect } from "@/components/common/page-size-select";
 import { APP_SHELL_MAIN_HEIGHT } from "@/components/layout/app-shell-metrics";
 import { TaskSubmitModal } from "@/components/task/task-submit-modal";
+import { ScrapedRecordsDialog } from "@/components/task/scraped-records-dialog";
 import { TaskTree } from "@/components/task/task-tree";
 import { useNarrowViewport } from "@/hooks/use-narrow-viewport";
 import { useResettingState } from "@/hooks/use-resetting-state";
@@ -268,6 +270,7 @@ function TasksPage() {
   const [opened, setOpened] = useResettingState(() => new Set<number>(), listKey);
   const [focusId, setFocusId] = useResettingState<number | null>(() => null, listKey);
   const [batchOpen, setBatchOpen] = useState(false);
+  const [recordsOpen, setRecordsOpen] = useState(false);
   const [filterOpen, setFilterOpen] = useState(false);
   const [template, setTemplate] = useState("");
   const [preview, setPreview] = useState<string[]>([]);
@@ -718,6 +721,13 @@ function TasksPage() {
               </Button>
               <Button
                 size="sm"
+                leftSection={<IconDatabase size={14} />}
+                onClick={() => setRecordsOpen(true)}
+              >
+                {t("scrapedRecords.toggle")}
+              </Button>
+              <Button
+                size="sm"
                 leftSection={<IconPlus size={14} />}
                 onClick={() => setSubmitOpen(true)}
               >
@@ -830,6 +840,7 @@ function TasksPage() {
       ) : null}
 
       <TaskSubmitModal opened={submitOpen} onClose={() => setSubmitOpen(false)} />
+      <ScrapedRecordsDialog opened={recordsOpen} onClose={() => setRecordsOpen(false)} />
     </Stack>
   );
 }

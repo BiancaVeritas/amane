@@ -505,5 +505,16 @@
   },
   "scrape": {
     "manual": "Manual search"
+  },
+  "scrapedRecords": {
+    "toggle": "File records",
+    "title": "File records",
+    "hint": "Names that have been scraped. A matching name is skipped next time; clearing only stops the skip, it does not touch running tasks.",
+    "count": "{{count}} entries",
+    "clear": "Clear records",
+    "cleared": "Cleared {{count}} entries",
+    "empty": "No records yet",
+    "removeOne": "Remove this record",
+    "notOrganized": "Not organized"
   }
 }

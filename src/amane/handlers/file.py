@@ -288,6 +288,15 @@ async def commit_organized_media_file(
     occupant = await repo.get_media_file_by_path(str(placed))
     if occupant is None or occupant.id == media.id:
         updated = await repo.update_media_file(media.id, path=str(placed))
+        if updated is not None:
+            # 记下改后的名字与目标路径: 文件记录界面要能并排看到「原始名 → 新名」.
+            await repo.remember_scraped_renamed(
+                media.library_id,
+                media.filename,
+                updated.filename,
+                target_path=updated.path,
+                source_path=media.path,
+            )
         if updated is not None and library is not None:
             await refresh_external_subtitle(repo, updated, library)
         return
@@ -658,6 +667,16 @@ class OrganizeHandler(TaskHandler[OrganizePayload, OrganizeResult]):
                     case PlaceOutcome.CONFLICT:
                         # 行不提交新路径, 留在源路径: 下次整理会再次报告, 直到用户自行处理.
                         target = fop_result.conflict_target
+                        if target is not None:
+                            # 目标已被占说明这份早就整理过一遍; 补记一条, 文件记录里
+                            # 才不会一直显示「待整理」.
+                            await self._repo.remember_scraped_renamed(
+                                media_file.library_id,
+                                media_file.filename,
+                                target.name,
+                                target_path=str(target),
+                                source_path=media_file.path,
+                            )
                         conflicted += _record_conflicts(
                             conflicts,
                             []

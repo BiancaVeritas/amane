@@ -472,5 +472,16 @@
   },
   "scrape": {
     "manual": "手动搜索"
+  },
+  "scrapedRecords": {
+    "toggle": "文件记录",
+    "title": "文件记录",
+    "hint": "刮过的文件名登记在这里。有记录的同名文件不再进入刮削；清掉记录只是下次不再拦截，不影响正在运行的任务。",
+    "count": "共 {{count}} 条",
+    "clear": "清空记录",
+    "cleared": "已清除 {{count}} 条记录",
+    "empty": "还没有记录",
+    "removeOne": "删除这条记录",
+    "notOrganized": "待整理"
   }
 }

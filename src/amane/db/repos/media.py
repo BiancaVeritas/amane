@@ -11,7 +11,7 @@ from sqlmodel.sql.expression import SelectOfScalar
 from ...parsing import ContentType, FilePhase, FilePhaseSummary, Mosaic, file_phase_from_path, summarize_file_phases
 from ...utils.collections import unique_ids
 from ...utils.path import nfc_path
-from ..models import MediaFile, MediaFileStatus, MediaSortField, Metadata, SortOrder
+from ..models import MediaFile, MediaFileStatus, MediaSortField, Metadata, ScrapedFilename, SortOrder
 from ..repo_types import _MEDIA_SORT_COLUMNS, MediaFileUpdates, _apply_media_phase_filters, _order_clause, _utcnow
 from .base import RepositoryMixinBase, chunks
 
@@ -46,6 +46,20 @@ class MetadataFilesSummary(NamedTuple):
     phase: FilePhaseSummary
 
 
+def _filename_stem(filename: str) -> str:
+    """取文件主名, 去掉最后一段扩展名.
+
+    「同一个文件」的判断不该受容器格式影响: 同一份片子转成 .mp4 / .strm 时,
+    主名一模一样, 用户当然不希望被当成新文件再刮一遍.
+    """
+    name = filename.strip()
+    if not name:
+        return ""
+    dot = name.rfind(".")
+    # 没有点, 或点在开头 (隐藏文件) 时整段当主名.
+    return name[:dot] if dot > 0 else name
+
+
 class MediaRepoMixin(RepositoryMixinBase):
     async def create_media_file(self, library_id: int, **updates: Unpack[MediaFileUpdates]) -> MediaFile:
         path = updates.get("path")
@@ -70,19 +84,138 @@ class MediaRepoMixin(RepositoryMixinBase):
             return result.first()
 
     async def has_scraped_with_filename(self, library_id: int, filename: str) -> bool:
-        """同库内是否已有一份同名且已刮削的记录.
+        """同库内这份文件名是否已经刮过 (不比扩展名).
 
-        等值命中 ``ix_media_files_filename``, 十万条量级也不退化成全表扫描.
+        查的是 ``scraped_filenames`` 登记表, 不是 ``media_files``: 后者会随整理与清理
+        增删, 靠它判断会在文件挪动两轮之后失效, 于是同一份文件被重刮.
         """
+        stem = _filename_stem(filename)
+        if not stem:
+            return False
         async with self._session() as session:
             stmt = (
-                select(col(MediaFile.id))
-                .where(MediaFile.library_id == library_id)
-                .where(MediaFile.filename == filename)
-                .where(MediaFile.status == MediaFileStatus.SCRAPED)
+                select(col(ScrapedFilename.id))
+                .where(ScrapedFilename.library_id == library_id)
+                .where(ScrapedFilename.filename == stem)
                 .limit(1)
             )
             return (await session.exec(stmt)).first() is not None
+
+    async def remember_scraped_filename(self, library_id: int, filename: str, *, path: str = "") -> None:
+        """登记「这个名字刮过了」; 已存在则忽略. 只记主名, 不含扩展名."""
+        stem = _filename_stem(filename)
+        if not stem:
+            return
+        async with self._session() as session:
+            existing = (
+                await session.exec(
+                    select(ScrapedFilename)
+                    .where(ScrapedFilename.library_id == library_id)
+                    .where(ScrapedFilename.filename == stem)
+                    .limit(1)
+                )
+            ).first()
+            if existing is not None:
+                if path and not existing.source_path:
+                    existing.source_path = path
+                    session.add(existing)
+                    await session.commit()
+                return
+            session.add(ScrapedFilename(library_id=library_id, filename=stem, source_path=path))
+            await session.commit()
+
+    async def forget_scraped_filename(self, filename: str, *, library_id: int | None = None) -> int:
+        """删掉单条登记; 返回删掉的条数.
+
+        ``library_id`` 缺省时按文件名跨库删: 管理界面只列名字, 不带库归属.
+        """
+        stem = _filename_stem(filename)
+        if not stem:
+            return 0
+        async with self._session() as session:
+            stmt = sqla_delete(ScrapedFilename).where(ScrapedFilename.filename == stem)
+            if library_id is not None:
+                stmt = stmt.where(ScrapedFilename.library_id == library_id)
+            result = await session.exec(stmt)
+            await session.commit()
+            return result.rowcount or 0
+
+    async def forget_scraped_filenames(self, *, library_id: int | None = None) -> int:
+        """清掉登记, 让同名文件重新可刮. 返回清掉的条数."""
+        async with self._session() as session:
+            stmt = sqla_delete(ScrapedFilename)
+            if library_id is not None:
+                stmt = stmt.where(col(ScrapedFilename.library_id) == library_id)
+            result = await session.exec(stmt)
+            await session.commit()
+            return result.rowcount or 0
+
+    async def list_scraped_filenames(
+        self, *, library_id: int | None = None, limit: int = 200
+    ) -> list[tuple[str, str, str, str]]:
+        """看登记了哪些名字; 每项是 (原始主名, 整理后名字, 源路径, 目标路径).
+
+        后两者为空表示还没整理 (或整理时冲突跳过).
+        """
+        async with self._session() as session:
+            stmt = select(
+                ScrapedFilename.filename,
+                ScrapedFilename.renamed,
+                ScrapedFilename.source_path,
+                ScrapedFilename.target_path,
+            ).order_by(col(ScrapedFilename.created_at).desc())
+            if library_id is not None:
+                stmt = stmt.where(col(ScrapedFilename.library_id) == library_id)
+            stmt = stmt.limit(limit)
+            return [
+                (str(name), str(renamed), str(source), str(target))
+                for name, renamed, source, target in (await session.exec(stmt)).all()
+            ]
+
+    async def remember_scraped_renamed(
+        self,
+        library_id: int,
+        filename: str,
+        renamed: str,
+        *,
+        target_path: str = "",
+        source_path: str = "",
+    ) -> None:
+        """记下整理后的文件名与目标路径; 登记行不存在时补一条 (改名先于登记的老数据)."""
+        stem = _filename_stem(filename)
+        if not stem:
+            return
+        async with self._session() as session:
+            row = (await session.exec(select(ScrapedFilename).where(
+                ScrapedFilename.library_id == library_id,
+                ScrapedFilename.filename == stem,
+            ).limit(1))).first()
+            if row is None:
+                session.add(
+                    ScrapedFilename(
+                        library_id=library_id,
+                        filename=stem,
+                        renamed=renamed,
+                        target_path=target_path,
+                        source_path=source_path,
+                    )
+                )
+            else:
+                changed = False
+                if row.renamed != renamed:
+                    row.renamed = renamed
+                    changed = True
+                if row.target_path != target_path:
+                    row.target_path = target_path
+                    changed = True
+                # 存量行可能只有 renamed 没有 source: 补上, 否则界面第一行是空的.
+                if source_path and row.source_path != source_path:
+                    row.source_path = source_path
+                    changed = True
+                if not changed:
+                    return
+                session.add(row)
+            await session.commit()
 
     async def get_valid(self, disk_paths: Iterable[str]) -> Sequence[MediaFile]:
         """路径按 ``chunks`` 分批 IN, 避开绑定变量上限. 比较前统一 NFC."""

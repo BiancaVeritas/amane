@@ -91,7 +91,13 @@ async def ensure_oshash(repo: Repository, media: MediaFile) -> str | None:
 
 
 async def finalize_media_file(repo: Repository, media_file_id: int | None, metadata_id: int | None) -> None:
-    """media_file_id 为 None 时静默跳过."""
+    """media_file_id 为 None 时静默跳过.
+
+    刮完顺手把这个文件名登记进 ``scraped_filenames``: 之后同一份文件被整理到别处、
+    或者源文件还留在原目录, 都不会再刮第二遍.
+    """
     if media_file_id is None:
         return
-    await repo.update_media_file(media_file_id, status=MediaFileStatus.SCRAPED, metadata_id=metadata_id)
+    media = await repo.update_media_file(media_file_id, status=MediaFileStatus.SCRAPED, metadata_id=metadata_id)
+    if media is not None and media.filename:
+        await repo.remember_scraped_filename(media.library_id, media.filename, path=media.path)

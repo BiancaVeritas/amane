@@ -646,7 +646,12 @@ function TitleDetailPage() {
             )}
             {!playingTrailer && (
               <>
-                <FilePhaseOverlay phase={item.file_phase} />
+                <FilePhaseOverlay
+                  // 标签一并传入: 无码也可能只体现在「無碼」标签上.
+                  phase={
+                    item.file_phase ? { ...item.file_phase, tags: item.tags } : item.file_phase
+                  }
+                />
                 {(item.vr || item.score != null) && (
                   <Group
                     pos="absolute"

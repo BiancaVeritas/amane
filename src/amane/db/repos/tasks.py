@@ -89,6 +89,30 @@ def _matching_root_ids(
     return _scope_tasks(stmt, statuses=statuses, task_types=task_types).distinct()
 
 
+async def _descendants_of(session: AsyncSession, ids: Sequence[int]) -> set[int]:
+    """``ids`` 的全部后裔 (不含自身)."""
+    id_set = set(ids)
+    if not id_set:
+        return set()
+    visited = set(id_set)
+    descendants: set[int] = set()
+    frontier = list(id_set)
+    while frontier:
+        next_frontier: list[int] = []
+        for chunk in chunks(frontier):
+            rows = await session.exec(
+                select(TaskLink.parent_task_id, TaskLink.child_task_id).where(col(TaskLink.parent_task_id).in_(chunk))
+            )
+            for _parent, child in rows.all():
+                if child is None or child in visited:
+                    continue
+                visited.add(child)
+                descendants.add(child)
+                next_frontier.append(child)
+        frontier = next_frontier
+    return descendants
+
+
 async def _ids_with_external_descendants(session: AsyncSession, ids: Sequence[int]) -> set[int]:
     """待删集合里存在集合外后裔的那些 id (含菱形多父).
     有未纳入本次删除的后裔时祖先须跳过, 否则剩余子任务失去链根后无法在列表中显示.

@@ -394,7 +394,7 @@ class ScrapingConfig(BaseModel):
     poster_ratio: float = Field(default=0.7, ge=0.3, le=1.0)
     """日本有码等常规影片的海报裁剪宽高比 (w/h). 默认 0.7."""
 
-    uncensored_poster_ratio: float = Field(default=0.87, ge=0.3, le=1.0)
+    uncensored_poster_ratio: float = Field(default=0.7, ge=0.3, le=1.0)
     """无码影片独立的海报裁剪宽高比 (w/h); 裁剪开关与常规影片共用 crop_poster."""
 
     poster_crop_skip_ratio: float = Field(default=0.9, ge=0.5, le=1.0)

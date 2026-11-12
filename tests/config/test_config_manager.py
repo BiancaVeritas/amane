@@ -368,7 +368,7 @@ class TestScrapingPriorityMigration:
         cfg = ScrapingConfig.model_validate({"poster_ratio": 0.65, "uncensored_poster_ratio": 0.82})
         assert cfg.poster_ratio == 0.65
         assert cfg.uncensored_poster_ratio == 0.82
-        assert ScrapingConfig().uncensored_poster_ratio == 0.87
+        assert ScrapingConfig().uncensored_poster_ratio == 0.7
 
     def test_legacy_uncensored_default_route_adds_aventertainments(self):
         cfg = ScrapingConfig.model_validate({

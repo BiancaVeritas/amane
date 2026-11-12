@@ -3,6 +3,7 @@ from typing import TYPE_CHECKING, Annotated, cast
 
 import structlog
 from fastapi import APIRouter, HTTPException, Query, Response
+from pydantic import BaseModel, Field
 
 from ...db.models import MediaFile, MediaFileStatus, MediaSortField, SortOrder
 from ...parsing import DEFINITION_VALUES, ContentType, Mosaic
@@ -84,6 +85,70 @@ async def list_media(
         content_type=content_type,
     )
     return MediaListResponse(items=await _phase_responses(repo, items), total=total)
+
+
+def _relative_to_library(path: str, roots: Sequence[str]) -> str:
+    """把绝对路径截成库内相对路径.
+
+    哪个库根前缀最长就用哪个 (库可能嵌套); 都匹配不上时原样返回完整路径,
+    总比猜错一段更好.
+    """
+    if not path:
+        return ""
+    normalized = path.replace("\\", "/").rstrip("/")
+    best = ""
+    for root in roots:
+        prefix = root.replace("\\", "/").rstrip("/")
+        if prefix and normalized.casefold().startswith(prefix.casefold()):
+            candidate = normalized[len(prefix) :].lstrip("/")
+            if len(candidate) < len(normalized) - len(best):
+                best = candidate
+    return best or normalized
+
+
+
+class ScrapedFilenameItem(BaseModel):
+    """一条登记: 原始名 + 整理后名 + 两侧路径."""
+
+    filename: str
+    renamed: str = Field(default="", description="整理后的文件名; 空表示还没整理")
+    source_path: str = Field(default="", description="入库时所在路径")
+    target_path: str = Field(default="", description="整理后的路径; 空表示还没整理")
+
+
+@router.get("/scraped-filenames")
+async def list_scraped_filenames(
+    repo: RepoDep,
+    library_id: Annotated[int | None, Query(description="只看某个库")] = None,
+    limit: Annotated[int, Query(ge=1, le=1000)] = 200,
+) -> list[ScrapedFilenameItem]:
+    """已登记的「刮过就不再刮」文件名."""
+    rows = await repo.list_scraped_filenames(library_id=library_id, limit=limit)
+    # 相对路径在这里算: 前端不知道库根, 自己截字符串迟早出错.
+    roots = [str(lib.path) for lib in await repo.list_libraries() if lib.path]
+    return [
+        ScrapedFilenameItem(
+            filename=name,
+            renamed=renamed,
+            source_path=_relative_to_library(source, roots),
+            target_path=_relative_to_library(target, roots),
+        )
+        for name, renamed, source, target in rows
+    ]
+
+
+@router.delete("/scraped-filenames")
+async def clear_scraped_filenames(
+    repo: RepoDep,
+    library_id: Annotated[int | None, Query(description="只清某个库; 不给则全清")] = None,
+    filename: Annotated[str | None, Query(description="只清这一条; 不给则按 library_id 决定范围")] = None,
+) -> dict[str, int]:
+    """清掉登记, 让同名文件重新可刮. 给了 filename 就只删那一条."""
+    if filename is not None:
+        removed = await repo.forget_scraped_filename(filename, library_id=library_id)
+        return {"cleared": removed}
+    cleared = await repo.forget_scraped_filenames(library_id=library_id)
+    return {"cleared": cleared}
 
 
 @router.post("/batch/delete")

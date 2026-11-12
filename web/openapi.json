@@ -681,6 +681,146 @@
         }
       }
     },
+    "/api/media/scraped-filenames": {
+      "get": {
+        "tags": [
+          "media"
+        ],
+        "summary": "List Scraped Filenames",
+        "description": "已登记的「刮过就不再刮」文件名.",
+        "operationId": "list_scraped_filenames",
+        "parameters": [
+          {
+            "name": "library_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "只看某个库",
+              "title": "Library Id"
+            },
+            "description": "只看某个库"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 1000,
+              "minimum": 1,
+              "default": 200,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ScrapedFilenameItem"
+                  },
+                  "title": "Response List Scraped Filenames"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "media"
+        ],
+        "summary": "Clear Scraped Filenames",
+        "description": "清掉登记, 让同名文件重新可刮. 给了 filename 就只删那一条.",
+        "operationId": "clear_scraped_filenames",
+        "parameters": [
+          {
+            "name": "library_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "只清某个库; 不给则全清",
+              "title": "Library Id"
+            },
+            "description": "只清某个库; 不给则全清"
+          },
+          {
+            "name": "filename",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "只清这一条; 不给则按 library_id 决定范围",
+              "title": "Filename"
+            },
+            "description": "只清这一条; 不给则按 library_id 决定范围"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "integer"
+                  },
+                  "title": "Response Clear Scraped Filenames"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/media/batch/delete": {
       "post": {
         "tags": [
@@ -10706,7 +10846,7 @@
               ],
               "crop_poster": true,
               "poster_ratio": 0.7,
-              "uncensored_poster_ratio": 0.87,
+              "uncensored_poster_ratio": 0.7,
               "poster_crop_skip_ratio": 0.9,
               "poster_crop_detect_face": true,
               "poster_crop_rules": [],
@@ -16446,6 +16586,38 @@
         ],
         "title": "ScrapeSubmission"
       },
+      "ScrapedFilenameItem": {
+        "properties": {
+          "filename": {
+            "type": "string",
+            "title": "Filename"
+          },
+          "renamed": {
+            "type": "string",
+            "title": "Renamed",
+            "description": "整理后的文件名; 空表示还没整理",
+            "default": ""
+          },
+          "source_path": {
+            "type": "string",
+            "title": "Source Path",
+            "description": "入库时所在路径",
+            "default": ""
+          },
+          "target_path": {
+            "type": "string",
+            "title": "Target Path",
+            "description": "整理后的路径; 空表示还没整理",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "filename"
+        ],
+        "title": "ScrapedFilenameItem",
+        "description": "一条登记: 原始名 + 整理后名 + 两侧路径."
+      },
       "ScrapingConfig": {
         "properties": {
           "download_resources": {
@@ -16473,7 +16645,7 @@
             "maximum": 1.0,
             "minimum": 0.3,
             "title": "Uncensored Poster Ratio",
-            "default": 0.87
+            "default": 0.7
           },
           "poster_crop_skip_ratio": {
             "type": "number",

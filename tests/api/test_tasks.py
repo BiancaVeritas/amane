@@ -288,6 +288,7 @@ class TestBatchTasks:
         # 任务没了, 但文件索引必须还在.
         assert await repo.get_media_file(media.id) is not None
 
+    
         failed = await repo.create_task(task_type=TaskType.SCRAPE, payload={"number": "X"})
         assert failed.id is not None
         await repo.fail_task(failed.id, error="x")

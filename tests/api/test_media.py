@@ -5,6 +5,8 @@ from typing import TYPE_CHECKING
 import pytest
 import pytest_asyncio
 
+from amane.db.models import MediaFileStatus
+
 if TYPE_CHECKING:
     from httpx2 import AsyncClient
 
@@ -88,3 +90,81 @@ class TestMediaHttp:
         assert [row["id"] for row in by_type.json()["items"]] == [inherited.id]
         assert by_type.json()["total"] == 1
         assert (await client.get("media?content_type=bogus")).status_code == 422
+
+
+class TestScrapedFilenameRegistry:
+    """同名不重刮的登记表, 与 media_files 解耦."""
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_survives_media_file_deletion(self, repo: Repository) -> None:
+        """media_files 记录被删掉之后, 同名仍然不该重刮.
+
+        这是本次的核心诉求: 旧实现查 media_files 的同名 SCRAPED 行, 而那张表会随
+        整理与清理增删, 文件挪动两轮之后就又能刮了.
+        """
+        media = await repo.create_media_file(
+            1, path="/lib/ABC-123.mp4", filename="ABC-123.mp4", status=MediaFileStatus.SCRAPED
+        )
+        await repo.remember_scraped_filename(1, "ABC-123.mp4")
+        assert await repo.has_scraped_with_filename(1, "ABC-123.mp4") is True
+
+        assert media.id is not None
+        await repo.delete_media_file(media.id)
+        # 媒体记录没了, 登记还在.
+        assert await repo.has_scraped_with_filename(1, "ABC-123.mp4") is True
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_forget_clears_registry(self, repo: Repository) -> None:
+        """清掉登记后同名可以重新刮."""
+        await repo.remember_scraped_filename(1, "ABC-123.mp4")
+        assert await repo.has_scraped_with_filename(1, "ABC-123.mp4") is True
+
+        cleared = await repo.forget_scraped_filenames()
+        assert cleared == 1
+        assert await repo.has_scraped_with_filename(1, "ABC-123.mp4") is False
+
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_extension_is_ignored(self, repo: Repository) -> None:
+        """同一份片子换个容器格式不该被当成新文件.
+
+        判重只看主名: 用户把 .strm 转成 .mp4 时, 主名一模一样.
+        """
+        await repo.remember_scraped_filename(1, "ABC-123.mp4")
+        assert await repo.has_scraped_with_filename(1, "ABC-123.strm") is True
+        assert await repo.has_scraped_with_filename(1, "ABC-123.mp4") is True
+        assert await repo.has_scraped_with_filename(1, "ABC-124.strm") is False
+
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_remove_single_record(self, repo: Repository) -> None:
+        """单条删除只影响那一个名字, 其余记录保留."""
+        await repo.remember_scraped_filename(1, "ABC-123.mp4")
+        await repo.remember_scraped_filename(1, "ABC-124.mp4")
+
+        removed = await repo.forget_scraped_filename("ABC-123.mp4")
+        assert removed == 1
+        assert await repo.has_scraped_with_filename(1, "ABC-123.mp4") is False
+        assert await repo.has_scraped_with_filename(1, "ABC-124.mp4") is True
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_remove_missing_record_returns_zero(self, repo: Repository) -> None:
+        """删不存在的记录不报错, 返回 0."""
+        assert await repo.forget_scraped_filename("NOPE-999.mp4") == 0
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_registry_is_per_library(self, repo: Repository) -> None:
+        """登记按库隔离: 另一个库里的同名文件不受影响."""
+        other = await repo.create_library(name="other", path="/other")
+        assert other.id is not None
+        await repo.remember_scraped_filename(1, "ABC-123.mp4")
+        assert await repo.has_scraped_with_filename(1, "ABC-123.mp4") is True
+        assert await repo.has_scraped_with_filename(other.id, "ABC-123.mp4") is False
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_remember_is_idempotent(self, repo: Repository) -> None:
+        """重复登记不报错也不重复计数."""
+        await repo.remember_scraped_filename(1, "ABC-123.mp4")
+        await repo.remember_scraped_filename(1, "ABC-123.mp4")
+        # 登记的是主名 (不含扩展名); 未整理时 renamed 与两个路径都为空.
+        assert await repo.list_scraped_filenames(library_id=1) == [("ABC-123", "", "", "")]

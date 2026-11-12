@@ -4692,6 +4692,36 @@ export type ScrapeSubmission = {
 };
 
 /**
+ * ScrapedFilenameItem
+ *
+ * 一条登记: 原始名 + 整理后名 + 两侧路径.
+ */
+export type ScrapedFilenameItem = {
+    /**
+     * Filename
+     */
+    filename: string;
+    /**
+     * Renamed
+     *
+     * 整理后的文件名; 空表示还没整理
+     */
+    renamed?: string;
+    /**
+     * Source Path
+     *
+     * 入库时所在路径
+     */
+    source_path?: string;
+    /**
+     * Target Path
+     *
+     * 整理后的路径; 空表示还没整理
+     */
+    target_path?: string;
+};
+
+/**
  * ScrapingConfig
  */
 export type ScrapingConfig = {
@@ -6539,6 +6569,86 @@ export type ListMediaResponses = {
 };
 
 export type ListMediaResponse = ListMediaResponses[keyof ListMediaResponses];
+
+export type ClearScrapedFilenamesData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Library Id
+         *
+         * 只清某个库; 不给则全清
+         */
+        library_id?: number | null;
+        /**
+         * Filename
+         *
+         * 只清这一条; 不给则按 library_id 决定范围
+         */
+        filename?: string | null;
+    };
+    url: '/api/media/scraped-filenames';
+};
+
+export type ClearScrapedFilenamesErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ClearScrapedFilenamesError = ClearScrapedFilenamesErrors[keyof ClearScrapedFilenamesErrors];
+
+export type ClearScrapedFilenamesResponses = {
+    /**
+     * Response Clear Scraped Filenames
+     *
+     * Successful Response
+     */
+    200: {
+        [key: string]: number;
+    };
+};
+
+export type ClearScrapedFilenamesResponse = ClearScrapedFilenamesResponses[keyof ClearScrapedFilenamesResponses];
+
+export type ListScrapedFilenamesData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Library Id
+         *
+         * 只看某个库
+         */
+        library_id?: number | null;
+        /**
+         * Limit
+         */
+        limit?: number;
+    };
+    url: '/api/media/scraped-filenames';
+};
+
+export type ListScrapedFilenamesErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListScrapedFilenamesError = ListScrapedFilenamesErrors[keyof ListScrapedFilenamesErrors];
+
+export type ListScrapedFilenamesResponses = {
+    /**
+     * Response List Scraped Filenames
+     *
+     * Successful Response
+     */
+    200: Array<ScrapedFilenameItem>;
+};
+
+export type ListScrapedFilenamesResponse = ListScrapedFilenamesResponses[keyof ListScrapedFilenamesResponses];
 
 export type BatchDeleteMediaData = {
     body: MediaBatchDeleteRequest;

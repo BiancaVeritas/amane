@@ -25,6 +25,8 @@ export type FilePhaseLike = {
   definition?: string | null;
   /** 文件名含独立的 LTX 标记; 与 mosaic 无关, 单独成角标. */
   ltx?: boolean;
+  /** 条目标签; 「無碼」「無修正」这类字样也视为无码. */
+  tags?: readonly string[];
 };
 
 type PhaseChipKey = "sub" | "cen" | "u" | "crack" | "leak" | "ltx" | "def";
@@ -75,8 +77,18 @@ function showsCensored(phase: FilePhaseLike): boolean {
   return phase.censored === true;
 }
 
-/** 无码: 条目给了布尔值就用它 (类型已并上文件标记), 否则退回看这一份文件自己的标记. */
+/** 标签里表示「无码」的写法. FC2 之类的条目类型本身不带无码标记, 靠标签区分. */
+const UNCENSORED_TAGS = ["無碼", "无码", "無修正", "无修正", "無修", "无修"];
+
+/** 标签里有没有无码字样. */
+function tagsSayUncensored(tags: readonly string[] | null | undefined): boolean {
+  if (!tags) return false;
+  return tags.some((tag) => UNCENSORED_TAGS.some((word) => tag.includes(word)));
+}
+
+/** 无码: 标签明说无码/无修正时直接点亮; 否则用条目布尔值, 再退回看这一份文件自己的标记. */
 function showsUncensored(phase: FilePhaseLike): boolean {
+  if (tagsSayUncensored(phase.tags)) return true;
   if (phase.uncensored != null) return phase.uncensored;
   return phase.mosaic === "uncensored";
 }

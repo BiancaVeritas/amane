@@ -3209,7 +3209,7 @@ export const HotSettingsSchema = {
                 ],
                 crop_poster: true,
                 poster_ratio: 0.7,
-                uncensored_poster_ratio: 0.87,
+                uncensored_poster_ratio: 0.7,
                 poster_crop_skip_ratio: 0.9,
                 poster_crop_detect_face: true,
                 poster_crop_rules: [],
@@ -9050,6 +9050,39 @@ export const ScrapeSubmissionSchema = {
     title: 'ScrapeSubmission'
 } as const;
 
+export const ScrapedFilenameItemSchema = {
+    properties: {
+        filename: {
+            type: 'string',
+            title: 'Filename'
+        },
+        renamed: {
+            type: 'string',
+            title: 'Renamed',
+            description: '整理后的文件名; 空表示还没整理',
+            default: ''
+        },
+        source_path: {
+            type: 'string',
+            title: 'Source Path',
+            description: '入库时所在路径',
+            default: ''
+        },
+        target_path: {
+            type: 'string',
+            title: 'Target Path',
+            description: '整理后的路径; 空表示还没整理',
+            default: ''
+        }
+    },
+    type: 'object',
+    required: [
+        'filename'
+    ],
+    title: 'ScrapedFilenameItem',
+    description: '一条登记: 原始名 + 整理后名 + 两侧路径.'
+} as const;
+
 export const ScrapingConfigSchema = {
     properties: {
         download_resources: {
@@ -9077,7 +9110,7 @@ export const ScrapingConfigSchema = {
             maximum: 1,
             minimum: 0.3,
             title: 'Uncensored Poster Ratio',
-            default: 0.87
+            default: 0.7
         },
         poster_crop_skip_ratio: {
             type: 'number',
