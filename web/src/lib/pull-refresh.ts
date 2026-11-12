@@ -38,13 +38,15 @@ function report(): void {
   bridge.setPageScrollableUp(value);
 }
 
+function onTouchStart(event: TouchEvent): void {
+  touched = event.target instanceof Element ? event.target : null;
+  report();
+}
+function onScroll(): void {
+  report();
+}
 /** 装上监听; 桥不可用时为空操作. */
 export function installPullRefreshGate(): () => void {
-  const onTouchStart = (event: TouchEvent) => {
-    touched = event.target instanceof Element ? event.target : null;
-    report();
-  };
-  const onScroll = () => report();
   // 两个监听都是 passive: 页面滚动仍由合成器驱动, 不受它们影响.
   document.addEventListener("touchstart", onTouchStart, { capture: true, passive: true });
   document.addEventListener("scroll", onScroll, { capture: true, passive: true });

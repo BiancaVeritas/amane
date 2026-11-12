@@ -230,6 +230,10 @@ export interface SchemaFormInstance {
     name: string;
     children: (field: import("@tanstack/react-form").AnyFieldApi) => React.ReactNode;
   }>;
+  Subscribe: React.ComponentType<{
+    selector?: (state: { values: unknown }) => unknown;
+    children: (value: unknown) => React.ReactNode;
+  }>;
 }
 
 // ==================== Field props ====================

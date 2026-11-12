@@ -14,7 +14,7 @@ import {
   type MantineBreakpoint,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
-import { IconArrowMerge, IconDots, IconRefresh, IconTag, IconTrash } from "@tabler/icons-react";
+import { IconDots, IconRefresh, IconTag, IconTrash } from "@tabler/icons-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
@@ -24,10 +24,8 @@ import {
   batchMetadataUserTagsMutation,
   batchScrapeMetadataMutation,
   deleteMetadataMutation,
-  getMetadataQueryKey,
   listFacetsOptions,
   listMetadataQueryKey,
-  mergeMetadataEntriesMutation,
   submitTaskMutation,
 } from "@/client/@tanstack/react-query.gen";
 import type { CacheKind, MetadataResponse, MetadataSortField, SortOrder } from "@/client/types.gen";
@@ -35,11 +33,10 @@ import { HintedActionIcon } from "@/components/common/hinted-action-icon";
 import { ListToolbar } from "@/components/common/list-toolbar";
 import { SortableTh } from "@/components/common/sortable-th";
 import { SelectionBar } from "@/components/common/selection-bar";
-import { MergeNotice } from "@/components/media/merge-notice";
 import { useIdSelection } from "@/hooks/use-id-selection";
 import { useResizableColumns } from "@/hooks/use-resizable-columns";
 import { extractErrorMessage } from "@/lib/api-error";
-import { confirm, confirmWithCheckbox } from "@/lib/confirm";
+import { confirm } from "@/lib/confirm";
 import { USER_TAG_FACET_LIST } from "@/lib/facets";
 import { type MetaTableColumnKey, useUIStore } from "@/stores/ui";
 import { VrBadge } from "./vr-badge";
@@ -55,6 +52,29 @@ const SORTABLE_COLUMNS = [
 ] as const satisfies readonly MetadataSortField[];
 
 type SortableColumn = (typeof SORTABLE_COLUMNS)[number];
+
+const SCRAPE_CACHE_DEFAULT: CacheKind[] = ["metadata", "trans"];
+const SCRAPE_CACHE_FORCE: CacheKind[] = [];
+
+function ScrapeMenuItems({ onScrape }: { onScrape: (useCache: CacheKind[]) => void }) {
+  const { t } = useTranslation("common");
+  return (
+    <>
+      <Menu.Item onClick={() => onScrape(SCRAPE_CACHE_DEFAULT)}>
+        <Text size="sm">{t("actions.scrapeNormal")}</Text>
+        <Text size="xs" c="dimmed">
+          {t("actions.scrapeNormalDesc")}
+        </Text>
+      </Menu.Item>
+      <Menu.Item onClick={() => onScrape(SCRAPE_CACHE_FORCE)}>
+        <Text size="sm">{t("actions.scrapeForce")}</Text>
+        <Text size="xs" c="dimmed">
+          {t("actions.scrapeForceDesc")}
+        </Text>
+      </Menu.Item>
+    </>
+  );
+}
 
 const COLUMN_I18N_KEY = {
   number: "number",
@@ -120,30 +140,6 @@ function cellValue(item: MetadataResponse, field: SortableColumn): string {
     case "file_count":
       return String(item.file_count ?? 0);
   }
-}
-
-const SCRAPE_CACHE_DEFAULT: CacheKind[] = ["metadata", "trans"];
-const SCRAPE_CACHE_FORCE: CacheKind[] = [];
-
-/** 列表内的单条与批量重新刮削共用这组选项, 语义与元数据详情页的刮削菜单一致. */
-function ScrapeMenuItems({ onScrape }: { onScrape: (useCache: CacheKind[]) => void }) {
-  const { t } = useTranslation("common");
-  return (
-    <>
-      <Menu.Item onClick={() => onScrape(SCRAPE_CACHE_DEFAULT)}>
-        <Text size="sm">{t("actions.scrapeNormal")}</Text>
-        <Text size="xs" c="dimmed">
-          {t("actions.scrapeNormalDesc")}
-        </Text>
-      </Menu.Item>
-      <Menu.Item onClick={() => onScrape(SCRAPE_CACHE_FORCE)}>
-        <Text size="sm">{t("actions.scrapeForce")}</Text>
-        <Text size="xs" c="dimmed">
-          {t("actions.scrapeForceDesc")}
-        </Text>
-      </Menu.Item>
-    </>
-  );
 }
 
 export function MetaTable({
@@ -267,64 +263,7 @@ export function MetaTable({
       }),
   });
 
-  const mergeEntries = useMutation({
-    ...mergeMetadataEntriesMutation(),
-    onSuccess: (res, variables) => {
-      notifications.show({
-        message: variables.body.rescrape
-          ? t("common:toast.scrapeStarted")
-          : t("common:toast.metadataUpdated"),
-        color: "blue",
-      });
-      clear();
-      void queryClient.invalidateQueries({ queryKey: listMetadataQueryKey() });
-      void queryClient.invalidateQueries({
-        queryKey: getMetadataQueryKey({ path: { metadata_id: res.id } }),
-      });
-    },
-    onError: (err) =>
-      notifications.show({
-        message: extractErrorMessage(err, t("common:toast.operationFailed")),
-        color: "red",
-      }),
-  });
-
-  const busy =
-    batchScrape.isPending || batchDelete.isPending || batchTags.isPending || mergeEntries.isPending;
-
-  async function handleMergeEntries(target: MetadataResponse) {
-    const sourceIds = selectedIds.filter((id) => id !== target.id);
-    if (sourceIds.length === 0) {
-      notifications.show({
-        message: t("manage.mergeNeedSources"),
-        color: "yellow",
-      });
-      return;
-    }
-    const result = await confirmWithCheckbox({
-      title: t("manage.mergeConfirm"),
-      message: (
-        <MergeNotice
-          lead={t("manage.mergeEntriesLead", { count: sourceIds.length, number: target.number })}
-          items={[
-            t("manage.mergeEntriesKeep"),
-            t("manage.mergeEntriesRaw"),
-            t("manage.mergeEntriesLinks"),
-            t("manage.mergeEntriesDelete"),
-          ]}
-        />
-      ),
-      // 勾选后改走重新刮削: 按当前优先级从 raw 聚合, 目标未锁定字段不再保持不变.
-      checkbox: { label: t("manage.mergeEntriesRescrape") },
-      confirmLabel: t("common:actions.confirm"),
-      danger: false,
-      confirmColor: "orange",
-    });
-    if (!result.ok) return;
-    mergeEntries.mutate({
-      body: { target_id: target.id, source_ids: sourceIds, rescrape: result.checked },
-    });
-  }
+  const busy = batchScrape.isPending || batchDelete.isPending || batchTags.isPending;
 
   const tagOptions = useMemo(
     () => (userTags?.items ?? []).map((tag) => ({ value: String(tag.id), label: tag.name })),
@@ -348,8 +287,8 @@ export function MetaTable({
         page={page}
         onChange={handlePageChange}
         header={
-          <SelectionBar count={selected.size} hint={t("manage.mergeGuide")}>
-            <Menu shadow="md" position="bottom-start">
+          <SelectionBar count={selected.size}>
+            <Menu position="bottom-start" withinPortal>
               <Menu.Target>
                 <Button
                   size="xs"
@@ -363,8 +302,8 @@ export function MetaTable({
               </Menu.Target>
               <Menu.Dropdown>
                 <ScrapeMenuItems
-                  onScrape={(useCache) =>
-                    batchScrape.mutate({ body: { ids: selectedIds, use_cache: useCache } })
+                  onScrape={(use_cache) =>
+                    batchScrape.mutate({ body: { ids: selectedIds, use_cache } })
                   }
                 />
               </Menu.Dropdown>
@@ -487,9 +426,9 @@ export function MetaTable({
                   )}
                 </Table.Td>
                 <Table.Td>
-                  {/* 窄屏动作列只容得下一个按钮, 全部动作移入菜单. */}
+                  {/* 窄屏动作列只容得下一个按钮, 两个动作移入菜单. */}
                   <Group gap={4} justify="flex-end" wrap="nowrap" visibleFrom="sm">
-                    <Menu shadow="md" position="bottom-start">
+                    <Menu position="bottom-end" withinPortal>
                       <Menu.Target>
                         <HintedActionIcon variant="subtle" label={t("actions.scrape")}>
                           <IconRefresh size={16} />
@@ -497,22 +436,14 @@ export function MetaTable({
                       </Menu.Target>
                       <Menu.Dropdown>
                         <ScrapeMenuItems
-                          onScrape={(useCache) =>
+                          onScrape={(use_cache) =>
                             scrapeOne.mutate({
-                              body: { type: "scrape", number: item.number, use_cache: useCache },
+                              body: { type: "scrape", number: item.number, use_cache },
                             })
                           }
                         />
                       </Menu.Dropdown>
                     </Menu>
-                    <HintedActionIcon
-                      variant="subtle"
-                      label={t("manage.merge")}
-                      disabled={mergeEntries.isPending}
-                      onClick={() => void handleMergeEntries(item)}
-                    >
-                      <IconArrowMerge size={16} />
-                    </HintedActionIcon>
                     <HintedActionIcon
                       variant="subtle"
                       color="red"
@@ -539,25 +470,14 @@ export function MetaTable({
                           </Menu.Sub.Target>
                           <Menu.Sub.Dropdown>
                             <ScrapeMenuItems
-                              onScrape={(useCache) =>
+                              onScrape={(use_cache) =>
                                 scrapeOne.mutate({
-                                  body: {
-                                    type: "scrape",
-                                    number: item.number,
-                                    use_cache: useCache,
-                                  },
+                                  body: { type: "scrape", number: item.number, use_cache },
                                 })
                               }
                             />
                           </Menu.Sub.Dropdown>
                         </Menu.Sub>
-                        <Menu.Item
-                          leftSection={<IconArrowMerge size={14} />}
-                          disabled={mergeEntries.isPending}
-                          onClick={() => void handleMergeEntries(item)}
-                        >
-                          {t("manage.merge")}
-                        </Menu.Item>
                         <Menu.Item
                           color="red"
                           leftSection={<IconTrash size={14} />}

@@ -39,7 +39,7 @@ def content_id_candidates(number: str) -> list[str]:
 _VIDEO_COLS = (
     "content_id, service_code, dvd_id, title_en, title_ja, comment_en, comment_ja, "
     "runtime_mins, release_date, sample_url, maker_id, label_id, series_id, "
-    "jacket_full_url, jacket_thumb_url, gallery_full_first, gallery_full_last, "
+    "jacket_full_url, jacket_cover_url, gallery_full_first, gallery_full_last, "
     "gallery_thumb_first, gallery_thumb_last"
 )
 

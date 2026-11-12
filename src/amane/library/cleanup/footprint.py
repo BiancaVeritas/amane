@@ -192,9 +192,18 @@ def _add_products(
     if metadata is None:
         return
     source = Path(item.path)
+    # 足迹展开是只读的磁盘清单操作，不是整理落盘。未配置唯一整理路径时，
+    # 仍需能按媒体库根目录反解默认模板，找到扫描目录中已有的 NFO/图片等产物。
+    # 使用副本覆盖解析基准，绝不修改数据库中的 Library 配置。
+    organize_paths = library.organize_paths or ([library.organize_path] if library.organize_path else [])
+    footprint_library = library
+    if len(organize_paths) != 1:
+        footprint_library = library.model_copy(
+            update={"organize_path": None, "organize_paths": [str(Path(library.path))]}
+        )
     try:
         paths = resolve_paths(
-            library,
+            footprint_library,
             metadata,
             ext=source.suffix.lstrip("."),
             source_path=source,

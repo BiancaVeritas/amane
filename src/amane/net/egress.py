@@ -63,6 +63,13 @@ def is_public_address(address: str) -> bool:
     return any(ip in network for network in _FAKE_IP_NETWORKS)
 
 
+def _is_fake_ip(address: str) -> bool:
+    ip = ip_address(address)
+    if isinstance(ip, IPv6Address) and ip.ipv4_mapped is not None:
+        ip = ip.ipv4_mapped
+    return any(ip in network for network in _FAKE_IP_NETWORKS)
+
+
 async def resolve_addresses(host: str, port: int) -> set[str]:
     """解析 host 的全部地址. 模块级函数便于测试替换, 策略对象自身不发起 I/O."""
     infos = await asyncio.to_thread(socket.getaddrinfo, host, port, type=socket.SOCK_STREAM)
@@ -91,10 +98,14 @@ class EgressPolicy:
     allow_private: bool = False
     max_redirects: int = 5
 
-    async def ensure_allowed(self, url: str) -> None:
+    async def ensure_allowed(self, url: str, *, allow_fake_ip: bool = True) -> set[str] | None:
+        """校验 URL 并返回本次解析出的公网地址, 供直连请求 pin 到实际连接.
+
+        fake-IP 段仅允许在显式代理模式下使用; 直连时它们不可路由, 必须拒绝.
+        """
         ensure_http_scheme(url)
         if self.allow_private:
-            return
+            return None
 
         parsed = _split(url)
         host = parsed.hostname
@@ -118,5 +129,6 @@ class EgressPolicy:
 
         # 任一地址落在私网就整体拒绝: 双栈主机可能同时给出公网与内网地址, 放行等于让 curl 自己选.
         for address in addresses:
-            if not is_public_address(address):
+            if not is_public_address(address) or (not allow_fake_ip and _is_fake_ip(address)):
                 raise _rejected(url, f"地址不在公网范围: {address}", detail="仅支持公网地址")
+        return addresses

@@ -174,7 +174,7 @@ async def test_fills_missing_and_skips_existing(
     )
 
     handler = ActorPushHandler(repo, resource_store, _hot(), client_factory=lambda _: client)
-    result = await handler.handle(ActorPushPayload())
+    result = await handler.handle(ActorPushPayload(mode="incremental"))
 
     assert result.success
     assert result.result is not None
@@ -187,7 +187,7 @@ async def test_fills_missing_and_skips_existing(
     assert result.result.no_image == 1
     assert [call[0] for call in client.updates] == ["p-Alice"]
     assert client.updates[0][1] == {
-        "Overview": "new bio",
+        "Overview": "生日：1990-01-01\n出生地：Tokyo\n简介：new bio",
         "PremiereDate": "1990-01-01",
         "ProductionYear": 1990,
         "ProductionLocations": ["Tokyo"],
@@ -195,6 +195,30 @@ async def test_fills_missing_and_skips_existing(
     assert client.images == [("p-Alice", "image/png")]
     assert client.list_calls == 1
     assert client.search_calls == []
+
+
+@pytest.mark.asyncio(loop_scope="function")
+async def test_full_sync_overwrites_existing_profile_fields(repo: Repository, resource_store: ResourceStore) -> None:
+    await _actor(repo, "FullSync", overview="Amane bio", birthday="1992-04-05", birthplace="Tokyo")
+    client = _FakeClient(
+        [_person("FullSync", overview="old bio", premiere_date="1980-01-01", production_year=1980, locations=["Osaka"])]
+    )
+    handler = ActorPushHandler(repo, resource_store, _hot(), client_factory=lambda _: client)
+
+    result = await handler.handle(ActorPushPayload())
+
+    assert result.success
+    assert client.updates == [
+        (
+            "p-FullSync",
+            {
+                "Overview": "生日：1992-04-05\n出生地：Tokyo\n简介：Amane bio",
+                "PremiereDate": "1992-04-05",
+                "ProductionYear": 1992,
+                "ProductionLocations": ["Tokyo"],
+            },
+        )
+    ]
 
 
 @pytest.mark.asyncio(loop_scope="function")
@@ -214,7 +238,7 @@ async def test_recorded_type_is_not_used_for_push(
     client = _FakeClient([_person("Alice")])
 
     handler = ActorPushHandler(repo, resource_store, _hot(), client_factory=lambda _: client)
-    result = await handler.handle(ActorPushPayload())
+    result = await handler.handle(ActorPushPayload(mode="incremental"))
 
     assert not result.success
     assert result.result is not None
@@ -235,7 +259,7 @@ async def test_uploads_octet_stream_avatar_by_content(
     client = _FakeClient([_person("Alice")])
 
     handler = ActorPushHandler(repo, resource_store, _hot(), client_factory=lambda _: client)
-    result = await handler.handle(ActorPushPayload())
+    result = await handler.handle(ActorPushPayload(mode="incremental"))
 
     assert result.success
     assert result.result is not None
@@ -254,7 +278,7 @@ async def test_magic_miss_falls_back_to_pil(
     client = _FakeClient([_person("Alice")])
 
     handler = ActorPushHandler(repo, resource_store, _hot(), client_factory=lambda _: client)
-    result = await handler.handle(ActorPushPayload())
+    result = await handler.handle(ActorPushPayload(mode="incremental"))
 
     assert result.result is not None
     assert result.result.images == 1
@@ -272,7 +296,7 @@ async def test_skips_unrecognized_avatar_and_tries_next(
     client = _FakeClient([_person("Alice")])
 
     handler = ActorPushHandler(repo, resource_store, _hot(), client_factory=lambda _: client)
-    result = await handler.handle(ActorPushPayload())
+    result = await handler.handle(ActorPushPayload(mode="incremental"))
 
     assert result.result is not None
     assert result.result.images == 1
@@ -290,7 +314,7 @@ async def test_fails_without_sending_unrecognized_avatar(
     client = _FakeClient([_person("Alice")])
 
     handler = ActorPushHandler(repo, resource_store, _hot(), client_factory=lambda _: client)
-    result = await handler.handle(ActorPushPayload())
+    result = await handler.handle(ActorPushPayload(mode="incremental"))
 
     assert not result.success
     assert result.result is not None
@@ -302,7 +326,7 @@ async def test_fails_without_sending_unrecognized_avatar(
 
 
 @pytest.mark.asyncio(loop_scope="function")
-async def test_force_overwrites_non_empty_values(
+async def test_existing_fields_are_preserved_but_avatar_is_reuploaded(
     repo: Repository, resource_store: ResourceStore, tmp_path: Path
 ) -> None:
     image_url = await _image_url(resource_store, tmp_path)
@@ -328,17 +352,14 @@ async def test_force_overwrites_non_empty_values(
     )
 
     handler = ActorPushHandler(repo, resource_store, _hot(), client_factory=lambda _: client)
-    result = await handler.handle(ActorPushPayload(force=True))
+    result = await handler.handle(ActorPushPayload(mode="incremental"))
 
     assert result.success
     assert result.result is not None
-    assert result.result.updated == 1
+    assert result.result.updated == 0
     assert result.result.images == 1
-    updates = client.updates[0][1]
-    assert updates["Overview"] == "new bio"
-    assert updates["PremiereDate"] == "1990-01-01"
-    assert updates["ProductionYear"] == 1990
-    assert updates["ProductionLocations"] == ["Tokyo"]
+    assert client.updates == []
+    assert client.images == [("p-Alice", "image/png")]
 
 
 @pytest.mark.asyncio(loop_scope="function")
@@ -348,7 +369,7 @@ async def test_alias_match_and_not_found(repo: Repository, resource_store: Resou
     client = _FakeClient([_person("ありす")])
 
     handler = ActorPushHandler(repo, resource_store, _hot(), client_factory=lambda _: client)
-    result = await handler.handle(ActorPushPayload(actor_ids=await _ids(repo, "Alice", "Ghost")))
+    result = await handler.handle(ActorPushPayload(actor_ids=await _ids(repo, "Alice", "Ghost"), mode="incremental"))
 
     assert result.success
     assert result.result is not None
@@ -375,7 +396,7 @@ async def test_search_limit_falls_back_to_full_index(repo: Repository, resource_
     client = _TruncatedSearchClient([_person("Alice")])
 
     handler = ActorPushHandler(repo, resource_store, _hot(), client_factory=lambda _: client)
-    result = await handler.handle(ActorPushPayload(actor_ids=[actor_id]))
+    result = await handler.handle(ActorPushPayload(actor_ids=[actor_id], mode="incremental"))
 
     assert result.success
     assert result.result is not None
@@ -391,7 +412,7 @@ async def test_missing_actor_ids(repo: Repository, resource_store: ResourceStore
     client = _FakeClient([_person("Alice")])
 
     handler = ActorPushHandler(repo, resource_store, _hot(), client_factory=lambda _: client)
-    result = await handler.handle(ActorPushPayload(actor_ids=[actor_id, 999999]))
+    result = await handler.handle(ActorPushPayload(actor_ids=[actor_id, 999999], mode="incremental"))
 
     assert result.success
     assert result.result is not None
@@ -403,7 +424,7 @@ async def test_missing_actor_ids(repo: Repository, resource_store: ResourceStore
 @pytest.mark.asyncio(loop_scope="function")
 async def test_unconfigured_server_fails(repo: Repository, resource_store: ResourceStore) -> None:
     handler = ActorPushHandler(repo, resource_store, HotSettings(), client_factory=lambda _: _FakeClient([]))
-    result = await handler.handle(ActorPushPayload())
+    result = await handler.handle(ActorPushPayload(mode="incremental"))
 
     assert not result.success
     assert result.error is not None
@@ -442,7 +463,7 @@ async def test_failure_outcomes(
     client = _FakeClient(persons, fail_updates=fail_updates, fail_images=fail_images)
 
     handler = ActorPushHandler(repo, resource_store, _hot(), client_factory=lambda _: client)
-    result = await handler.handle(ActorPushPayload())
+    result = await handler.handle(ActorPushPayload(mode="incremental"))
 
     assert result.success is success
     assert result.result is not None
@@ -459,7 +480,7 @@ async def test_person_list_failure_fails_task(repo: Repository, resource_store: 
     client = _FakeClient([], fail_list=True)
 
     handler = ActorPushHandler(repo, resource_store, _hot(), client_factory=lambda _: client)
-    result = await handler.handle(ActorPushPayload())
+    result = await handler.handle(ActorPushPayload(mode="incremental"))
 
     assert not result.success
     assert result.error is not None
@@ -477,7 +498,7 @@ async def test_same_name_persons_all_update_once(repo: Repository, resource_stor
     )
 
     handler = ActorPushHandler(repo, resource_store, _hot(), client_factory=lambda _: client)
-    result = await handler.handle(ActorPushPayload())
+    result = await handler.handle(ActorPushPayload(mode="incremental"))
 
     assert result.success
     assert result.result is not None

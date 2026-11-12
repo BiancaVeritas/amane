@@ -141,7 +141,7 @@ async def test_build_index_skips_unchanged_and_reports_missing(repo: Repository,
     store = ResourceStore(engine=repo._engine, base_dir=tmp_path / "resources")
     first = await repo.upsert_metadata(number="AAA-001", poster_urls=["http://example.com/a.jpg"])
     await repo.upsert_metadata(number="AAA-002")
-    third = await repo.upsert_metadata(number="AAA-003", thumb_urls=["http://example.com/c.jpg"])
+    third = await repo.upsert_metadata(number="AAA-003", cover_urls=["http://example.com/c.jpg"])
     await _seed_image(repo, store, first, "http://example.com/a.jpg", 10)
     await _seed_image(repo, store, third, "http://example.com/c.jpg", 20)
 

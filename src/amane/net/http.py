@@ -13,7 +13,7 @@ import aiofiles
 import httpx2 as httpx
 import structlog
 from aiolimiter import AsyncLimiter
-from curl_cffi import CurlError
+from curl_cffi import CurlError, CurlOpt
 from curl_cffi.requests import AsyncSession, BrowserTypeLiteral, Response
 
 from .egress import EgressPolicy, ensure_http_scheme
@@ -200,6 +200,30 @@ def _failure_body(resp: Response | None) -> bytes | None:
 _FAILURE_BODY_LIMIT = 64 * 1024
 
 
+def _resolve_curl_options(url: str, addresses: set[str] | None) -> dict[CurlOpt, Any] | None:
+    """将已校验 DNS 结果绑定到 libcurl 连接, 避免校验与连接之间再次解析发生 rebinding.
+
+    代理模式下目标域名由代理端解析, 本机 CURLOPT_RESOLVE 不参与连接, 因此不传该选项.
+    """
+    if not addresses:
+        return None
+    parsed = httpx.URL(url)
+    host = parsed.host
+    port = parsed.port or (443 if parsed.scheme == "https" else 80)
+    rendered = []
+    for address in sorted(addresses):
+        try:
+            from ipaddress import ip_address
+
+            ip = ip_address(address)
+        except ValueError:
+            continue
+        rendered.append(f"[{ip}]" if ip.version == 6 else str(ip))
+    if not rendered:
+        return None
+    return {CurlOpt.RESOLVE: [f"{host}:{port}:{address}" for address in rendered]}
+
+
 def _with_same_origin_referer(
     host: str | None, headers: dict[str, str] | None, hosts: frozenset[str]
 ) -> dict[str, str] | None:
@@ -222,6 +246,7 @@ class WebClient:
         *,
         proxy: str | None = None,
         proxy_overrides: Mapping[str, str | None] | None = None,
+        source_proxies: Mapping[str, str | None] | None = None,
         timeout: float = 30.0,
         max_retries: int = 2,
         max_clients: int = 50,
@@ -233,6 +258,7 @@ class WebClient:
     ):
         self._proxy = proxy
         self._proxy_overrides = dict(proxy_overrides or {})
+        self._source_proxies = dict(source_proxies or {})
         self._timeout = timeout
         self._max_retries = max_retries
         self._limiters = limiters
@@ -241,13 +267,19 @@ class WebClient:
         self._chunk_size = chunk_size
         self._download_concurrency = download_concurrency
         self._fingerprints = _FingerprintPicker(_IMPERSONATE_OPTIONS)
-        self._session = AsyncSession(
-            max_clients=max_clients,
-            verify=False,
-            max_redirects=20,
-            timeout=timeout,
-            impersonate=self._fingerprints.default,
-        )
+        # curl_cffi accepts a heterogeneous set of keyword options; keep the
+        # mapping Any-valued so type checkers do not treat every value as a
+        # candidate for every AsyncSession constructor parameter.
+        self._session_options: dict[str, Any] = {
+            "max_clients": max_clients,
+            "verify": False,
+            "max_redirects": 20,
+            "timeout": timeout,
+            "impersonate": self._fingerprints.default,
+        }
+        self._session: AsyncSession[Response] = AsyncSession(**self._session_options)
+        # 仅为带 DNS 固定解析的流式响应保留独立 session, 直到响应关闭.
+        self._stream_sessions: dict[int, AsyncSession[Response]] = {}
         # 日志给出进程默认指纹, 便于判断某站点是否按 TLS 指纹放行.
         logger.info("web client created", impersonate=self._fingerprints.default)
 
@@ -255,8 +287,10 @@ class WebClient:
         """按 host 取得限速许可. 供不经 ``request`` 的通道 (浏览器渲染 / solver) 复用同一限速."""
         await self._limiters.get(httpx.URL(url).host).acquire()
 
-    def _proxy_for(self, host: str | None) -> str | None:
-        """该 host 实际使用的代理: 站点级设定优先, 含显式直连 (值为 ``None``)."""
+    def _proxy_for(self, host: str | None, *, source: str | None = None) -> str | None:
+        """来源代理优先于 host 覆盖, 两者都没有时使用全局代理."""
+        if source is not None and source in self._source_proxies:
+            return self._source_proxies[source]
         if host in self._proxy_overrides:
             return self._proxy_overrides[host]
         return self._proxy
@@ -277,6 +311,7 @@ class WebClient:
         max_attempts: int | None = None,
         egress: EgressPolicy | None = None,
         stream: bool = False,
+        source: str | None = None,
     ) -> Response:
         """``ok_statuses`` 额外视为成功 (例如 RSS 304), 不重试、不当失败. 重试用尽后抛 ``RequestError``.
 
@@ -310,13 +345,16 @@ class WebClient:
                 ok_statuses=ok_statuses,
                 max_attempts=max_attempts,
                 stream=stream,
+                source=source,
             )
 
         current_method: HttpMethod = method
         current_url = url
         for _ in range(egress.max_redirects + 1):
             # 逐跳复查: curl 自带的跟随只看首跳, 一个公网 URL 可以 302 到内网.
-            await egress.ensure_allowed(current_url)
+            current_host = httpx.URL(current_url).host
+            current_proxy = self._proxy_for(current_host, source=source) if use_proxy else None
+            resolved_ips = await egress.ensure_allowed(current_url, allow_fake_ip=current_proxy is not None)
             resp = await self._send(
                 current_method,
                 current_url,
@@ -330,6 +368,8 @@ class WebClient:
                 ok_statuses=ok_statuses,
                 max_attempts=max_attempts,
                 stream=stream,
+                source=source,
+                resolved_ips=resolved_ips,
             )
             location = resp.headers.get("Location") if resp.status_code in _REDIRECT_STATUSES else None
             if not location:
@@ -359,6 +399,8 @@ class WebClient:
         ok_statuses: frozenset[int] | None = None,
         max_attempts: int | None = None,
         stream: bool = False,
+        source: str | None = None,
+        resolved_ips: set[str] | None = None,
     ) -> Response:
         """单次请求的尝试循环; 重定向策略由 ``request`` 决定."""
         host = httpx.URL(url).host
@@ -380,19 +422,37 @@ class WebClient:
             impersonate = self._fingerprints.select(key)
             should_retry = False
             try:
-                resp = await self._session.request(
-                    method,
-                    url,
-                    headers=headers,
-                    cookies=cookies,
-                    data=data,
-                    json=json,
-                    proxy=self._proxy_for(host) if use_proxy else None,
-                    timeout=timeout or self._timeout,
-                    allow_redirects=allow_redirects,
-                    impersonate=impersonate,
-                    stream=stream,
-                )
+                proxy = self._proxy_for(host, source=source) if use_proxy else None
+                curl_options = _resolve_curl_options(url, resolved_ips) if proxy is None else None
+                # curl_cffi 的 curl_options 属于 AsyncSession 构造参数, 不能传给 request().
+                # DNS 固定解析是逐 URL 的, 因此使用独立 session, 避免并发请求互相覆盖 CURLOPT_RESOLVE.
+                request_session: AsyncSession[Response] = self._session
+                owns_session = bool(curl_options)
+                if owns_session:
+                    request_session = AsyncSession(**self._session_options, curl_options=curl_options)
+                try:
+                    resp = await request_session.request(
+                        method,
+                        url,
+                        headers=headers,
+                        cookies=cookies,
+                        data=data,
+                        json=json,
+                        proxy=proxy,
+                        timeout=timeout or self._timeout,
+                        allow_redirects=allow_redirects,
+                        impersonate=impersonate,
+                        stream=stream,
+                    )
+                except BaseException:
+                    if owns_session:
+                        await request_session.close()
+                    raise
+                if owns_session:
+                    if stream:
+                        self._stream_sessions[id(resp)] = request_session
+                    else:
+                        await request_session.close()
                 extra_ok = ok_statuses or frozenset()
                 if (
                     resp.status_code < 300
@@ -501,8 +561,7 @@ class WebClient:
             attempts=attempts,
         )
 
-    @staticmethod
-    async def _close(resp: Response | None) -> None:
+    async def _close(self, resp: Response | None) -> None:
         """丢弃的应答: 先中止传输再关闭. 非流式应答上两步都是空操作.
 
         流式应答的正文由 curl 后台任务持续写入队列, 只停止消费不会停止传输 — 不先置中止标志,
@@ -517,6 +576,13 @@ class WebClient:
             await resp.aclose()
         except Exception as e:
             logger.debug("stream close error (ignored)", error=str(e))
+        finally:
+            session = self._stream_sessions.pop(id(resp), None)
+            if session is not None:
+                try:
+                    await session.close()
+                except Exception as e:
+                    logger.debug("stream session close error (ignored)", error=str(e))
 
     async def get_text(
         self,
@@ -558,9 +624,12 @@ class WebClient:
         cookies: dict[str, str] | None = None,
         use_proxy: bool = True,
         egress: EgressPolicy | None = None,
+        source: str | None = None,
     ) -> bytes:
         with skip_body_recording():
-            resp = await self.request("GET", url, headers=headers, cookies=cookies, use_proxy=use_proxy, egress=egress)
+            resp = await self.request(
+                "GET", url, headers=headers, cookies=cookies, use_proxy=use_proxy, egress=egress, source=source
+            )
         return resp.content
 
     async def post_text(
@@ -603,10 +672,12 @@ class WebClient:
                 url, RequestFailure(kind=FailureKind.UNEXPECTED, message=f"JSON parse error: {e}")
             ) from e
 
-    async def _probe(self, url: str, *, use_proxy: bool, egress: EgressPolicy | None = None) -> tuple[int | None, str]:
+    async def _probe(
+        self, url: str, *, use_proxy: bool, egress: EgressPolicy | None = None, source: str | None = None
+    ) -> tuple[int | None, str]:
         """HEAD 探测 Content-Length 与重定向终址; 探测失败时终址回退为 ``url``."""
         try:
-            resp = await self.request("HEAD", url, use_proxy=use_proxy, egress=egress)
+            resp = await self.request("HEAD", url, use_proxy=use_proxy, egress=egress, source=source)
         except RequestError:
             return None, url
         final_url = str(resp.url) if resp.url else url
@@ -622,12 +693,14 @@ class WebClient:
         size, _ = await self._probe(url, use_proxy=use_proxy)
         return size
 
-    async def resolve_final_url(self, url: str, *, use_proxy: bool = True, egress: EgressPolicy | None = None) -> str:
+    async def resolve_final_url(
+        self, url: str, *, use_proxy: bool = True, egress: EgressPolicy | None = None, source: str | None = None
+    ) -> str:
         """跟随重定向后的终址; 探测失败时返回 ``url``.
 
         调用方据此判定上游是否改派了别的资源 (如占位图). ``egress`` 给定时每一跳都复查.
         """
-        _, final_url = await self._probe(url, use_proxy=use_proxy, egress=egress)
+        _, final_url = await self._probe(url, use_proxy=use_proxy, egress=egress, source=source)
         return final_url
 
     async def download(
@@ -638,6 +711,7 @@ class WebClient:
         use_proxy: bool = True,
         egress: EgressPolicy | None = None,
         max_bytes: int | None = None,
+        source: str | None = None,
     ) -> bool:
         """下载. 分块阈值、分片大小与并发数取自 ``network`` 配置. 失败返回 False, 并按状态与原因记日志.
 
@@ -646,15 +720,17 @@ class WebClient:
         由调用方决定清理.
         """
         if max_bytes is not None:
-            return await self._download_bounded(url, dest, use_proxy=use_proxy, egress=egress, max_bytes=max_bytes)
+            return await self._download_bounded(
+                url, dest, use_proxy=use_proxy, egress=egress, max_bytes=max_bytes, source=source
+            )
 
-        file_size, _ = await self._probe(url, use_proxy=use_proxy, egress=egress)
+        file_size, _ = await self._probe(url, use_proxy=use_proxy, egress=egress, source=source)
 
         if file_size and file_size > self._chunked_threshold:
-            return await self._download_chunked(url, dest, file_size, use_proxy=use_proxy, egress=egress)
+            return await self._download_chunked(url, dest, file_size, use_proxy=use_proxy, egress=egress, source=source)
 
         try:
-            content = await self.get_bytes(url, use_proxy=use_proxy, egress=egress)
+            content = await self.get_bytes(url, use_proxy=use_proxy, egress=egress, source=source)
         except RequestError as e:
             logger.error(
                 "download failed",
@@ -682,10 +758,11 @@ class WebClient:
         use_proxy: bool,
         egress: EgressPolicy | None,
         max_bytes: int,
+        source: str | None = None,
     ) -> bool:
         """限长下载: 边接收边写入, 超限即中止, 不把正文攒在内存里."""
         try:
-            resp = await self.request("GET", url, use_proxy=use_proxy, egress=egress, stream=True)
+            resp = await self.request("GET", url, use_proxy=use_proxy, egress=egress, stream=True, source=source)
         except RequestError as e:
             logger.error(
                 "download failed",
@@ -724,6 +801,7 @@ class WebClient:
         *,
         use_proxy: bool = True,
         egress: EgressPolicy | None = None,
+        source: str | None = None,
     ) -> bool:
         chunk_size = self._chunk_size
         parts = [(s, min(s + chunk_size - 1, file_size - 1)) for s in range(0, file_size, chunk_size)]
@@ -752,6 +830,7 @@ class WebClient:
                         headers={"Range": f"bytes={start}-{end}"},
                         use_proxy=use_proxy,
                         egress=egress,
+                        source=source,
                     )
                 except RequestError as e:
                     return e.failure or RequestFailure(kind=FailureKind.UNEXPECTED, message=e.message)

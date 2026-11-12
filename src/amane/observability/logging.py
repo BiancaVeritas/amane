@@ -3,6 +3,7 @@
 import asyncio
 import logging
 import sys
+from datetime import UTC, datetime
 from logging.handlers import RotatingFileHandler
 from typing import TYPE_CHECKING
 
@@ -80,7 +81,15 @@ class WSEventLogHandler(logging.Handler):
                     "level": record.levelname,
                     "source": source,
                     "message": message,
+                    "timestamp": datetime.fromtimestamp(record.created, UTC)
+                    .isoformat(timespec="microseconds")
+                    .replace("+00:00", "Z"),
                 }
+                # stdlib logging 不经过 structlog processor, 因此需要显式合并当前任务上下文.
+                for key, value in structlog.contextvars.get_contextvars().items():
+                    if isinstance(value, (str, int, float, bool, list, dict, type(None))):
+                        data[key] = value
+                # LogRecord 的 extra 字段优先于 contextvars, 保留调用方显式传入的值.
                 for key, value in record.__dict__.items():
                     if key.startswith("_") or key in self._SKIP_ATTRS:
                         continue

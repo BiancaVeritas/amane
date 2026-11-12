@@ -6,6 +6,7 @@ class SiteName(StrEnum):
 
     AIRAV = "airav"
     AVBASE = "avbase"
+    AVENTERTAINMENTS = "aventertainments"
     AVSOX = "avsox"
     DAHLIA = "dahlia"
     DMM = "dmm"
@@ -26,9 +27,18 @@ class SiteName(StrEnum):
     MGSTAGE = "mgstage"
     MINNANO = "minnano"
     OFFICIAL = "official"
+    PONDO = "1pondo"
+    PACOPACOMAMA = "pacopacomama"
+    CARIBBEANCOM = "caribbeancom"
+    CARIBBEANCOMPR = "caribbeancompr"
+    D2PASS = "d2pass"
     PRESTIGE = "prestige"
     R18DEV = "r18dev"
+    TENMUSUME = "10musume"
+    TOKYO_HOT = "tokyo_hot"
     THEPORNDB = "theporndb"
+    TUSHY = "tushy"
+    TUSHY_RAW = "tushy_raw"
     WIKIPEDIA = "wikipedia"
     XCITY = "xcity"
 
@@ -47,6 +57,7 @@ class BrowserBackendName(StrEnum):
     PATCHRIGHT = "patchright"
     CAMOUFOX = "camoufox"
     BSK = "bsk"
+    REMOTE = "remote"
     SOLVER = "solver"
 
 
@@ -93,6 +104,7 @@ class LibraryAutomation(StrEnum):
 
     NONE = "none"
     WATCH = "watch"
+    REFRESH = "refresh"
     SCRAPE = "scrape"
 
 
@@ -117,7 +129,9 @@ class DownloadableResource(StrEnum):
 
 class MetadataField(StrEnum):
     TITLE = "title"
+    ORIGINAL_TITLE = "original_title"
     PLOT = "plot"
+    ORIGINAL_PLOT = "original_plot"
     ACTORS = "actors"
     DIRECTORS = "directors"
     TAGS = "tags"
@@ -127,7 +141,7 @@ class MetadataField(StrEnum):
     PUBLISHER = "publisher"
     STUDIO = "studio"
     POSTER_URLS = "poster_urls"
-    THUMB_URLS = "thumb_urls"
+    COVER_URLS = "cover_urls"
     TRAILER_URLS = "trailer_urls"
     EXTRAFANART = "extrafanart"
     SCORE = "score"

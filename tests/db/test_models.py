@@ -7,6 +7,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, SQLModel, create_engine
 
 from amane.db.models import MediaFile, MediaFileStatus, Metadata
+from amane.parsing import ContentType
 
 
 @pytest.fixture
@@ -36,12 +37,28 @@ class TestMediaFile:
 
 
 class TestMetadata:
-    def test_number_is_unique(self, session: Session):
-        m1 = Metadata(number="MIDV-123")
-        m2 = Metadata(number="MIDV-123")
+    def test_non_western_number_is_unique(self, session: Session):
+        m1 = Metadata(number="MIDV-123", content_type=ContentType.CENSORED)
+        m2 = Metadata(number="MIDV-123", content_type=ContentType.CENSORED)
         session.add(m1)
         session.commit()
         session.add(m2)
+        with pytest.raises(IntegrityError):
+            session.commit()
+
+    def test_western_same_number_allows_distinct_theporndb_uuids(self, session: Session):
+        first = Metadata(number="Lancelotstylesevolution.26.10.16", theporndb_uuid="scene-a")
+        second = Metadata(number="Lancelotstylesevolution.26.10.16", theporndb_uuid="scene-b")
+        session.add_all([first, second])
+        session.commit()
+        assert first.id != second.id
+
+    def test_western_theporndb_uuid_is_unique(self, session: Session):
+        first = Metadata(number="Lancelotstylesevolution.26.10.16", theporndb_uuid="scene-a")
+        second = Metadata(number="Different.26.10.16", theporndb_uuid="scene-a")
+        session.add(first)
+        session.commit()
+        session.add(second)
         with pytest.raises(IntegrityError):
             session.commit()
 

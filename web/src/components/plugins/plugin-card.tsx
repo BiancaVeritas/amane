@@ -70,7 +70,11 @@ export function PluginCard({ plugin }: { plugin: PluginResponse }) {
           <Switch
             size="sm"
             checked={enabled}
-            onChange={(event) => update(config, { enabled: event.currentTarget.checked })}
+            onChange={(event) =>
+              update(config, {
+                enabled: event.target instanceof HTMLInputElement && event.target.checked,
+              })
+            }
             disabled={pending}
             aria-label={t("enabled")}
           />

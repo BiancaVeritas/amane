@@ -25,7 +25,9 @@ export function BoolField({
           <Switch
             id={id}
             checked={field.state.value === true}
-            onChange={(e) => field.handleChange(e.currentTarget.checked)}
+            onChange={(e) =>
+              field.handleChange(e.target instanceof HTMLInputElement && e.target.checked)
+            }
             aria-label={label}
           />
         </FieldChrome>

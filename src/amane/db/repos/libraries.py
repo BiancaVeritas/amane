@@ -15,29 +15,16 @@ from ...library import (
     validate_min_file_size,
     validate_trailer_pattern,
 )
-from ...organize.path_templates import (
-    VIDEO_TEMPLATE_DEFAULT,
-    normalize_link_template,
-    validate_extrafanart_name_template,
-    validate_path_template,
-)
+from ...organize.path_templates import VIDEO_TEMPLATE_DEFAULT, normalize_link_template, validate_path_template
 from ...organize.strm_content import normalize_strm_content_template, validate_strm_content_template
 from ...utils.path import resolved_path
-from ..models import Library, MediaFile
+from ..models import Library, MediaFile, MetadataLibrary
 from ..repo_types import LibraryUpdates
 from .base import RepositoryMixinBase
 
 
 def _path_template_or_none(value: str | None) -> str | None:
     return None if value is None else validate_path_template(value)
-
-
-def _extrafanart_name_or_none(value: str | None) -> str | None:
-    """空白文件名模板按未设置处理, 交给默认值."""
-    if value is None:
-        return None
-    stripped = value.strip()
-    return None if not stripped else validate_extrafanart_name_template(stripped)
 
 
 def _strm_content_or_none(value: str | None) -> str | None:
@@ -65,6 +52,9 @@ class LibrariesRepoMixin(RepositoryMixinBase):
         self,
         name: str,
         path: str,
+        organize_path: str | None = None,
+        scan_paths: list[str] | None = None,
+        organize_paths: list[str] | None = None,
         automation: LibraryAutomation = LibraryAutomation.SCRAPE,
         auto_organize: bool = False,
         ingest: LibraryIngest = LibraryIngest.NATIVE,
@@ -80,7 +70,6 @@ class LibrariesRepoMixin(RepositoryMixinBase):
         poster_template: str | None = None,
         fanart_template: str | None = None,
         extrafanart_template: str | None = None,
-        extrafanart_name_template: str | None = None,
         nfo_template: str | None = None,
         trailer_template: str | None = None,
         subtitle_template: str | None = None,
@@ -92,6 +81,16 @@ class LibrariesRepoMixin(RepositoryMixinBase):
         min_file_size: int = 0,
     ) -> Library:
         min_file_size = validate_min_file_size(min_file_size)
+        scan_paths = list(dict.fromkeys(str(resolved_path(p)) for p in (scan_paths or [path]) if p and p.strip()))
+        organize_paths = list(
+            dict.fromkeys(
+                str(resolved_path(p))
+                for p in (organize_paths or ([organize_path] if organize_path else []))
+                if p and p.strip()
+            )
+        )
+        if not scan_paths:
+            raise ValueError("至少需要设置一个扫描路径")
         cloud_path = resolve_ingest_cloud_path(ingest, cloud_path)
         video_template = validate_path_template(video_template)
         link_template = _path_template_or_none(normalize_link_template(link_template))
@@ -100,7 +99,6 @@ class LibrariesRepoMixin(RepositoryMixinBase):
         poster_template = _path_template_or_none(poster_template)
         fanart_template = _path_template_or_none(fanart_template)
         extrafanart_template = _path_template_or_none(extrafanart_template)
-        extrafanart_name_template = _extrafanart_name_or_none(extrafanart_name_template)
         nfo_template = _path_template_or_none(nfo_template)
         trailer_template = _path_template_or_none(trailer_template)
         subtitle_template = _path_template_or_none(subtitle_template)
@@ -109,7 +107,10 @@ class LibrariesRepoMixin(RepositoryMixinBase):
                 await _reject_overlapping_cloud_path(session, cloud_path)
             lib = Library(
                 name=name,
-                path=str(resolved_path(path)),
+                path=scan_paths[0],
+                scan_paths=scan_paths,
+                organize_path=organize_paths[0] if len(organize_paths) == 1 else None,
+                organize_paths=organize_paths,
                 automation=automation,
                 auto_organize=auto_organize,
                 ingest=ingest,
@@ -125,7 +126,6 @@ class LibrariesRepoMixin(RepositoryMixinBase):
                 poster_template=poster_template,
                 fanart_template=fanart_template,
                 extrafanart_template=extrafanart_template,
-                extrafanart_name_template=extrafanart_name_template,
                 nfo_template=nfo_template,
                 trailer_template=trailer_template,
                 subtitle_template=subtitle_template,
@@ -169,9 +169,22 @@ class LibrariesRepoMixin(RepositoryMixinBase):
     async def get_library_for_path(self, file_path: str) -> Library | None:
         """最长前缀匹配. 仅迁移或无法解析归属时使用, 不是入库归属真值."""
         best: Library | None = None
+        best_root_length = -1
+        from pathlib import Path
+
+        candidate = Path(file_path)
         for lib in await self.list_libraries():
-            if file_path.startswith(lib.path) and (best is None or len(lib.path) > len(best.path)):
-                best = lib
+            for root in lib.scan_paths or [lib.path]:
+                # 路径边界必须匹配, 避免 /media/a 错认 /media/abc.
+                try:
+                    candidate.relative_to(Path(root))
+                except ValueError:
+                    continue
+                # 比较实际命中的根目录长度, 不能拿该媒体库其它未命中的根目录参与比较.
+                root_length = len(str(root))
+                if root_length > best_root_length:
+                    best = lib
+                    best_root_length = root_length
         return best
 
     async def delete_library(self, library_id: int) -> int:
@@ -185,6 +198,10 @@ class LibrariesRepoMixin(RepositoryMixinBase):
             media_files = list(result.all())
             for mf in media_files:
                 await session.delete(mf)
+            # 当前归属独立于 MediaFile 生命周期; 真正删除媒体库时才显式清理.
+            from sqlalchemy import delete as sqla_delete
+
+            await session.exec(sqla_delete(MetadataLibrary).where(col(MetadataLibrary.library_id) == library_id))
             # 未声明 ORM relationship, UoW 不会排序删除顺序; 须先 flush 子表.
             await session.flush()
             await session.delete(lib)
@@ -201,8 +218,41 @@ class LibrariesRepoMixin(RepositoryMixinBase):
                 lib.name = updates["name"]
             # 值未变时不改写形式: 老库的库路径可能还没解析为真实路径, 而索引行都是与它同一形式的写法,
             # 仅仅重新保存一次就把库根换成另一种写法, 会把同一个文件算成两条索引.
-            if "path" in updates and updates["path"] != lib.path:
-                lib.path = str(resolved_path(updates["path"]))
+            if "scan_paths" in updates:
+                # Repository round-trip must preserve the caller's path representation.
+                # Canonicalization belongs at the filesystem boundary, not persistence.
+                paths = list(dict.fromkeys(p.strip() for p in updates["scan_paths"] if p and p.strip()))
+                if not paths:
+                    raise ValueError("至少需要设置一个扫描路径")
+                lib.scan_paths = paths
+                # Keep the legacy single-root field in sync only when it was not
+                # explicitly supplied by the caller.
+                if "path" not in updates:
+                    lib.path = paths[0]
+            elif "path" in updates:
+                # Resolve a genuinely changed legacy root, but preserve its stored
+                # spelling when the caller sends the same value again. Existing
+                # index rows use that spelling too, so canonicalizing an unchanged
+                # symlink alias would split the library root from its indexed paths.
+                requested_path = updates["path"]
+                if requested_path != lib.path and requested_path:
+                    requested_path = str(resolved_path(requested_path))
+                lib.path = requested_path
+                lib.scan_paths = [lib.path] if lib.path else []
+
+            if "organize_paths" in updates:
+                # Keep the multi-path value exactly as submitted for DB round-trip.
+                paths = list(dict.fromkeys(p.strip() for p in updates["organize_paths"] if p and p.strip()))
+                lib.organize_paths = paths
+            if "organize_path" in updates:
+                # An explicitly supplied legacy field is independent of the
+                # multi-path field and must never be silently overwritten.
+                lib.organize_path = updates["organize_path"]
+                if "organize_paths" not in updates:
+                    lib.organize_paths = [lib.organize_path] if lib.organize_path else []
+            elif "organize_paths" in updates:
+                # Derive the legacy field only when it was not supplied.
+                lib.organize_path = paths[0] if len(paths) == 1 else None
             if "automation" in updates:
                 lib.automation = updates["automation"]
             if "auto_organize" in updates:
@@ -237,8 +287,6 @@ class LibrariesRepoMixin(RepositoryMixinBase):
                 lib.fanart_template = _path_template_or_none(updates["fanart_template"])
             if "extrafanart_template" in updates:
                 lib.extrafanart_template = _path_template_or_none(updates["extrafanart_template"])
-            if "extrafanart_name_template" in updates:
-                lib.extrafanart_name_template = _extrafanart_name_or_none(updates["extrafanart_name_template"])
             if "nfo_template" in updates:
                 lib.nfo_template = _path_template_or_none(updates["nfo_template"])
             if "trailer_template" in updates:

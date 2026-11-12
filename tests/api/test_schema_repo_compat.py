@@ -464,7 +464,6 @@ _ROUNDTRIP = [
                 "poster_template",
                 "fanart_template",
                 "extrafanart_template",
-                "extrafanart_name_template",
                 "nfo_template",
                 "trailer_template",
                 "subtitle_template",
@@ -477,7 +476,7 @@ _ROUNDTRIP = [
         ),
     ),
     (ScheduleUpdates, _make_schedule, "update_schedule", frozenset(), frozenset()),
-    (MetadataFields, _make_metadata, "update_metadata", frozenset(), frozenset()),
+    (MetadataFields, _make_metadata, "update_metadata", frozenset({"series"}), frozenset()),
     (FeedUpdates, _make_feed, "update_feed", frozenset(), frozenset()),
 ]
 _ROUNDTRIP_IDS = ["media", "library", "schedule", "metadata", "feed"]

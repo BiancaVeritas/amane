@@ -172,7 +172,9 @@ def build_metadata(work: dict[str, Any], *, url: str) -> MediaMetadata | None:
         return None
     raw_products = work.get("products")
     products = [p for p in raw_products if isinstance(p, dict)] if isinstance(raw_products, list) else []
-    poster_urls, thumb_urls, extrafanart = _build_images(products)
+    poster_urls, cover_urls, extrafanart = _build_images(products)
+    image_product = _image_product(products)
+    original_poster = _text(image_product.get("thumbnail_url")) if image_product else ""
     return MediaMetadata(
         number=number,
         title=_text(work.get("title")) or None,
@@ -185,7 +187,12 @@ def build_metadata(work: dict[str, Any], *, url: str) -> MediaMetadata | None:
         tags=_build_tags(work.get("genres")),
         directors=_build_directors(products),
         poster_urls=poster_urls,
-        thumb_urls=thumb_urls,
+        # 只有商品明确提供独立 thumbnail_url 时才视为双页海报；封面派生的 poster 候选不算。
+        original_poster_urls=image_candidates(original_poster) if original_poster else [],
+        cover_urls=cover_urls,
+        double_page_poster_urls=poster_urls if original_poster and cover_urls else [],
+        double_page_original_poster_urls=image_candidates(original_poster) if original_poster and cover_urls else [],
+        double_page_cover_urls=cover_urls if original_poster and cover_urls else [],
         extrafanart=extrafanart,
         source_url=url,
     )
@@ -202,8 +209,8 @@ def _build_images(products: list[dict[str, Any]]) -> tuple[list[str], list[str],
     cover = _text(product.get("image_url"))
     poster = _text(product.get("thumbnail_url"))
     poster_urls = image_candidates(poster) if poster else (poster_candidates(cover) if cover else [])
-    thumb_urls = image_candidates(cover) if cover else []
-    return poster_urls, thumb_urls, _sample_urls(products, preferred=product)
+    cover_urls = image_candidates(cover) if cover else []
+    return poster_urls, cover_urls, _sample_urls(products, preferred=product)
 
 
 def _image_product(products: list[dict[str, Any]]) -> dict[str, Any] | None:

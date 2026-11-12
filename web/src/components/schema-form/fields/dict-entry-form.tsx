@@ -108,6 +108,18 @@ function DictEntryField({
   return children(field);
 }
 
+// Dict 条目表单是轻量适配器，不持有独立表单状态；这里提供兼容的 Subscribe，
+// 避免 SchemaFormInstance 要求 Subscribe 后该适配器缺少实现。
+function DictEntrySubscribe({
+  children,
+}: {
+  selector?: (state: { values: unknown }) => unknown;
+  children: (value: unknown) => ReactNode;
+}) {
+  return <>{children(undefined)}</>;
+}
+
 export const dictEntryForm: SchemaFormInstance = {
   Field: DictEntryField,
+  Subscribe: DictEntrySubscribe,
 };

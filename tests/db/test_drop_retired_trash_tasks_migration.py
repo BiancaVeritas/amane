@@ -11,8 +11,7 @@ from sqlalchemy import Connection, create_engine, text
 
 from tests.helpers import alembic_config
 
-_PREVIOUS = "6940e4cf8a80"
-_TARGET = "56fe451426ef"
+_PREVIOUS = "fd5c8ad2c5db"
 
 
 @pytest.fixture
@@ -24,7 +23,7 @@ def _insert_task(conn: Connection, task_type: str) -> int:
     result = conn.execute(
         text(
             "INSERT INTO tasks (type, status, payload, retries, priority, created_at) "
-            "VALUES (:type, 'DONE', '{}', 0, 0, CURRENT_TIMESTAMP)"
+            "VALUES (:type, 'done', '{}', 0, 0, CURRENT_TIMESTAMP)"
         ),
         {"type": task_type},
     )
@@ -40,13 +39,17 @@ def test_drop_retired_trash_tasks(alembic_cfg: Config) -> None:
     engine = create_engine(url)
 
     with engine.begin() as conn:
-        trash_parent = _insert_task(conn, "TRASH")
+        trash_parent = _insert_task(conn, "trash")
         trash_child = _insert_task(conn, "TRASH")
-        keep_parent = _insert_task(conn, "ORGANIZE")
-        keep_child = _insert_task(conn, "SCRAPE")
+        trash_upper_parent = _insert_task(conn, "TRASH")
+        trash_upper_child = _insert_task(conn, "trash")
+        keep_parent = _insert_task(conn, "organize")
+        keep_child = _insert_task(conn, "scrape")
         for parent, child in (
             (trash_parent, trash_child),
             (trash_parent, keep_child),
+            (trash_upper_parent, trash_upper_child),
+            (trash_upper_parent, keep_child),
             (keep_parent, trash_child),
             (keep_parent, keep_child),
         ):
@@ -58,13 +61,13 @@ def test_drop_retired_trash_tasks(alembic_cfg: Config) -> None:
                 {"p": parent, "c": child, "k": f"{parent}-{child}"},
             )
 
-    command.upgrade(alembic_cfg, _TARGET)
+    command.upgrade(alembic_cfg, "head")
 
     with engine.connect() as conn:
         types = conn.execute(text("SELECT type FROM tasks ORDER BY id")).scalars().all()
         links = conn.execute(text("SELECT parent_task_id, child_task_id FROM task_links")).all()
 
-    assert types == ["ORGANIZE", "SCRAPE"]
+    assert types == ["organize", "scrape"]
     assert links == [(keep_parent, keep_child)]
 
     engine.dispose()

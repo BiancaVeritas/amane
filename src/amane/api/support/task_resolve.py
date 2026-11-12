@@ -61,6 +61,8 @@ async def resolve_submission(req: TaskSubmission, repo: Repository) -> tuple[Tas
             await req.resolve(repo)
             return TaskType.REFRESH, req
         case OrganizeSubmission():
+            # 提交阶段只解析媒体库与请求范围; 唯一整理路径检查在执行阶段由
+            # OrganizeHandler 负责, 使任务可入队并以明确失败结果反馈配置问题。
             await req.resolve(repo)
             return TaskType.ORGANIZE, req
         case DeleteSubmission():
@@ -84,7 +86,7 @@ async def resolve_submission(req: TaskSubmission, repo: Repository) -> tuple[Tas
         case ActorScrapeSubmission():
             return TaskType.ACTOR_SCRAPE, ActorScrapePayload(actor_id=req.actor_id, use_cache=req.use_cache)
         case ActorPushSubmission():
-            return TaskType.ACTOR_PUSH, ActorPushPayload(actor_ids=req.actor_ids, force=req.force)
+            return TaskType.ACTOR_PUSH, ActorPushPayload(actor_ids=req.actor_ids, mode=req.mode)
         case RescrapeSubmission():
             return TaskType.RESCRAPE, RescrapePayload(
                 limit=req.limit, min_age_days=req.min_age_days, targets=req.targets

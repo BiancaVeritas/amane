@@ -41,6 +41,7 @@ export function FacetBadge({
   size = "sm",
 }: FacetBadgeProps) {
   const color = KIND_COLOR[kind];
+  // 名称字段统一保留数据本身的大小写；不得由 Badge 默认样式自动转成大写。
   const leftSection =
     kind === "actor" && (gender === "female" || gender === "male") ? (
       <GenderMark gender={gender} size={12} />
@@ -48,8 +49,8 @@ export function FacetBadge({
 
   if (id == null) {
     return (
-      <Badge color={color} variant={variant} size={size} leftSection={leftSection}>
-        {name}
+      <Badge color={color} variant={variant} size={size} leftSection={leftSection} tt="none">
+        <span>{name}</span>
       </Badge>
     );
   }
@@ -64,9 +65,10 @@ export function FacetBadge({
             variant={variant}
             size={size}
             leftSection={leftSection}
+            tt="none"
             style={{ cursor: "pointer" }}
           >
-            {name}
+            <span>{name}</span>
           </Badge>
         </Link>
       );
@@ -82,9 +84,10 @@ export function FacetBadge({
           color={color}
           variant={variant}
           size={size}
+          tt="none"
           style={{ cursor: "pointer" }}
         >
-          {name}
+          <span>{name}</span>
         </Badge>
       </Link>
     );
@@ -98,9 +101,10 @@ export function FacetBadge({
         variant={variant}
         size={size}
         leftSection={leftSection}
+        tt="none"
         style={{ cursor: "pointer" }}
       >
-        {name}
+        <span>{name}</span>
       </Badge>
     </Link>
   );

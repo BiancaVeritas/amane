@@ -280,6 +280,7 @@ class ActorBrowseParams(BaseModel):
 
 class MetadataFields(TypedDict, total=False):
     title: str | None
+    original_title: str | None
     actors: list[str]
     studio: str | None
     publisher: str | None
@@ -287,16 +288,21 @@ class MetadataFields(TypedDict, total=False):
     runtime: int | None
     tags: list[str]
     series: str | None
+    series_names: list[str]
     plot: str | None
+    original_plot: str | None
     directors: list[str]
+    original_poster_urls: list[str]
     poster_urls: list[str]
-    thumb_urls: list[str]
+    cover_urls: list[str]
+    original_cover_urls: list[str]
     trailer_urls: list[str]
     extrafanart_urls: dict[str, list[str]]
     scores: dict[str, float]
     external_ids: dict[str, str]
     source_urls: dict[str, str]
     field_sources: dict[str, str]
+    image_sources: dict[str, str]
     raw: dict[str, dict[str, object]]
 
 
@@ -315,6 +321,9 @@ class MediaFileUpdates(TypedDict, total=False):
 class LibraryUpdates(TypedDict, total=False):
     name: str
     path: str
+    scan_paths: list[str]
+    organize_path: str | None
+    organize_paths: list[str]
     automation: LibraryAutomation
     auto_organize: bool
     ingest: LibraryIngest
@@ -330,7 +339,6 @@ class LibraryUpdates(TypedDict, total=False):
     poster_template: str | None
     fanart_template: str | None
     extrafanart_template: str | None
-    extrafanart_name_template: str | None
     nfo_template: str | None
     trailer_template: str | None
     subtitle_template: str | None

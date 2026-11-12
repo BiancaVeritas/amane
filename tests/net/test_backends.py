@@ -7,12 +7,34 @@ import pytest
 
 from amane.enums import BrowserBackendName
 from amane.net import backends
-from amane.net.backends import probe_backends, probe_solver
+from amane.net.backends import probe_backends, probe_remote_browser, probe_solver
 from amane.net.bsk import BskBrowser, BskStatus
 
 
 def _transport(handler: object) -> httpx2.MockTransport:
     return httpx2.MockTransport(handler)  # type: ignore[arg-type]
+
+
+@pytest.mark.asyncio
+async def test_remote_probe_requires_chromium_cdp_handshake() -> None:
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        assert str(request.url) == "http://nas-browser:9222/json/version"
+        return httpx2.Response(
+            200, json={"Browser": "Chrome/131.0", "webSocketDebuggerUrl": "ws://nas:9222/devtools/browser/abc"}
+        )
+
+    probe = await probe_remote_browser("http://nas-browser:9222/", transport=_transport(handler))
+    assert probe.available
+    assert probe.version == "Chrome/131.0"
+
+
+@pytest.mark.asyncio
+async def test_remote_probe_rejects_non_cdp_http_service() -> None:
+    probe = await probe_remote_browser(
+        "http://nas-browser:9222", transport=_transport(lambda request: httpx2.Response(200, json={"ok": True}))
+    )
+    assert not probe.available
+    assert "不是有效的 Chromium CDP" in (probe.detail or "")
 
 
 @pytest.mark.asyncio
@@ -94,6 +116,7 @@ async def test_probe_backends_covers_every_backend_in_order(monkeypatch: pytest.
         BrowserBackendName.PATCHRIGHT,
         BrowserBackendName.CAMOUFOX,
         BrowserBackendName.BSK,
+        BrowserBackendName.REMOTE,
         BrowserBackendName.SOLVER,
     ]
     by_name = {probe.backend: probe for probe in probes}
@@ -102,6 +125,7 @@ async def test_probe_backends_covers_every_backend_in_order(monkeypatch: pytest.
     assert "camoufox" in (by_name[BrowserBackendName.CAMOUFOX].detail or "")
     assert by_name[BrowserBackendName.BSK].version == "0.3.3"
     assert by_name[BrowserBackendName.BSK].browsers[0].name == "edge"
+    assert not by_name[BrowserBackendName.REMOTE].available
     assert by_name[BrowserBackendName.SOLVER].available
 
 

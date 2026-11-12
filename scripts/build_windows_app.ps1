@@ -59,6 +59,8 @@ $StdlibArgs = @()
     --add-data "$(Join-Path $Root 'src\amane\media\watermarks');amane/media/watermarks" `
     --add-data "$(Join-Path $Root 'src\amane\utils\zhcdict.json');amane/utils" `
     --add-data "$(Join-Path $Root 'src\amane\utils\zhconv_overrides.json');amane/utils" `
+    --add-data "$(Join-Path $Root 'src\amane\crawlers\sites\caribbeancompr_heyzo_index.json');amane/crawlers/sites" `
+    --add-data "$(Join-Path $Root 'src\amane\crawlers\sites\d2pass_heyzo_index.json');amane/crawlers/sites" `
     --add-data "$(Join-Path $Root 'alembic.ini');." `
     --collect-submodules amane `
     --exclude-module patchright `

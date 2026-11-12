@@ -142,7 +142,7 @@ class PrestigeCrawler(Crawler):
             (data.get("packageImage") or {}).get("path") if isinstance(data.get("packageImage"), dict) else None
         )
         poster_url = _image_url(front_path)
-        thumb_url = _image_url(spread_path)
+        cover_url = _image_url(spread_path)
 
         extrafanart: list[str] = []
         for img_list_key in ("media",):
@@ -166,7 +166,11 @@ class PrestigeCrawler(Crawler):
             series=series_name or None,
             plot=data.get("body") or None,
             poster_urls=[poster_url] if poster_url else [],
-            thumb_urls=[thumb_url] if thumb_url else [],
+            original_poster_urls=[poster_url] if poster_url else [],
+            cover_urls=[cover_url] if cover_url else [],
+            double_page_poster_urls=[poster_url] if poster_url and cover_url else [],
+            double_page_original_poster_urls=[poster_url] if poster_url and cover_url else [],
+            double_page_cover_urls=[cover_url] if poster_url and cover_url else [],
             directors=directors,
             extrafanart=extrafanart,
             source_url=url,

@@ -66,7 +66,7 @@ class IqqtvCrawler(Crawler):
         runtime = self._parse_runtime(html)
         tags = extract_all_texts(html, '//div[contains(@class,"tag-info")]//a[contains(@href, "tag")]/text()')
         series = extract_text(html, '//a[contains(@href, "series")]/text()')
-        thumb_url = extract_text(html, '//meta[@property="og:image"]/@content')
+        cover_url = extract_text(html, '//meta[@property="og:image"]/@content')
         plot = self._extract_plot(html)
         extrafanart = html.xpath('//div[@class="cover"]//img[@src]/@data-src').getall()
 
@@ -81,7 +81,7 @@ class IqqtvCrawler(Crawler):
             tags=tags,
             series=series or None,
             plot=plot or None,
-            thumb_urls=[thumb_url] if thumb_url else [],
+            cover_urls=[cover_url] if cover_url else [],
             extrafanart=extrafanart,
             source_url=url,
         )

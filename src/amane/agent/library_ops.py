@@ -17,6 +17,8 @@ _LIBRARY_UPDATE_KEYS = frozenset(
     {
         "name",
         "path",
+        "scan_paths",
+        "organize_paths",
         "automation",
         "auto_organize",
         "ingest",
@@ -32,7 +34,6 @@ _LIBRARY_UPDATE_KEYS = frozenset(
         "poster_template",
         "fanart_template",
         "extrafanart_template",
-        "extrafanart_name_template",
         "nfo_template",
         "trailer_template",
         "subtitle_template",
@@ -66,6 +67,8 @@ def build_library_ops_capability() -> Capability[AgentDeps]:
     async def create_library(
         ctx: RunContext[AgentDeps],
         path: str,
+        scan_paths: list[str] | None = None,
+        organize_paths: list[str] | None = None,
         name: str | None = None,
         automation: LibraryAutomation = LibraryAutomation.SCRAPE,
         auto_organize: bool = False,
@@ -75,15 +78,24 @@ def build_library_ops_capability() -> Capability[AgentDeps]:
     ) -> dict[str, Any]:
         """Create a media library; optional initial REFRESH(scan=add)."""
         patterns = list(patterns or [])
+        scan_paths = list(dict.fromkeys(p.strip() for p in (scan_paths or [path]) if p and p.strip()))
+        organize_paths = list(dict.fromkeys(p.strip() for p in (organize_paths or []) if p and p.strip()))
+        if not scan_paths:
+            return {"error": "至少需要设置一个扫描路径"}
         try:
-            await check_directory_path(path, ctx.deps.bridge.safe_dirs)
+            for scan_path in scan_paths:
+                await check_directory_path(scan_path, ctx.deps.bridge.safe_dirs)
+            for organize_path in organize_paths:
+                await check_directory_path(organize_path, ctx.deps.bridge.safe_dirs)
         except ValueError as exc:
             return {"error": str(exc)}
-        display = name or Path(path).name
+        display = name or Path(scan_paths[0]).name
         try:
             lib = await ctx.deps.repo.create_library(
                 name=display,
-                path=path,
+                path=scan_paths[0],
+                scan_paths=scan_paths,
+                organize_paths=organize_paths,
                 automation=automation,
                 auto_organize=auto_organize,
                 recursive=recursive,
@@ -95,19 +107,22 @@ def build_library_ops_capability() -> Capability[AgentDeps]:
         _sync_library(ctx.deps, lib)
         out: dict[str, Any] = {"library_id": lib.id}
         if scan:
+            scan_paths = lib.scan_paths or [lib.path]
             task = await ctx.deps.repo.create_task(
                 TaskType.REFRESH,
                 RefreshPayload(
                     library_id=lib.id,
                     recursive=lib.recursive,
                     patterns=list(lib.patterns or []),
-                    path=lib.path,
+                    path=scan_paths[0],
+                    paths=scan_paths,
                     scan={ScanMode.add},
                     scrape=set(),
                 ),
             )
             assert task.id is not None
             out["refresh_task_id"] = task.id
+            out["refresh_task_ids"] = [task.id]
         return out
 
     @cap.tool
@@ -130,11 +145,14 @@ def build_library_ops_capability() -> Capability[AgentDeps]:
                 patch["ingest"] = LibraryIngest(patch["ingest"])
             except ValueError:
                 return {"error": f"无效的 ingest: {patch['ingest']}"}
-        if "path" in patch and patch["path"] is not None:
-            try:
+        try:
+            if "path" in patch and patch["path"] is not None:
                 await check_directory_path(str(patch["path"]), ctx.deps.bridge.safe_dirs)
-            except ValueError as exc:
-                return {"error": str(exc)}
+            for field in ("scan_paths", "organize_paths"):
+                for candidate in patch.get(field, []) or []:
+                    await check_directory_path(str(candidate), ctx.deps.bridge.safe_dirs)
+        except ValueError as exc:
+            return {"error": str(exc)}
         try:
             lib = await ctx.deps.repo.update_library(library_id, **cast(LibraryUpdates, patch))
         except ValueError as exc:
@@ -146,6 +164,7 @@ def build_library_ops_capability() -> Capability[AgentDeps]:
             "ingest",
             "cloud_path",
             "path",
+            "scan_paths",
             "recursive",
             "patterns",
             "trailer_pattern",
@@ -183,31 +202,28 @@ def build_library_ops_capability() -> Capability[AgentDeps]:
         ctx: RunContext[AgentDeps],
         library_id: int,
         scan_add: bool = True,
-        scan_remove: bool = False,
     ) -> dict[str, Any]:
-        """Enqueue a REFRESH task for a library (scan add/remove modes)."""
+        """Enqueue a REFRESH task to discover files; invalid-record cleanup is a separate operation."""
         lib = await ctx.deps.repo.get_library(library_id)
         if lib is None:
             return {"error": f"library {library_id} 不存在"}
-        scan: set[ScanMode] = set()
-        if scan_add:
-            scan.add(ScanMode.add)
-        if scan_remove:
-            scan.add(ScanMode.remove)
-        if not scan:
-            return {"error": "至少启用 scan_add 或 scan_remove"}
+        if not scan_add:
+            return {"error": "扫描新文件任务必须启用 scan_add；清理失效记录请使用独立清理操作"}
+        scan = {ScanMode.add}
+        scan_paths = lib.scan_paths or [lib.path]
         task = await ctx.deps.repo.create_task(
             TaskType.REFRESH,
             RefreshPayload(
                 library_id=library_id,
                 recursive=lib.recursive,
                 patterns=list(lib.patterns or []),
-                path=lib.path,
+                path=scan_paths[0],
+                paths=scan_paths,
                 scan=scan,
                 scrape=set(),
             ),
         )
         assert task.id is not None
-        return {"task_id": task.id}
+        return {"task_ids": [task.id], "task_id": task.id}
 
     return cap

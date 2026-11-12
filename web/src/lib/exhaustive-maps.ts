@@ -91,12 +91,12 @@ export const TASK_TYPES = exhaustiveTuple<TaskType>()(
   "upscale",
   "r18_import",
   "actor_scrape",
+  "actor_push",
   "rescrape",
   "scan_invalid",
   "delete",
   "semantic_index",
   "semantic_benchmark",
-  "actor_push",
 );
 
 export const DOWNLOADABLE_RESOURCES = exhaustiveTuple<DownloadableResource>()(
@@ -106,7 +106,12 @@ export const DOWNLOADABLE_RESOURCES = exhaustiveTuple<DownloadableResource>()(
   "trailer",
 );
 
-export const LIBRARY_AUTOMATIONS = exhaustiveTuple<LibraryAutomation>()("none", "watch", "scrape");
+export const LIBRARY_AUTOMATIONS = exhaustiveTuple<LibraryAutomation>()(
+  "none",
+  "watch",
+  "refresh",
+  "scrape",
+);
 
 export const LIBRARY_INGESTS = exhaustiveTuple<LibraryIngest>()("native", "clouddrive");
 
@@ -191,9 +196,9 @@ export const MANUAL_TASK_TYPES = exhaustiveTuple<ManualTaskType>()(
   "upscale",
   "r18_import",
   "actor_scrape",
+  "actor_push",
   "rescrape",
   "semantic_index",
-  "actor_push",
 );
 
 /** 刮削站点结果分组顺序. */
@@ -219,7 +224,9 @@ export const FACET_SORT_FIELDS = exhaustiveTuple<FacetSortField>()("name", "coun
 
 export const METADATA_FIELDS = exhaustiveTuple<MetadataField>()(
   "title",
+  "original_title",
   "plot",
+  "original_plot",
   "actors",
   "directors",
   "tags",
@@ -229,7 +236,7 @@ export const METADATA_FIELDS = exhaustiveTuple<MetadataField>()(
   "publisher",
   "studio",
   "poster_urls",
-  "thumb_urls",
+  "cover_urls",
   "trailer_urls",
   "extrafanart",
   "score",

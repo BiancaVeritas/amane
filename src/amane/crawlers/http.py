@@ -1,8 +1,7 @@
 """爬虫 HTTP 封装: HTML 按来源策略在直连与浏览器之间路由.
 
-``get_html`` 是浏览器渲染的唯一入口: ``use_browser=auto`` 先直连, 首次命中 Cloudflare 挑战后该来源改用
-浏览器并保持; ``always`` 一律渲染; ``off`` 一律直连. 判定集中在 ``RenderPolicy``, 派生视图共享已切换的
-scope. 表单 POST 用 ``post_html``, 浏览器渲染只提供 GET, 因此该路径一律直连.
+``get_html`` 是唯一入口: ``use_browser=auto`` 先直连, 首次命中 Cloudflare 挑战后该来源改用浏览器并保持;
+``always`` 一律渲染; ``off`` 一律直连. 判定集中在 ``RenderPolicy``, 派生视图共享已切换的 scope.
 ``get_json`` / ``get_bytes`` / ``download`` 永远直连, 不走 HTML 拦截启发式.
 """
 
@@ -123,7 +122,18 @@ class HttpClient:
         scope = self._scope(url)
         if self._policy.should_render(scope):
             return await self._render(url, headers=headers, cookies=cookies, wait_for=wait_for)
-        text = await self.get_text(url, headers=headers, cookies=cookies, encoding=encoding)
+        try:
+            text = await self.get_text(url, headers=headers, cookies=cookies, encoding=encoding)
+        except RequestError as exc:
+            # HTTP 4xx/5xx 在 WebClient 层会抛 RequestError, 但 403 的响应正文
+            # 仍保存在 failure.body 中。先识别正文是否确实为 Cloudflare challenge；
+            # 只有 AUTO + 可用浏览器时才升级, 普通 403 保留原始 RequestError。
+            reason = classify_block("", failure=exc.failure)
+            if reason is FailureReason.CLOUDFLARE_CHALLENGE and self._policy.escalate(scope, reason):
+                return await self._render(url, headers=headers, cookies=cookies, wait_for=wait_for)
+            if reason is FailureReason.CLOUDFLARE_CHALLENGE:
+                raise SourceError(reason, http_status=exc.http_status, detail=url) from exc
+            raise
         reason = classify_block(text)
         if reason is None:
             if wait_for is not None:
@@ -132,22 +142,6 @@ class HttpClient:
         if self._policy.escalate(scope, reason):
             return await self._render(url, headers=headers, cookies=cookies, wait_for=wait_for)
         raise SourceError(reason, detail=url)
-
-    async def post_html(
-        self,
-        url: str,
-        *,
-        data: Any,
-        headers: dict[str, str] | None = None,
-        cookies: dict[str, str] | None = None,
-        encoding: str = "utf-8",
-    ) -> str:
-        """表单 POST 取 HTML. 浏览器渲染只提供 GET, 该路径一律直连, 拦截判定与 ``get_html`` 相同."""
-        text = await self._web.post_text(url, data=data, headers=headers, cookies=cookies, encoding=encoding)
-        reason = classify_block(text)
-        if reason is not None:
-            raise SourceError(reason, detail=url)
-        return text
 
     async def get_json(
         self,
@@ -160,6 +154,19 @@ class HttpClient:
 
     async def get_bytes(self, url: str, *, headers: dict[str, str] | None = None) -> bytes:
         return await self._web.get_bytes(url, headers=headers)
+
+    async def post_text(
+        self,
+        url: str,
+        *,
+        data: Any | None = None,
+        json: Any | None = None,
+        headers: dict[str, str] | None = None,
+        cookies: dict[str, str] | None = None,
+        encoding: str = "utf-8",
+    ) -> str:
+        """发送 POST 并返回响应文本; 与 get_text 一样保持直连 HTTP 语义."""
+        return await self._web.post_text(url, data=data, json=json, headers=headers, cookies=cookies, encoding=encoding)
 
     async def post_json(
         self,
@@ -230,5 +237,4 @@ class HttpClient:
 
     async def download(self, url: str, dest: Path) -> bool:
         # 失败返回 False, 不抛异常.
-        # 不传 egress: 刮削要下载内网 LAN 镜像, 地址判定会让这些来源全部失败; 协议白名单仍是全局底线.
         return await self._web.download(url, dest)

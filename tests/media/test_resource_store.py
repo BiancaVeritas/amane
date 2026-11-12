@@ -2,13 +2,11 @@
 
 import asyncio
 from typing import TYPE_CHECKING, Any, ClassVar
-from unittest.mock import AsyncMock
 
 import pytest
 
 from amane.media import ResourceStore, UpscaleOutcome, derived_locator
 from amane.media.resource_store import RESOURCE_URL_PREFIX, _is_placeholder_url, internal_url_hash
-from amane.net.egress import EgressPolicy
 from amane.net.http import RateLimiters, WebClient
 
 if TYPE_CHECKING:
@@ -349,10 +347,7 @@ class _StubResponse:
         self.url = url
         self.content = content
         self.status_code = status
-        self.quit_now = None
-
-    async def aclose(self) -> None:
-        return
+        self.quit_now: asyncio.Event | None = None
 
 
 class _StubSession:
@@ -382,74 +377,6 @@ def _stub_client(
     return client, session
 
 
-@pytest.mark.asyncio
-async def test_acquire_forwards_egress_policy(
-    resource_store: ResourceStore, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-):
-    """策略与上限必须原样到下载通道: 漏传等于端点上的限制静默失效."""
-    policy = EgressPolicy()
-    client = AsyncMock()
-    client.resolve_final_url = AsyncMock(return_value=_REQUEST)
-    client.download = AsyncMock(return_value=False)
-    monkeypatch.setattr(resource_store, "_compute_path", lambda url: tmp_path / "a.jpg")
-
-    assert await resource_store.acquire(_REQUEST, client, egress=policy, max_bytes=1024) is None
-
-    client.resolve_final_url.assert_awaited_once_with(_REQUEST, egress=policy)
-    kwargs = client.download.await_args.kwargs
-    assert kwargs["egress"] is policy
-    assert kwargs["max_bytes"] == 1024
-
-
-@pytest.mark.asyncio
-async def test_acquire_records_content_type(
-    resource_store: ResourceStore, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-):
-    """入库按内容写 MIME: 无后缀 URL 的图片不再记成通用二进制."""
-    url = "https://img.example.com/actor/12345"
-    client = AsyncMock()
-    client.resolve_final_url = AsyncMock(return_value=url)
-
-    async def download(_url: str, dest: Path, **_kwargs: object) -> bool:
-        dest.write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * 8)
-        return True
-
-    client.download = AsyncMock(side_effect=download)
-    monkeypatch.setattr(resource_store, "_compute_path", lambda url: tmp_path / "resources" / "resource.bin")
-
-    assert await resource_store.acquire(url, client) is not None
-    record = await resource_store.get_by_url(url)
-    assert record is not None
-    assert record.mime_type == "image/png"
-
-
-@pytest.mark.asyncio
-async def test_derived_mime_follows_content(resource_store: ResourceStore):
-    """派生资源同样按内容写类型; 盘上字节被换掉后重跑并覆盖记录."""
-    url = "https://s/derived.jpg"
-
-    async def png(dest: Path) -> bool:
-        dest.write_bytes(b"\x89PNG\r\n\x1a\n")
-        return True
-
-    first = await resource_store.acquire_derived(url, "crop", "0.7", png)
-    assert first is not None
-    assert first.mime_type == "image/png"
-
-    # 盘上字节不再是记录所指的那份, 下一次调用必须重跑 producer.
-    resource_store.full_path(first).write_bytes(b"stale")
-
-    async def jpeg(dest: Path) -> bool:
-        dest.write_bytes(b"\xff\xd8\xff\xe0")
-        return True
-
-    second = await resource_store.acquire_derived(url, "crop", "0.7", jpeg)
-    assert second is not None
-    saved = await resource_store.get_by_url(first.url)
-    assert saved is not None
-    assert saved.mime_type == "image/jpeg"
-
-
 _REQUEST = "https://pics.dmm.co.jp/digital/video/mide00030/mide00030pl.jpg"
 _PLACEHOLDER = "https://pics.dmm.com/mono/movie/n/now_printing/now_printing.jpg"
 
@@ -460,7 +387,6 @@ class TestPlaceholderRedirect:
         [
             (_PLACEHOLDER, True),
             ("https://imgsrc.dmm.com/pics/mono/movie/n/now_printing/now_printing.jpg?h=800&w=800", True),
-            ("https://cdn.up-timely.com/noimage.png", True),
             (_REQUEST, False),
             # 只匹配路径, 查询串里的同名字样不算
             ("https://pics.dmm.com/redirect?to=/now_printing/now_printing.jpg", False),

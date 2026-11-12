@@ -12,6 +12,7 @@ from amane.config import HotSettings, SrConfig
 from amane.enums import DownloadableResource
 from amane.media import CropRotation, ResourceStore, manual_crop_image, materialize_images
 from amane.media import pipeline as pipeline_mod
+from amane.parsing import ContentType
 from tests.helpers import LOAD_TOLERANT_TIMEOUT, await_for
 
 if TYPE_CHECKING:
@@ -73,7 +74,7 @@ async def test_poster_cropped_when_candidate_small(resource_store: ResourceStore
     out = await materialize_images(
         ["https://s/p.jpg"], ["https://s/t.jpg"], [], resource_store, cast("WebClient", client), cfg, tmp_path
     )
-    assert out.thumb_urls == ["https://s/t.jpg"]  # 外部列表原样
+    assert out.cover_urls == ["https://s/t.jpg"]  # 外部列表原样
     assert len(out.poster_urls) == 1
     assert out.poster_urls[0].startswith(pipeline_mod.RESOURCE_URL_PREFIX)  # 内部派生
     # 派生 args 为配置比例, 非候选 300/420
@@ -85,6 +86,36 @@ async def test_poster_cropped_when_candidate_small(resource_store: ResourceStore
     assert crop_res.meta.get("args") == "0.7000"
     poster = Image.open(crop_path)
     assert poster.size == (376, 538)  # int(538 * 0.7), 非 int(538 * 300/420)=384
+
+
+@pytest.mark.asyncio
+async def test_uncensored_uses_its_own_poster_ratio(resource_store: ResourceStore, tmp_path: Path):
+    client = FakeClient(
+        {
+            "https://s/uncensored-cover.jpg": (800, 538),
+            "https://s/uncensored-poster.jpg": (300, 420),
+        }
+    )
+    cfg = HotSettings()
+    cfg.scraping.poster_ratio = 0.7
+    cfg.scraping.uncensored_poster_ratio = 0.5
+    out = await materialize_images(
+        ["https://s/uncensored-poster.jpg"],
+        ["https://s/uncensored-cover.jpg"],
+        [],
+        resource_store,
+        cast("WebClient", client),
+        cfg,
+        tmp_path,
+        content_type=ContentType.UNCENSORED,
+    )
+    url_hash = out.poster_urls[0].rsplit("/", 1)[-1]
+    got = await resource_store.get_by_url_hash(url_hash)
+    assert got is not None
+    crop_res, crop_path = got
+    assert crop_res.meta is not None
+    assert crop_res.meta.get("args") == "0.5000"
+    assert Image.open(crop_path).size == (269, 538)
 
 
 @pytest.mark.asyncio
@@ -132,12 +163,33 @@ async def test_trailer_downloaded_external_url(resource_store: ResourceStore, tm
 
 
 @pytest.mark.asyncio
+async def test_trailer_disabled_drops_url_without_downloading(resource_store: ResourceStore, tmp_path: Path):
+    """关闭预告片下载时, 不下载文件且不把外部预告片 URL 写回元数据."""
+    client = FakeClient({})
+    settings = HotSettings()
+    assert DownloadableResource.trailer not in settings.scraping.download_resources
+
+    out = await materialize_images(
+        [],
+        [],
+        ["https://s/trailer.mp4"],
+        resource_store,
+        cast("WebClient", client),
+        settings,
+        tmp_path,
+    )
+
+    assert out.trailer_urls == []
+    assert "https://s/trailer.mp4" not in client.downloaded
+
+
+@pytest.mark.asyncio
 async def test_empty_sources(resource_store: ResourceStore, tmp_path: Path):
     out = await materialize_images(
         [], [], [], resource_store, cast("WebClient", FakeClient({})), HotSettings(), tmp_path
     )
     assert out.poster_urls == []
-    assert out.thumb_urls == []
+    assert out.cover_urls == []
     assert out.trailer_urls == []
 
 
@@ -162,7 +214,7 @@ async def test_eager_sr_overwrites(resource_store: ResourceStore, tmp_path: Path
     thumb_res = await resource_store.get_by_url("https://s/t.jpg")
     assert thumb_res is not None
     assert thumb_res.meta is not None and "sr" in thumb_res.meta
-    assert out.thumb_urls == ["https://s/t.jpg"]  # URL 不变 (就地覆盖)
+    assert out.cover_urls == ["https://s/t.jpg"]  # URL 不变 (就地覆盖)
 
 
 class _GatedClient:
@@ -334,7 +386,7 @@ async def test_thumb_trailer_reordered_when_first_dead(resource_store: ResourceS
         settings,
         tmp_path,
     )
-    assert out.thumb_urls == ["https://s/live.jpg", "https://s/dead.jpg"]
+    assert out.cover_urls == ["https://s/live.jpg", "https://s/dead.jpg"]
     assert out.trailer_urls == ["https://s/trailer.mp4", "https://s/dead.mp4"]
 
 
@@ -515,3 +567,28 @@ async def test_cache_hit_counts_as_success(resource_store: ResourceStore, tmp_pa
     assert out.poster_urls == ["https://s/live.jpg", "https://s/dead.jpg"]
     assert "https://s/live.jpg" not in client.downloaded  # 缓存命中, 无网络请求
     assert "https://s/dead.jpg" in client.downloaded
+
+
+@pytest.mark.asyncio
+async def test_force_crop_uses_cached_locked_cover_without_reacquiring(resource_store: ResourceStore, tmp_path: Path):
+    url = "https://s/locked-cover.jpg"
+    client = FakeClient({url: (800, 538)})
+    assert await resource_store.acquire(url, cast("WebClient", client)) is not None
+    cfg = HotSettings()
+    cfg.scraping.crop_poster = False
+
+    out = await materialize_images(
+        [],
+        [url],
+        [],
+        resource_store,
+        cast("WebClient", client),
+        cfg,
+        tmp_path,
+        force_crop_poster=True,
+        preserve_cover_resource=True,
+    )
+
+    assert len(out.poster_urls) == 1
+    assert out.poster_urls[0].startswith(pipeline_mod.RESOURCE_URL_PREFIX)
+    assert client.downloaded == [url]

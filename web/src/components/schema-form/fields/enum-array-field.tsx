@@ -80,7 +80,7 @@ export function EnumArrayField({
                   label={getOptionLabel(opt, i, itemSchema)}
                   checked={isChecked}
                   onChange={(e) => {
-                    const checked = e.currentTarget.checked;
+                    const checked = e.target instanceof HTMLInputElement && e.target.checked;
                     const next = new Set(selectedSet);
                     if (checked) next.add(opt);
                     else next.delete(opt);

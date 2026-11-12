@@ -27,25 +27,41 @@ def compute_merge_updates(
     """
     updates: dict[str, object] = {}
     field_sources_updates: dict[str, str] = {}
+    image_sources_updates: dict[str, str] = {}
 
     for field, source in selections.items():
         if source not in raw:
             raise ValueError(f"source '{source}' not found in raw data")
-        if field not in raw[source]:
+        raw_field = "thumb_urls" if field == "cover_urls" and field not in raw[source] else field
+        if raw_field not in raw[source]:
             raise ValueError(f"field '{field}' not found for source '{source}'")
 
-        value = raw[source][field]
+        value = raw[source][raw_field]
         if value is None:
             continue
 
         db_field = RAW_TO_DB_FIELD.get(field, field)
         merged = _actor_names_from_raw(value) if field == "actors" else value
         updates[db_field] = {source: merged} if db_field != field else merged
+        if field in {"poster_urls", "original_poster_urls", "cover_urls", "trailer_urls", "extrafanart"}:
+            image_urls = merged if isinstance(merged, list) else [merged]
+            image_sources_updates.update({url: source for url in image_urls if isinstance(url, str) and url})
+        # Source selection establishes the raw text as well as the translated display value.
+        if field == "title":
+            updates["original_title"] = merged
+        elif field == "plot":
+            updates["original_plot"] = merged
+        elif field == "cover_urls":
+            updates["original_cover_urls"] = merged
 
         if field in SCALAR_FIELD_NAMES:
             field_sources_updates[field] = source
+        elif field == "series_names":
+            field_sources_updates["series"] = source
 
     if field_sources_updates:
         updates["field_sources"] = {**field_sources, **field_sources_updates}
+    if image_sources_updates:
+        updates["image_sources"] = image_sources_updates
 
     return updates

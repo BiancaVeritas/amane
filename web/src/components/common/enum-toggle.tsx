@@ -1,5 +1,4 @@
 import { Button, SegmentedControl, Select } from "@mantine/core";
-import { useWindowEvent } from "@mantine/hooks";
 import { useLayoutEffect, useRef, useState } from "react";
 import { useNarrowViewport } from "@/hooks/use-narrow-viewport";
 import classes from "./enum-toggle.module.css";
@@ -36,28 +35,27 @@ export function EnumToggle<T extends string | number>(
   const narrow = useNarrowViewport();
 
   const data = options.map((opt, i) => ({ value: String(opt), label: getLabel(opt, i) }));
-  const labelsKey = data.map((item) => item.label).join("\u0000");
-
-  const controlRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const measureRef = useRef<HTMLDivElement>(null);
   const [clipped, setClipped] = useState(false);
 
-  // 窗口变宽时先回到 Segmented, 由下面的 effect 在绘制前重测; 否则一次变窄就永远停在下拉.
-  useWindowEvent("resize", () => setClipped(false));
-
-  // 裁切下 `scrollWidth` 仍是内容宽度, 与可视宽度比较即可知道放不放得下.
-  // 用 ResizeObserver 而非只测一次: 弹窗动画期间宽度为 0, 容器宽度也常在挂载之后才确定.
+  // 始终观察稳定容器；可见控件切换为 Select 时，测量节点仍然保留.
+  // 隐藏的 SegmentedControl 提供完整内容宽度，容器变化时重新判断是否放得下.
   useLayoutEffect(() => {
-    const el = controlRef.current;
-    if (el === null) return;
+    if (multiple) return;
+    const container = containerRef.current;
+    const measureControl = measureRef.current;
+    if (container === null || measureControl === null) return;
     const measure = () => {
-      if (!el.isConnected || el.clientWidth === 0) return;
-      setClipped(el.scrollWidth > el.clientWidth + 1);
+      if (!container.isConnected || container.clientWidth === 0) return;
+      setClipped(measureControl.scrollWidth > container.clientWidth + 1);
     };
     measure();
     const observer = new ResizeObserver(measure);
-    observer.observe(el);
+    observer.observe(container);
+    observer.observe(measureControl);
     return () => observer.disconnect();
-  }, [labelsKey, clipped]);
+  }, [multiple]);
 
   if (multiple) {
     return (
@@ -95,46 +93,78 @@ export function EnumToggle<T extends string | number>(
     );
   }
 
-  if (clipped) {
-    return (
-      <Select
-        size="sm"
-        disabled={disabled}
-        w={fullWidth ? undefined : "max-content"}
-        maw="100%"
-        allowDeselect={false}
-        comboboxProps={{ withinPortal: true }}
-        value={props.value == null ? null : String(props.value)}
-        onChange={(v) => {
-          const next = options.find((opt) => String(opt) === v);
-          if (next === undefined || props.value === next) return;
-          props.onChange(next);
-        }}
-        data={data}
-      />
-    );
-  }
-
   return (
-    <SegmentedControl
-      ref={controlRef}
-      size="sm"
-      radius="sm"
-      withItemsBorders
-      fullWidth={fullWidth}
-      disabled={disabled}
-      w={fullWidth ? undefined : "max-content"}
-      maw="100%"
-      styles={{
-        control: fullWidth ? undefined : { flex: "0 0 auto" },
+    <div
+      ref={containerRef}
+      style={{
+        position: "relative",
+        display: fullWidth ? "block" : "inline-block",
+        width: fullWidth ? "100%" : "max-content",
+        maxWidth: "100%",
+        minWidth: 0,
       }}
-      value={props.value == null ? "" : String(props.value)}
-      onChange={(v) => {
-        const next = options.find((opt) => String(opt) === v);
-        if (next === undefined || props.value === next) return;
-        props.onChange(next);
-      }}
-      data={data}
-    />
+    >
+      <div
+        aria-hidden="true"
+        style={{
+          position: "absolute",
+          top: 0,
+          left: 0,
+          width: "max-content",
+          visibility: "hidden",
+          pointerEvents: "none",
+          whiteSpace: "nowrap",
+        }}
+      >
+        <SegmentedControl
+          ref={measureRef}
+          size="sm"
+          radius="sm"
+          withItemsBorders
+          disabled
+          w="max-content"
+          maw="none"
+          styles={{ control: { flex: "0 0 auto" } }}
+          value={props.value == null ? "" : String(props.value)}
+          data={data}
+        />
+      </div>
+      {clipped ? (
+        <Select
+          size="sm"
+          disabled={disabled}
+          w="100%"
+          allowDeselect={false}
+          comboboxProps={{ withinPortal: true }}
+          value={props.value == null ? null : String(props.value)}
+          onChange={(v) => {
+            const next = options.find((opt) => String(opt) === v);
+            if (next === undefined || props.value === next) return;
+            props.onChange(next);
+          }}
+          data={data}
+        />
+      ) : (
+        <SegmentedControl
+          size="sm"
+          radius="sm"
+          withItemsBorders
+          fullWidth={fullWidth}
+          disabled={disabled}
+          w={fullWidth ? "100%" : "max-content"}
+          maw="100%"
+          styles={{
+            control: fullWidth ? undefined : { flex: "0 0 auto" },
+          }}
+          value={props.value == null ? "" : String(props.value)}
+          onChange={(v) => {
+            const next = options.find((opt) => String(opt) === v);
+            if (next === undefined || props.value === next) return;
+            props.onChange(next);
+          }}
+          data={data}
+        />
+      )}
+    </div>
   );
 }

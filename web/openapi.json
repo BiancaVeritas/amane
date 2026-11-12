@@ -47,6 +47,50 @@
         }
       }
     },
+    "/api/config/media-server/test": {
+      "post": {
+        "tags": [
+          "config"
+        ],
+        "summary": "Test Media Server Connection",
+        "description": "测试 Emby/Jellyfin 连接与 API Key, 不写入配置; 掩码值复用已保存密钥.",
+        "operationId": "test_media_server_connection",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MediaServerConfig"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Test Media Server Connection"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/config": {
       "get": {
         "tags": [
@@ -1140,10 +1184,10 @@
                   "type": "null"
                 }
               ],
-              "description": "Filter by linked MediaFile library id(s); OR",
+              "description": "Filter by current media library id(s)",
               "title": "Library Id"
             },
-            "description": "Filter by linked MediaFile library id(s); OR"
+            "description": "Filter by current media library id(s)"
           },
           {
             "name": "has_files",
@@ -1362,7 +1406,7 @@
           "metadata"
         ],
         "summary": "Batch Scrape Metadata",
-        "description": "以各自 number 重新刮削.",
+        "description": "以各自 Metadata ID / ThePornDB UUID 重新刮削.",
         "operationId": "batch_scrape_metadata",
         "requestBody": {
           "content": {
@@ -1423,48 +1467,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/UserTagLinksResponse"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/metadata/merge-entries": {
-      "post": {
-        "tags": [
-          "metadata"
-        ],
-        "summary": "Merge Metadata Entries",
-        "description": "把来源条目的 raw 快照补入目标并删除来源: 目标字段不变, 关联记录迁入目标.\n\n``rescrape`` 要求合并提交后再按目标番号入队 SCRAPE: 只有 raw 已落库, 复用快照的聚合\n才能按当前优先级重建字段与站点级字典.",
-        "operationId": "merge_metadata_entries",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/MetadataMergeEntriesRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/MetadataResponse"
                 }
               }
             }
@@ -1660,14 +1662,81 @@
         }
       }
     },
+    "/api/metadata/{metadata_id}/images/{kind}": {
+      "post": {
+        "tags": [
+          "metadata"
+        ],
+        "summary": "Upload Metadata Image",
+        "description": "替换影片封面/海报; 写入 Resource 并在同一手动写入中自动锁定对应 URL 字段.",
+        "operationId": "upload_metadata_image",
+        "parameters": [
+          {
+            "name": "metadata_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Metadata Id"
+            }
+          },
+          {
+            "name": "kind",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "enum": [
+                "cover",
+                "thumb",
+                "poster"
+              ],
+              "type": "string",
+              "title": "Kind"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_metadata_image"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MetadataResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/metadata/{metadata_id}/crop-poster": {
       "post": {
         "tags": [
           "metadata"
         ],
-        "summary": "Crop Poster From Thumb",
-        "description": "从封面 (thumb) 按像素框裁切海报, 写入派生 Resource 并更新 poster_urls.\n\n先按 EXIF 转正、再顺时针旋转 ``req.rotation``, 框相对旋转后的图像.",
-        "operationId": "crop_poster_from_thumb",
+        "summary": "Crop Poster From Cover",
+        "description": "从封面 (cover) 按像素框裁切海报, 写入派生 Resource 并更新 poster_urls.\n\n先按 EXIF 转正、再顺时针旋转 ``req.rotation``, 框相对旋转后的图像.",
+        "operationId": "crop_poster_from_cover",
         "parameters": [
           {
             "name": "metadata_id",
@@ -1819,6 +1888,267 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ConnectivityReportResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/oshash-submissions": {
+      "get": {
+        "tags": [
+          "oshash-submissions"
+        ],
+        "summary": "List Submissions",
+        "operationId": "list_submissions",
+        "parameters": [
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 30,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/oshash-submissions/{submission_id}/submit": {
+      "post": {
+        "tags": [
+          "oshash-submissions"
+        ],
+        "summary": "Submit One",
+        "operationId": "submit_one",
+        "parameters": [
+          {
+            "name": "submission_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Submission Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/oshash-submissions/batch": {
+      "post": {
+        "tags": [
+          "oshash-submissions"
+        ],
+        "summary": "Submit Batch",
+        "operationId": "submit_batch",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BatchSubmit"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/oshash-submissions/{submission_id}": {
+      "delete": {
+        "tags": [
+          "oshash-submissions"
+        ],
+        "summary": "Delete One",
+        "operationId": "delete_one",
+        "parameters": [
+          {
+            "name": "submission_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Submission Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/oshash-submissions/delete": {
+      "post": {
+        "tags": [
+          "oshash-submissions"
+        ],
+        "summary": "Delete Batch",
+        "operationId": "delete_batch",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BatchDelete"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/theporndb-scenes/search": {
+      "post": {
+        "tags": [
+          "theporndb-scenes"
+        ],
+        "summary": "Search Scenes",
+        "operationId": "search_scenes",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SceneSearchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "items": {
+                      "additionalProperties": true,
+                      "type": "object"
+                    },
+                    "type": "array"
+                  },
+                  "type": "object",
+                  "title": "Response Search Scenes"
                 }
               }
             }
@@ -4621,7 +4951,7 @@
           "resources"
         ],
         "summary": "Proxy Image",
-        "description": "上游失败记入进程内负缓存 (15 分钟), 窗口内同 URL 直接 502.\n同 URL 进行中请求合并为一次 acquire.\n使用图片 token 的请求只从缓存读取资源: 未命中返回 404, 不发起对外请求, 不写入负缓存.\n缓存命中先于地址判定: 只有下载会发起对外请求, 已入库资源即使是私网地址也直接返回.",
+        "description": "上游失败记入进程内负缓存 (15 分钟), 窗口内同 URL 直接 502.\n同 URL + 来源的进行中请求合并为一次 acquire.\n使用图片 token 的请求只从缓存读取资源: 未命中返回 404, 不发起对外请求, 不写入负缓存.",
         "operationId": "proxy_image",
         "parameters": [
           {
@@ -4634,6 +4964,42 @@
               "title": "Url"
             },
             "description": "External image URL to proxy"
+          },
+          {
+            "name": "mode",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Browser cache mode",
+              "title": "Mode"
+            },
+            "description": "Browser cache mode"
+          },
+          {
+            "name": "source",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Owning scraper source",
+              "title": "Source"
+            },
+            "description": "Owning scraper source"
           }
         ],
         "responses": {
@@ -4674,6 +5040,24 @@
               "type": "string",
               "title": "Url Hash"
             }
+          },
+          {
+            "name": "mode",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Browser cache mode",
+              "title": "Mode"
+            },
+            "description": "Browser cache mode"
           }
         ],
         "responses": {
@@ -5528,6 +5912,63 @@
         }
       }
     },
+    "/api/tasks/{task_id}/log": {
+      "get": {
+        "tags": [
+          "tasks"
+        ],
+        "summary": "Get Task Log",
+        "description": "任务日志尾部. 记录文件不存在时返回空页.",
+        "operationId": "get_task_log",
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Task Id"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 5000,
+              "minimum": 1,
+              "description": "Max entries from the end of task.log",
+              "default": 5000,
+              "title": "Limit"
+            },
+            "description": "Max entries from the end of task.log"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskLogPage"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/tasks/{task_id}/record": {
       "get": {
         "tags": [
@@ -5559,6 +6000,288 @@
             "description": "Include plaintext cookies/tokens from local secrets snapshot"
           }
         ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/tag-mappings": {
+      "get": {
+        "tags": [
+          "tag-mappings"
+        ],
+        "summary": "List Mappings",
+        "operationId": "list_mappings",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "all",
+                "pending",
+                "mapped"
+              ],
+              "type": "string",
+              "default": "pending",
+              "title": "Status"
+            }
+          },
+          {
+            "name": "language",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "all",
+                "ja",
+                "en",
+                "zh",
+                "other"
+              ],
+              "type": "string",
+              "default": "all",
+              "title": "Language"
+            }
+          },
+          {
+            "name": "frequency",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "all",
+                "high"
+              ],
+              "type": "string",
+              "default": "all",
+              "title": "Frequency"
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "",
+              "title": "Search"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "tag-mappings"
+        ],
+        "summary": "Save Mapping",
+        "operationId": "save_mapping",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MappingUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/tag-mappings/{original}": {
+      "delete": {
+        "tags": [
+          "tag-mappings"
+        ],
+        "summary": "Delete Mapping",
+        "operationId": "delete_mapping",
+        "parameters": [
+          {
+            "name": "original",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Original"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/tag-mappings/export": {
+      "get": {
+        "tags": [
+          "tag-mappings"
+        ],
+        "summary": "Export Mappings",
+        "operationId": "export_mappings",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/tag-mappings/import": {
+      "post": {
+        "tags": [
+          "tag-mappings"
+        ],
+        "summary": "Import Mappings",
+        "operationId": "import_mappings",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "type": "object",
+                "title": "Payload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/tag-mappings/suggest": {
+      "post": {
+        "tags": [
+          "tag-mappings"
+        ],
+        "summary": "Suggest Mappings",
+        "description": "只返回候选译名，不写入词典；人工确认仍由 PUT 接口完成。",
+        "operationId": "suggest_mappings",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SuggestRequest"
+              }
+            }
+          },
+          "required": true
+        },
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -5729,7 +6452,7 @@
           "libraries"
         ],
         "summary": "Get Path Template Schema",
-        "description": "与 ORGANIZE 实际使用的默认值同源.",
+        "description": "与 resolve_paths 同源.",
         "operationId": "get_path_template_schema",
         "responses": {
           "200": {
@@ -6939,13 +7662,7 @@
             },
             "type": "array",
             "title": "Actor Ids",
-            "description": "要推送的演员 ID; 空表示全部演员"
-          },
-          "force": {
-            "type": "boolean",
-            "title": "Force",
-            "description": "覆盖媒体服务器上已有的头像与人物字段",
-            "default": false
+            "description": "要同步的演员 ID; 空表示全部演员"
           },
           "type": {
             "type": "string",
@@ -7256,9 +7973,9 @@
               "type": "string",
               "enum": [
                 "minnano",
-                "javdb",
-                "wikipedia",
                 "theporndb",
+                "wikipedia",
+                "javdb",
                 "avbase"
               ]
             },
@@ -7271,6 +7988,8 @@
             "items": {
               "type": "string",
               "enum": [
+                "tushy",
+                "tushy_raw",
                 "gfriends"
               ]
             },
@@ -7288,12 +8007,6 @@
             "type": "boolean",
             "title": "Auto Scrape",
             "default": true
-          },
-          "auto_push": {
-            "type": "boolean",
-            "title": "Auto Push",
-            "description": "演员刮削成功后自动将该演员推送到媒体服务器",
-            "default": false
           },
           "gfriends_repo": {
             "type": "string",
@@ -7600,7 +8313,7 @@
             "maximum": 60000.0,
             "minimum": 50.0,
             "title": "Sql Timeout Ms",
-            "default": 5000,
+            "default": 1000,
             "x-hidden": true
           },
           "result_cache_ttl_s": {
@@ -7920,6 +8633,42 @@
         "title": "ApprovalsRow",
         "description": "未决审批快照. 每个回合结束发一条, **空列表表示已无未决**, 后者覆盖前者.\n\n原样携带 AG-UI 中断: 前端既用它渲染审批入口, 也把它交给 runtime 完成 `resume`."
       },
+      "BatchDelete": {
+        "properties": {
+          "ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "maxItems": 500,
+            "minItems": 1,
+            "title": "Ids"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ids"
+        ],
+        "title": "BatchDelete"
+      },
+      "BatchSubmit": {
+        "properties": {
+          "ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "maxItems": 500,
+            "minItems": 1,
+            "title": "Ids"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ids"
+        ],
+        "title": "BatchSubmit"
+      },
       "Body_install_plugin": {
         "properties": {
           "file": {
@@ -7950,6 +8699,21 @@
         },
         "type": "object",
         "title": "Body_install_plugin"
+      },
+      "Body_upload_metadata_image": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "File",
+            "description": "本地封面或海报图片"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_upload_metadata_image"
       },
       "BrowserBackendItemResponse": {
         "properties": {
@@ -8006,6 +8770,7 @@
           "patchright",
           "camoufox",
           "bsk",
+          "remote",
           "solver"
         ],
         "title": "BrowserBackendName"
@@ -8062,6 +8827,12 @@
             "pattern": "^https?://.+",
             "title": "Solver Url",
             "default": "http://127.0.0.1:8191"
+          },
+          "remote_url": {
+            "type": "string",
+            "pattern": "^https?://.+",
+            "title": "Remote Url",
+            "default": "http://127.0.0.1:9222"
           }
         },
         "type": "object",
@@ -8561,7 +9332,7 @@
           "bottom"
         ],
         "title": "CropPosterRequest",
-        "description": "从封面图按像素框裁切海报 (相对 thumb 当前本地文件像素; 含就地超分后尺寸)."
+        "description": "从封面图按像素框裁切海报 (相对 cover 当前本地文件像素; 含就地超分后尺寸)."
       },
       "DeleteResult": {
         "properties": {
@@ -9768,6 +10539,7 @@
               ],
               "crop_poster": true,
               "poster_ratio": 0.7,
+              "uncensored_poster_ratio": 0.87,
               "poster_crop_skip_ratio": 0.9,
               "jpeg_quality": 95,
               "content_routes": {
@@ -9779,9 +10551,11 @@
                 ],
                 "censored": [
                   "dmm",
+                  "mgstage",
                   "javdb",
+                  "avbase",
                   "javbus",
-                  "official"
+                  "avsox"
                 ],
                 "chinese": [
                   "iqqtv",
@@ -9802,15 +10576,17 @@
                   "javdb"
                 ],
                 "uncensored": [
-                  "javdb",
-                  "javbus",
-                  "avsox",
-                  "freejavbt"
+                  "aventertainments",
+                  "10musume",
+                  "1pondo",
+                  "caribbeancom",
+                  "pacopacomama",
+                  "tokyo_hot",
+                  "caribbeancompr",
+                  "d2pass"
                 ],
                 "western": [
-                  "theporndb",
-                  "javdb",
-                  "freejavbt"
+                  "theporndb"
                 ]
               },
               "field_priority": {},
@@ -9826,6 +10602,30 @@
                 "title": "zh_cn"
               },
               "site_config": {
+                "10musume": {
+                  "cookie": {},
+                  "languages": [
+                    "zh",
+                    "ja",
+                    "en"
+                  ],
+                  "official_routes": {},
+                  "rate_limit": 2.0,
+                  "use_browser": "auto",
+                  "use_proxy": true
+                },
+                "1pondo": {
+                  "cookie": {},
+                  "languages": [
+                    "zh",
+                    "ja",
+                    "en"
+                  ],
+                  "official_routes": {},
+                  "rate_limit": 2.0,
+                  "use_browser": "auto",
+                  "use_proxy": true
+                },
                 "airav": {
                   "cookie": {},
                   "languages": [
@@ -9850,7 +10650,55 @@
                   "use_browser": "auto",
                   "use_proxy": true
                 },
+                "aventertainments": {
+                  "cookie": {},
+                  "languages": [
+                    "zh",
+                    "ja",
+                    "en"
+                  ],
+                  "official_routes": {},
+                  "rate_limit": 2.0,
+                  "use_browser": "auto",
+                  "use_proxy": true
+                },
                 "avsox": {
+                  "cookie": {},
+                  "languages": [
+                    "zh",
+                    "ja",
+                    "en"
+                  ],
+                  "official_routes": {},
+                  "rate_limit": 2.0,
+                  "use_browser": "auto",
+                  "use_proxy": true
+                },
+                "caribbeancom": {
+                  "cookie": {},
+                  "languages": [
+                    "zh",
+                    "ja",
+                    "en"
+                  ],
+                  "official_routes": {},
+                  "rate_limit": 2.0,
+                  "use_browser": "auto",
+                  "use_proxy": true
+                },
+                "caribbeancompr": {
+                  "cookie": {},
+                  "languages": [
+                    "zh",
+                    "ja",
+                    "en"
+                  ],
+                  "official_routes": {},
+                  "rate_limit": 2.0,
+                  "use_browser": "auto",
+                  "use_proxy": true
+                },
+                "d2pass": {
                   "cookie": {},
                   "languages": [
                     "zh",
@@ -10090,6 +10938,18 @@
                   "use_browser": "auto",
                   "use_proxy": true
                 },
+                "pacopacomama": {
+                  "cookie": {},
+                  "languages": [
+                    "zh",
+                    "ja",
+                    "en"
+                  ],
+                  "official_routes": {},
+                  "rate_limit": 2.0,
+                  "use_browser": "auto",
+                  "use_proxy": true
+                },
                 "prestige": {
                   "cookie": {},
                   "languages": [
@@ -10115,6 +10975,42 @@
                   "use_proxy": true
                 },
                 "theporndb": {
+                  "cookie": {},
+                  "languages": [
+                    "zh",
+                    "ja",
+                    "en"
+                  ],
+                  "official_routes": {},
+                  "rate_limit": 2.0,
+                  "use_browser": "auto",
+                  "use_proxy": true
+                },
+                "tokyo_hot": {
+                  "cookie": {},
+                  "languages": [
+                    "zh",
+                    "ja",
+                    "en"
+                  ],
+                  "official_routes": {},
+                  "rate_limit": 2.0,
+                  "use_browser": "auto",
+                  "use_proxy": true
+                },
+                "tushy": {
+                  "cookie": {},
+                  "languages": [
+                    "zh",
+                    "ja",
+                    "en"
+                  ],
+                  "official_routes": {},
+                  "rate_limit": 2.0,
+                  "use_browser": "auto",
+                  "use_proxy": true
+                },
+                "tushy_raw": {
                   "cookie": {},
                   "languages": [
                     "zh",
@@ -10165,17 +11061,18 @@
             "default": {
               "profile_sites": [
                 "minnano",
-                "javdb",
-                "wikipedia",
                 "theporndb",
+                "wikipedia",
+                "javdb",
                 "avbase"
               ],
               "image_sites": [
+                "tushy",
+                "tushy_raw",
                 "gfriends"
               ],
               "download_images": true,
               "auto_scrape": true,
-              "auto_push": false,
               "gfriends_repo": "https://github.com/gfriends/gfriends"
             }
           },
@@ -10187,7 +11084,7 @@
               "model": "gpt-4o-mini",
               "max_tokens": 128000,
               "rate_limit": 2.0,
-              "sql_timeout_ms": 5000,
+              "sql_timeout_ms": 1000,
               "result_cache_ttl_s": 3600,
               "result_cache_max_entries": 64,
               "history_ttl_s": 3600,
@@ -10202,6 +11099,7 @@
               "max_clients": 50,
               "browser": {
                 "backend": "off",
+                "remote_url": "http://127.0.0.1:9222",
                 "solver_url": "http://127.0.0.1:8191",
                 "timeout": 30000
               },
@@ -10877,17 +11775,6 @@
             ],
             "title": "Extrafanart Template"
           },
-          "extrafanart_name_template": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Extrafanart Name Template"
-          },
           "nfo_template": {
             "anyOf": [
               {
@@ -11117,17 +12004,6 @@
               }
             ],
             "title": "Extrafanart Template"
-          },
-          "extrafanart_name_template": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Extrafanart Name Template"
           },
           "nfo_template": {
             "anyOf": [
@@ -11405,17 +12281,6 @@
             ],
             "title": "Extrafanart Template"
           },
-          "extrafanart_name_template": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Extrafanart Name Template"
-          },
           "nfo_template": {
             "anyOf": [
               {
@@ -11594,6 +12459,33 @@
           "wanz_factory"
         ],
         "title": "Manufacturer"
+      },
+      "MappingUpdate": {
+        "properties": {
+          "original": {
+            "type": "string",
+            "maxLength": 300,
+            "minLength": 1,
+            "title": "Original"
+          },
+          "translation": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Translation"
+          }
+        },
+        "type": "object",
+        "required": [
+          "original"
+        ],
+        "title": "MappingUpdate"
       },
       "MediaBatchDeleteRequest": {
         "properties": {
@@ -11901,6 +12793,7 @@
                 "type": "null"
               }
             ],
+            "format": "password",
             "title": "Api Key",
             "description": "管理员 API Key"
           },
@@ -12141,6 +13034,13 @@
               }
             ],
             "title": "Series Id"
+          },
+          "series_ids": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Series Ids"
           }
         },
         "type": "object",
@@ -12154,7 +13054,9 @@
         "type": "string",
         "enum": [
           "title",
+          "original_title",
           "plot",
+          "original_plot",
           "actors",
           "directors",
           "tags",
@@ -12164,7 +13066,7 @@
           "publisher",
           "studio",
           "poster_urls",
-          "thumb_urls",
+          "cover_urls",
           "trailer_urls",
           "extrafanart",
           "score"
@@ -12214,36 +13116,6 @@
         "title": "MetadataLocksRequest",
         "description": "整体替换锁定字段集合."
       },
-      "MetadataMergeEntriesRequest": {
-        "properties": {
-          "target_id": {
-            "type": "integer",
-            "title": "Target Id",
-            "description": "合并目标 Metadata ID; 其字段与已有站点快照保持不变"
-          },
-          "source_ids": {
-            "items": {
-              "type": "integer"
-            },
-            "type": "array",
-            "minItems": 1,
-            "title": "Source Ids",
-            "description": "待合并的 Metadata ID 列表; 按顺序补入 raw 快照"
-          },
-          "rescrape": {
-            "type": "boolean",
-            "title": "Rescrape",
-            "description": "合并后按当前优先级对目标番号入队 SCRAPE, 复用 raw 缓存重新聚合字段",
-            "default": false
-          }
-        },
-        "type": "object",
-        "required": [
-          "target_id",
-          "source_ids"
-        ],
-        "title": "MetadataMergeEntriesRequest"
-      },
       "MetadataPartial": {
         "properties": {
           "title": {
@@ -12256,6 +13128,17 @@
               }
             ],
             "title": "Title"
+          },
+          "original_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Original Title"
           },
           "actors": {
             "anyOf": [
@@ -12344,16 +13227,43 @@
             ],
             "title": "Series"
           },
+          "series_names": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Series Names"
+          },
           "plot": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "x-long": true
               },
               {
                 "type": "null"
               }
             ],
             "title": "Plot"
+          },
+          "original_plot": {
+            "anyOf": [
+              {
+                "type": "string",
+                "x-long": true
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Original Plot"
           },
           "directors": {
             "anyOf": [
@@ -12383,7 +13293,7 @@
             ],
             "title": "Poster Urls"
           },
-          "thumb_urls": {
+          "original_poster_urls": {
             "anyOf": [
               {
                 "items": {
@@ -12395,7 +13305,35 @@
                 "type": "null"
               }
             ],
-            "title": "Thumb Urls"
+            "title": "Original Poster Urls"
+          },
+          "cover_urls": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cover Urls"
+          },
+          "original_cover_urls": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Original Cover Urls"
           },
           "trailer_urls": {
             "anyOf": [
@@ -12499,6 +13437,17 @@
             ],
             "title": "Title"
           },
+          "original_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Original Title"
+          },
           "actors": {
             "items": {
               "type": "string"
@@ -12506,6 +13455,13 @@
             "type": "array",
             "title": "Actors",
             "default": []
+          },
+          "actor_genders": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/ActorGender"
+            },
+            "type": "object",
+            "title": "Actor Genders"
           },
           "studio": {
             "anyOf": [
@@ -12570,6 +13526,14 @@
             ],
             "title": "Series"
           },
+          "series_names": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Series Names",
+            "default": []
+          },
           "plot": {
             "anyOf": [
               {
@@ -12580,6 +13544,17 @@
               }
             ],
             "title": "Plot"
+          },
+          "original_plot": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Original Plot"
           },
           "directors": {
             "items": {
@@ -12600,7 +13575,7 @@
             ],
             "title": "Poster Url"
           },
-          "thumb_url": {
+          "cover_url": {
             "anyOf": [
               {
                 "type": "string"
@@ -12609,7 +13584,7 @@
                 "type": "null"
               }
             ],
-            "title": "Thumb Url"
+            "title": "Cover Url"
           },
           "trailer_url": {
             "anyOf": [
@@ -12646,6 +13621,14 @@
             "title": "Vr",
             "default": false
           },
+          "original_poster_urls": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Original Poster Urls",
+            "default": []
+          },
           "poster_urls": {
             "items": {
               "type": "string"
@@ -12654,12 +13637,20 @@
             "title": "Poster Urls",
             "default": []
           },
-          "thumb_urls": {
+          "cover_urls": {
             "items": {
               "type": "string"
             },
             "type": "array",
-            "title": "Thumb Urls",
+            "title": "Cover Urls",
+            "default": []
+          },
+          "original_cover_urls": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Original Cover Urls",
             "default": []
           },
           "trailer_urls": {
@@ -12690,6 +13681,17 @@
             "title": "External Ids",
             "default": {}
           },
+          "theporndb_uuid": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Theporndb Uuid"
+          },
           "source_urls": {
             "additionalProperties": true,
             "type": "object",
@@ -12700,6 +13702,14 @@
             "additionalProperties": true,
             "type": "object",
             "title": "Field Sources",
+            "default": {}
+          },
+          "image_sources": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Image Sources",
             "default": {}
           },
           "raw": {
@@ -12925,10 +13935,6 @@
             "type": "string",
             "title": "Extrafanart Template"
           },
-          "extrafanart_name_template": {
-            "type": "string",
-            "title": "Extrafanart Name Template"
-          },
           "nfo_template": {
             "type": "string",
             "title": "Nfo Template"
@@ -12948,13 +13954,12 @@
           "poster_template",
           "fanart_template",
           "extrafanart_template",
-          "extrafanart_name_template",
           "nfo_template",
           "trailer_template",
           "subtitle_template"
         ],
         "title": "OptionalPathTemplateDefaults",
-        "description": "附属模板缺省 (Library 对应列为 None 时 ORGANIZE 使用; 剧照文件名在写盘时按张数渲染)."
+        "description": "附属模板缺省 (Library 对应列为 None 时 ORGANIZE 使用)."
       },
       "OrganizeConflict": {
         "properties": {
@@ -13165,7 +14170,7 @@
           "subtitle_extensions_default"
         ],
         "title": "PathTemplateSchemaResponse",
-        "description": "与 ORGANIZE 实际使用的默认值同源; 路径模板由 resolve_paths 解析, 剧照文件名模板由写盘阶段渲染."
+        "description": "与 resolve_paths 同源."
       },
       "PlaybackSourceListResponse": {
         "properties": {
@@ -14338,6 +15343,24 @@
         ],
         "title": "ScanMode"
       },
+      "SceneSearchRequest": {
+        "properties": {
+          "query": {
+            "type": "string",
+            "maxLength": 200,
+            "title": "Query",
+            "default": ""
+          },
+          "date": {
+            "type": "string",
+            "maxLength": 40,
+            "title": "Date",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "title": "SceneSearchRequest"
+      },
       "ScheduleCreateRequest": {
         "properties": {
           "name": {
@@ -14624,6 +15647,18 @@
             "title": "Media Id",
             "description": "MediaFile ID. 通常仅用于内部提交任务，手动提交无需指定"
           },
+          "theporndb_uuid": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Theporndb Uuid",
+            "description": "WESTERN 手动指定的 ThePornDB UUID"
+          },
           "content_type": {
             "anyOf": [
               {
@@ -14678,6 +15713,13 @@
             "title": "Poster Ratio",
             "default": 0.7
           },
+          "uncensored_poster_ratio": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.3,
+            "title": "Uncensored Poster Ratio",
+            "default": 0.87
+          },
           "poster_crop_skip_ratio": {
             "type": "number",
             "maximum": 1.0,
@@ -14700,6 +15742,7 @@
                 "enum": [
                   "airav",
                   "avbase",
+                  "aventertainments",
                   "avsox",
                   "dahlia",
                   "dmm",
@@ -14718,8 +15761,15 @@
                   "kin8",
                   "mgstage",
                   "official",
+                  "1pondo",
+                  "pacopacomama",
+                  "caribbeancom",
+                  "caribbeancompr",
+                  "d2pass",
                   "prestige",
                   "r18dev",
+                  "10musume",
+                  "tokyo_hot",
                   "theporndb",
                   "xcity"
                 ]
@@ -14741,6 +15791,7 @@
                 "enum": [
                   "airav",
                   "avbase",
+                  "aventertainments",
                   "avsox",
                   "dahlia",
                   "dmm",
@@ -14759,8 +15810,15 @@
                   "kin8",
                   "mgstage",
                   "official",
+                  "1pondo",
+                  "pacopacomama",
+                  "caribbeancom",
+                  "caribbeancompr",
+                  "d2pass",
                   "prestige",
                   "r18dev",
+                  "10musume",
+                  "tokyo_hot",
                   "theporndb",
                   "xcity"
                 ]
@@ -14782,6 +15840,7 @@
                 "enum": [
                   "airav",
                   "avbase",
+                  "aventertainments",
                   "avsox",
                   "dahlia",
                   "dmm",
@@ -14800,8 +15859,15 @@
                   "kin8",
                   "mgstage",
                   "official",
+                  "1pondo",
+                  "pacopacomama",
+                  "caribbeancom",
+                  "caribbeancompr",
+                  "d2pass",
                   "prestige",
                   "r18dev",
+                  "10musume",
+                  "tokyo_hot",
                   "theporndb",
                   "xcity"
                 ]
@@ -15445,6 +16511,7 @@
         "enum": [
           "airav",
           "avbase",
+          "aventertainments",
           "avsox",
           "dahlia",
           "dmm",
@@ -15465,9 +16532,18 @@
           "mgstage",
           "minnano",
           "official",
+          "1pondo",
+          "pacopacomama",
+          "caribbeancom",
+          "caribbeancompr",
+          "d2pass",
           "prestige",
           "r18dev",
+          "10musume",
+          "tokyo_hot",
           "theporndb",
+          "tushy",
+          "tushy_raw",
           "wikipedia",
           "xcity"
         ],
@@ -15720,6 +16796,24 @@
           "waifu-photo-2x"
         ],
         "title": "SrPreset"
+      },
+      "SuggestRequest": {
+        "properties": {
+          "originals": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 30,
+            "minItems": 1,
+            "title": "Originals"
+          }
+        },
+        "type": "object",
+        "required": [
+          "originals"
+        ],
+        "title": "SuggestRequest"
       },
       "TaskBatchAction": {
         "type": "string",
@@ -16219,6 +17313,66 @@
         ],
         "title": "TaskListResponse"
       },
+      "TaskLogEntry": {
+        "properties": {
+          "timestamp": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timestamp"
+          },
+          "level": {
+            "type": "string",
+            "title": "Level"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "context": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "level",
+          "source",
+          "message"
+        ],
+        "title": "TaskLogEntry",
+        "description": "与 WebSocket LOG 事件同形; context 是原日志里未映射到固定字段的键."
+      },
+      "TaskLogPage": {
+        "properties": {
+          "entries": {
+            "items": {
+              "$ref": "#/components/schemas/TaskLogEntry"
+            },
+            "type": "array",
+            "title": "Entries"
+          },
+          "truncated": {
+            "type": "boolean",
+            "title": "Truncated",
+            "default": false
+          }
+        },
+        "type": "object",
+        "title": "TaskLogPage"
+      },
       "TaskResponse": {
         "properties": {
           "id": {
@@ -16434,12 +17588,12 @@
           "upscale",
           "r18_import",
           "actor_scrape",
+          "actor_push",
           "rescrape",
           "scan_invalid",
           "delete",
           "semantic_index",
-          "semantic_benchmark",
-          "actor_push"
+          "semantic_benchmark"
         ],
         "title": "TaskType"
       },

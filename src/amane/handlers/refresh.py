@@ -7,9 +7,9 @@ import structlog
 from ..db import TaskType
 from ..library import MEDIA_EXTENSIONS, InventoryStore, LibraryHit, LibraryScan, OrphanScan, scan_inventory
 from ..parsing import parse_file_info
-from ..utils.path import nfc_path
+from ..utils.path import is_descendant, nfc_path
 from ..utils.threads import path_exists, path_is_dir
-from ._common import register_media_file
+from ._common import LibraryTaskLocks, refresh_media_association, register_media_file
 from .models import RefreshPayload, RefreshResult, ScanMode, ScrapePayload
 from .protocol import FollowupTask, TaskHandler, TaskResult
 
@@ -30,13 +30,60 @@ class RefreshHandler(TaskHandler[RefreshPayload, RefreshResult]):
         repo: Repository,
         media_extensions: Sequence[str] | None = None,
         inventory_store: InventoryStore | None = None,
+        library_locks: LibraryTaskLocks | None = None,
     ):
         super().__init__(payload_t=RefreshPayload, result_t=RefreshResult)
         self._repo = repo
         self._media_extensions = frozenset(media_extensions) if media_extensions else MEDIA_EXTENSIONS
         self._inventory_store = inventory_store
+        self._library_locks = library_locks if library_locks is not None else LibraryTaskLocks()
 
     async def handle(self, payload: RefreshPayload) -> TaskResult[RefreshResult]:
+        # 同一媒体库的全量/单目录扫描共用锁，避免多个 REFRESH worker 同时遍历同一库的不同磁盘。
+        lock = await self._library_locks.get(payload.library_id)
+        async with lock:
+            return await self._handle_locked(payload)
+
+    async def _handle_locked(self, payload: RefreshPayload) -> TaskResult[RefreshResult]:
+        # 一个媒体库的一次扫描请求只创建一个 REFRESH 任务；多个根目录在该任务内串行执行。
+        # 只有最后一个根目录负责扇出 SCRAPE，避免前面的目录重复提交全库待刮削文件。
+        if payload.paths:
+            paths = list(dict.fromkeys(path for path in payload.paths if path))
+            if not paths:
+                return TaskResult(success=False, error="至少需要一个扫描路径")
+            total_added = total_removed = total_scrape = total_associated = 0
+            followups: list[FollowupTask] = []
+            for index, scan_path in enumerate(paths):
+                one_payload = payload.model_copy(
+                    update={
+                        "path": scan_path,
+                        "paths": [],
+                        "scrape": payload.scrape if index == len(paths) - 1 else set(),
+                    }
+                )
+                result = await self._handle_locked(one_payload)
+                if not result.success:
+                    return TaskResult(
+                        success=False,
+                        error=f"扫描目录失败 ({scan_path}): {result.error or '未知错误'}",
+                    )
+                if result.result is not None:
+                    total_added += result.result.added
+                    total_removed += result.result.removed
+                    total_scrape += result.result.scrape
+                    total_associated += result.result.associated
+                followups.extend(result.followups)
+            return TaskResult(
+                True,
+                result=RefreshResult(
+                    added=total_added,
+                    removed=total_removed,
+                    scrape=total_scrape,
+                    associated=total_associated,
+                ),
+                followups=followups,
+            )
+
         scan_dir = Path(payload.path)
         if not await path_is_dir(scan_dir):
             return TaskResult(success=False, error=f"不是目录: {payload.path}")
@@ -51,7 +98,7 @@ class RefreshHandler(TaskHandler[RefreshPayload, RefreshResult]):
             subtitle_extensions=library.subtitle_extensions if library is not None else None,
         )
 
-        added = removed = scrape = subtitles = 0
+        added = removed = scrape = subtitles = associated = 0
 
         existing = await self._repo.list_media_files(library_id=payload.library_id, limit=None)
         existing_by_path = {nfc_path(f.path): f for f in existing}
@@ -67,7 +114,15 @@ class RefreshHandler(TaskHandler[RefreshPayload, RefreshResult]):
             if want_add:
                 logger.info("scan walking started", path=payload.path)
                 walked = 0
-                library_root = Path(library.path) if library is not None else scan_dir
+                # 清单根目录必须是本次扫描路径所属的媒体库扫描根; 子目录巡检不能冒充整库扫描。
+                library_roots = (
+                    [Path(root) for root in (library.scan_paths or [library.path])] if library is not None else []
+                )
+                library_root = next((root for root in library_roots if is_descendant(scan_dir, root)), None)
+                if library is not None and library_root is None:
+                    return TaskResult(success=False, error=f"扫描目录不属于当前媒体库: {scan_dir}")
+                if library_root is None:
+                    library_root = scan_dir
                 # 与清理清单共用一趟遍历: 媒体命中用于增删, 无效文件与空目录顺手进清单.
                 inventory = await scan_inventory(
                     scan_dir,
@@ -102,23 +157,42 @@ class RefreshHandler(TaskHandler[RefreshPayload, RefreshResult]):
                     if walked % _WALK_LOG_EVERY == 0:
                         logger.info("scan walking", path=payload.path, seen=walked, added=added)
                     if path_key not in existing_by_path:
+                        # MediaFile.path 全局唯一: 先查其它媒体库的索引, 不重复插入也不擅自转移归属.
+                        globally_existing = await self._repo.get_media_file_by_path(str(file_path))
+                        if globally_existing is not None:
+                            logger.debug(
+                                "file path already indexed in another library",
+                                path=str(file_path),
+                                existing_library_id=globally_existing.library_id,
+                                requested_library_id=payload.library_id,
+                            )
+                            continue
                         media = await register_media_file(self._repo, payload.library_id, file_path, library=library)
+                        if media is None:
+                            continue
                         existing_by_path[path_key] = media
                         added += 1
+                        if payload.associate and await refresh_media_association(self._repo, media):
+                            associated += 1
                     else:
-                        subtitles += await self._sync_external_subtitle(existing_by_path[path_key], hit)
+                        existing_media = existing_by_path[path_key]
+                        subtitles += await self._sync_external_subtitle(existing_media, hit)
+                        if payload.associate and await refresh_media_association(self._repo, existing_media):
+                            associated += 1
                 if added:
                     logger.info("new files discovered", path=payload.path, count=added)
 
             # 删除索引中已不存在的记录.
             if want_remove:
                 if seen is not None:
-                    missing = [f for f in existing if nfc_path(f.path) not in seen]
+                    missing = [
+                        f for f in existing if nfc_path(f.path) not in seen and is_descendant(Path(f.path), scan_dir)
+                    ]
                 else:
                     missing = []
                     for f in existing:
-                        still_there = await path_exists(Path(f.path))
-                        if not still_there:
+                        file_path = Path(f.path)
+                        if is_descendant(file_path, scan_dir) and not await path_exists(file_path):
                             missing.append(f)
                 if missing:
                     logger.info("remove invalid db entries", count=len(missing))
@@ -127,8 +201,10 @@ class RefreshHandler(TaskHandler[RefreshPayload, RefreshResult]):
                         await self._repo.delete_media_file(media.id)
                     removed += len(missing)
 
-        media_files = await self._repo.list_media_files(
-            library_id=payload.library_id, status=payload.scrape, limit=None
+        media_files = (
+            []
+            if payload.associate
+            else await self._repo.list_media_files(library_id=payload.library_id, status=payload.scrape, limit=None)
         )
 
         # 扇出 SCRAPE; 只描述后继, 由完成事务创建.
@@ -152,10 +228,20 @@ class RefreshHandler(TaskHandler[RefreshPayload, RefreshResult]):
             scrape += 1
 
         logger.info(
-            "scan completed", path=payload.path, added=added, removed=removed, scrape=scrape, subtitles=subtitles
+            "scan completed",
+            path=payload.path,
+            added=added,
+            removed=removed,
+            scrape=scrape,
+            associated=associated,
+            subtitles=subtitles,
         )
 
-        return TaskResult(True, result=RefreshResult(added=added, removed=removed, scrape=scrape), followups=followups)
+        return TaskResult(
+            True,
+            result=RefreshResult(added=added, removed=removed, scrape=scrape, associated=associated),
+            followups=followups,
+        )
 
     async def _sync_external_subtitle(self, media: MediaFile, hit: LibraryHit) -> int:
         """按本次遍历所见回写已登记行的外挂字幕标记; 未变化返回 0.

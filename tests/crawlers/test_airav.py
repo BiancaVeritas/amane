@@ -77,3 +77,13 @@ async def test_search_uses_site_spelling(
     crawler = AiravCrawler(client=http_client(web))
     assert await crawler._search(SearchQuery(query)) == expected_url
     assert web.get_text.await_count == expected_calls
+
+
+def test_strip_source_label_prefixes() -> None:
+    from amane.crawlers.sites.airav import _strip_source_label
+
+    assert _strip_source_label("caribbeancom_051318-665") == "051318-665"
+    assert _strip_source_label("1pondo051318_001") == "051318_001"
+    assert _strip_source_label("10musume-051318_01") == "051318_01"
+    assert _strip_source_label("pacopacomama051318_001") == "051318_001"
+    assert _strip_source_label("HEYZO-3607") == "HEYZO-3607"

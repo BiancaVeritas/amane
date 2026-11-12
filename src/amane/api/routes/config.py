@@ -4,8 +4,9 @@ import structlog
 from fastapi import APIRouter, HTTPException
 from pydantic import ValidationError
 
-from ...config import HotSettings
+from ...config import HotSettings, MediaServerConfig
 from ...events import Event, EventType
+from ...media_server import MediaServerClient, MediaServerError
 from ..deps import ConfigDep, PluginManagerDep, RuntimeDep
 
 logger = structlog.get_logger()
@@ -13,9 +14,32 @@ logger = structlog.get_logger()
 router = APIRouter(prefix="/config", tags=["config"])
 
 
+def _masked_settings(settings: HotSettings) -> HotSettings:
+    media_server = settings.media_server.model_copy(
+        update={"api_key": "**********" if settings.media_server.api_key else None}
+    )
+    return settings.model_copy(update={"media_server": media_server})
+
+
+@router.post("/media-server/test")
+async def test_media_server_connection(config: MediaServerConfig, current: ConfigDep) -> dict[str, object]:
+    """测试 Emby/Jellyfin 连接与 API Key, 不写入配置; 掩码值复用已保存密钥."""
+    if config.api_key == "**********":
+        config = config.model_copy(update={"api_key": current.hot.media_server.api_key})
+    if not config.enabled:
+        raise HTTPException(status_code=400, detail="请先填写服务器地址和 API Key")
+    try:
+        async with MediaServerClient(config) as client:
+            persons = await client.list_persons()
+    except MediaServerError as exc:
+        raise HTTPException(status_code=502, detail=f"媒体服务器连接失败: {exc}") from exc
+    return {"success": True, "kind": config.kind, "people_count": len(persons)}
+
+
 @router.get("")
 async def get_config(config: ConfigDep) -> HotSettings:
-    return config.hot
+    # 不把媒体服务器 API Key 明文返回浏览器; 未修改时前端回传掩码会被 update_config 忽略.
+    return _masked_settings(config.hot)
 
 
 @router.patch("")
@@ -38,7 +62,7 @@ async def update_config(req: dict[str, Any], config: ConfigDep, runtime: Runtime
 
     await runtime.event_bus.broadcast(Event(type=EventType.LOG, data={"type": "config.updated"}))
 
-    return config.hot
+    return _masked_settings(config.hot)
 
 
 @router.get("/schema")

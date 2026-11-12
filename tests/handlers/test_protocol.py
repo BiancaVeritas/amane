@@ -39,6 +39,21 @@ from amane.observability.models import (
 
 RESULT_CASES = [
     pytest.param(
+        ActorPushResult(
+            requested=5,
+            matched=4,
+            updated=3,
+            images=2,
+            skipped=1,
+            not_found=1,
+            no_image=0,
+            missing=0,
+            failed=0,
+            failures=[],
+        ),
+        id="actor_push",
+    ),
+    pytest.param(
         ScrapeResult(
             metadata_id=7,
             field_sources={"title": "dmm"},
@@ -65,21 +80,6 @@ RESULT_CASES = [
             outcomes=[SiteOutcomeRecord(site="wikipedia", outcome=SiteOutcomeKind.OK)],
         ),
         id="actor_scrape",
-    ),
-    pytest.param(
-        ActorPushResult(
-            requested=3,
-            matched=2,
-            updated=1,
-            images=1,
-            skipped=1,
-            not_found=1,
-            no_image=1,
-            missing=0,
-            failed=0,
-            failures=[],
-        ),
-        id="actor_push",
     ),
     pytest.param(
         OrganizeResult(

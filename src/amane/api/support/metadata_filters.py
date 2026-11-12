@@ -63,7 +63,7 @@ async def parse_metadata_filters(
     publisher_id: Annotated[list[int] | None, Query(description="Filter by publisher facet id(s); OR")] = None,
     series_id: Annotated[list[int] | None, Query(description="Filter by series facet id(s); OR")] = None,
     user_tag_id: Annotated[list[int] | None, Query(description="Filter by user tag id(s); AND")] = None,
-    library_id: Annotated[list[int] | None, Query(description="Filter by linked MediaFile library id(s); OR")] = None,
+    library_id: Annotated[list[int] | None, Query(description="Filter by current media library id(s)")] = None,
     has_files: Annotated[bool | None, Query(description="Filter by presence of linked MediaFile(s)")] = None,
     has_subtitle: Annotated[bool | None, Query(description="Filter by linked file subtitle marker")] = None,
     vr: Annotated[bool | None, Query(description="Filter by VR marker (entry tag vocabulary)")] = None,

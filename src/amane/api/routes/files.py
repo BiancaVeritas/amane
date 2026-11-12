@@ -67,6 +67,23 @@ def _list_files_sync(path: str, base: str | None, show_hidden: bool, safe_dirs: 
     if safe_dirs is not None and not safe_dirs:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="尚未配置安全目录")
 
+    # Emby 风格起始页：Windows 枚举盘符；NAS 只展示映射给 Amane 的安全根目录。
+    if path == "__roots__":
+        roots: list[Path] = []
+        if safe_dirs is not None:
+            roots = [root for root in safe_dirs if root.exists() and root.is_dir()]
+        elif os.name == "nt":
+            import ctypes
+            import string
+
+            mask = ctypes.windll.kernel32.GetLogicalDrives()
+            roots = [Path(f"{letter}:/") for index, letter in enumerate(string.ascii_uppercase) if mask & (1 << index)]
+        else:
+            roots = [Path("/")]
+        items = [FileItem(name=root.name or root.anchor, path=str(root.as_posix()), type="directory") for root in roots]
+        items.sort(key=lambda item: item.name.casefold())
+        return FileListResponse(path="__roots__", items=items, total=len(items))
+
     p = Path(path)
     try:
         # 非严格解析: 虚拟/网络挂载盘 (CloudDrive2 等) 无法规范化查询时按字面继续,

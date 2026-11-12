@@ -64,9 +64,12 @@ def _handler(repo: Repository) -> ScrapeHandler:
 async def _library_with_file(repo: Repository, tmp_path: Path, *, auto_organize: bool) -> tuple[int, int]:
     lib_root = tmp_path / "lib"
     lib_root.mkdir(exist_ok=True)
-    lib = await repo.create_library(name="t", path=str(lib_root), auto_organize=auto_organize)
+    lib = await repo.create_library(
+        name="t", path=str(lib_root), organize_path=str(lib_root), auto_organize=auto_organize
+    )
     assert lib.id is not None
     media = await register_media_file(repo, lib.id, lib_root / "incoming" / "MIDV-123.mp4")
+    assert media is not None
     assert media.id is not None
     return lib.id, media.id
 
@@ -216,7 +219,9 @@ async def test_repeated_single_file_organize_keeps_file_in_place(
     incoming.mkdir(parents=True)
     src = incoming / "MIDV-123.mp4"
     src.write_bytes(b"video")
-    lib = await repo.create_library(name="t", path=str(lib_root), write_nfo=False, auto_organize=True)
+    lib = await repo.create_library(
+        name="t", path=str(lib_root), organize_path=str(lib_root), write_nfo=False, auto_organize=True
+    )
     assert lib.id is not None
     meta = await repo.upsert_metadata(number="MIDV-123", studio="Studio")
     assert meta.id is not None

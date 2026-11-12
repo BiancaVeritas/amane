@@ -32,29 +32,37 @@ class MetadataResponse(BaseModel):
     number: str
     content_type: ContentType
     title: str | None = None
+    original_title: str | None = None
     actors: list[str] = []
+    actor_genders: dict[str, ActorGender] = Field(default_factory=dict)
     studio: str | None = None
     publisher: str | None = None
     release: str | None = None
     runtime: int | None = None
     tags: list[str] = []
     series: str | None = None
+    series_names: list[str] = []
     plot: str | None = None
+    original_plot: str | None = None
     directors: list[str] = []
     poster_url: str | None = None
-    thumb_url: str | None = None
+    cover_url: str | None = None
     trailer_url: str | None = None
     extrafanart: list[str] = []
     score: float | None = None
     vr: bool = False
+    original_poster_urls: list[str] = []
     poster_urls: list[str] = []
-    thumb_urls: list[str] = []
+    cover_urls: list[str] = []
+    original_cover_urls: list[str] = []
     trailer_urls: list[str] = []
     extrafanart_urls: dict = {}
     scores: dict[str, float] = {}
     external_ids: dict = {}
+    theporndb_uuid: str | None = None
     source_urls: dict = {}
     field_sources: dict = {}
+    image_sources: dict[str, str] = {}
     raw: dict = {}
     locked_fields: list[MetadataField] = []
 
@@ -64,7 +72,12 @@ class MetadataResponse(BaseModel):
         """非法存量锁值忽略."""
         if not isinstance(value, list):
             return []
-        return list(dict.fromkeys(item for item in value if isinstance(item, str) and item in _METADATA_FIELD_VALUES))
+        normalized = [
+            "cover_urls" if item == "thumb_urls" else item
+            for item in value
+            if isinstance(item, str) and (item == "thumb_urls" or item in _METADATA_FIELD_VALUES)
+        ]
+        return list(dict.fromkeys(normalized))
 
     file_count: int = 0
     file_phase: FilePhaseSummary = Field(default_factory=FilePhaseSummary)
@@ -82,14 +95,18 @@ PartialMetadata = create_partial_model(
         "id",
         "number",
         "content_type",
+        "theporndb_uuid",
         "created_at",
         "updated_at",
         "raw",
         "field_sources",
+        "image_sources",
         "locked_fields",
     ),
     json_schema_extras={
         "extrafanart_urls": anyof_extras(kv({"v-x-long": True})),
+        "plot": anyof_extras(kv({"x-long": True})),
+        "original_plot": anyof_extras(kv({"x-long": True})),
         "release": anyof_extras(
             {
                 "description": "发行日 (YYYY-MM-DD); 也可输入带时刻的 ISO 串, 服务端只保留日期",
@@ -129,19 +146,11 @@ class MetadataDetailResponse(BaseModel):
     studio_id: int | None = None
     publisher_id: int | None = None
     series_id: int | None = None
+    series_ids: dict[str, int] = Field(default_factory=dict)
 
 
 class MergeRequest(BaseModel):
     selections: dict[str, str] = Field(description="field_name -> source_key 映射")
-
-
-class MetadataMergeEntriesRequest(BaseModel):
-    target_id: int = Field(description="合并目标 Metadata ID; 其字段与已有站点快照保持不变")
-    source_ids: list[int] = Field(min_length=1, description="待合并的 Metadata ID 列表; 按顺序补入 raw 快照")
-    rescrape: bool = Field(
-        default=False,
-        description="合并后按当前优先级对目标番号入队 SCRAPE, 复用 raw 缓存重新聚合字段",
-    )
 
 
 class MetadataLocksRequest(BaseModel):
@@ -149,9 +158,16 @@ class MetadataLocksRequest(BaseModel):
 
     fields: list[MetadataField] = Field(default_factory=list, description="锁定的字段集合; 空集解除全部锁定")
 
+    @field_validator("fields", mode="before")
+    @classmethod
+    def _normalize_legacy_cover_lock(cls, value: object) -> object:
+        if not isinstance(value, list):
+            return value
+        return ["cover_urls" if item == "thumb_urls" else item for item in value]
+
 
 class CropPosterRequest(CropBoxRequest):
-    """从封面图按像素框裁切海报 (相对 thumb 当前本地文件像素; 含就地超分后尺寸)."""
+    """从封面图按像素框裁切海报 (相对 cover 当前本地文件像素; 含就地超分后尺寸)."""
 
 
 class MetadataBatchIdsRequest(BaseModel):

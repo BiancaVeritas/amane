@@ -24,7 +24,7 @@ Webhook 的 `source_file` / `destination_file` 是 CloudDrive **虚拟路径** (
 
 分流: 规范化后对所有 clouddrive 且 `automation≠none` 的库做最长 `cloud_path` 前缀匹配, 再按 posix 段拼到 `Library.path`. 创建 / 更新时拒绝与其它 clouddrive 库相同或互为前缀的 `cloud_path` (等长重复与嵌套均冲突). `mount_point_watcher` 的 `{mount_point}` 是宿主挂载点, 本通道不读.
 
-native Observer 启动失败 (如 inotify 配额) 只停掉 FileWatcher, 已登记的 cloud 路由与 webhook 接收仍保留; `add_library` 热启动失败同样清掉未启动的实例, 不把 `_watcher` 留成半开状态.
+native Observer 启动失败 (如 inotify 配额) 只停掉 FileWatcher, 已登记的 cloud 路由与 webhook 接收仍保留; `add_library` 按 `library_id` 替换 native 监听, 重复调用不会产生重复 handler; 热启动失败同样清掉未启动的实例, 不把 `_watcher` 留成半开状态.
 
 ## Webhook 载荷
 

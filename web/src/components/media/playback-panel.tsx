@@ -34,6 +34,7 @@ import { LazyPlaybackPlayer } from "@/components/media/playback-player-lazy";
 import { extractErrorMessage } from "@/lib/api-error";
 import { apiFetch } from "@/lib/api-token";
 import { orderPlaybackSources } from "@/lib/media/source-order";
+import { displaySourceName } from "@/lib/source-display";
 import { useUIStore } from "@/stores/ui";
 
 const EMPTY_SOURCES: PlaybackSourceOption[] = [];
@@ -438,7 +439,7 @@ export function PlaybackPanel({
         value: streamKey(item),
         label: item.available
           ? item.name
-          : t("detail.playbackUnavailableOption", { name: item.name }),
+          : t("detail.playbackUnavailableOption", { name: displaySourceName(item.name) }),
       }))}
       value={streamKey(selected)}
       onChange={(key) => setPickedStream({ sourceId: source.source_id, key })}
@@ -462,13 +463,16 @@ export function PlaybackPanel({
             {sources.length > 1 ? (
               <LevelPicker
                 label={t("detail.playbackSourceLabel")}
-                options={sources.map((item) => ({ value: item.source_id, label: item.name }))}
+                options={sources.map((item) => ({
+                  value: item.source_id,
+                  label: displaySourceName(item.name),
+                }))}
                 value={source.source_id}
                 onChange={setPickedSourceId}
               />
             ) : (
               <Text size="xs" c="dimmed">
-                {source.name}
+                {displaySourceName(source.name)}
               </Text>
             )}
             {streamPicker}

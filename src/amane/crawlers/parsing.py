@@ -65,6 +65,32 @@ def extract_all_texts(html: Selector, *selectors: SelectorType) -> list[str]:
     return []
 
 
+def extract_linked_texts(html: Selector, *container_selectors: SelectorType) -> list[str]:
+    """按指定容器内的独立链接提取文本, 不把多个链接压平成一个姓名.
+
+    选择器必须先限定到演员等目标字段; 本函数只负责保留该字段内每个 ``a`` 节点的边界.
+    """
+    for selector in container_selectors:
+        try:
+            if isinstance(selector, CSSSelector):
+                containers = html.css(selector)
+            elif isinstance(selector, re.Pattern):
+                continue
+            else:
+                containers = html.xpath(selector)
+            names = [
+                clean_string(anchor.xpath("string(.)").get())
+                for container in containers
+                for anchor in container.xpath(".//a")
+            ]
+            names = [name for name in names if name]
+            if names:
+                return names
+        except AttributeError, TypeError, IndexError:
+            continue
+    return []
+
+
 def next_data_props(html: str) -> dict[str, Any] | None:
     """取内嵌服务端数据的 ``props.pageProps``; 无脚本 / JSON 不合法 / 结构不符时返回 None."""
     match = _NEXT_DATA_RE.search(html)

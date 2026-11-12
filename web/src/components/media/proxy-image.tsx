@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ImgHTMLAttributes, type ReactNode } from "react";
 import { PROXY_IMAGE_PREFIX, useQueuedImageUrl } from "@/lib/image-loader";
+import { useConfig } from "@/hooks/use-config";
 
 export interface ProxyImageProps extends ImgHTMLAttributes<HTMLImageElement> {
   /** 排队等待期间渲染的内容. 默认空 div: 在 Mantine AspectRatio 内会被
@@ -30,7 +31,12 @@ export function ProxyImage({
   loading,
   ...rest
 }: ProxyImageProps) {
-  const isProxied = Boolean(src && src.startsWith(PROXY_IMAGE_PREFIX));
+  const { data: config } = useConfig();
+  const cacheMode = config?.sr?.enabled ? "sr" : "original";
+  const isResourceEndpoint = Boolean(src && src.startsWith("/api/resources/"));
+  const cacheKeyedSrc =
+    src && isResourceEndpoint ? `${src}${src.includes("?") ? "&" : "?"}mode=${cacheMode}` : src;
+  const isProxied = Boolean(cacheKeyedSrc && cacheKeyedSrc.startsWith(PROXY_IMAGE_PREFIX));
   const hostRef = useRef<HTMLDivElement>(null);
   const [nearViewport, setNearViewport] = useState(!isProxied);
   if (!isProxied && !nearViewport) {
@@ -56,7 +62,9 @@ export function ProxyImage({
     return () => observer.disconnect();
   }, [isProxied]);
 
-  const { src: queuedSrc, release } = useQueuedImageUrl(isProxied && nearViewport ? src : null);
+  const { src: queuedSrc, release } = useQueuedImageUrl(
+    isProxied && nearViewport ? cacheKeyedSrc : null,
+  );
 
   if (isProxied) {
     if (!queuedSrc) {
@@ -87,7 +95,6 @@ export function ProxyImage({
       />
     );
   }
-  if (!src) return placeholder;
-  // onLoad/onError 已从 rest 中解构, 本分支要显式接回: 本地资源图的自然尺寸与失败回退同样依赖它们
-  return <img {...rest} src={src} loading={loading} onLoad={onLoad} onError={onError} />;
+  if (!cacheKeyedSrc) return placeholder;
+  return <img {...rest} src={cacheKeyedSrc} loading={loading} />;
 }

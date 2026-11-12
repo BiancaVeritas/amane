@@ -140,7 +140,7 @@ async def test_purges_unreferenced_resources(cleanup_env):
 
     await repo.upsert_metadata(
         number="KEEP-1",
-        thumb_urls=[keep.url],
+        cover_urls=[keep.url],
         poster_urls=[f"{RESOURCE_URL_PREFIX}/{ResourceStore.url_hash(keep.url)}"],
     )
 

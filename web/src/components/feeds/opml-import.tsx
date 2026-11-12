@@ -171,7 +171,9 @@ export function OpmlImportButton({
             description={t("importAutoEnqueueHint")}
             checked={autoEnqueue}
             disabled={importing}
-            onChange={(event) => setAutoEnqueue(event.currentTarget.checked)}
+            onChange={(event) =>
+              setAutoEnqueue(event.target instanceof HTMLInputElement && event.target.checked)
+            }
           />
           <Checkbox.Group value={selected} onChange={setSelected}>
             {/* 窄屏降低列表高度, 避免弹窗自身滚动与列表滚动形成双层. */}

@@ -16,7 +16,6 @@ from amane.config import (
     ConfigManager,
     DownloadableResource,
     HotSettings,
-    MediaServerConfig,
     ScrapingConfig,
     SiteConfig,
     WatermarkConfig,
@@ -157,40 +156,6 @@ class TestHotSettings:
             HotSettings(worker=WorkerConfig(poll_interval=11.0))
 
 
-class TestMediaServerConfig:
-    """Emby / Jellyfin 推送配置的归一化与启用判据."""
-
-    @pytest.mark.parametrize(
-        ("raw", "expected"),
-        [
-            (" http://media.local:8096/ ", "http://media.local:8096"),
-            ("https://media.example/api/", "https://media.example/api"),
-            (None, None),
-            ("", None),
-            ("   ", None),
-        ],
-    )
-    def test_url_normalized(self, raw: str | None, expected: str | None):
-        assert MediaServerConfig(url=raw).url == expected
-
-    def test_url_requires_scheme(self):
-        with pytest.raises(ValidationError, match=r"http://"):
-            MediaServerConfig(url="media.local:8096")
-
-    @pytest.mark.parametrize(
-        ("url", "api_key", "expected"),
-        [
-            ("http://media.local", "key", True),
-            ("http://media.local", None, False),
-            ("http://media.local", "   ", False),
-            (None, "key", False),
-            ("", "", False),
-        ],
-    )
-    def test_enabled(self, url: str, api_key: str | None, expected: bool):
-        assert MediaServerConfig(url=url, api_key=api_key).enabled is expected
-
-
 class TestScrapingDownloadResources:
     """download_resources 旧字段迁移."""
 
@@ -254,7 +219,20 @@ class TestBrowserTimeoutMigration:
             ({"network": {"browser": {"backend": "solver"}}}, 30000),
         ],
     )
-    def test_browser_timeout_moves_into_browser_config(self, payload: dict, expected: int):
+    def test_browser_timeout_moves_into_browser_config(
+        self, payload: dict, expected: int, monkeypatch: pytest.MonkeyPatch
+    ):
+        import importlib
+
+        original_import_module = importlib.import_module
+
+        def _import_module(name: str):
+            if name == "camoufox":
+                return object()
+            return original_import_module(name)
+
+        monkeypatch.setattr("amane.config.manager.importlib.import_module", _import_module)
+
         cfg = HotSettings.model_validate(payload)
         assert cfg.network.browser.timeout == expected
 
@@ -386,17 +364,37 @@ class TestScrapingPriorityMigration:
         assert set(cfg.content_routes) == set(ContentType)
         assert cfg.content_routes[ContentType.FC2] == ScrapingConfig().content_routes[ContentType.FC2]
 
+    def test_uncensored_poster_ratio_is_independent(self):
+        cfg = ScrapingConfig.model_validate({"poster_ratio": 0.65, "uncensored_poster_ratio": 0.82})
+        assert cfg.poster_ratio == 0.65
+        assert cfg.uncensored_poster_ratio == 0.82
+        assert ScrapingConfig().uncensored_poster_ratio == 0.87
+
+    def test_legacy_uncensored_default_route_adds_aventertainments(self):
+        cfg = ScrapingConfig.model_validate(
+            {"content_routes": {"uncensored": ["javdb", "javbus", "avsox", "freejavbt"]}}
+        )
+        assert cfg.content_routes[ContentType.UNCENSORED] == [
+            SiteName.JAVDB,
+            SiteName.JAVBUS,
+            SiteName.AVSOX,
+            SiteName.FREEJAVBT,
+            SiteName.AVENTERTAINMENTS,
+        ]
+
     def test_default_routes_type_specific_heads(self):
         routes = ScrapingConfig().content_routes
         assert routes[ContentType.AMATEUR][0] == SiteName.MGSTAGE
         assert routes[ContentType.CHINESE][0] == SiteName.IQQTV
         assert routes[ContentType.HENTAI][0] == SiteName.GETCHU
         assert routes[ContentType.WESTERN][0] == SiteName.THEPORNDB
-        assert SiteName.AVSOX in routes[ContentType.UNCENSORED]
+        assert routes[ContentType.UNCENSORED][0] == SiteName.AVENTERTAINMENTS
+        assert routes[ContentType.UNCENSORED].index(SiteName.CARIBBEANCOMPR) < routes[ContentType.UNCENSORED].index(
+            SiteName.D2PASS
+        )
         assert SiteName.FC2PPVDB in routes[ContentType.FC2]
         # 官方电子市场下架的作品只剩索引站在线看站收录, airav 排在 fc2 路线的链尾
         assert routes[ContentType.FC2][-1] == SiteName.AIRAV
-        assert SiteName.OFFICIAL in routes[ContentType.CENSORED]
 
 
 class TestFrozenKeyDictCompleteness:
@@ -751,3 +749,16 @@ class TestBskBackendAvailability:
 
         with pytest.raises(ValidationError, match="未找到 bsk CLI"):
             BrowserConfig(bsk_path=str(tmp_path / "absent"), backend=BrowserBackendName.BSK)
+
+
+def test_default_uncensored_route_appends_d2pass() -> None:
+    cfg = ScrapingConfig()
+    assert cfg.content_routes[ContentType.UNCENSORED][-1] == SiteName.D2PASS
+
+
+def test_default_actor_source_orders() -> None:
+    from amane.config.manager import ActorScrapingConfig
+
+    cfg = ActorScrapingConfig()
+    assert [str(site) for site in cfg.profile_sites] == ["minnano", "theporndb", "wikipedia", "javdb", "avbase"]
+    assert [str(site) for site in cfg.image_sites] == ["tushy", "tushy_raw", "gfriends"]

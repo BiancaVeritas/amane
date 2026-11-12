@@ -1,14 +1,4 @@
-import {
-  ActionIcon,
-  Anchor,
-  Badge,
-  Group,
-  Paper,
-  Skeleton,
-  Stack,
-  Text,
-  Tooltip,
-} from "@mantine/core";
+import { Anchor, Badge, Button, Group, Paper, Skeleton, Stack, Text, Tooltip } from "@mantine/core";
 import { useQuery } from "@tanstack/react-query";
 import { IconRefresh } from "@tabler/icons-react";
 import { useTranslation } from "react-i18next";
@@ -24,6 +14,8 @@ function backendLabel(backend: BrowserBackendName): string {
       return "Camoufox";
     case "bsk":
       return "BrowserSkill";
+    case "remote":
+      return "NAS Browser";
     case "solver":
       return "Solver";
     case "off":
@@ -40,6 +32,7 @@ function BackendHint({ backend }: { backend: string }) {
       {backend === "patchright" && t("backend.hint.patchright")}
       {backend === "camoufox" && t("backend.hint.camoufox")}
       {backend === "solver" && t("backend.hint.solver")}
+      {backend === "remote" && t("backend.hint.remote")}
       {backend === "bsk" && (
         <>
           {t("backend.hint.bsk")}{" "}
@@ -86,16 +79,15 @@ export function BrowserBackendPanel() {
             {t("backend.description")}
           </Text>
         </Stack>
-        <Tooltip label={t("backend.refresh")}>
-          <ActionIcon
-            variant="subtle"
-            aria-label={t("backend.refresh")}
-            loading={isFetching && !isPending}
-            onClick={() => void refetch()}
-          >
-            <IconRefresh size={18} />
-          </ActionIcon>
-        </Tooltip>
+        <Button
+          variant="light"
+          size="xs"
+          leftSection={<IconRefresh size={14} />}
+          loading={isFetching && !isPending}
+          onClick={() => void refetch()}
+        >
+          {t("backend.testConnection")}
+        </Button>
       </Group>
 
       {isPending ? (

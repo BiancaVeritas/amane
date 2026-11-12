@@ -20,8 +20,6 @@
     "advancedHint": "在对应类型中搜索并添加筛选条件",
     "facetPlaceholder": "搜索…",
     "facetEmpty": "无匹配",
-    "library": "媒体库",
-    "libraryAll": "全部媒体库",
     "hasFiles": "关联文件",
     "hasFilesAny": "不限",
     "hasFilesYes": "有文件",
@@ -48,7 +46,9 @@
       "uncensored": "无码",
       "cracked": "破解",
       "leaked": "流出"
-    }
+    },
+    "library": "媒体库",
+    "libraryAll": "全部媒体库"
   },
   "filePhase": {
     "subtitle": "中字",
@@ -81,6 +81,7 @@
   "detail": {
     "fields": {
       "title": "标题",
+      "originalTitle": "原标题",
       "studio": "制作商",
       "publisher": "发行商",
       "release": "发行日期",
@@ -92,8 +93,10 @@
       "actors": "演员",
       "tags": "标签",
       "plot": "剧情",
+      "originalPlot": "原剧情",
       "trailer": "预告片",
       "poster": "海报",
+      "cover": "封面",
       "thumb": "封面",
       "extrafanart": "剧照",
       "sourceUrls": "来源链接"
@@ -130,6 +133,10 @@
     "closeTrailer": "关闭预告片",
     "trailerFailed": "无法播放此预告片",
     "coverUnavailable": "封面不可用",
+    "uploadCover": "上传封面",
+    "uploadPoster": "上传海报",
+    "uploadCoverSuccess": "封面已替换并自动锁定",
+    "uploadPosterSuccess": "海报已替换并自动锁定",
     "playback": "播放",
     "playbackFailed": "无法播放此码流",
     "playbackFailedWithStatus": "无法播放此码流(HTTP {{status}})",
@@ -161,10 +168,12 @@
       "rotateLeft": "向左旋转 90°",
       "rotateRight": "向右旋转 90°",
       "resetRotation": "复位",
+      "saveStandardPreset": "保存为常规预设",
+      "saveUncensoredPreset": "保存为无码预设",
       "confirm": "裁切并保存",
       "needSelection": "请先框选有效区域",
       "success": "海报已更新",
-      "noThumb": "需要封面图才能裁切海报"
+      "noCover": "需要封面图才能裁切海报"
     },
     "playbackCopyTimestamp": "复制时间戳",
     "playbackCopyLink": "复制当前时间的链接",
@@ -218,7 +227,8 @@
   "view": {
     "grid": "海报",
     "list": "列表",
-    "cloud": "词云"
+    "cloud": "词云",
+    "cover": "封面"
   },
   "favorite": {
     "add": "收藏",
@@ -292,7 +302,14 @@
     "removeImage": "删除这张头像",
     "rawSources": "刮削来源快照",
     "rawSourcesHint": "各站原始快照, 只读; 供离线重新聚合",
-    "viewAll": "查看全部 {{count}} 位"
+    "viewAll": "查看全部 {{count}} 位",
+    "syncToMediaServer": "同步到媒体服务器",
+    "syncSubmitted": "已提交演员同步任务",
+    "fullSync": "完整同步",
+    "incrementalSync": "增量同步",
+    "chooseSyncMode": "选择同步模式",
+    "fullSyncConfirmTitle": "确认完整同步",
+    "fullSyncConfirmMessage": "将使用 Amane 中有值的演员资料覆盖媒体服务器中的对应资料。Amane 中没有内容的字段不会被清空。确定继续吗？"
   },
   "notFound": "未找到影片",
   "invalidId": "无效的影片 ID",
@@ -301,6 +318,9 @@
   "editor": {
     "title": {
       "label": "标题"
+    },
+    "original_title": {
+      "label": "原标题"
     },
     "actors": {
       "label": "演员"
@@ -327,13 +347,22 @@
     "plot": {
       "label": "剧情"
     },
+    "original_plot": {
+      "label": "原剧情"
+    },
     "directors": {
       "label": "导演"
     },
     "poster_urls": {
       "label": "海报 URL"
     },
-    "thumb_urls": {
+    "original_poster_urls": {
+      "label": "原海报 URL"
+    },
+    "original_cover_urls": {
+      "label": "原封面 URL"
+    },
+    "cover_urls": {
       "label": "封面 URL"
     },
     "trailer_urls": {
@@ -346,10 +375,22 @@
       "label": "评分"
     },
     "external_ids": {
-      "label": "外部 ID"
+      "label": "外部 ID",
+      "options": {
+        "caribbeancom": "Caribbeancom",
+        "caribbeancompr": "Caribbeancompr",
+        "pacopacomama": "Pacopacomama",
+        "tokyo_hot": "Tokyo-Hot"
+      }
     },
     "source_urls": {
-      "label": "来源链接"
+      "label": "来源链接",
+      "options": {
+        "caribbeancom": "Caribbeancom",
+        "caribbeancompr": "Caribbeancompr",
+        "pacopacomama": "Pacopacomama",
+        "tokyo_hot": "Tokyo-Hot"
+      }
     }
   },
   "manage": {
@@ -360,17 +401,6 @@
     "merge": "合并到此项",
     "mergeConfirm": "确认合并",
     "mergeConfirmBody": "将把 {{count}} 个来源合并到目标项",
-    "mergeEntriesLead": "将 {{count}} 部影片合并到「{{number}}」",
-    "mergeEntriesKeep": "目标影片保留, 现有字段保持不变",
-    "mergeEntriesRaw": "其余影片的刮削来源快照并入目标",
-    "mergeEntriesLinks": "评论、用户标签与关联文件转移到目标",
-    "mergeEntriesDelete": "其余影片会被删除",
-    "mergeEntriesRescrape": "合并后重新刮削 (按优先级重新聚合字段)",
-    "mergeActorLead": "将 {{count}} 名演员合并到「{{name}}」",
-    "mergeActorAlias": "来源演员的名字成为目标的别名",
-    "mergeActorFill": "人物信息填补目标的空缺",
-    "mergeActorTags": "来源演员的用户标签转移到目标",
-    "mergeActorDelete": "来源演员会被删除",
     "deleteFacetBody": "将从所有影片中移除「{{name}}」, 并加入剔除名单, 后续刮削时自动剔除",
     "deleteUserTagBody": "确定永久删除用户标签 「{{name}}」？将从所有影片上移除该标签",
     "rulesTitle": "分类规则",

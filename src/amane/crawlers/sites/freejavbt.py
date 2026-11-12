@@ -68,7 +68,7 @@ class FreejavbtCrawler(Crawler):
             tags=extract_all_texts(
                 html, '//div[contains(@class,"single-video-meta")]//a[contains(@class,"btn-danger")]/text()'
             ),
-            thumb_urls=[cover] if cover else [],
+            cover_urls=[cover] if cover else [],
             extrafanart=extract_all_texts(
                 html, '//div[contains(@class,"preview")]//a[contains(@class,"tile-item")]/@href'
             ),

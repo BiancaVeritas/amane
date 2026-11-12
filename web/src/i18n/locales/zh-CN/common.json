@@ -22,7 +22,7 @@
     "scrapeNormal": "刮削",
     "scrapeNormalDesc": "不重新获取已缓存数据",
     "scrapeForce": "强制刮削",
-    "scrapeForceDesc": "重新获取全部来源(覆盖缓存)",
+    "scrapeForceDesc": "重新获取全部来源（覆盖缓存）",
     "moveUp": "上移",
     "moveDown": "下移"
   },
@@ -162,5 +162,24 @@
     "description": "渲染此页面时抛出了未捕获的异常, 详情见下方",
     "retry": "重试",
     "switchServer": "切换服务器"
+  },
+  "browseSettings": {
+    "title": "显示设置",
+    "cardSize": "图片大小",
+    "pageSize": "每页显示数量",
+    "sizes": {
+      "0": "超小",
+      "1": "特小",
+      "2": "小",
+      "3": "中",
+      "4": "默认",
+      "5": "大",
+      "6": "特大",
+      "7": "超大"
+    }
+  },
+  "detail": {
+    "commentSeek": "跳转到 {{time}}",
+    "playbackUnavailable": "播放源不可用"
   }
 }

@@ -3,5 +3,6 @@
   "empty": "空目录",
   "selectAll": "全选",
   "selectDir": "选择此目录",
-  "toggleHidden": "切换隐藏文件显示"
+  "toggleHidden": "切换隐藏文件显示",
+  "locations": "位置列表"
 }

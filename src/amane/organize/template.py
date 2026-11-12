@@ -37,6 +37,7 @@ TemplateVariables = TypedDict(
     {
         "number": str,
         "prefix": str,
+        "raw_prefix": str,
         "suffix": str,
         "title": str,
         "actor": str,
@@ -46,6 +47,7 @@ TemplateVariables = TypedDict(
         "studio": str,
         "publisher": str,
         "series": str,
+        "series_names": str,
         "year": str,
         "release": str,
         "ext": str,
@@ -63,8 +65,6 @@ TemplateVariables = TypedDict(
         "link_dir": str,
         "link_name": str,
         "raw_srt_name": str,
-        "index": str,
-        "index_padded": str,
     },
 )
 PLACEHOLDERS: tuple[str, ...] = tuple(TemplateVariables.__annotations__)
@@ -329,10 +329,17 @@ def _build_variables(
     if cd is None and file_info is not None:
         cd = file_info.cd
     prefix, suffix = split_number(metadata.number) if metadata.number else ("", "")
+    raw_prefix = ""
+    if prefix:
+        upper_number = metadata.number.upper()
+        upper_prefix = prefix.upper()
+        prefix_index = 0 if upper_number.startswith(upper_prefix) else upper_number.find(upper_prefix)
+        raw_prefix = metadata.number[prefix_index : prefix_index + len(prefix)] if prefix_index >= 0 else prefix
 
     return {
         "number": metadata.number,
         "prefix": prefix,
+        "raw_prefix": raw_prefix,
         "suffix": suffix,
         "title": _safe(metadata.title) or metadata.number,
         "actor": _safe(actor) or _UNKNOWN,
@@ -342,6 +349,12 @@ def _build_variables(
         "studio": _safe(metadata.studio) or _UNKNOWN,
         "publisher": _safe(metadata.publisher) or _UNKNOWN,
         "series": _safe(metadata.series) or _UNKNOWN,
+        "series_names": ",".join(
+            safe_name
+            for name in (metadata.series_names or ([metadata.series] if metadata.series else []))
+            if (safe_name := _safe(name)) is not None
+        )
+        or _UNKNOWN,
         "year": year or _UNKNOWN,
         "release": _safe(metadata.release) or _UNKNOWN,
         "ext": ext,
@@ -361,8 +374,6 @@ def _build_variables(
         "link_dir": _UNKNOWN,
         "link_name": _UNKNOWN,
         "raw_srt_name": _UNKNOWN,
-        "index": _UNKNOWN,
-        "index_padded": _UNKNOWN,
     }
 
 

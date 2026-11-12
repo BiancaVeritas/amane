@@ -10,12 +10,16 @@
     "menuLabel": "Choose scan action",
     "modes": {
       "add": {
-        "label": "Scan for new files",
-        "desc": "Discover and register new media files, then scrape pending ones"
+        "label": "Scan new files and scrape",
+        "desc": "Scan and register new files, then run the existing scrape flow for pending files"
       },
       "remove": {
         "label": "Remove dead entries",
         "desc": "Delete records for files that no longer exist on disk"
+      },
+      "associate": {
+        "label": "Scan and update new files",
+        "desc": "Associate new files using existing internal identities; no scraping or stale-record cleanup"
       }
     }
   },
@@ -43,6 +47,8 @@
     "numberPlaceholder": "e.g. MIDV-123",
     "contentType": "Content type",
     "contentTypeHint": "Leave empty to infer from the number you enter",
+    "theporndbUuid": "ThePornDB UUID",
+    "theporndbUuidPlaceholder": "Enter ThePornDB UUID",
     "contentTypeAuto": "Infer automatically",
     "submit": "Start scrape",
     "contentTypes": {
@@ -53,6 +59,19 @@
       "fc2": "FC2",
       "amateur": "Amateur",
       "hentai": "Hentai"
+    },
+    "sceneSearch": {
+      "title": "Search ThePornDB Scenes",
+      "queryPlaceholder": "Title or Studio",
+      "titleField": "Title or Studio",
+      "date": "Date",
+      "search": "Search",
+      "emptyQuery": "Enter a title, studio, or date to search",
+      "noResults": "No matching scenes found",
+      "select": "Select scene {{title}}",
+      "dateLabel": "Date",
+      "studio": "Studio",
+      "duration": "Duration"
     }
   },
   "batch": {
@@ -83,7 +102,8 @@
     "hint": "Watching and auto-scrape",
     "none": "Off",
     "watch": "Watch only",
-    "scrape": "Watch and scrape"
+    "scrape": "Watch and scrape",
+    "refresh": "Watch and refresh"
   },
   "autoOrganize": {
     "label": "Auto organize",
@@ -130,10 +150,10 @@
     "hardlink": "Hard Link",
     "symlink": "Symbolic Link"
   },
-  "fieldVideoTemplate": "Video Path Template",
-  "fieldVideoTemplateHint": "Relative or absolute path; see placeholder badges below",
-  "fieldLinkTemplate": "Link Path Template",
-  "fieldLinkTemplateHint": "Organize creates an STRM file or symbolic link here. Must be an absolute path outside the library",
+  "fieldVideoTemplate": "Video naming template",
+  "fieldVideoTemplateHint": "Directory structure and file naming rules for organized videos",
+  "fieldLinkTemplate": "Link naming template",
+  "fieldLinkTemplateHint": "Directory structure and naming rules for hard links, symlinks, or STRM files",
   "fieldLinkTemplatePlaceholder": "e.g. /local/emby/{studio}/{number}/{number}.{ext}",
   "fieldLinkMode": "Link Mode",
   "linkMode": {
@@ -156,6 +176,7 @@
     "items": {
       "number": "Catalog number",
       "prefix": "Catalog prefix. e.g. MIDV-123 → MIDV",
+      "raw_prefix": "Catalog prefix preserving original letter case. e.g. LancelotStylesEvolution.26.10.16 → LancelotStylesEvolution",
       "suffix": "Catalog number without the prefix. e.g. MIDV-123 → 123",
       "title": "Title",
       "actor": "First actor",
@@ -181,9 +202,7 @@
       "video_relpath": "Rendered video path relative to the library root. Link, sidecar, and STRM content templates",
       "link_dir": "Directory of the link; same as {video_dir} when the link template is unset",
       "link_name": "Rendered link filename (no extension); same as {video_name} when the link template is unset",
-      "raw_srt_name": "Source subtitle filename. e.g. A/foo.zh.srt → foo.zh",
-      "index": "Still index, starting at 1. Only available in the stills filename template",
-      "index_padded": "Zero-padded still index; width is the digit count of the stills count. Only available in the stills filename template"
+      "raw_srt_name": "Source subtitle filename. e.g. A/foo.zh.srt → foo.zh"
     }
   },
   "tpl": {
@@ -191,7 +210,6 @@
     "poster": "Poster Template",
     "fanart": "Fanart Template",
     "extrafanart": "Extrafanart Template",
-    "extrafanartName": "Stills filename template",
     "nfo": "NFO Template",
     "trailer": "Trailer Template",
     "subtitle": "Subtitle Template"
@@ -259,5 +277,9 @@
     "noiseHint": "Created by the OS or a sync tool; deleted along with the folder",
     "blocked": "{{count}} more folders were left out: unrecognized files",
     "showNoise": "Show system files"
-  }
+  },
+  "fieldScanPath": "Scan path",
+  "fieldOrganizePath": "Organize path",
+  "organizePathHint": "Leave empty to allow only non-organizing operations",
+  "organizePathRequired": "Set an organize path before enabling auto-organize"
 }

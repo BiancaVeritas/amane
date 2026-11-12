@@ -127,6 +127,28 @@ async def test_scrape_returns_none_without_post() -> None:
 
 
 @pytest.mark.asyncio
+async def test_scrape_preserves_source_poster_as_original_poster() -> None:
+    payload = [
+        {
+            "slug": "fns257",
+            "acf_custom_images": {
+                "main_photo_url": "https://cdn.example/cover.jpg",
+                "sub_photo_url": "https://cdn.example/poster.jpg",
+            },
+        }
+    ]
+    crawler = _crawler(FalenoCrawler, payload)
+    result = await crawler._scrape("https://faleno.jp/top/wp-json/wp/v2/works?slug=fns257")
+
+    assert result is not None
+    assert result.cover_urls == ["https://cdn.example/cover.jpg"]
+    assert result.poster_urls == ["https://cdn.example/poster.jpg"]
+    assert result.original_poster_urls == ["https://cdn.example/poster.jpg"]
+    assert result.double_page_poster_urls == ["https://cdn.example/poster.jpg"]
+    assert result.double_page_cover_urls == ["https://cdn.example/cover.jpg"]
+
+
+@pytest.mark.asyncio
 async def test_scrape_tolerates_missing_acf_and_null_gallery() -> None:
     payload = [
         {

@@ -106,7 +106,7 @@
 | airav | airav.io | FC2、国产 | | 中文标题 |
 | iqqtv | iqq5.xyz | 国产 | | 国产第一来源; 按「字段语言偏好」请求对应语言的页面 |
 | mgstage | mgstage.com | 素人 | | 素人第一来源; 素人影片不记录站内化名为演员 |
-| theporndb | theporndb.net | 欧美 | :material-check: | 需要 API Token, 未填写时跳过; 有媒体文件时按文件指纹匹配 |
+| theporndb | theporndb.net | 欧美 | :material-check: | 需要 API Token; 新文件按 OSHASH 匹配, 重新刮削 / 手动兜底可指定 Scene ID; 指纹未命中不按重复番号猜测 |
 | getchu | getchu.com | 动漫 | | 动漫第一来源 |
 | r18dev | 本地 PostgreSQL 镜像 | | | 离线数据源, 见 [r18.dev](#r18dev) |
 | jav321 | jav321.com | | | DMM 目录镜像 |
@@ -251,7 +251,6 @@
 - **手动刮削**: 演员详情页的「刮削」菜单 (可选「强制刮削」), 演员列表的批量刮削.
 - **刮削本页空缺**: 演员列表中刮削当前页生日、身高与头像均为空的演员.
 - **重新刮削**: 重新刮削任务的范围勾选「演员」.
-- **自动推送**: 「演员刮削 → 自动推送」开启后, 演员刮削成功会提交一个只包含该演员的「推送演员」任务, 把资料与头像写入媒体服务器上已有的同名人物. 默认关闭, 且需要先在「设置 → 媒体服务器」中完成配置. 见 [人物推送](media-server.md#push).
 
 ### 资料来源与头像来源
 
@@ -423,7 +422,6 @@ r18dev 是离线数据源: r18.dev 以 PostgreSQL 数据包的形式发布完整
 | 头像来源优先级 | gfriends | 头像来源的顺序 |
 | 下载头像 | 开启 | 把头像下载到本地 |
 | 自动刮削 | 开启 | 影片刮削时自动刮削尚未刮削过的演员 |
-| 自动推送 | 关闭 | 演员刮削成功后, 把该演员推送到媒体服务器, 见 [人物推送](media-server.md#push) |
 | gFriends 仓库 | `https://github.com/gfriends/gfriends` | gFriends GitHub 仓库地址 |
 
 ### 设置 → LLM 翻译

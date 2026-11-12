@@ -2,7 +2,6 @@
   "title": "Settings",
   "tabs": {
     "scraping": "Movie Scraping",
-    "media_server": "Media server",
     "actor_scraping": "Actor Scraping",
     "agent": "Agent",
     "network": "Network",
@@ -12,8 +11,10 @@
     "sr": "Super Resolution",
     "llm": "LLM Translation",
     "watermark": "Watermark",
-    "semantic": "Semantic Search"
+    "semantic": "Semantic Search",
+    "media_server": "Media server"
   },
+  "restoreDefault": "Restore defaults",
   "config": {
     "loadError": "Failed to load configuration"
   },
@@ -60,8 +61,12 @@
         "description": "Skip cropping when the existing poster's height exceeds this fraction of the cover height"
       },
       "poster_ratio": {
-        "label": "Poster Crop Ratio",
-        "description": "Width-to-height ratio for cropping the poster from the cover"
+        "label": "Default Poster Crop Ratio",
+        "description": "Width-to-height ratio for non-uncensored titles; Japanese censored titles use this setting."
+      },
+      "uncensored_poster_ratio": {
+        "label": "Uncensored Poster Crop Ratio",
+        "description": "Independent poster crop width-to-height ratio for uncensored titles; shares the global crop switch."
       },
       "jpeg_quality": {
         "label": "JPEG Quality",
@@ -82,7 +87,7 @@
           "publisher": "Publisher",
           "plot": "Plot",
           "poster_urls": "Poster",
-          "thumb_urls": "Cover",
+          "cover_urls": "Cover",
           "trailer_urls": "Trailer",
           "extrafanart": "Stills",
           "score": "Score"
@@ -91,6 +96,7 @@
           "options": {
             "airav": "airav",
             "avbase": "avbase",
+            "aventertainments": "aventertainments",
             "avsox": "avsox",
             "dahlia": "dahlia",
             "dmm": "dmm",
@@ -114,13 +120,22 @@
             "prestige": "prestige",
             "r18dev": "r18dev",
             "theporndb": "theporndb",
+            "tushy": "Tushy",
+            "tushy_raw": "Tushy Raw",
             "wikipedia": "wikipedia",
-            "xcity": "xcity"
+            "xcity": "xcity",
+            "10musume": "10musume",
+            "1pondo": "1pondo",
+            "caribbeancom": "Caribbeancom",
+            "caribbeancompr": "Caribbeancompr",
+            "pacopacomama": "Pacopacomama",
+            "tokyo_hot": "Tokyo-Hot"
           },
           "$": {
             "options": {
               "airav": "airav",
               "avbase": "avbase",
+              "aventertainments": "aventertainments",
               "avsox": "avsox",
               "dahlia": "dahlia",
               "dmm": "dmm",
@@ -144,8 +159,17 @@
               "prestige": "prestige",
               "r18dev": "r18dev",
               "theporndb": "theporndb",
+              "tushy": "Tushy",
+              "tushy_raw": "Tushy Raw",
               "wikipedia": "wikipedia",
-              "xcity": "xcity"
+              "xcity": "xcity",
+              "10musume": "10musume",
+              "1pondo": "1pondo",
+              "caribbeancom": "Caribbeancom",
+              "caribbeancompr": "Caribbeancompr",
+              "pacopacomama": "Pacopacomama",
+              "tokyo_hot": "Tokyo-Hot",
+              "d2pass": "d2pass"
             }
           }
         }
@@ -165,7 +189,7 @@
           "publisher": "Publisher",
           "plot": "Plot",
           "poster_urls": "Poster",
-          "thumb_urls": "Cover",
+          "cover_urls": "Cover",
           "trailer_urls": "Trailer",
           "extrafanart": "Stills",
           "score": "Score"
@@ -174,6 +198,7 @@
           "options": {
             "airav": "airav",
             "avbase": "avbase",
+            "aventertainments": "aventertainments",
             "avsox": "avsox",
             "dahlia": "dahlia",
             "dmm": "dmm",
@@ -197,13 +222,22 @@
             "prestige": "prestige",
             "r18dev": "r18dev",
             "theporndb": "theporndb",
+            "tushy": "Tushy",
+            "tushy_raw": "Tushy Raw",
             "wikipedia": "wikipedia",
-            "xcity": "xcity"
+            "xcity": "xcity",
+            "10musume": "10musume",
+            "1pondo": "1pondo",
+            "caribbeancom": "Caribbeancom",
+            "caribbeancompr": "Caribbeancompr",
+            "pacopacomama": "Pacopacomama",
+            "tokyo_hot": "Tokyo-Hot"
           },
           "$": {
             "options": {
               "airav": "airav",
               "avbase": "avbase",
+              "aventertainments": "aventertainments",
               "avsox": "avsox",
               "dahlia": "dahlia",
               "dmm": "dmm",
@@ -227,8 +261,17 @@
               "prestige": "prestige",
               "r18dev": "r18dev",
               "theporndb": "theporndb",
+              "tushy": "Tushy",
+              "tushy_raw": "Tushy Raw",
               "wikipedia": "wikipedia",
-              "xcity": "xcity"
+              "xcity": "xcity",
+              "10musume": "10musume",
+              "1pondo": "1pondo",
+              "caribbeancom": "Caribbeancom",
+              "caribbeancompr": "Caribbeancompr",
+              "pacopacomama": "Pacopacomama",
+              "tokyo_hot": "Tokyo-Hot",
+              "d2pass": "d2pass"
             }
           }
         }
@@ -247,7 +290,7 @@
           "publisher": "Publisher",
           "plot": "Plot",
           "poster_urls": "Poster",
-          "thumb_urls": "Cover",
+          "cover_urls": "Cover",
           "trailer_urls": "Trailer",
           "extrafanart": "Stills",
           "score": "Score"
@@ -267,6 +310,7 @@
         "options": {
           "airav": "airav",
           "avbase": "avbase",
+          "aventertainments": "aventertainments",
           "avsox": "avsox",
           "dahlia": "dahlia",
           "dmm": "dmm",
@@ -322,6 +366,7 @@
               "patchright": "Patchright",
               "camoufox": "Camoufox",
               "bsk": "BrowserSkill",
+              "remote": "NAS Remote Browser",
               "solver": "Solver"
             }
           },
@@ -403,6 +448,7 @@
           "options": {
             "airav": "airav",
             "avbase": "avbase",
+            "aventertainments": "aventertainments",
             "avsox": "avsox",
             "dahlia": "dahlia",
             "dmm": "dmm",
@@ -426,13 +472,22 @@
             "prestige": "prestige",
             "r18dev": "r18dev",
             "theporndb": "theporndb",
+            "tushy": "Tushy",
+            "tushy_raw": "Tushy Raw",
             "wikipedia": "wikipedia",
-            "xcity": "xcity"
+            "xcity": "xcity",
+            "10musume": "10musume",
+            "1pondo": "1pondo",
+            "caribbeancom": "Caribbeancom",
+            "caribbeancompr": "Caribbeancompr",
+            "pacopacomama": "Pacopacomama",
+            "tokyo_hot": "Tokyo-Hot"
           },
           "$": {
             "options": {
               "airav": "airav",
               "avbase": "avbase",
+              "aventertainments": "aventertainments",
               "avsox": "avsox",
               "dahlia": "dahlia",
               "dmm": "dmm",
@@ -456,33 +511,20 @@
               "prestige": "prestige",
               "r18dev": "r18dev",
               "theporndb": "theporndb",
+              "tushy": "Tushy",
+              "tushy_raw": "Tushy Raw",
               "wikipedia": "wikipedia",
-              "xcity": "xcity"
+              "xcity": "xcity",
+              "10musume": "10musume",
+              "1pondo": "1pondo",
+              "caribbeancom": "Caribbeancom",
+              "caribbeancompr": "Caribbeancompr",
+              "pacopacomama": "Pacopacomama",
+              "tokyo_hot": "Tokyo-Hot",
+              "d2pass": "d2pass"
             }
           }
         }
-      }
-    },
-    "media_server": {
-      "label": "Media server",
-      "kind": {
-        "label": "Type",
-        "options": {
-          "emby": "Emby",
-          "jellyfin": "Jellyfin"
-        }
-      },
-      "url": {
-        "label": "URL",
-        "description": "Server address including scheme, port and optional subpath"
-      },
-      "api_key": {
-        "label": "API key",
-        "description": "Administrator API key"
-      },
-      "verify_tls": {
-        "label": "Verify certificate",
-        "description": "Verify HTTPS certificates; disable for self-signed"
       }
     },
     "network": {
@@ -515,6 +557,7 @@
             "patchright": "Patchright",
             "camoufox": "Camoufox",
             "bsk": "BrowserSkill",
+            "remote": "NAS Remote Browser",
             "solver": "Solver"
           }
         },
@@ -525,6 +568,10 @@
         "solver_url": {
           "label": "Solver URL",
           "description": "FlareSolverr-compatible service URL; used by the solver backend only"
+        },
+        "remote_url": {
+          "label": "NAS Remote Browser",
+          "description": "CDP URL of the Chromium container, e.g. http://192.168.1.100:9222; do not expose publicly"
         }
       },
       "chunked_threshold": {
@@ -660,6 +707,7 @@
         "$": {
           "options": {
             "title": "Title",
+            "original_title": "Original Title",
             "actors": "Actors",
             "tags": "Tags",
             "release": "Release Date",
@@ -669,8 +717,9 @@
             "studio": "Studio",
             "publisher": "Publisher",
             "plot": "Plot",
+            "original_plot": "Original Plot",
             "poster_urls": "Poster",
-            "thumb_urls": "Cover",
+            "cover_urls": "Cover",
             "trailer_urls": "Trailer",
             "extrafanart": "Stills",
             "score": "Score"
@@ -697,7 +746,7 @@
           "publisher": "Publisher",
           "plot": "Plot",
           "poster_urls": "Poster",
-          "thumb_urls": "Cover",
+          "cover_urls": "Cover",
           "trailer_urls": "Trailer",
           "extrafanart": "Stills",
           "score": "Score"
@@ -836,6 +885,8 @@
             "javdb": "javdb",
             "minnano": "minnano",
             "theporndb": "theporndb",
+            "tushy": "Tushy",
+            "tushy_raw": "Tushy Raw",
             "wikipedia": "wikipedia"
           }
         }
@@ -843,11 +894,15 @@
       "image_sites": {
         "label": "Avatar Source Priority",
         "options": {
-          "gfriends": "gfriends"
+          "gfriends": "gfriends",
+          "tushy": "Tushy",
+          "tushy_raw": "Tushy Raw"
         },
         "$": {
           "options": {
-            "gfriends": "gfriends"
+            "gfriends": "gfriends",
+            "tushy": "Tushy",
+            "tushy_raw": "Tushy Raw"
           }
         }
       },
@@ -861,10 +916,6 @@
       "gfriends_repo": {
         "label": "gFriends Repository",
         "description": "gFriends GitHub repository URL"
-      },
-      "auto_push": {
-        "label": "Auto-push",
-        "description": "Push each actor to the media server after a successful scrape"
       }
     },
     "plugins": {
@@ -882,6 +933,35 @@
         "label": "Auto-maintain",
         "description": "Recompute an entry's vectors as soon as its images change; keeps the model resident"
       }
+    },
+    "media_server": {
+      "kind": {
+        "label": "Server type",
+        "description": "Choose Emby or Jellyfin",
+        "options": {
+          "emby": "Emby",
+          "jellyfin": "Jellyfin"
+        }
+      },
+      "url": {
+        "label": "Server URL",
+        "description": "Full URL, e.g. http://127.0.0.1:8096"
+      },
+      "api_key": {
+        "label": "API Key",
+        "description": "Media server administrator API key"
+      },
+      "verify_tls": {
+        "label": "Verify TLS certificate",
+        "description": "Disable for self-signed certificates"
+      }
     }
+  },
+  "mediaServer": {
+    "testConnection": "Test connection",
+    "testSuccess": "Connected; {{count}} people found",
+    "testFailed": "Connection failed",
+    "testSuccess_one": "Connected; {{count}} person found",
+    "testSuccess_other": "Connected; {{count}} people found"
   }
 }

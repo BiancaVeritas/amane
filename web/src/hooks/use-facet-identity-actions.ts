@@ -1,6 +1,6 @@
 import { notifications } from "@mantine/notifications";
 import { useMutation, useQueryClient, type QueryKey } from "@tanstack/react-query";
-import { useCallback, useState, type ReactNode } from "react";
+import { useCallback, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   deleteFacetMutation,
@@ -19,8 +19,11 @@ export interface UseFacetIdentityActionsOptions {
   kind: FacetKind;
   /** 列表缓存 key (actors → listActors; catalog → listFacets). */
   listQueryKey: QueryKey;
-  /** 合并确认正文; 省略时使用通用一句话. */
-  mergeNotice?: (target: FacetNamedTarget, count: number) => ReactNode;
+  /**
+   * true (默认): openMerge 先经居中确认再提交.
+   * false: openMerge 有来源时直接提交 (演员表).
+   */
+  confirmMerge?: boolean;
   /** 合并成功后清空多选. */
   onMerged?: () => void;
 }
@@ -32,7 +35,7 @@ export interface UseFacetIdentityActionsOptions {
 export function useFacetIdentityActions({
   kind,
   listQueryKey,
-  mergeNotice,
+  confirmMerge = true,
   onMerged,
 }: UseFacetIdentityActionsOptions) {
   const { t } = useTranslation(["metadata", "common"]);
@@ -133,9 +136,42 @@ export function useFacetIdentityActions({
     [isUserTag, t, deleteMutation, kind],
   );
 
+  const openBatchDelete = useCallback(
+    async (facetIds: number[]) => {
+      const ids = [...new Set(facetIds)];
+      if (ids.length === 0) return;
+      if (!isUserTag) {
+        const ok = await confirm({
+          title: t("common:actions.delete"),
+          message: "将从所有影片中移除选择的项目，并加入剔除名单，后续刮削时自动剔除",
+          confirmLabel: t("common:actions.delete"),
+        });
+        if (!ok) return;
+      }
+      let deleted = 0;
+      for (const id of ids) {
+        try {
+          await deleteMutation.mutateAsync({ path: { kind, facet_id: id } });
+          deleted += 1;
+        } catch {
+          // 单项 mutation 已通过 onError 展示错误; 继续处理剩余选中项.
+        }
+      }
+      if (deleted > 0) onMerged?.();
+      invalidate();
+      if (deleted > 0) {
+        notifications.show({
+          message: `已删除 ${deleted} 个项目${deleted < ids.length ? `，失败 ${ids.length - deleted} 个` : ""}`,
+          color: deleted === ids.length ? "blue" : "yellow",
+        });
+      }
+    },
+    [isUserTag, t, deleteMutation, kind, onMerged, invalidate],
+  );
+
   const openMerge = useCallback(
-    async (target: FacetNamedTarget, selected: Set<number>) => {
-      const sources = [...selected].filter((id) => id !== target.id);
+    async (targetId: number, selected: Set<number>) => {
+      const sources = [...selected].filter((id) => id !== targetId);
       if (sources.length === 0) {
         notifications.show({
           message: t("manage.mergeNeedSources"),
@@ -143,22 +179,22 @@ export function useFacetIdentityActions({
         });
         return;
       }
-      const ok = await confirm({
-        title: t("manage.mergeConfirm"),
-        message: mergeNotice
-          ? mergeNotice(target, sources.length)
-          : t("manage.mergeConfirmBody", { count: sources.length }),
-        confirmLabel: t("common:actions.confirm"),
-        danger: false,
-        confirmColor: "orange",
-      });
-      if (!ok) return;
+      if (confirmMerge) {
+        const ok = await confirm({
+          title: t("manage.mergeConfirm"),
+          message: t("manage.mergeConfirmBody", { count: sources.length }),
+          confirmLabel: t("common:actions.confirm"),
+          danger: false,
+          confirmColor: "orange",
+        });
+        if (!ok) return;
+      }
       mergeMutation.mutate({
         path: { kind },
-        body: { target_id: target.id, source_ids: sources },
+        body: { target_id: targetId, source_ids: sources },
       });
     },
-    [mergeNotice, mergeMutation, kind, t],
+    [confirmMerge, mergeMutation, kind, t],
   );
 
   const busy = renameMutation.isPending || mergeMutation.isPending || deleteMutation.isPending;
@@ -174,6 +210,7 @@ export function useFacetIdentityActions({
     submitRename,
     renamePending: renameMutation.isPending,
     openDelete,
+    openBatchDelete,
     deletePending: deleteMutation.isPending,
     openMerge,
     mergePending: mergeMutation.isPending,

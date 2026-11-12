@@ -6,7 +6,7 @@ from fastapi import APIRouter, HTTPException, Query, Response
 from ...db.models import FAVORITE_FACET_KINDS, SCRAPE_FACET_KINDS, FacetKind, FacetSortField, SortOrder
 from ...db.repo_types import FacetItem
 from ...utils.model import to_resp
-from ..deps import RepoDep
+from ..deps import RepoDep, RuntimeDep
 from ..models import (
     FacetBatchAction,
     FacetBatchRequest,
@@ -43,6 +43,7 @@ async def create_user_tags(req: UserTagsCreateRequest, repo: RepoDep) -> UserTag
 async def list_facets(
     kind: FacetKind,
     repo: RepoDep,
+    runtime: RuntimeDep,
     search: Annotated[str | None, Query()] = None,
     favorite: Annotated[bool | None, Query(description="Filter by favorite marker")] = None,
     offset: Annotated[int, Query(ge=0)] = 0,
@@ -56,7 +57,13 @@ async def list_facets(
     items, total = await repo.list_facets(
         kind, search=search, favorite=favorite, offset=offset, limit=limit, sort_by=sort_by, order=order
     )
-    return FacetListResponse(items=[_facet_response(i) for i in items], total=total)
+    responses = [_facet_response(i) for i in items]
+    if kind == FacetKind.TAG:
+        responses = [
+            response.model_copy(update={"name": runtime.tag_mappings.map_tags([response.name])[0]})
+            for response in responses
+        ]
+    return FacetListResponse(items=responses, total=total)
 
 
 @router.get("/{kind}/rules")
@@ -124,15 +131,20 @@ async def batch_facets(kind: FacetKind, req: FacetBatchRequest, repo: RepoDep) -
 
 
 @router.get("/{kind}/{facet_id}")
-async def get_facet(kind: FacetKind, facet_id: int, repo: RepoDep) -> FacetResponse:
+async def get_facet(kind: FacetKind, facet_id: int, repo: RepoDep, runtime: RuntimeDep) -> FacetResponse:
     item = await repo.get_facet(kind, facet_id)
     if item is None:
         raise HTTPException(status_code=404, detail="分类不存在")
-    return _facet_response(item)
+    response = _facet_response(item)
+    return (
+        response.model_copy(update={"name": runtime.tag_mappings.map_tags([response.name])[0]})
+        if kind == FacetKind.TAG
+        else response
+    )
 
 
 @router.post("/{kind}/merge")
-async def merge_facets(kind: FacetKind, req: FacetMergeRequest, repo: RepoDep) -> FacetResponse:
+async def merge_facets(kind: FacetKind, req: FacetMergeRequest, repo: RepoDep, runtime: RuntimeDep) -> FacetResponse:
     """将 source_ids 合并入 target_id: 关联迁移到 target, source 实体被删除."""
     try:
         item = await repo.merge_facets(kind, req.target_id, req.source_ids)
@@ -141,11 +153,18 @@ async def merge_facets(kind: FacetKind, req: FacetMergeRequest, repo: RepoDep) -
     if item is None:
         raise HTTPException(status_code=404, detail="分类不存在")
     logger.info("facets merged", kind=kind, target_id=req.target_id, source_ids=req.source_ids)
-    return _facet_response(item)
+    response = _facet_response(item)
+    return (
+        response.model_copy(update={"name": runtime.tag_mappings.map_tags([response.name])[0]})
+        if kind == FacetKind.TAG
+        else response
+    )
 
 
 @router.patch("/{kind}/{facet_id}")
-async def rename_facet(kind: FacetKind, facet_id: int, req: FacetRenameRequest, repo: RepoDep) -> FacetResponse:
+async def rename_facet(
+    kind: FacetKind, facet_id: int, req: FacetRenameRequest, repo: RepoDep, runtime: RuntimeDep
+) -> FacetResponse:
     """新名称与另一实体冲突时返回 409 (应使用合并)."""
     name = req.name.strip()
     if not name:

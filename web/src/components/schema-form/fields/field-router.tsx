@@ -132,16 +132,45 @@ export function FieldRouter({
             {label}
           </Text>
         )}
-        {Object.entries(properties).map(([key, fieldSchema]) => (
-          <FieldRouter
-            key={key}
-            name={`${name}.${key}`}
-            schema={fieldSchema}
-            form={form}
-            i18nPath={`${effectiveI18nPath}.${key}`}
-            i18nPrefix={i18nPrefix}
-          />
-        ))}
+        {Object.entries(properties).map(([key, fieldSchema]) => {
+          const child = (
+            <FieldRouter
+              name={`${name}.${key}`}
+              schema={fieldSchema}
+              form={form}
+              i18nPath={`${effectiveI18nPath}.${key}`}
+              i18nPrefix={i18nPrefix}
+            />
+          );
+
+          // 浏览器设置按后端显示专属连接参数; 通用 timeout 始终可见.
+          if (
+            name === "network.browser" &&
+            ["bsk_path", "solver_url", "remote_url"].includes(key)
+          ) {
+            return (
+              <form.Subscribe
+                key={key}
+                selector={(state: { values: unknown }) => {
+                  const values = state.values as Record<string, unknown>;
+                  const network = values.network as Record<string, unknown> | undefined;
+                  const browser = network?.browser as Record<string, unknown> | undefined;
+                  return browser?.backend;
+                }}
+              >
+                {(backend: unknown) => {
+                  const visible =
+                    (key === "bsk_path" && backend === "bsk") ||
+                    (key === "solver_url" && backend === "solver") ||
+                    (key === "remote_url" && backend === "remote");
+                  return visible ? child : null;
+                }}
+              </form.Subscribe>
+            );
+          }
+
+          return <Box key={key}>{child}</Box>;
+        })}
       </Box>
     );
   }

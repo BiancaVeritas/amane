@@ -75,7 +75,7 @@ class AiravCrawler(Crawler):
             studio=studio or None,
             release=release or None,
             tags=tags,
-            thumb_urls=[cover] if cover else [],
+            cover_urls=[cover] if cover else [],
             plot=plot or None,
             source_url=url,
         )

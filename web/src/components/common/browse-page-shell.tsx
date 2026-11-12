@@ -177,9 +177,11 @@ export function BrowsePageShell({
         <Stack gap="md" style={{ minWidth: 0 }}>
           {summary}
           <Box style={{ minWidth: 0 }}>{search}</Box>
+          <Group gap="xs" wrap="wrap" align="center">
+            {extras}
+            {pageSize}
+          </Group>
           {filterPanel}
-          {extras}
-          {pageSize}
           {actions != null && (
             <Group justify="flex-end" gap="sm" wrap="wrap">
               {actions}

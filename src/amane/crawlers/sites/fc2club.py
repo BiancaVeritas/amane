@@ -54,6 +54,6 @@ class FC2ClubCrawler(Crawler):
             actors=film_actors(actors, gender=ActorGender.UNKNOWN),
             release=release,
             tags=tags,
-            thumb_urls=[cover] if cover else [],
+            cover_urls=[cover] if cover else [],
             source_url=url,
         )

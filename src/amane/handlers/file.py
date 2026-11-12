@@ -18,7 +18,6 @@ from ..media.resource_store import internal_url_hash
 from ..net.http import WebClient
 from ..observability.models import OrganizeConflict, OrganizeConflictReason
 from ..organize import (
-    EXTRAFANART_NAME_TEMPLATE_DEFAULT,
     MoveMode,
     PlaceOutcome,
     ResolvedPaths,
@@ -27,7 +26,6 @@ from ..organize import (
     discover_subtitles,
     execute_organize,
     place_subtitles,
-    render_extrafanart_names,
     render_strm_content,
     resolve_paths,
     target_state,
@@ -85,6 +83,7 @@ async def execute_file_operations(
     safe_dirs: Sequence[Path] | None = (),
     watermark_dir: Path | None = None,
     actor_genders: dict[str, ActorGender] | None = None,
+    tag_mapping_path: Path | None = None,
 ) -> FileOperationsResult:
     """``file_info`` 由渲染路径的那一次 ``parse_file_info`` 产出, 必须带上 ``has_external_subtitle``.
 
@@ -121,7 +120,6 @@ async def execute_file_operations(
             file_info=file_info,
             content_type=metadata.content_type,
             watermark_dir=watermark_dir,
-            library=library,
         )
 
     # 发现字幕: 必须在视频移动前检查同目录.
@@ -144,11 +142,13 @@ async def execute_file_operations(
         mode = LinkMode(library.link_mode) if library is not None else LinkMode.STRM
         strm_content: str | None = None
         if mode == LinkMode.STRM and library is not None:
+            organize_paths = library.organize_paths or ([library.organize_path] if library.organize_path else [])
+            organize_root = Path(organize_paths[0]) if organize_paths else Path(library.path)
             try:
                 strm_content = render_strm_content(
                     library.strm_content_template,
                     org_result.dest,
-                    Path(library.path),
+                    organize_root,
                     metadata,
                     source_path=source_path,
                     file_info=file_info,
@@ -163,7 +163,7 @@ async def execute_file_operations(
 
     # 写入 NFO.
     if org_result.outcome is PlaceOutcome.PLACED and org_result.dest and write_nfo:
-        await write_nfo_file(metadata, paths.nfo)
+        await write_nfo_file(metadata, paths.nfo, tag_mapping_path=tag_mapping_path)
 
     # 字幕按模板落到 video_dest 侧.
     subtitle_conflicts: list[SubtitleConflict] = []
@@ -203,6 +203,7 @@ async def apply_file_operations(
     web_client: WebClient | None = None,
     safe_dirs: Sequence[Path] | None = (),
     watermark_dir: Path | None = None,
+    tag_mapping_path: Path | None = None,
 ) -> FileOperationsResult | None:
     """缺少 media_file_id 或对应记录时返回 None (跳过, 不视为失败).
     Library 由 MediaFile.library_id 派生.
@@ -245,6 +246,7 @@ async def apply_file_operations(
         safe_dirs=safe_dirs,
         watermark_dir=watermark_dir,
         actor_genders=actor_genders,
+        tag_mapping_path=tag_mapping_path,
     )
 
 
@@ -254,7 +256,11 @@ async def commit_organized_media_file(
     placed: Path,
     library_root: Path,
 ) -> None:
-    """整理后的路径仍在本库内才改 path; 已离开本库且源路径不在磁盘上则删行.
+    """提交整理后的文件记录.
+
+    目标仍在监控库内时更新 MediaFile.path; MOVE 到库外且源路径已腾空时删除
+    MediaFile 行, 但不删除 Metadata / MediaIdentity, 使监控目录以后重新收到同一
+    文件时仍可复用本地作品资料. COPY / HARDLINK / SYMLINK 等源路径仍存在时保留原行.
 
     目标路径已被另一行占用时删本行; 占用行缺少刮削字段则从本行补上.
     """
@@ -308,7 +314,6 @@ def _copy_into_library(src: Path, dst: Path) -> None:
     成功路径保持 copy2 的全部行为 (Windows 的 CopyFile2 与其余平台的 copyfile + copystat).
     网盘 / FUSE 挂载 (CloudDrive2 等) 常对 utime、chmod 返回 EPERM: copy2 在内容写入之后
     抛错, 而元数据缺失不影响产物可用, 不应让整个整理任务失败.
-    内容失败时记录两次尝试的原文, 并原样抛出回退那次的错误.
     """
     try:
         shutil.copy2(src, dst)
@@ -318,7 +323,6 @@ def _copy_into_library(src: Path, dst: Path) -> None:
         try:
             shutil.copyfile(src, dst)
         except OSError as second:
-            # 回退复制经 CRT 打开文件, Win32 码会被压成 EINVAL, 两次的原文都要留下.
             logger.error(
                 "library copy failed",
                 src=str(src),
@@ -327,10 +331,10 @@ def _copy_into_library(src: Path, dst: Path) -> None:
                 copyfile_error=str(second),
             )
             raise
-    try:
-        shutil.copystat(src, dst)
-    except OSError as exc:
-        logger.debug("copy metadata skipped", src=str(src), dst=str(dst), error=str(exc))
+        try:
+            shutil.copystat(src, dst)
+        except OSError as exc:
+            logger.debug("copy metadata skipped", src=str(src), dst=str(dst), error=str(exc))
 
 
 @in_thread
@@ -340,7 +344,7 @@ def _place_library_images(
     thumb_local: Path | None,
     poster_local: Path | None,
     trailer_local: Path | None,
-    extrafanart_targets: Sequence[tuple[str, Path]],
+    extrafanart: Sequence[Path],
     kinds: set[DownloadableResource],
     config: HotSettings | None,
     file_info: FileInfo | None,
@@ -364,7 +368,11 @@ def _place_library_images(
             crop_poster(
                 paths.thumb,
                 paths.poster,
-                poster_ratio=config.scraping.poster_ratio,
+                poster_ratio=(
+                    config.scraping.uncensored_poster_ratio
+                    if content_type == ContentType.UNCENSORED
+                    else config.scraping.poster_ratio
+                ),
                 jpeg_quality=config.scraping.jpeg_quality,
             )
 
@@ -372,10 +380,10 @@ def _place_library_images(
         paths.trailer.parent.mkdir(parents=True, exist_ok=True)
         _copy_into_library(trailer_local, paths.trailer)
 
-    if extrafanart_targets and DownloadableResource.extrafanart in kinds:
+    if extrafanart and DownloadableResource.extrafanart in kinds:
         paths.extrafanart_dir.mkdir(parents=True, exist_ok=True)
-        for name, p in extrafanart_targets:
-            _copy_into_library(p, paths.extrafanart_dir / name)
+        for i, p in enumerate(extrafanart):
+            _copy_into_library(p, paths.extrafanart_dir / f"{i + 1}.jpg")
 
     # 叠加水印 (thumb / poster).
     wm = config.watermark if config is not None else WatermarkConfig()
@@ -413,16 +421,12 @@ async def _download_images_via_store(
     file_info: FileInfo | None,
     content_type: ContentType,
     watermark_dir: Path | None = None,
-    library: Library | None = None,
 ) -> None:
-    """优先用 Resource 已有文件; 缺失则现场 acquire.
-
-    剧照文件名在这里渲染: 补零宽度取决于本轮剧照数量, 只有拿到文件列表后才定得下来.
-    """
+    """优先用 Resource 已有文件; 缺失则现场 acquire."""
     thumb_local = None
     if DownloadableResource.thumb in kinds:
-        thumb_urls = metadata.thumb_urls
-        thumb_local = await _acquire_first_local(thumb_urls, store, client) if thumb_urls else None
+        cover_urls = metadata.cover_urls
+        thumb_local = await _acquire_first_local(cover_urls, store, client) if cover_urls else None
 
     poster_local = None
     if DownloadableResource.poster in kinds:
@@ -441,19 +445,12 @@ async def _download_images_via_store(
             priority = list(extrafanart_by_site.keys())
             extrafanart = await store.acquire_extrafanart(extrafanart_by_site, priority, client)
 
-    # 名字与源文件成对落地: 文件名模板只能在这里渲染, 宽度取决于本轮张数.
-    extrafanart_targets: list[tuple[str, Path]] = []
-    if extrafanart:
-        template = library.extrafanart_name_template if library is not None else None
-        names = render_extrafanart_names(template or EXTRAFANART_NAME_TEMPLATE_DEFAULT, paths.context, len(extrafanart))
-        extrafanart_targets = list(zip(names, extrafanart, strict=True))
-
     await _place_library_images(
         paths,
         thumb_local=thumb_local,
         poster_local=poster_local,
         trailer_local=trailer_local,
-        extrafanart_targets=extrafanart_targets,
+        extrafanart=extrafanart,
         kinds=kinds,
         config=config,
         file_info=file_info,
@@ -481,6 +478,7 @@ class OrganizeHandler(TaskHandler[OrganizePayload, OrganizeResult]):
         web_client: WebClient | None = None,
         safe_dirs: Sequence[Path] | None = (),
         watermark_dir: Path | None = None,
+        tag_mapping_path: Path | None = None,
         *,
         library_locks: LibraryTaskLocks | None = None,
     ):
@@ -491,6 +489,7 @@ class OrganizeHandler(TaskHandler[OrganizePayload, OrganizeResult]):
         self._resource_store = resource_store
         self._safe_dirs = safe_dirs
         self._watermark_dir = watermark_dir
+        self._tag_mapping_path = tag_mapping_path
         self._library_locks = library_locks if library_locks is not None else LibraryTaskLocks()
 
     async def _load_scope(self, payload: OrganizePayload, library: Library) -> list[MediaFile]:
@@ -498,8 +497,20 @@ class OrganizeHandler(TaskHandler[OrganizePayload, OrganizeResult]):
         if payload.media_file_ids is not None:
             return await self._repo.list_media_files(library_id=library.id, ids=payload.media_file_ids, limit=None)
         indexed = await self._repo.list_media_files(library_id=library.id, limit=None)
-        if nfc_path(payload.path) != nfc_path(library.path):
-            return [mf for mf in indexed if path_is_under(mf.path, payload.path)]
+        scan_roots = library.scan_paths or [library.path]
+        if payload.path:
+            matching_roots = [root for root in scan_roots if nfc_path(root) == nfc_path(payload.path)]
+
+            def in_scope(mf: MediaFile) -> bool:
+                if matching_roots:
+                    return any(path_is_under(mf.path, root) for root in matching_roots)
+                return path_is_under(mf.path, payload.path)
+
+            # 范围外的索引不属于任何扫描根目录，必须纳入清理候选；
+            # 但其它扫描根目录中的正常记录仍不能因本次局部整理而被处理。
+            return [
+                mf for mf in indexed if not any(path_is_under(mf.path, root) for root in scan_roots) or in_scope(mf)
+            ]
         return indexed
 
     async def handle(self, payload: OrganizePayload) -> TaskResult[OrganizeResult]:
@@ -507,12 +518,28 @@ class OrganizeHandler(TaskHandler[OrganizePayload, OrganizeResult]):
         if library is None:
             return TaskResult(success=False, error=f"媒体库 {payload.library_id} 不存在")
         assert library.id is not None
-        library_root = Path(library.path)
-        if not await path_is_dir(library_root):
-            return TaskResult(success=False, error=f"不是目录: {library.path}")
+        organize_paths = library.organize_paths or ([library.organize_path] if library.organize_path else [])
+        if len(organize_paths) > 1:
+            return TaskResult(
+                success=False,
+                error="当前媒体库配置了多个整理路径，无法确定唯一的落盘目标。多整理路径仅支持扫描、监控、刷新和刮削等非整理操作。若要使用整理落盘功能，请只保留一个整理路径。",
+            )
+        scan_roots = library.scan_paths or [library.path]
+        for scan_root in scan_roots:
+            if not await path_is_dir(Path(scan_root)):
+                return TaskResult(success=False, error=f"不是目录: {scan_root}")
+        # 与 path_templates._resolve_organize_base_path 保持一致: 未配置整理路径时,
+        # 以媒体库根目录作为模板落盘根目录, 兼容旧版 Library 配置.
+        organize_root = Path(organize_paths[0]) if organize_paths else Path(library.path)
+        if not await path_is_dir(organize_root):
+            return TaskResult(success=False, error=f"整理路径不是可访问目录: {organize_root}")
         if payload.media_file_ids is None:
-            scope = Path(payload.path) if payload.path else library_root
-            if nfc_path(str(scope)) != nfc_path(library.path) and not await path_is_dir(scope):
+            scope = Path(payload.path) if payload.path else Path(scan_roots[0])
+            if not any(
+                path_is_under(str(scope), root) or nfc_path(str(scope)) == nfc_path(root) for root in scan_roots
+            ):
+                return TaskResult(success=False, error=f"整理范围不属于媒体库扫描路径: {scope}")
+            if not await path_is_dir(scope):
                 return TaskResult(success=False, error=f"不是目录: {scope}")
 
         lock = await self._library_locks.get(library.id)
@@ -526,7 +553,12 @@ class OrganizeHandler(TaskHandler[OrganizePayload, OrganizeResult]):
             # 勾选快照里的行在本次运行前已消失 (自动整理的单文件范围是主要来源): 不是「空跑」, 记一次跳过.
             logger.warning("organize scope missing", library_id=library.id, media_file_ids=payload.media_file_ids)
             skipped += 1
-        library_root = Path(library.path)
+        library_roots = [Path(root) for root in (library.scan_paths or [library.path])]
+
+        def owning_root(file_path: Path) -> Path | None:
+            matches = [root for root in library_roots if is_descendant(file_path, root)]
+            return max(matches, key=lambda root: len(str(root))) if matches else None
+
         media_extensions = frozenset(self._config.watcher.media_extensions) or MEDIA_EXTENSIONS
         scan = LibraryScan(
             trailer_pattern=library.trailer_pattern,
@@ -542,7 +574,7 @@ class OrganizeHandler(TaskHandler[OrganizePayload, OrganizeResult]):
                 if mf.id is not None:
                     mf_path = Path(mf.path)
                     missing = await existing_disk_path(mf_path, follow_symlinks=False) is None
-                    if missing or not is_descendant(mf_path, library_root) or is_in_trash(mf_path):
+                    if missing or owning_root(mf_path) is None or is_in_trash(mf_path):
                         await self._repo.delete_media_file(mf.id)
                     else:
                         kind = await _classify_indexed(mf_path, scan)
@@ -595,19 +627,21 @@ class OrganizeHandler(TaskHandler[OrganizePayload, OrganizeResult]):
                     web_client=self._web_client,
                     safe_dirs=self._safe_dirs,
                     watermark_dir=self._watermark_dir,
+                    tag_mapping_path=self._tag_mapping_path,
                 )
                 if fop_result is None:
                     skipped += 1
                     await self.report_progress(i, total, file_path.name)
                     continue
 
-                if fop_result.dest and media_file.id is not None:
-                    await commit_organized_media_file(self._repo, media_file, fop_result.dest, library_root)
+                source_root = owning_root(file_path)
+                if fop_result.dest and media_file.id is not None and source_root is not None:
+                    await commit_organized_media_file(self._repo, media_file, fop_result.dest, source_root)
                 match fop_result.outcome:
                     case PlaceOutcome.PLACED:
                         organized += 1
-                        if collect_prune:
-                            prune_candidates.update(ancestor_dirs(file_path, library_root=library_root))
+                        if collect_prune and source_root is not None:
+                            prune_candidates.update(ancestor_dirs(file_path, library_root=source_root))
                         # 字幕冲突的 path 是留在原处的那条字幕, 不是视频源路径.
                         conflicted += _record_conflicts(
                             conflicts,
@@ -641,7 +675,10 @@ class OrganizeHandler(TaskHandler[OrganizePayload, OrganizeResult]):
 
         pruned_dirs = 0
         if prune_candidates:
-            pruned_dirs = (await prune_empty_dirs(prune_candidates, library_root=library_root)).removed
+            for root in library_roots:
+                candidates = {path for path in prune_candidates if is_descendant(path, root)}
+                if candidates:
+                    pruned_dirs += (await prune_empty_dirs(candidates, library_root=root)).removed
 
         logger.info(
             "organize completed",
@@ -693,7 +730,7 @@ async def _collect_live_resource_refs(repo: Repository) -> tuple[set[str], set[s
         if not batch:
             break
         for meta in batch:
-            for u in (*meta.poster_urls, *meta.thumb_urls, *meta.trailer_urls):
+            for u in (*meta.poster_urls, *meta.cover_urls, *meta.trailer_urls):
                 _add_resource_ref(u, live_urls, live_hashes)
             for site_urls in meta.extrafanart_urls.values():
                 for u in site_urls:

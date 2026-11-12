@@ -73,15 +73,21 @@ def _languages_schema(schema: dict[str, Any]) -> None:
 _DEFAULT_CONTENT_ROUTES: dict[ContentType, list[SiteName]] = {
     ContentType.CENSORED: [
         SiteName.DMM,
+        SiteName.MGSTAGE,
         SiteName.JAVDB,
-        SiteName.JAVBUS,
-        SiteName.OFFICIAL,
-    ],
-    ContentType.UNCENSORED: [
-        SiteName.JAVDB,
+        SiteName.AVBASE,
         SiteName.JAVBUS,
         SiteName.AVSOX,
-        SiteName.FREEJAVBT,
+    ],
+    ContentType.UNCENSORED: [
+        SiteName.AVENTERTAINMENTS,
+        SiteName.TENMUSUME,
+        SiteName.PONDO,
+        SiteName.CARIBBEANCOM,
+        SiteName.PACOPACOMAMA,
+        SiteName.TOKYO_HOT,
+        SiteName.CARIBBEANCOMPR,
+        SiteName.D2PASS,
     ],
     ContentType.FC2: [
         SiteName.JAVDB,
@@ -104,8 +110,6 @@ _DEFAULT_CONTENT_ROUTES: dict[ContentType, list[SiteName]] = {
     ],
     ContentType.WESTERN: [
         SiteName.THEPORNDB,
-        SiteName.JAVDB,
-        SiteName.FREEJAVBT,
     ],
     ContentType.HENTAI: [
         SiteName.GETCHU,
@@ -333,7 +337,10 @@ class ScrapingConfig(BaseModel):
     crop_poster: bool = True
 
     poster_ratio: float = Field(default=0.7, ge=0.3, le=1.0)
-    """海报裁剪宽高比 (w/h). 从封面右侧裁剪生成海报. 默认 0.7 (贴近常见 379x538 / 高清海报)."""
+    """日本有码等常规影片的海报裁剪宽高比 (w/h). 默认 0.7."""
+
+    uncensored_poster_ratio: float = Field(default=0.87, ge=0.3, le=1.0)
+    """无码影片独立的海报裁剪宽高比 (w/h); 裁剪开关与常规影片共用 crop_poster."""
 
     poster_crop_skip_ratio: float = Field(default=0.9, ge=0.5, le=1.0)
     """海报裁剪跳过阈值. 当 poster 候选高度已达 thumb 高度的此比例以上时, 视为候选够用, 不再从 thumb 裁剪
@@ -388,6 +395,13 @@ class ScrapingConfig(BaseModel):
     @field_validator("content_routes", mode="before")
     @classmethod
     def _complete_content_routes(cls, v: Any) -> Any:
+        # Upgrade an untouched legacy default route so existing installations start
+        # querying the newly added AVE source; preserve any user-customized ordering.
+        if isinstance(v, dict):
+            uncensored = v.get(ContentType.UNCENSORED, v.get(ContentType.UNCENSORED.value))
+            legacy_default = ["javdb", "javbus", "avsox", "freejavbt"]
+            if uncensored == legacy_default:
+                v = {**v, ContentType.UNCENSORED.value: [*legacy_default, str(SiteName.AVENTERTAINMENTS)]}
         return _complete_frozen_dict(
             v, {ct: [str(site) for site in _DEFAULT_CONTENT_ROUTES.get(ct, [])] for ct in ContentType}
         )
@@ -542,7 +556,11 @@ def _require_browser_engine(
                 "浏览器后端 bsk 不可用: 未找到 bsk CLI, 请安装 BrowserSkill 并连接浏览器扩展, 或改用 solver"
             )
         return backend
-    module = {BrowserBackendName.PATCHRIGHT: "patchright", BrowserBackendName.CAMOUFOX: "camoufox"}.get(backend)
+    module = {
+        BrowserBackendName.PATCHRIGHT: "patchright",
+        BrowserBackendName.CAMOUFOX: "camoufox",
+        BrowserBackendName.REMOTE: "patchright",
+    }.get(backend)
     if module is None:
         return backend
     try:
@@ -563,6 +581,8 @@ class BrowserConfig(BaseModel):
     """页面导航默认超时 (毫秒); 单次渲染可覆盖."""
     solver_url: str = Field(default="http://127.0.0.1:8191", pattern=r"^https?://.+")
     """FlareSolverr 兼容服务地址; 仅 ``solver`` 后端使用. 服务不允许暴露到公网."""
+    remote_url: str = Field(default="http://127.0.0.1:9222", pattern=r"^https?://.+")
+    """独立 Chromium 容器的 CDP HTTP 地址; 仅 ``remote`` 后端使用, 不应暴露到公网."""
 
     @model_validator(mode="after")
     def _engine_available(self) -> BrowserConfig:
@@ -708,8 +728,8 @@ class AgentConfig(BaseModel):
     """单次回复的输出上限. 超过模型上限时上游拒绝请求."""
 
     rate_limit: float = Field(default=2.0, ge=0.1, le=100)
-    sql_timeout_ms: int = Field(default=5000, ge=50, le=60_000, json_schema_extra={"x-hidden": True})
-    """只读 SQL 执行超时 (毫秒), 不计建连; 到期即中断语句."""
+    sql_timeout_ms: int = Field(default=1000, ge=50, le=60_000, json_schema_extra={"x-hidden": True})
+    """只读 SQL 默认超时 (毫秒). 超过须用户批准放宽."""
 
     result_cache_ttl_s: int = Field(default=3600, ge=60, le=86_400, json_schema_extra={"x-hidden": True})
     """过期后按 SQL 重新执行."""
@@ -735,7 +755,7 @@ class MediaServerConfig(BaseModel):
 
     kind: Literal["emby", "jellyfin"] = Field(default="jellyfin", description="媒体服务器类型")
     url: str | None = Field(default=None, description="服务器地址, 含协议、端口与可选子路径")
-    api_key: str | None = Field(default=None, description="管理员 API Key")
+    api_key: str | None = Field(default=None, description="管理员 API Key", json_schema_extra={"format": "password"})
     verify_tls: bool = Field(default=True, description="校验 HTTPS 证书; 自签名证书可关闭")
 
     @field_validator("url")
@@ -776,9 +796,6 @@ class ActorScrapingConfig(BaseModel):
     download_images: bool = True
     auto_scrape: bool = True
     """影片刮削成功后自动入队该片演员的 ACTOR_SCRAPE; 已刮过的 Actor 跳过."""
-
-    auto_push: bool = Field(default=False, description="演员刮削成功后自动将该演员推送到媒体服务器")
-    """媒体服务器未配置时静默跳过."""
 
     gfriends_repo: str = Field(default="https://github.com/gfriends/gfriends", description="gFriends GitHub 仓库 URL")
 

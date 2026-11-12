@@ -2,6 +2,7 @@ import {
   Accordion,
   Anchor,
   Badge,
+  Button,
   Checkbox,
   Group,
   Input,
@@ -61,7 +62,6 @@ const OPTIONAL_TEMPLATE_KEYS = [
   "poster_template",
   "fanart_template",
   "extrafanart_template",
-  "extrafanart_name_template",
   "nfo_template",
   "trailer_template",
   "subtitle_template",
@@ -82,12 +82,16 @@ function mbToBytes(mb: number): number {
 export const LIBRARY_AUTOMATION_BADGE_COLOR = {
   none: "gray",
   watch: "blue",
+  refresh: "violet",
   scrape: "teal",
 } as const satisfies Record<LibraryAutomation, string>;
 
 export interface LibraryFormState {
   name: string;
   path: string;
+  scan_paths: string[];
+  organize_path: string;
+  organize_paths: string[];
   recursive: boolean;
   patterns: string;
   move_mode: LibraryResponse["move_mode"];
@@ -105,7 +109,6 @@ export interface LibraryFormState {
   poster_template: string;
   fanart_template: string;
   extrafanart_template: string;
-  extrafanart_name_template: string;
   nfo_template: string;
   trailer_template: string;
   subtitle_template: string;
@@ -121,6 +124,9 @@ export function emptyLibraryForm(schema?: PathTemplateSchemaResponse | null): Li
   return {
     name: "",
     path: "",
+    scan_paths: [""],
+    organize_path: "",
+    organize_paths: [""],
     recursive: true,
     patterns: "",
     move_mode: "move",
@@ -140,7 +146,6 @@ export function emptyLibraryForm(schema?: PathTemplateSchemaResponse | null): Li
     poster_template: defaults?.poster_template ?? "",
     fanart_template: defaults?.fanart_template ?? "",
     extrafanart_template: defaults?.extrafanart_template ?? "",
-    extrafanart_name_template: defaults?.extrafanart_name_template ?? "",
     nfo_template: defaults?.nfo_template ?? "",
     trailer_template: defaults?.trailer_template ?? "",
     subtitle_template: defaults?.subtitle_template ?? "",
@@ -156,6 +161,13 @@ export function libraryFormFromResponse(lib: LibraryResponse): LibraryFormState 
   return {
     name: lib.name,
     path: lib.path,
+    scan_paths: (lib as LibraryResponse & { scan_paths?: string[] }).scan_paths?.length
+      ? (lib as LibraryResponse & { scan_paths?: string[] }).scan_paths!
+      : [lib.path],
+    organize_path: lib.organize_path ?? "",
+    organize_paths: (lib as LibraryResponse & { organize_paths?: string[] }).organize_paths?.length
+      ? (lib as LibraryResponse & { organize_paths?: string[] }).organize_paths!
+      : [lib.organize_path ?? ""],
     recursive: lib.recursive,
     patterns: lib.patterns?.join(", ") ?? "",
     move_mode: lib.move_mode,
@@ -173,7 +185,6 @@ export function libraryFormFromResponse(lib: LibraryResponse): LibraryFormState 
     poster_template: lib.poster_template ?? "",
     fanart_template: lib.fanart_template ?? "",
     extrafanart_template: lib.extrafanart_template ?? "",
-    extrafanart_name_template: lib.extrafanart_name_template ?? "",
     nfo_template: lib.nfo_template ?? "",
     trailer_template: lib.trailer_template ?? "",
     subtitle_template: lib.subtitle_template ?? "",
@@ -203,7 +214,12 @@ export function parseBlacklistPatterns(s: string): string[] {
 function libraryFormValues(form: LibraryFormState): Record<string, unknown> {
   return {
     name: form.name.trim(),
-    path: form.path.trim(),
+    path: (form.scan_paths.find((p) => p.trim()) ?? form.path).trim(),
+    scan_paths: form.scan_paths.map((p) => p.trim()).filter(Boolean),
+    organize_path:
+      (form.organize_paths.map((p) => p.trim()).filter(Boolean)[0] ?? form.organize_path.trim()) ||
+      null,
+    organize_paths: form.organize_paths.map((p) => p.trim()).filter(Boolean),
     recursive: form.recursive,
     patterns: parseLibraryPatterns(form.patterns),
     move_mode: form.move_mode,
@@ -221,7 +237,6 @@ function libraryFormValues(form: LibraryFormState): Record<string, unknown> {
     poster_template: form.poster_template.trim(),
     fanart_template: form.fanart_template.trim(),
     extrafanart_template: form.extrafanart_template.trim(),
-    extrafanart_name_template: form.extrafanart_name_template.trim(),
     nfo_template: form.nfo_template.trim(),
     trailer_template: form.trailer_template.trim(),
     subtitle_template: form.subtitle_template.trim(),
@@ -252,7 +267,6 @@ const TPL_I18N = {
   poster_template: "tpl.poster",
   fanart_template: "tpl.fanart",
   extrafanart_template: "tpl.extrafanart",
-  extrafanart_name_template: "tpl.extrafanartName",
   nfo_template: "tpl.nfo",
   trailer_template: "tpl.trailer",
   subtitle_template: "tpl.subtitle",
@@ -302,17 +316,102 @@ export function LibraryFormFields({ value, onChange, showCreateOnly }: LibraryFo
         <Switch
           label={t("fieldRecursive")}
           checked={value.recursive}
-          onChange={(e) => onChange({ ...value, recursive: e.currentTarget.checked })}
+          onChange={(e) =>
+            onChange({
+              ...value,
+              recursive: e.target instanceof HTMLInputElement && e.target.checked,
+            })
+          }
           style={{ flex: "1 1 12rem" }}
         />
       </Group>
-      <PathPicker
-        label={t("fieldPath")}
-        placeholder={t("placeholder")}
-        value={value.path}
-        onChange={(path) => onChange({ ...value, path })}
-        pathType="directory"
-      />
+      <Stack gap="xs">
+        <Input.Label>{t("fieldScanPath", { defaultValue: "扫描路径" })}</Input.Label>
+        {value.scan_paths.map((path, index) => (
+          <Group key={`scan-${index}`} align="flex-end" wrap="nowrap">
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <PathPicker
+                placeholder={t("placeholder")}
+                value={path}
+                onChange={(next) =>
+                  onChange({
+                    ...value,
+                    path: index === 0 ? next : value.path,
+                    scan_paths: value.scan_paths.map((p, i) => (i === index ? next : p)),
+                  })
+                }
+                pathType="directory"
+              />
+            </div>
+            <Button
+              type="button"
+              variant="light"
+              size="sm"
+              onClick={() => onChange({ ...value, scan_paths: [...value.scan_paths, ""] })}
+            >
+              ＋
+            </Button>
+            {value.scan_paths.length > 1 && (
+              <Button
+                type="button"
+                color="red"
+                variant="subtle"
+                size="sm"
+                onClick={() =>
+                  onChange({ ...value, scan_paths: value.scan_paths.filter((_, i) => i !== index) })
+                }
+              >
+                −
+              </Button>
+            )}
+          </Group>
+        ))}
+      </Stack>
+      <Stack gap="xs">
+        <Input.Label>{t("fieldOrganizePath", { defaultValue: "整理路径" })}</Input.Label>
+        {value.organize_paths.map((path, index) => (
+          <Group key={`organize-${index}`} align="flex-end" wrap="nowrap">
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <PathPicker
+                placeholder={t("organizePathHint", { defaultValue: "留空时不能执行整理或落盘" })}
+                value={path}
+                onChange={(next) =>
+                  onChange({
+                    ...value,
+                    organize_path: index === 0 ? next : value.organize_path,
+                    organize_paths: value.organize_paths.map((p, i) => (i === index ? next : p)),
+                  })
+                }
+                pathType="directory"
+              />
+            </div>
+            <Button
+              type="button"
+              variant="light"
+              size="sm"
+              onClick={() => onChange({ ...value, organize_paths: [...value.organize_paths, ""] })}
+            >
+              ＋
+            </Button>
+            {value.organize_paths.length > 1 && (
+              <Button
+                type="button"
+                color="red"
+                variant="subtle"
+                size="sm"
+                onClick={() =>
+                  onChange({
+                    ...value,
+                    organize_paths: value.organize_paths.filter((_, i) => i !== index),
+                  })
+                }
+              >
+                −
+              </Button>
+            )}
+          </Group>
+        ))}
+      </Stack>
       <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
         <Input.Wrapper label={t("ingest.label")} description={t("ingest.hint")}>
           <div className={classes.ingestControl}>
@@ -411,7 +510,12 @@ export function LibraryFormFields({ value, onChange, showCreateOnly }: LibraryFo
             <Switch
               id="library-write-nfo"
               checked={value.write_nfo}
-              onChange={(e) => onChange({ ...value, write_nfo: e.currentTarget.checked })}
+              onChange={(e) =>
+                onChange({
+                  ...value,
+                  write_nfo: e.target instanceof HTMLInputElement && e.target.checked,
+                })
+              }
               aria-label={t("fieldWriteNfo")}
             />
           </div>
@@ -562,7 +666,25 @@ export function LibraryFormFields({ value, onChange, showCreateOnly }: LibraryFo
         <FieldChrome label={t("autoOrganize.label")} description={t("autoOrganize.hint")}>
           <Switch
             checked={value.auto_organize}
-            onChange={(e) => onChange({ ...value, auto_organize: e.currentTarget.checked })}
+            onChange={(e) => {
+              const enabled = e.target instanceof HTMLInputElement && e.target.checked;
+              const configuredPaths = value.organize_paths
+                .map((path) => path.trim())
+                .filter(Boolean);
+              if (enabled && configuredPaths.length !== 1) {
+                notifications.show({
+                  color: "red",
+                  message:
+                    configuredPaths.length === 0
+                      ? t("organizePathRequired", {
+                          defaultValue: "请先设置整理路径，才能开启自动整理",
+                        })
+                      : "当前媒体库配置了多个整理路径，无法确定唯一的落盘目标。自动整理只能配置一个整理路径。",
+                });
+                return;
+              }
+              onChange({ ...value, auto_organize: enabled });
+            }}
             aria-label={t("autoOrganize.label")}
           />
         </FieldChrome>
@@ -570,7 +692,12 @@ export function LibraryFormFields({ value, onChange, showCreateOnly }: LibraryFo
           <FieldChrome label={t("fieldInitialRefresh")}>
             <Switch
               checked={value.scan}
-              onChange={(e) => onChange({ ...value, scan: e.currentTarget.checked })}
+              onChange={(e) =>
+                onChange({
+                  ...value,
+                  scan: e.target instanceof HTMLInputElement && e.target.checked,
+                })
+              }
               aria-label={t("fieldInitialRefresh")}
             />
           </FieldChrome>

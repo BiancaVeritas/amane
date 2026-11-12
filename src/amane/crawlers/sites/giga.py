@@ -96,7 +96,7 @@ class GigaCrawler(Crawler):
             studio="GIGA",
             release=extract_text(html, self._work_field("DVDリリース日")) or None,
             runtime=self._parse_runtime(extract_text(html, self._work_field("収録時間"))),
-            thumb_urls=[urljoin(url, cover)] if cover else [],
+            cover_urls=[urljoin(url, cover)] if cover else [],
             extrafanart=[urljoin(url, u) for u in extrafanart],
             source_url=url,
         )

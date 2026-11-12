@@ -263,8 +263,8 @@ class DmmCrawler(Crawler):
 
         # 素人条目只有 mediumUrl (jp.jpg), 没有 largeUrl; 这一张同时作封面与海报.
         package_image = data.packageImage
-        thumb_url = (package_image.largeUrl or package_image.mediumUrl) if package_image else None
-        thumb_urls = [thumb_url] if thumb_url else []
+        cover_url = (package_image.largeUrl or package_image.mediumUrl) if package_image else None
+        cover_urls = [cover_url] if cover_url else []
         poster_urls = [package_image.mediumUrl] if package_image and package_image.mediumUrl else []
 
         number = self._cid_to_number(cid, retail=False)
@@ -280,8 +280,9 @@ class DmmCrawler(Crawler):
             tags=[g.name for g in data.genres if g.name],
             series=data.series.name if data.series else None,
             plot=data.description or None,
-            thumb_urls=thumb_urls,
+            cover_urls=cover_urls,
             poster_urls=poster_urls,
+            original_poster_urls=[],  # packageImage 的 medium/large 是同一张图的不同尺寸, 不代表独立海报.
             trailer_urls=trailer_urls,
             score=resp.data.reviewSummary.average if resp.data.reviewSummary else None,
             directors=[d.name for d in data.directors if d.name],
@@ -401,7 +402,7 @@ class DmmCrawler(Crawler):
         cover_url = cover_url.replace("ps.jpg", "pl.jpg")
 
         # 页面只引用标准 CDN, 高清副本由 dmm_cdn 推导; 竖版海报取 ps 形态.
-        thumb_urls = image_candidates(cover_url) if cover_url else []
+        cover_urls = image_candidates(cover_url) if cover_url else []
         poster_urls = poster_candidates(cover_url)
 
         extrafanart = _extrafanart_urls(html)
@@ -434,8 +435,9 @@ class DmmCrawler(Crawler):
             tags=tags,
             series=series or None,
             plot=plot or None,
-            thumb_urls=thumb_urls,
+            cover_urls=cover_urls,
             poster_urls=poster_urls,
+            original_poster_urls=[],  # 此页面只有封面图, poster_urls 是由封面派生的展示图地址.
             score=score,
             directors=directors,
             extrafanart=extrafanart,
@@ -470,7 +472,7 @@ class DmmCrawler(Crawler):
 
         # 页面只引用标准 CDN, 高清副本由 dmm_cdn 推导; 竖版海报取 ps 形态.
         cover_url = extract_text(html, '//meta[@property="og:image"]/@content').replace("ps.jpg", "pl.jpg")
-        thumb_urls = image_candidates(cover_url) if cover_url else []
+        cover_urls = image_candidates(cover_url) if cover_url else []
         poster_urls = poster_candidates(cover_url)
 
         extrafanart = _extrafanart_urls(html)
@@ -489,8 +491,9 @@ class DmmCrawler(Crawler):
             tags=tags,
             series=series or None,
             plot=plot or None,
-            thumb_urls=thumb_urls,
+            cover_urls=cover_urls,
             poster_urls=poster_urls,
+            original_poster_urls=[],  # 此页面只有封面图, poster_urls 是由封面派生的展示图地址.
             score=score,
             directors=directors,
             extrafanart=extrafanart,
@@ -540,7 +543,9 @@ class DmmCrawler(Crawler):
             series=data.series.name if data.series else None,
             plot=data.description or None,
             poster_urls=[data.packageImage] if data.packageImage else [],
-            thumb_urls=[data.packageLargeImage] if data.packageLargeImage else [],
+            original_poster_urls=[data.packageImage] if data.packageImage else [],
+            # packageImage / packageLargeImage 是同一包装图的不同尺寸, 不标记为双页组合.
+            cover_urls=[data.packageLargeImage] if data.packageLargeImage else [],
             trailer_urls=[trailer_url] if trailer_url else [],
             score=data.reviewSummary.averagePoint if data.reviewSummary else None,
             directors=[d.name for d in data.directors if d.name],
@@ -584,7 +589,8 @@ class DmmCrawler(Crawler):
             tags=[g.name for g in data.genres if g.name],
             plot=data.description or None,
             poster_urls=[data.keyVisualImage] if data.keyVisualImage else [],
-            thumb_urls=[data.packageImage] if data.packageImage else [],
+            original_poster_urls=[data.keyVisualImage] if data.keyVisualImage else [],
+            cover_urls=[data.packageImage] if data.packageImage else [],
             score=data.reviewSummary.averagePoint if data.reviewSummary else None,
             directors=directors,
             source_url=url,

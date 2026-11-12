@@ -10,12 +10,16 @@
     "menuLabel": "选择扫描操作",
     "modes": {
       "add": {
-        "label": "扫描新文件",
-        "desc": "发现新媒体文件并入库, 随后刮削待处理的文件"
+        "label": "扫描新文件并刮削",
+        "desc": "扫描并登记新文件，随后对待处理文件执行原有刮削流程"
       },
       "remove": {
         "label": "清理失效记录",
         "desc": "删除磁盘上已不存在的文件记录"
+      },
+      "associate": {
+        "label": "扫描新文件并更新",
+        "desc": "扫描新文件并使用内部已有身份建立作品关联，不发起刮削请求，也不清理失效记录"
       }
     }
   },
@@ -43,6 +47,8 @@
     "numberPlaceholder": "例如 MIDV-123",
     "contentType": "内容类型",
     "contentTypeHint": "留空则根据填写的番号推断",
+    "theporndbUuid": "ThePornDB UUID",
+    "theporndbUuidPlaceholder": "输入 ThePornDB UUID",
     "contentTypeAuto": "自动推断",
     "submit": "开始刮削",
     "contentTypes": {
@@ -53,6 +59,19 @@
       "fc2": "FC2",
       "amateur": "素人",
       "hentai": "动漫"
+    },
+    "sceneSearch": {
+      "title": "ThePornDB 场景搜索",
+      "queryPlaceholder": "标题或片商",
+      "titleField": "标题或片商",
+      "date": "日期",
+      "search": "搜索",
+      "emptyQuery": "请输入标题、片商或日期",
+      "noResults": "没有找到符合条件的场景",
+      "select": "选择场景 {{title}}",
+      "dateLabel": "日期",
+      "studio": "片商",
+      "duration": "时长"
     }
   },
   "batch": {
@@ -81,7 +100,8 @@
     "hint": "控制监控与自动刮削",
     "none": "关闭",
     "watch": "仅监控",
-    "scrape": "监控+刮削"
+    "scrape": "监控+刮削",
+    "refresh": "监控+刷新"
   },
   "autoOrganize": {
     "label": "自动整理",
@@ -128,10 +148,10 @@
     "hardlink": "硬链接",
     "symlink": "符号链接"
   },
-  "fieldVideoTemplate": "视频路径模板",
-  "fieldVideoTemplateHint": "可使用相对或绝对路径, 可用占位符见下方徽章",
-  "fieldLinkTemplate": "链接路径模板",
-  "fieldLinkTemplateHint": "整理时在此路径创建 STRM 文件或符号链接. 必须是库外的绝对路径",
+  "fieldVideoTemplate": "视频命名模板",
+  "fieldVideoTemplateHint": "设置整理后视频的目录结构和文件命名规则",
+  "fieldLinkTemplate": "链路命名模板",
+  "fieldLinkTemplateHint": "设置硬链接、符号链接或 STRM 的目录结构和命名规则",
   "fieldLinkTemplatePlaceholder": "例如 /local/emby/{studio}/{number}/{number}.{ext}",
   "fieldLinkMode": "链接方式",
   "linkMode": {
@@ -154,6 +174,7 @@
     "items": {
       "number": "番号",
       "prefix": "番号前缀. 例 MIDV-123 → MIDV",
+      "raw_prefix": "番号前缀，保留原始大小写. 例 LancelotStylesEvolution.26.10.16 → LancelotStylesEvolution",
       "suffix": "番号去掉前缀后的剩余段. 例 MIDV-123 → 123",
       "title": "标题",
       "actor": "第一位演员",
@@ -179,9 +200,7 @@
       "video_relpath": "整理后视频相对库根目录的路径. 链接模板、附属资源模板与 STRM 内容模板可用",
       "link_dir": "链接所在目录; 未设置链接模板时同 {video_dir}",
       "link_name": "整理后链接文件名 (不含扩展名); 未设置链接模板时同 {video_name}",
-      "raw_srt_name": "字幕源文件名. 例 A/foo.zh.srt → foo.zh",
-      "index": "剧照序号, 从 1 开始. 只在剧照文件名模板里可用",
-      "index_padded": "补零剧照序号, 宽度取剧照数量位数. 只在剧照文件名模板里可用"
+      "raw_srt_name": "字幕源文件名. 例 A/foo.zh.srt → foo.zh"
     }
   },
   "tpl": {
@@ -189,7 +208,6 @@
     "poster": "海报模板",
     "fanart": "背景图模板",
     "extrafanart": "剧照模板",
-    "extrafanartName": "剧照文件名模板",
     "nfo": "NFO 模板",
     "trailer": "预告片模板",
     "subtitle": "字幕模板"
@@ -247,5 +265,9 @@
     "noise": "系统文件",
     "noiseHint": "操作系统或同步工具生成的产物, 会随目录一起删除",
     "showNoise": "显示系统文件"
-  }
+  },
+  "fieldScanPath": "扫描路径",
+  "fieldOrganizePath": "整理路径",
+  "organizePathHint": "留空时仅允许扫描、监控、刮削和重新识别等非落盘操作",
+  "organizePathRequired": "请先设置整理路径，才能开启自动整理"
 }

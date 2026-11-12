@@ -50,6 +50,7 @@
   "backend": {
     "title": "浏览器后端",
     "description": "受保护站点经这些后端渲染; 本地引擎不在当前分发内时, 保存设置会被拒绝.",
+    "testConnection": "测试联通性",
     "refresh": "重新检测",
     "available": "可用",
     "unavailable": "不可用",
@@ -62,6 +63,7 @@
       "camoufox": "当前分发包不含该引擎; 源码安装后可启用.",
       "bsk": "安装 bsk CLI, 并在 Chrome 或 Edge 中连接 BrowserSkill 扩展.",
       "bskLink": "查看安装说明",
+      "remote": "连接 NAS 上独立部署的 Chromium 容器，通过 CDP 远程控制浏览器。",
       "solver": "部署 FlareSolverr 兼容服务, 并在设置中填写地址."
     }
   }

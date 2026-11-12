@@ -32,6 +32,7 @@ import { isRecord } from "@/lib/utils";
 /** Scalar fields - point-pick by equal value groups. */
 const TEXT_FIELDS = [
   "title",
+  "original_title",
   "actors",
   "studio",
   "publisher",
@@ -40,6 +41,7 @@ const TEXT_FIELDS = [
   "tags",
   "series",
   "plot",
+  "original_plot",
   "directors",
 ] as const satisfies readonly MetadataField[];
 
@@ -49,7 +51,7 @@ const TEXT_FIELDS = [
  */
 const MEDIA_FIELDS = [
   "poster_urls",
-  "thumb_urls",
+  "cover_urls",
   "trailer_urls",
   "extrafanart",
 ] as const satisfies readonly MetadataField[];

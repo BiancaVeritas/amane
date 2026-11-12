@@ -22,12 +22,12 @@ r18 库由项目导入 / 管理但 schema 不受我们控制, **不能纳入 Ale
 
 ## 写入事务边界
 
-pysqlite 只在 DML 之前发出 `BEGIN`, 纯 SELECT 落在事务之外 (SQLAlchemy 的 autobegin 只是记账, 不发出语句). 因此「先查询判定, 再按判定写入」默认不构成一个事务: 并发调用双方都读到写入前的状态, 后写入者随后违反唯一约束. 这类写入必须自行取得写锁, 现用于 `src/amane/db/repos/metadata.py::MetadataRepoMixin.upsert_metadata` 的首句 `BEGIN IMMEDIATE`.
+pysqlite 只在 DML 之前发出 `BEGIN`, 纯 SELECT 落在事务之外 (SQLAlchemy 的 autobegin 只是记账, 不发出语句). 因此「先查询判定, 再按判定写入」默认不构成一个事务: 并发调用双方都读到写入前的状态, 后写入者随后违反唯一约束. 这类写入必须自行取得写锁, 现用于 `src/amane/db/repos/metadata.py::MetadataRepoMixin.upsert_metadata` 与 `upsert_western_metadata` 的首句 `BEGIN IMMEDIATE`.
 
 - 写锁是库级的, 从取得写锁到提交之间其它写入被阻塞. 临界区内不允许出现联网或磁盘等待, 否则全库写入一并被拖住.
 - 会话在进入该调用之前不得已有未结束的数据库事务, 否则 `BEGIN IMMEDIATE` 失败.
 - 该写法依赖驱动不自行发出 `BEGIN`; 驱动或方言改为显式发出时失效.
-- 番号比较一律经 `src/amane/db/models.py::metadata_number_predicate`, 才能命中 `ix_metadata_number`.
+- 番号查找经 `src/amane/db/models.py::metadata_number_predicate`, 使用 `ix_metadata_number_lookup` (大小写不敏感普通索引); 非 WESTERN 的番号唯一性由 `ix_metadata_number_non_western` 部分唯一索引保证. WESTERN 不得仅凭番号定位, 使用 `scene_id` 唯一索引 `ix_metadata_western_scene_id`.
 - 同类窗口的另一处: `src/amane/db/repos/media.py::MediaRepoMixin.create_media_file` 直接提交, 两条并行 `REFRESH` 都会判定路径未见, 后提交者违反 `media_files.path` 的 UNIQUE 约束, 整个 `REFRESH` 失败且文件不入库.
 
 连接级 PRAGMA (WAL / `synchronous=NORMAL` / `busy_timeout` / 外键) 只能在 `db/engine.py` 的连接钩子里逐连接下发, 别处另开业务引擎会退回驱动默认. 写锁被占用时连接等待至多 `busy_timeout` 才报 `database is locked`, 临界区短于该值即不失败. `synchronous=NORMAL` 的取舍限于 WAL 已开启: 掉电丢最近若干已提交事务而不损坏库, 换掉逐笔 fsync 拉长的持锁时间.
@@ -64,7 +64,7 @@ SQLite 不支持删列、改类型等 ALTER TABLE 操作, Alembic 通过 batch m
 | JSON 列、`Task.payload`、`translations.db` | value |
 | 枚举型表列 (`Field(Enum)`) | **成员名** |
 
-SQLite 没有原生 enum, 列仍是 VARCHAR. 不能使用 `Column(String)` 或 `values_callable` 按 value 落库 — ORM 会读出 `str`. 落库的是大写成员名 (如 `TRASH`), 不是小写值 (`trash`); 裸 SQL 的条件与写入也按成员名, ORM 比较用 `is`.
+SQLite 没有原生 enum, 列仍是 VARCHAR. 不能使用 `Column(String)` 或 `values_callable` 按 value 落库 — ORM 会读出 `str`. 裸 SQL 绑定成员名; ORM 比较用 `is`.
 
 ## Autogenerate 盲区
 
@@ -86,7 +86,7 @@ SQLite 没有原生 enum, 列仍是 VARCHAR. 不能使用 `Column(String)` 或 `
 3. 匹配不到的行落入一个**兜底行** (如不可删的 `Unmanaged` library), 保证迁移不中止.
 4. 再 `batch_alter_table` 把回填好的列 `alter_column(nullable=False)` + `create_foreign_key` + `create_index`.
 
-迁移测试用临时文件 DB: `command.upgrade(cfg, "<prev>")` → 插旧 schema 数据 → `upgrade("<被测 revision>")` → 断言回填结果. 升到 head 会把后续无关迁移牵进断言. ORM 模型与枚举对应 head schema, 后续迁移改列或改成员会让旧用例失效: 建行与断言都用裸 SQL 与字面量, 不得经 ORM 或引用当前枚举. 只有测启动期升级路径 (`sqlite_migrate`) 的用例才升到 head.
+迁移测试用临时文件 DB: `command.upgrade(cfg, "<prev>")` → 插旧 schema 数据 → `upgrade("head")` → 断言回填结果.
 
 ## 测试策略
 

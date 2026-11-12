@@ -13,9 +13,6 @@ from sqlalchemy.exc import IntegrityError
 
 from tests.helpers import alembic_config
 
-_PREVIOUS = "c4f17334c3ea"
-_TARGET = "b058160ffee4"
-
 
 @pytest.fixture
 def alembic_cfg(tmp_path: Path) -> Config:
@@ -38,7 +35,7 @@ def _insert_metadata(conn: Any, *, number: str, title: str) -> int:
 
 
 def test_metadata_number_case_insensitive_unique_merges_duplicates(alembic_cfg: Config) -> None:
-    command.upgrade(alembic_cfg, _PREVIOUS)
+    command.upgrade(alembic_cfg, "c4f17334c3ea")
 
     url = alembic_cfg.get_main_option("sqlalchemy.url")
     assert url is not None
@@ -72,7 +69,8 @@ def test_metadata_number_case_insensitive_unique_merges_duplicates(alembic_cfg: 
             {"m": dup_id},
         )
 
-    command.upgrade(alembic_cfg, _TARGET)
+    # 本测试验证旧的全局番号唯一 Migration; 新的 WESTERN Scene ID Migration 会有意替换该约束.
+    command.upgrade(alembic_cfg, "2a7c9e1d4b60")
 
     with engine.connect() as conn:
         numbers = [row[0] for row in conn.execute(text("SELECT number FROM metadata ORDER BY id")).fetchall()]

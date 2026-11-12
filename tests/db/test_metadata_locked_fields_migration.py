@@ -12,9 +12,6 @@ from sqlalchemy import create_engine, inspect, text
 
 from tests.helpers import alembic_config
 
-_PREVIOUS = "0c4de00792e3"
-_TARGET = "e4f7dd7d4711"
-
 
 @pytest.fixture
 def alembic_cfg(tmp_path: Path) -> Config:
@@ -45,7 +42,7 @@ def _index_sql(conn: Any, name: str) -> str:
 
 
 def test_metadata_locked_fields_backfill(alembic_cfg: Config) -> None:
-    command.upgrade(alembic_cfg, _PREVIOUS)
+    command.upgrade(alembic_cfg, "0c4de00792e3")
 
     url = alembic_cfg.get_main_option("sqlalchemy.url")
     assert url is not None
@@ -53,7 +50,7 @@ def test_metadata_locked_fields_backfill(alembic_cfg: Config) -> None:
     with engine.begin() as conn:
         legacy_id = _insert_metadata(conn, number="ABC-001", title="Legacy")
 
-    command.upgrade(alembic_cfg, _TARGET)
+    command.upgrade(alembic_cfg, "e4f7dd7d4711")
 
     with engine.connect() as conn:
         columns = {column["name"]: column for column in inspect(conn).get_columns("metadata")}
@@ -77,7 +74,7 @@ def test_metadata_locked_fields_backfill(alembic_cfg: Config) -> None:
 
 
 def test_metadata_locked_fields_downgrade_restores_expression_index(alembic_cfg: Config) -> None:
-    command.upgrade(alembic_cfg, _TARGET)
+    command.upgrade(alembic_cfg, "head")
 
     url = alembic_cfg.get_main_option("sqlalchemy.url")
     assert url is not None
@@ -85,7 +82,7 @@ def test_metadata_locked_fields_downgrade_restores_expression_index(alembic_cfg:
     with engine.begin() as conn:
         _insert_metadata(conn, number="ABC-003", title="Downgrade")
 
-    command.downgrade(alembic_cfg, _PREVIOUS)
+    command.downgrade(alembic_cfg, "0c4de00792e3")
 
     with engine.connect() as conn:
         assert "locked_fields" not in {column["name"] for column in inspect(conn).get_columns("metadata")}

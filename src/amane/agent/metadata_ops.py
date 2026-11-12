@@ -26,7 +26,7 @@ _AGENT_PATCH_KEYS = frozenset(
         "plot",
         "directors",
         "poster_urls",
-        "thumb_urls",
+        "cover_urls",
         "trailer_urls",
         "extrafanart_urls",
         "scores",
@@ -117,7 +117,7 @@ def build_metadata_ops_capability() -> Capability[AgentDeps]:
         use_cache: set[CacheKind] | None = None,
         content_type: ContentType | None = None,
     ) -> dict[str, Any]:
-        """Enqueue SCRAPE tasks for metadata ids (by each row's number).
+        """Enqueue SCRAPE tasks for metadata ids, preserving each row's identity.
 
         content_type: None 用条目已落定的类型, 不重新推断.
         """
@@ -131,9 +131,17 @@ def build_metadata_ops_capability() -> Capability[AgentDeps]:
             if metadata is None:
                 missing += 1
                 continue
+            resolved_type = content_type if content_type is not None else metadata.content_type
+            if resolved_type != metadata.content_type and (
+                resolved_type == ContentType.WESTERN or metadata.content_type == ContentType.WESTERN
+            ):
+                return {"error": f"Metadata {metadata_id}: WESTERN 重新刮削不能更改作品内容类型"}
+            preserve_identity = resolved_type == metadata.content_type
             payload = ScrapePayload(
                 number=metadata.number,
-                content_type=content_type if content_type is not None else metadata.content_type,
+                content_type=resolved_type,
+                metadata_id=metadata.id if preserve_identity else None,
+                theporndb_uuid=metadata.theporndb_uuid if preserve_identity else None,
                 use_cache=cache_kinds,
             )
             await ctx.deps.repo.create_task(task_type=TaskType.SCRAPE, payload=payload)

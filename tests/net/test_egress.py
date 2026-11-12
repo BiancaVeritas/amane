@@ -170,3 +170,14 @@ class TestPublicAddress:
     )
     def test_predicate(self, address: str, expected: bool):
         assert is_public_address(address) is expected
+
+
+@pytest.mark.asyncio
+async def test_ensure_allowed_returns_validated_addresses(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def _resolve(host: str, port: int) -> set[str]:
+        assert host == "pics.example"
+        assert port == 443
+        return {"93.184.216.34"}
+
+    monkeypatch.setattr("amane.net.egress.resolve_addresses", _resolve)
+    assert await EgressPolicy().ensure_allowed("https://pics.example/a.jpg") == {"93.184.216.34"}

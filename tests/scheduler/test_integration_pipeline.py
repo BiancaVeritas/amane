@@ -135,7 +135,7 @@ def fake_metadata():
             "runtime": 120,
             "tags": ["tag1", "tag2"],
             "poster_urls": ["https://img.example.com/poster.jpg"],
-            "thumb_urls": ["https://img.example.com/thumb.jpg"],
+            "cover_urls": ["https://img.example.com/thumb.jpg"],
             "score": 8.5,
         }
     )

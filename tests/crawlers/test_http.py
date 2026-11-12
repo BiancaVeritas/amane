@@ -60,28 +60,6 @@ async def test_get_html_raises_source_error_on_block(client, mock_web, html: str
 
 
 @pytest.mark.asyncio
-async def test_post_html_forwards_form(client, mock_web):
-    mock_web.post_text.return_value = "<html><body>Normal Page</body></html>"
-
-    assert await client.post_html("https://example.com/search", data={"sn": "SERO-025"}) == (
-        "<html><body>Normal Page</body></html>"
-    )
-    mock_web.post_text.assert_awaited_once_with(
-        "https://example.com/search", data={"sn": "SERO-025"}, headers=None, cookies=None, encoding="utf-8"
-    )
-
-
-@pytest.mark.asyncio
-async def test_post_html_raises_source_error_on_block(client, mock_web):
-    mock_web.post_text.return_value = "just a moment... cloudflare challenge"
-
-    with pytest.raises(SourceError) as exc:
-        await client.post_html("https://example.com/search", data={"sn": "SERO-025"})
-
-    assert exc.value.reason == FailureReason.CLOUDFLARE_CHALLENGE
-
-
-@pytest.mark.asyncio
 async def test_render_returns_page_with_host_scope(client, mock_browser):
     mock_browser.get_page.return_value = ("<html><body>Rendered</body></html>", None)
 
@@ -143,7 +121,18 @@ def test_for_source_without_config_returns_same_client(mock_web, mock_browser):
 
 
 @pytest.mark.asyncio
-async def test_always_source_routes_get_html_through_browser(mock_web, mock_browser):
+async def test_always_source_routes_get_html_through_browser(mock_web, mock_browser, monkeypatch):
+    import importlib
+
+    original_import_module = importlib.import_module
+
+    def _import_module(name: str):
+        if name == "camoufox":
+            return object()
+        return original_import_module(name)
+
+    monkeypatch.setattr("amane.config.manager.importlib.import_module", _import_module)
+
     client = HttpClient(web=mock_web, browser=mock_browser, browser_timeout=12345)
     view = client.for_source(
         "minnano",
@@ -211,6 +200,65 @@ async def test_auto_source_uses_direct_first(mock_web, mock_browser):
     mock_web.get_text.return_value = "<html>ok</html>"
 
     assert await view.get_html("https://www.minnano-av.com/search_result.php") == "<html>ok</html>"
+    mock_browser.get_page.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_auto_source_switches_to_browser_on_http_403_cloudflare_challenge(mock_web, mock_browser):
+    client = HttpClient(web=mock_web, browser=mock_browser)
+    view = client.for_source("minnano", SiteConfig())
+    failure = RequestFailure(
+        kind=FailureKind.HTTP_STATUS,
+        status=403,
+        message="HTTP 403",
+        body=b"<html><title>Just a moment...</title><script>_cf_chl_opt={}</script></html>",
+    )
+    mock_web.get_text.side_effect = RequestError("https://www.minnano-av.com/search_result.php", failure)
+    mock_browser.get_page.return_value = ("<html><body>rendered result</body></html>", None)
+
+    result = await view.get_html("https://www.minnano-av.com/search_result.php")
+
+    assert result == "<html><body>rendered result</body></html>"
+    mock_browser.get_page.assert_awaited_once()
+    assert mock_browser.get_page.await_args.kwargs["scope"] == "minnano"
+
+
+@pytest.mark.asyncio
+async def test_auto_source_does_not_switch_on_plain_http_403(mock_web, mock_browser):
+    client = HttpClient(web=mock_web, browser=mock_browser)
+    view = client.for_source("minnano", SiteConfig())
+    failure = RequestFailure(
+        kind=FailureKind.HTTP_STATUS,
+        status=403,
+        message="HTTP 403",
+        body=b"<html><title>Access denied</title><p>Forbidden</p></html>",
+    )
+    error = RequestError("https://www.minnano-av.com/search_result.php", failure)
+    mock_web.get_text.side_effect = error
+
+    with pytest.raises(RequestError) as exc:
+        await view.get_html("https://www.minnano-av.com/search_result.php")
+
+    assert exc.value is error
+    mock_browser.get_page.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_off_source_does_not_switch_on_http_403_cloudflare_challenge(mock_web, mock_browser):
+    client = HttpClient(web=mock_web, browser=mock_browser)
+    view = client.for_source("minnano", SiteConfig(use_browser=BrowserMode.OFF))
+    failure = RequestFailure(
+        kind=FailureKind.HTTP_STATUS,
+        status=403,
+        message="HTTP 403",
+        body=b"<html>Just a moment... <script>_cf_chl_opt={}</script></html>",
+    )
+    mock_web.get_text.side_effect = RequestError("https://a.example/", failure)
+
+    with pytest.raises(SourceError) as exc:
+        await view.get_html("https://a.example/")
+
+    assert exc.value.reason is FailureReason.CLOUDFLARE_CHALLENGE
     mock_browser.get_page.assert_not_awaited()
 
 

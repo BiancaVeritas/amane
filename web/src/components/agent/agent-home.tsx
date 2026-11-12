@@ -187,6 +187,7 @@ function ReasoningPart({ text }: { text: string }) {
   const preview = thoughtPreview(text);
   return (
     <FoldBar
+      // oxlint-disable-next-line react/no-unstable-nested-components -- FoldBar header is a render callback, not a component.
       header={(expanded) => (
         <>
           <Box c="dimmed" style={{ display: "flex", lineHeight: 0 }}>
@@ -302,6 +303,7 @@ function ActivityBlock({
   return (
     <FoldBar
       attention={attention}
+      // oxlint-disable-next-line react/no-unstable-nested-components -- FoldBar header is a render callback, not a component.
       header={() => (
         <>
           <BarText>{label}</BarText>
@@ -771,6 +773,7 @@ function AgUiThread({
 }) {
   const { t } = useTranslation("agent");
   const queryClient = useQueryClient();
+  const queryClientRef = useRef(queryClient);
   const [loadingHistory, setLoadingHistory] = useState(true);
   const [serverTurn, setServerTurn] = useState(false);
   /** 展示源: 回放行折叠出的消息, 直播与回放共用. */
@@ -877,11 +880,11 @@ function AgUiThread({
           setServerTurn(false);
           // 流关闭即回合已结束且行已追平: 此刻的行是完整的, 据此落定
           applyRows(rowsRef.current, true);
-          void queryClient.invalidateQueries({ queryKey: listAgentSessionsQueryKey() });
+          void queryClientRef.current.invalidateQueries({ queryKey: listAgentSessionsQueryKey() });
         }
       }
     })();
-  }, [applyRows, queryClient, runtime, sessionId, snapshot]);
+  }, [applyRows, runtime, sessionId, snapshot]);
 
   // 挂载: 先取整段历史, 再接上跟随 (挂载时回合可能正在后台运行, 跟随会一路跟到它结束).
   // 取历史失败不留在加载态: 提示后放行, 页面照常可用.

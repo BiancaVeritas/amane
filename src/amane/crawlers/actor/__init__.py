@@ -13,15 +13,20 @@ from .sites import (
     JavDBActorCrawler,
     MinnanoActorCrawler,
     ThePornDBActorCrawler,
+    TushyActorCrawler,
+    TushyRawActorCrawler,
     WikipediaActorCrawler,
 )
 
-actor_registry.register(MinnanoActorCrawler)
-actor_registry.register(JavDBActorCrawler)
-actor_registry.register(WikipediaActorCrawler)
+# 注册顺序分别决定资料来源 / 头像来源的默认优先级; 两类能力过滤后各自保持相对顺序.
+actor_registry.register(TushyActorCrawler)
+actor_registry.register(TushyRawActorCrawler)
 actor_registry.register(GFriendsActorCrawler)
+actor_registry.register(MinnanoActorCrawler)
 actor_registry.register(ThePornDBActorCrawler)
-# 注册顺序即默认优先级; avbase 档案字段出现率低, 置于末尾.
+actor_registry.register(WikipediaActorCrawler)
+actor_registry.register(JavDBActorCrawler)
+# Avbase 档案字段出现率低, 置于资料来源末尾.
 actor_registry.register(AvbaseActorCrawler)
 
 __all__ = [
@@ -33,6 +38,8 @@ __all__ = [
     "JavDBActorCrawler",
     "MinnanoActorCrawler",
     "ThePornDBActorCrawler",
+    "TushyActorCrawler",
+    "TushyRawActorCrawler",
     "WikipediaActorCrawler",
     "actor_registry",
     "filter_sites_for_gender",

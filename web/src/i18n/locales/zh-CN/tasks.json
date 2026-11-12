@@ -46,7 +46,6 @@
     "progress": "进度"
   },
   "empty": "暂无任务",
-  "listLoadFailed": "任务列表加载失败",
   "benchmark": {
     "imagesPerSecond": "图片嵌入 {{value}} 张/秒",
     "queryMs": "单次查询 {{value}} ms",
@@ -74,7 +73,12 @@
   },
   "loadMoreChildren": "加载更多 ({{count}})",
   "logView": {
-    "empty": "暂无日志"
+    "empty": "暂无日志",
+    "loadFailed": "历史日志暂不可用",
+    "retry": "重试",
+    "historyUnavailable": "历史日志加载失败，当前实时日志仍可查看。",
+    "loading": "加载中…",
+    "truncated": "仅显示最近日志"
   },
   "reason": {
     "http_error": "请求被站点拒绝",
@@ -161,8 +165,7 @@
       "scan_invalid": "扫描无效文件",
       "delete": "删除",
       "semantic_index": "语义索引",
-      "semantic_benchmark": "性能测试",
-      "actor_push": "推送演员"
+      "semantic_benchmark": "性能测试"
     },
     "cleanup": {
       "remove_missing_files": {
@@ -221,6 +224,10 @@
         "label": "文件 ID",
         "description": "手动刮削无需指定"
       },
+      "theporndb_uuid": {
+        "label": "场景 ID",
+        "description": "ThePornDB 中的场景 ID"
+      },
       "content_type": {
         "label": "内容类型",
         "description": "留空则自动识别",
@@ -277,6 +284,10 @@
         "label": "路径",
         "description": "可设置仅扫描库的子目录"
       },
+      "paths": {
+        "label": "扫描目录列表",
+        "description": "额外指定多个需要扫描的目录"
+      },
       "scan": {
         "label": "扫描模式",
         "$": {
@@ -296,6 +307,10 @@
             "skip": "跳过"
           }
         }
+      },
+      "associate": {
+        "label": "扫描新文件并更新",
+        "description": "扫描新文件并使用内部已有身份建立作品关联，不发起刮削请求，也不清理失效记录"
       },
       "use_cache": {
         "label": "使用缓存",
@@ -412,11 +427,15 @@
     "actor_push": {
       "actor_ids": {
         "label": "演员 ID",
-        "description": "留空表示全部演员"
+        "description": "留空表示同步全部演员"
       },
-      "force": {
-        "label": "强制覆盖",
-        "description": "覆盖媒体服务器上已有的头像与人物字段"
+      "mode": {
+        "label": "同步模式",
+        "description": "完整同步会用 Amane 非空资料覆盖媒体服务器；增量同步仅补充媒体服务器中的空字段",
+        "options": {
+          "full": "完整同步",
+          "incremental": "增量同步"
+        }
       }
     }
   },
@@ -439,5 +458,12 @@
   "worker": {
     "pause": "暂停",
     "resume": "恢复"
-  }
+  },
+  "types": {
+    "actor_push": "推送演员"
+  },
+  "taskTypes": {
+    "actor_push": "推送演员"
+  },
+  "listLoadFailed": "任务列表加载失败"
 }

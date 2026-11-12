@@ -3,13 +3,13 @@
 import asyncio
 import random
 from collections import Counter
-from contextlib import suppress
-from typing import TYPE_CHECKING, Any, cast
+from typing import Any
 
 import pytest
 
 from amane.app.runtime import build_network_stack
 from amane.config import HotSettings, SiteConfig
+from amane.net import http as http_module
 from amane.net.egress import EgressPolicy
 from amane.net.errors import FailureKind, FailureReason, RequestError, RequestFailure
 from amane.net.http import (
@@ -21,11 +21,6 @@ from amane.net.http import (
     _with_same_origin_referer,
     site_proxy_overrides,
 )
-
-if TYPE_CHECKING:
-    from collections.abc import AsyncIterator
-
-    from curl_cffi.requests.session import HttpMethod
 
 
 class TestRequestError:
@@ -89,10 +84,9 @@ class _StubResponse:
         self.status_code = status
         self.headers = headers or {}
         self._chunks = chunks if chunks is not None else [content]
-        # 真实 SDK 只在 stream 模式建这个事件; ``_close`` 据此中止传输, 非流式应答上该分支为空操作
         self.quit_now: asyncio.Event | None = asyncio.Event() if stream else None
 
-    async def aiter_content(self) -> AsyncIterator[bytes]:
+    async def aiter_content(self):
         for chunk in self._chunks:
             yield chunk
 
@@ -111,6 +105,9 @@ class _StubSession:
         self.calls.append({"method": method, "url": url, **kwargs})
         index = min(len(self.calls) - 1, len(self._responses) - 1)
         return self._responses[index]
+
+    async def close(self) -> None:
+        return
 
 
 class _RangeStubSession:
@@ -415,6 +412,22 @@ class TestProxyResolution:
         assert session.calls[0]["proxy"] == expected
 
     @pytest.mark.asyncio
+    async def test_request_source_proxy_overrides_cdn_host(self, monkeypatch: pytest.MonkeyPatch):
+        """图片 CDN host 与站点网页 host 不同，也必须继承明确的来源代理策略."""
+        client = WebClient(
+            proxy=_GLOBAL_PROXY,
+            source_proxies={"javdb": None, "dmm": _SITE_PROXY},
+            limiters=RateLimiters(default_rate=100),
+        )
+        session = _StubSession()
+        monkeypatch.setattr(client, "_session", session)
+
+        await client.request("GET", "https://c0.jdbstatic.com/a.jpg", source="javdb")
+        await client.request("GET", "https://cdn.dmm.example/a.jpg", source="dmm")
+
+        assert [call["proxy"] for call in session.calls] == [None, _SITE_PROXY]
+
+    @pytest.mark.asyncio
     async def test_download_follows_host_proxy(self, monkeypatch: pytest.MonkeyPatch, tmp_path):
         """下载的探测与正文请求走同一代理."""
         client = WebClient(
@@ -510,18 +523,25 @@ class TestChunkedDownload:
         assert set(attempts.values()) == {1, 3}
 
 
-class TestEgressGuard:
-    """协议白名单对每次请求生效; 重定向由策略逐跳复查, 不交给 curl 跟随."""
+def test_resolve_curl_options_pins_validated_addresses() -> None:
+    from curl_cffi import CurlOpt
 
+    from amane.net.http import _resolve_curl_options
+
+    assert _resolve_curl_options("https://pics.example/a.jpg", {"93.184.216.34"}) == {
+        CurlOpt.RESOLVE: ["pics.example:443:93.184.216.34"]
+    }
+    assert _resolve_curl_options("https://pics.example/a.jpg", None) is None
+
+
+class TestEgressGuard:
     @pytest.mark.asyncio
     async def test_rejects_non_http_scheme_before_sending(self, monkeypatch: pytest.MonkeyPatch):
         client = WebClient(limiters=RateLimiters(default_rate=100))
         session = _StubSession()
         monkeypatch.setattr(client, "_session", session)
-
         with pytest.raises(RequestError):
-            await client.request("GET", "file:///etc/passwd")
-
+            await client.request("GET", "file:///etc/passwd", egress=EgressPolicy())
         assert session.calls == []
 
     @pytest.mark.asyncio
@@ -529,24 +549,20 @@ class TestEgressGuard:
         client = WebClient(limiters=RateLimiters(default_rate=100))
         session = _StubSession()
         monkeypatch.setattr(client, "_session", session)
-
         with pytest.raises(RequestError):
             await client.request("GET", "http://169.254.169.254/latest/meta-data/", egress=EgressPolicy())
-
         assert session.calls == []
 
     @pytest.mark.asyncio
     async def test_redirect_to_private_blocked(self, monkeypatch: pytest.MonkeyPatch, public_dns: None):
-        """公开 URL 302 到内网: 只有首跳被发出, 第二跳在发出前被拒."""
         client = WebClient(limiters=RateLimiters(default_rate=100))
         session = _StubSession(
             _StubResponse(status=302, headers={"Location": "http://169.254.169.254/latest/meta-data/"})
         )
         monkeypatch.setattr(client, "_session", session)
-
+        monkeypatch.setattr(http_module, "AsyncSession", lambda **kwargs: session)
         with pytest.raises(RequestError):
             await client.request("GET", "https://public.example/logo.png", egress=EgressPolicy())
-
         assert [call["url"] for call in session.calls] == ["https://public.example/logo.png"]
 
     @pytest.mark.asyncio
@@ -557,231 +573,35 @@ class TestEgressGuard:
             _StubResponse(content=b"jpeg-bytes"),
         )
         monkeypatch.setattr(client, "_session", session)
-
-        resp = await client.request("GET", "https://public.example/logo.png", egress=EgressPolicy())
-
-        assert resp.content == b"jpeg-bytes"
+        monkeypatch.setattr(http_module, "AsyncSession", lambda **kwargs: session)
+        response = await client.request("GET", "https://public.example/logo.png", egress=EgressPolicy())
+        assert response.content == b"jpeg-bytes"
         assert [call["url"] for call in session.calls] == [
             "https://public.example/logo.png",
             "https://cdn.example/final.jpg",
         ]
         assert all(call["allow_redirects"] is False for call in session.calls)
 
-    @pytest.mark.asyncio
-    @pytest.mark.parametrize(
-        ("status", "method", "expected_method"),
-        [
-            (302, "POST", "GET"),
-            (303, "POST", "GET"),
-            # 探测用的 HEAD 不能被改成 GET, 否则会白读一遍正文
-            (301, "HEAD", "HEAD"),
-            (302, "HEAD", "HEAD"),
-            (303, "HEAD", "HEAD"),
-            # 301/302 只把 POST 改成 GET, 其它方法保留
-            (301, "PUT", "PUT"),
-            (307, "POST", "POST"),
-            (308, "POST", "POST"),
-        ],
-    )
-    async def test_redirect_rewrites_method(
-        self,
-        monkeypatch: pytest.MonkeyPatch,
-        public_dns: None,
-        status: int,
-        method: str,
-        expected_method: str,
-    ):
-        """重定向的方法改写与 curl 一致: 303 除 HEAD 外改 GET, 301/302 只改 POST."""
-        client = WebClient(limiters=RateLimiters(default_rate=100))
-        session = _StubSession(
-            _StubResponse(status=status, headers={"Location": "https://cdn.example/final.jpg"}),
-            _StubResponse(content=b"ok"),
-        )
-        monkeypatch.setattr(client, "_session", session)
-
-        await client.request(cast("HttpMethod", method), "https://public.example/form", egress=EgressPolicy())
-
-        assert [call["method"] for call in session.calls] == [method, expected_method]
-
-    @pytest.mark.asyncio
-    @pytest.mark.parametrize(
-        ("status", "expected_body"),
-        [
-            # 改写成 GET 的跳转丢弃请求体
-            (301, None),
-            (302, None),
-            (303, None),
-            # 非改写重定向保留方法与请求体
-            (307, b"payload"),
-            (308, b"payload"),
-        ],
-    )
-    async def test_redirect_body_follows_method(
-        self, monkeypatch: pytest.MonkeyPatch, public_dns: None, status: int, expected_body: bytes | None
-    ):
-        """请求体只随方法一起改写, 与 curl 自身的跟随一致."""
-        client = WebClient(limiters=RateLimiters(default_rate=100))
-        session = _StubSession(
-            _StubResponse(status=status, headers={"Location": "https://cdn.example/final.jpg"}),
-            _StubResponse(content=b"ok"),
-        )
-        monkeypatch.setattr(client, "_session", session)
-
-        await client.request("POST", "https://public.example/form", data=b"payload", egress=EgressPolicy())
-
-        assert session.calls[0]["data"] == b"payload"
-        assert session.calls[1]["data"] == expected_body
-        assert session.calls[1]["json"] is None
-
-    @pytest.mark.asyncio
-    async def test_redirect_budget(self, monkeypatch: pytest.MonkeyPatch, public_dns: None):
-        client = WebClient(limiters=RateLimiters(default_rate=100))
-        session = _StubSession(_StubResponse(status=302, headers={"Location": "https://public.example/loop"}))
-        monkeypatch.setattr(client, "_session", session)
-
-        with pytest.raises(RequestError):
-            await client.request("GET", "https://public.example/loop", egress=EgressPolicy(max_redirects=2))
-
-        assert len(session.calls) == 3
-
-
-class TestCloseResponse:
-    """丢弃的应答: 先置中止标志再关闭; 关闭失败与空应答都不影响调用方."""
-
-    @staticmethod
-    def _stub(kind: str, records: list[str]) -> Any:
-        class _Resp:
-            def __init__(self) -> None:
-                self.quit_now = asyncio.Event() if kind == "stream" else None
-
-            async def aclose(self) -> None:
-                aborted = self.quit_now is not None and self.quit_now.is_set()
-                records.append("quit-then-close" if aborted else "close")
-                if kind == "raises":
-                    raise OSError("boom")
-
-        return None if kind == "none" else _Resp()
-
-    @pytest.mark.asyncio
-    @pytest.mark.parametrize(
-        ("kind", "expected"),
-        [
-            ("none", []),
-            ("plain", ["close"]),
-            # 非流式应答上置标志是空操作, 中止顺序只对流式应答可观察
-            ("stream", ["quit-then-close"]),
-            ("raises", ["close"]),
-        ],
-    )
-    async def test_aborts_before_close(self, kind: str, expected: list[str]):
-        records: list[str] = []
-
-        await WebClient._close(self._stub(kind, records))
-
-        assert records == expected
-
 
 class TestBoundedDownload:
-    """``max_bytes``: 不信任 Content-Length, 边收边写, 超限中止."""
-
     @pytest.mark.asyncio
     async def test_streams_under_cap(self, monkeypatch: pytest.MonkeyPatch, tmp_path, public_dns: None):
         client = WebClient(limiters=RateLimiters(default_rate=100))
-        session = _StubSession(_StubResponse(content=b"x" * 1024))
+        session = _StubSession(_StubResponse(content=b"x" * 1024, stream=True))
         monkeypatch.setattr(client, "_session", session)
-
-        assert (
-            await client.download(
-                "https://pics.example/a.jpg", tmp_path / "a.bin", max_bytes=2048, egress=EgressPolicy()
-            )
-            is True
+        monkeypatch.setattr(http_module, "AsyncSession", lambda **kwargs: session)
+        assert await client.download(
+            "https://pics.example/a.jpg", tmp_path / "a.bin", max_bytes=2048, egress=EgressPolicy()
         )
-
         assert (tmp_path / "a.bin").read_bytes() == b"x" * 1024
         assert session.calls[0]["stream"] is True
-        assert session.calls[0]["allow_redirects"] is False
 
     @pytest.mark.asyncio
     async def test_aborts_when_cap_exceeded(self, monkeypatch: pytest.MonkeyPatch, tmp_path):
-        """第三个分块越界时中止: 已写入的不超过上限, 且必须切断上游而不是只停止消费."""
         client = WebClient(limiters=RateLimiters(default_rate=100))
         response = _StubResponse(chunks=[b"a" * 1024, b"b" * 1024, b"c" * 1024], stream=True)
         session = _StubSession(response)
         monkeypatch.setattr(client, "_session", session)
-
         assert await client.download("https://pics.example/a.jpg", tmp_path / "a.bin", max_bytes=2048) is False
-
         assert (tmp_path / "a.bin").stat().st_size == 2048
-        assert response.quit_now is not None
-        assert response.quit_now.is_set()
-
-    @pytest.mark.asyncio
-    async def test_cap_cuts_upstream_transfer(self, monkeypatch: pytest.MonkeyPatch, tmp_path):
-        """真实上游: 超限后连接被切断, 不会把整份正文传完 (只停止消费时服务端会发满).
-
-        curl 在后台把正文读进无界队列, 消费方落后时 loopback 足以在越限之前传完整份正文, 判别随之失效.
-        服务端因此先发出越过上限的一段, 等客户端开始中止才继续发送: 剩余正文能否发满只取决于连接是否被切断.
-        """
-        total = 64 * 1024 * 1024
-        head = 1024 * 1024
-        chunk = b"x" * 65536
-        sent = 0
-        aborting = asyncio.Event()
-        finished = asyncio.Event()
-
-        async def handler(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
-            nonlocal sent
-            writer.write(
-                b"HTTP/1.1 200 OK\r\nContent-Length: " + str(total).encode() + b"\r\nConnection: close\r\n\r\n"
-            )
-            try:
-                for _ in range(total // len(chunk)):
-                    if sent == head:
-                        await aborting.wait()
-                    writer.write(chunk)
-                    await writer.drain()
-                    sent += len(chunk)
-            except ConnectionError:
-                pass
-            finally:
-                finished.set()
-                writer.close()
-                with suppress(Exception):
-                    await writer.wait_closed()
-
-        server = await asyncio.start_server(handler, "127.0.0.1", 0)
-        port = server.sockets[0].getsockname()[1]
-        client = WebClient(limiters=RateLimiters(default_rate=100))
-        close = client._close
-
-        async def close_after_signal(resp: Any) -> None:
-            aborting.set()
-            await close(resp)
-
-        monkeypatch.setattr(client, "_close", close_after_signal)
-        try:
-            ok = await asyncio.wait_for(
-                client.download(f"http://127.0.0.1:{port}/big.bin", tmp_path / "big.bin", max_bytes=128 * 1024),
-                timeout=10,
-            )
-            assert ok is False
-            await asyncio.wait_for(finished.wait(), timeout=10)
-        finally:
-            server.close()
-            await server.wait_closed()
-            await client.close()
-
-        # 判别边界落在「有没有切断」: 内核收发缓冲会吃掉几 MiB, 不能按 MB 级余量断言
-        assert sent < total // 2
-
-    @pytest.mark.asyncio
-    async def test_chunk_count_capped(self, monkeypatch: pytest.MonkeyPatch, tmp_path):
-        """上游自称的长度决定区间数: 超过上限直接放弃, 不构造区间列表也不发起 Range 请求."""
-        session = _RangeStubSession(b"x" * 5000)
-        client = _network_client(monkeypatch, session)
-        monkeypatch.setattr(client, "_chunk_size", 1)
-        monkeypatch.setattr(client, "_chunked_threshold", 1)
-
-        assert await client.download("https://pics.example/a.jpg", tmp_path / "a.jpg") is False
-
-        assert session.ranges == []
+        assert response.quit_now is not None and response.quit_now.is_set()

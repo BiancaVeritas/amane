@@ -234,13 +234,13 @@ export const ActorPushSubmissionSchema = {
             },
             type: 'array',
             title: 'Actor Ids',
-            description: '要推送的演员 ID; 空表示全部演员'
+            description: '要同步的演员 ID; 空表示全部演员'
         },
-        force: {
-            type: 'boolean',
-            title: 'Force',
-            description: '覆盖媒体服务器上已有的头像与人物字段',
-            default: false
+        mode: {
+            type: 'string',
+            enum: ['full', 'incremental'],
+            title: 'Mode',
+            description: '同步模式: full 用 Amane 非空资料覆盖; incremental 仅补充目标空字段'
         },
         type: {
             type: 'string',
@@ -556,9 +556,9 @@ export const ActorScrapingConfigSchema = {
                 type: 'string',
                 enum: [
                     'minnano',
-                    'javdb',
-                    'wikipedia',
                     'theporndb',
+                    'wikipedia',
+                    'javdb',
                     'avbase'
                 ]
             },
@@ -571,6 +571,8 @@ export const ActorScrapingConfigSchema = {
             items: {
                 type: 'string',
                 enum: [
+                    'tushy',
+                    'tushy_raw',
                     'gfriends'
                 ]
             },
@@ -588,12 +590,6 @@ export const ActorScrapingConfigSchema = {
             type: 'boolean',
             title: 'Auto Scrape',
             default: true
-        },
-        auto_push: {
-            type: 'boolean',
-            title: 'Auto Push',
-            description: '演员刮削成功后自动将该演员推送到媒体服务器',
-            default: false
         },
         gfriends_repo: {
             type: 'string',
@@ -905,7 +901,7 @@ export const AgentConfigSchema = {
             maximum: 60000,
             minimum: 50,
             title: 'Sql Timeout Ms',
-            default: 5000,
+            default: 1000,
             'x-hidden': true
         },
         result_cache_ttl_s: {
@@ -1237,6 +1233,44 @@ export const ApprovalsRowSchema = {
     description: '未决审批快照. 每个回合结束发一条, **空列表表示已无未决**, 后者覆盖前者.\n\n原样携带 AG-UI 中断: 前端既用它渲染审批入口, 也把它交给 runtime 完成 `resume`.'
 } as const;
 
+export const BatchDeleteSchema = {
+    properties: {
+        ids: {
+            items: {
+                type: 'integer'
+            },
+            type: 'array',
+            maxItems: 500,
+            minItems: 1,
+            title: 'Ids'
+        }
+    },
+    type: 'object',
+    required: [
+        'ids'
+    ],
+    title: 'BatchDelete'
+} as const;
+
+export const BatchSubmitSchema = {
+    properties: {
+        ids: {
+            items: {
+                type: 'integer'
+            },
+            type: 'array',
+            maxItems: 500,
+            minItems: 1,
+            title: 'Ids'
+        }
+    },
+    type: 'object',
+    required: [
+        'ids'
+    ],
+    title: 'BatchSubmit'
+} as const;
+
 export const Body_install_pluginSchema = {
     properties: {
         file: {
@@ -1267,6 +1301,22 @@ export const Body_install_pluginSchema = {
     },
     type: 'object',
     title: 'Body_install_plugin'
+} as const;
+
+export const Body_upload_metadata_imageSchema = {
+    properties: {
+        file: {
+            type: 'string',
+            contentMediaType: 'application/octet-stream',
+            title: 'File',
+            description: '本地封面或海报图片'
+        }
+    },
+    type: 'object',
+    required: [
+        'file'
+    ],
+    title: 'Body_upload_metadata_image'
 } as const;
 
 export const BrowserBackendItemResponseSchema = {
@@ -1325,6 +1375,7 @@ export const BrowserBackendNameSchema = {
         'patchright',
         'camoufox',
         'bsk',
+        'remote',
         'solver'
     ],
     title: 'BrowserBackendName'
@@ -1383,6 +1434,12 @@ export const BrowserConfigSchema = {
             pattern: '^https?://.+',
             title: 'Solver Url',
             default: 'http://127.0.0.1:8191'
+        },
+        remote_url: {
+            type: 'string',
+            pattern: '^https?://.+',
+            title: 'Remote Url',
+            default: 'http://127.0.0.1:9222'
         }
     },
     type: 'object',
@@ -1900,7 +1957,7 @@ export const CropPosterRequestSchema = {
         'bottom'
     ],
     title: 'CropPosterRequest',
-    description: '从封面图按像素框裁切海报 (相对 thumb 当前本地文件像素; 含就地超分后尺寸).'
+    description: '从封面图按像素框裁切海报 (相对 cover 当前本地文件像素; 含就地超分后尺寸).'
 } as const;
 
 export const DeleteResultSchema = {
@@ -3143,6 +3200,7 @@ export const HotSettingsSchema = {
                 ],
                 crop_poster: true,
                 poster_ratio: 0.7,
+                uncensored_poster_ratio: 0.87,
                 poster_crop_skip_ratio: 0.9,
                 jpeg_quality: 95,
                 content_routes: {
@@ -3154,9 +3212,11 @@ export const HotSettingsSchema = {
                     ],
                     censored: [
                         'dmm',
+                        'mgstage',
                         'javdb',
+                        'avbase',
                         'javbus',
-                        'official'
+                        'avsox'
                     ],
                     chinese: [
                         'iqqtv',
@@ -3177,15 +3237,17 @@ export const HotSettingsSchema = {
                         'javdb'
                     ],
                     uncensored: [
-                        'javdb',
-                        'javbus',
-                        'avsox',
-                        'freejavbt'
+                        'aventertainments',
+                        '10musume',
+                        '1pondo',
+                        'caribbeancom',
+                        'pacopacomama',
+                        'tokyo_hot',
+                        'caribbeancompr',
+                        'd2pass'
                     ],
                     western: [
-                        'theporndb',
-                        'javdb',
-                        'freejavbt'
+                        'theporndb'
                     ]
                 },
                 field_priority: {},
@@ -3201,6 +3263,30 @@ export const HotSettingsSchema = {
                     title: 'zh_cn'
                 },
                 site_config: {
+                    '10musume': {
+                        cookie: {},
+                        languages: [
+                            'zh',
+                            'ja',
+                            'en'
+                        ],
+                        official_routes: {},
+                        rate_limit: 2,
+                        use_browser: 'auto',
+                        use_proxy: true
+                    },
+                    '1pondo': {
+                        cookie: {},
+                        languages: [
+                            'zh',
+                            'ja',
+                            'en'
+                        ],
+                        official_routes: {},
+                        rate_limit: 2,
+                        use_browser: 'auto',
+                        use_proxy: true
+                    },
                     airav: {
                         cookie: {},
                         languages: [
@@ -3225,7 +3311,55 @@ export const HotSettingsSchema = {
                         use_browser: 'auto',
                         use_proxy: true
                     },
+                    aventertainments: {
+                        cookie: {},
+                        languages: [
+                            'zh',
+                            'ja',
+                            'en'
+                        ],
+                        official_routes: {},
+                        rate_limit: 2,
+                        use_browser: 'auto',
+                        use_proxy: true
+                    },
                     avsox: {
+                        cookie: {},
+                        languages: [
+                            'zh',
+                            'ja',
+                            'en'
+                        ],
+                        official_routes: {},
+                        rate_limit: 2,
+                        use_browser: 'auto',
+                        use_proxy: true
+                    },
+                    caribbeancom: {
+                        cookie: {},
+                        languages: [
+                            'zh',
+                            'ja',
+                            'en'
+                        ],
+                        official_routes: {},
+                        rate_limit: 2,
+                        use_browser: 'auto',
+                        use_proxy: true
+                    },
+                    caribbeancompr: {
+                        cookie: {},
+                        languages: [
+                            'zh',
+                            'ja',
+                            'en'
+                        ],
+                        official_routes: {},
+                        rate_limit: 2,
+                        use_browser: 'auto',
+                        use_proxy: true
+                    },
+                    d2pass: {
                         cookie: {},
                         languages: [
                             'zh',
@@ -3465,6 +3599,18 @@ export const HotSettingsSchema = {
                         use_browser: 'auto',
                         use_proxy: true
                     },
+                    pacopacomama: {
+                        cookie: {},
+                        languages: [
+                            'zh',
+                            'ja',
+                            'en'
+                        ],
+                        official_routes: {},
+                        rate_limit: 2,
+                        use_browser: 'auto',
+                        use_proxy: true
+                    },
                     prestige: {
                         cookie: {},
                         languages: [
@@ -3490,6 +3636,42 @@ export const HotSettingsSchema = {
                         use_proxy: true
                     },
                     theporndb: {
+                        cookie: {},
+                        languages: [
+                            'zh',
+                            'ja',
+                            'en'
+                        ],
+                        official_routes: {},
+                        rate_limit: 2,
+                        use_browser: 'auto',
+                        use_proxy: true
+                    },
+                    tokyo_hot: {
+                        cookie: {},
+                        languages: [
+                            'zh',
+                            'ja',
+                            'en'
+                        ],
+                        official_routes: {},
+                        rate_limit: 2,
+                        use_browser: 'auto',
+                        use_proxy: true
+                    },
+                    tushy: {
+                        cookie: {},
+                        languages: [
+                            'zh',
+                            'ja',
+                            'en'
+                        ],
+                        official_routes: {},
+                        rate_limit: 2,
+                        use_browser: 'auto',
+                        use_proxy: true
+                    },
+                    tushy_raw: {
                         cookie: {},
                         languages: [
                             'zh',
@@ -3540,17 +3722,18 @@ export const HotSettingsSchema = {
             default: {
                 profile_sites: [
                     'minnano',
-                    'javdb',
-                    'wikipedia',
                     'theporndb',
+                    'wikipedia',
+                    'javdb',
                     'avbase'
                 ],
                 image_sites: [
+                    'tushy',
+                    'tushy_raw',
                     'gfriends'
                 ],
                 download_images: true,
                 auto_scrape: true,
-                auto_push: false,
                 gfriends_repo: 'https://github.com/gfriends/gfriends'
             }
         },
@@ -3562,7 +3745,7 @@ export const HotSettingsSchema = {
                 model: 'gpt-4o-mini',
                 max_tokens: 128000,
                 rate_limit: 2,
-                sql_timeout_ms: 5000,
+                sql_timeout_ms: 1000,
                 result_cache_ttl_s: 3600,
                 result_cache_max_entries: 64,
                 history_ttl_s: 3600,
@@ -3577,6 +3760,7 @@ export const HotSettingsSchema = {
                 max_clients: 50,
                 browser: {
                     backend: 'off',
+                    remote_url: 'http://127.0.0.1:9222',
                     solver_url: 'http://127.0.0.1:8191',
                     timeout: 30000
                 },
@@ -4124,6 +4308,7 @@ export const LibraryAutomationSchema = {
     enum: [
         'none',
         'watch',
+        'refresh',
         'scrape'
     ],
     title: 'LibraryAutomation',
@@ -4147,6 +4332,15 @@ export const LibraryCreateRequestSchema = {
             type: 'string',
             title: 'Path'
         },
+        scan_paths: { items: { type: 'string' }, type: 'array', title: 'Scan Paths', default: [] },
+        organize_path: {
+            anyOf: [
+                { type: 'string' },
+                { type: 'null' }
+            ],
+            title: 'Organize Path'
+        },
+        organize_paths: { items: { type: 'string' }, type: 'array', title: 'Organize Paths', default: [] },
         automation: {
             $ref: '#/components/schemas/LibraryAutomation',
             default: 'scrape'
@@ -4262,17 +4456,6 @@ export const LibraryCreateRequestSchema = {
                 }
             ],
             title: 'Extrafanart Template'
-        },
-        extrafanart_name_template: {
-            anyOf: [
-                {
-                    type: 'string'
-                },
-                {
-                    type: 'null'
-                }
-            ],
-            title: 'Extrafanart Name Template'
         },
         nfo_template: {
             anyOf: [
@@ -4398,6 +4581,15 @@ export const LibraryResponseSchema = {
             type: 'string',
             title: 'Path'
         },
+        scan_paths: { items: { type: 'string' }, type: 'array', title: 'Scan Paths', default: [] },
+        organize_path: {
+            anyOf: [
+                { type: 'string' },
+                { type: 'null' }
+            ],
+            title: 'Organize Path'
+        },
+        organize_paths: { items: { type: 'string' }, type: 'array', title: 'Organize Paths', default: [] },
         automation: {
             $ref: '#/components/schemas/LibraryAutomation'
         },
@@ -4506,17 +4698,6 @@ export const LibraryResponseSchema = {
                 }
             ],
             title: 'Extrafanart Template'
-        },
-        extrafanart_name_template: {
-            anyOf: [
-                {
-                    type: 'string'
-                },
-                {
-                    type: 'null'
-                }
-            ],
-            title: 'Extrafanart Name Template'
         },
         nfo_template: {
             anyOf: [
@@ -4630,6 +4811,13 @@ export const LibraryUpdateRequestSchema = {
                 }
             ],
             title: 'Path'
+        },
+        organize_path: {
+            anyOf: [
+                { type: 'string' },
+                { type: 'null' }
+            ],
+            title: 'Organize Path'
         },
         automation: {
             anyOf: [
@@ -4794,17 +4982,6 @@ export const LibraryUpdateRequestSchema = {
                 }
             ],
             title: 'Extrafanart Template'
-        },
-        extrafanart_name_template: {
-            anyOf: [
-                {
-                    type: 'string'
-                },
-                {
-                    type: 'null'
-                }
-            ],
-            title: 'Extrafanart Name Template'
         },
         nfo_template: {
             anyOf: [
@@ -4987,6 +5164,34 @@ export const ManufacturerSchema = {
         'wanz_factory'
     ],
     title: 'Manufacturer'
+} as const;
+
+export const MappingUpdateSchema = {
+    properties: {
+        original: {
+            type: 'string',
+            maxLength: 300,
+            minLength: 1,
+            title: 'Original'
+        },
+        translation: {
+            anyOf: [
+                {
+                    type: 'string',
+                    maxLength: 300
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Translation'
+        }
+    },
+    type: 'object',
+    required: [
+        'original'
+    ],
+    title: 'MappingUpdate'
 } as const;
 
 export const MediaBatchDeleteRequestSchema = {
@@ -5301,6 +5506,7 @@ export const MediaServerConfigSchema = {
                     type: 'null'
                 }
             ],
+            format: 'password',
             title: 'Api Key',
             description: '管理员 API Key'
         },
@@ -5548,6 +5754,13 @@ export const MetadataDetailResponseSchema = {
                 }
             ],
             title: 'Series Id'
+        },
+        series_ids: {
+            additionalProperties: {
+                type: 'integer'
+            },
+            type: 'object',
+            title: 'Series Ids'
         }
     },
     type: 'object',
@@ -5562,7 +5775,9 @@ export const MetadataFieldSchema = {
     type: 'string',
     enum: [
         'title',
+        'original_title',
         'plot',
+        'original_plot',
         'actors',
         'directors',
         'tags',
@@ -5572,7 +5787,7 @@ export const MetadataFieldSchema = {
         'publisher',
         'studio',
         'poster_urls',
-        'thumb_urls',
+        'cover_urls',
         'trailer_urls',
         'extrafanart',
         'score'
@@ -5625,37 +5840,6 @@ export const MetadataLocksRequestSchema = {
     description: '整体替换锁定字段集合.'
 } as const;
 
-export const MetadataMergeEntriesRequestSchema = {
-    properties: {
-        target_id: {
-            type: 'integer',
-            title: 'Target Id',
-            description: '合并目标 Metadata ID; 其字段与已有站点快照保持不变'
-        },
-        source_ids: {
-            items: {
-                type: 'integer'
-            },
-            type: 'array',
-            minItems: 1,
-            title: 'Source Ids',
-            description: '待合并的 Metadata ID 列表; 按顺序补入 raw 快照'
-        },
-        rescrape: {
-            type: 'boolean',
-            title: 'Rescrape',
-            description: '合并后按当前优先级对目标番号入队 SCRAPE, 复用 raw 缓存重新聚合字段',
-            default: false
-        }
-    },
-    type: 'object',
-    required: [
-        'target_id',
-        'source_ids'
-    ],
-    title: 'MetadataMergeEntriesRequest'
-} as const;
-
 export const MetadataPartialSchema = {
     properties: {
         title: {
@@ -5668,6 +5852,17 @@ export const MetadataPartialSchema = {
                 }
             ],
             title: 'Title'
+        },
+        original_title: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Original Title'
         },
         actors: {
             anyOf: [
@@ -5756,16 +5951,43 @@ export const MetadataPartialSchema = {
             ],
             title: 'Series'
         },
+        series_names: {
+            anyOf: [
+                {
+                    items: {
+                        type: 'string'
+                    },
+                    type: 'array'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Series Names'
+        },
         plot: {
             anyOf: [
                 {
-                    type: 'string'
+                    type: 'string',
+                    'x-long': true
                 },
                 {
                     type: 'null'
                 }
             ],
             title: 'Plot'
+        },
+        original_plot: {
+            anyOf: [
+                {
+                    type: 'string',
+                    'x-long': true
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Original Plot'
         },
         directors: {
             anyOf: [
@@ -5795,7 +6017,7 @@ export const MetadataPartialSchema = {
             ],
             title: 'Poster Urls'
         },
-        thumb_urls: {
+        original_poster_urls: {
             anyOf: [
                 {
                     items: {
@@ -5807,7 +6029,35 @@ export const MetadataPartialSchema = {
                     type: 'null'
                 }
             ],
-            title: 'Thumb Urls'
+            title: 'Original Poster Urls'
+        },
+        cover_urls: {
+            anyOf: [
+                {
+                    items: {
+                        type: 'string'
+                    },
+                    type: 'array'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Cover Urls'
+        },
+        original_cover_urls: {
+            anyOf: [
+                {
+                    items: {
+                        type: 'string'
+                    },
+                    type: 'array'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Original Cover Urls'
         },
         trailer_urls: {
             anyOf: [
@@ -5912,6 +6162,17 @@ export const MetadataResponseSchema = {
             ],
             title: 'Title'
         },
+        original_title: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Original Title'
+        },
         actors: {
             items: {
                 type: 'string'
@@ -5919,6 +6180,13 @@ export const MetadataResponseSchema = {
             type: 'array',
             title: 'Actors',
             default: []
+        },
+        actor_genders: {
+            additionalProperties: {
+                $ref: '#/components/schemas/ActorGender'
+            },
+            type: 'object',
+            title: 'Actor Genders'
         },
         studio: {
             anyOf: [
@@ -5983,6 +6251,14 @@ export const MetadataResponseSchema = {
             ],
             title: 'Series'
         },
+        series_names: {
+            items: {
+                type: 'string'
+            },
+            type: 'array',
+            title: 'Series Names',
+            default: []
+        },
         plot: {
             anyOf: [
                 {
@@ -5993,6 +6269,17 @@ export const MetadataResponseSchema = {
                 }
             ],
             title: 'Plot'
+        },
+        original_plot: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Original Plot'
         },
         directors: {
             items: {
@@ -6013,7 +6300,7 @@ export const MetadataResponseSchema = {
             ],
             title: 'Poster Url'
         },
-        thumb_url: {
+        cover_url: {
             anyOf: [
                 {
                     type: 'string'
@@ -6022,7 +6309,7 @@ export const MetadataResponseSchema = {
                     type: 'null'
                 }
             ],
-            title: 'Thumb Url'
+            title: 'Cover Url'
         },
         trailer_url: {
             anyOf: [
@@ -6059,6 +6346,14 @@ export const MetadataResponseSchema = {
             title: 'Vr',
             default: false
         },
+        original_poster_urls: {
+            items: {
+                type: 'string'
+            },
+            type: 'array',
+            title: 'Original Poster Urls',
+            default: []
+        },
         poster_urls: {
             items: {
                 type: 'string'
@@ -6067,12 +6362,20 @@ export const MetadataResponseSchema = {
             title: 'Poster Urls',
             default: []
         },
-        thumb_urls: {
+        cover_urls: {
             items: {
                 type: 'string'
             },
             type: 'array',
-            title: 'Thumb Urls',
+            title: 'Cover Urls',
+            default: []
+        },
+        original_cover_urls: {
+            items: {
+                type: 'string'
+            },
+            type: 'array',
+            title: 'Original Cover Urls',
             default: []
         },
         trailer_urls: {
@@ -6103,6 +6406,17 @@ export const MetadataResponseSchema = {
             title: 'External Ids',
             default: {}
         },
+        theporndb_uuid: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Theporndb Uuid'
+        },
         source_urls: {
             additionalProperties: true,
             type: 'object',
@@ -6113,6 +6427,14 @@ export const MetadataResponseSchema = {
             additionalProperties: true,
             type: 'object',
             title: 'Field Sources',
+            default: {}
+        },
+        image_sources: {
+            additionalProperties: {
+                type: 'string'
+            },
+            type: 'object',
+            title: 'Image Sources',
             default: {}
         },
         raw: {
@@ -6344,10 +6666,6 @@ export const OptionalPathTemplateDefaultsSchema = {
             type: 'string',
             title: 'Extrafanart Template'
         },
-        extrafanart_name_template: {
-            type: 'string',
-            title: 'Extrafanart Name Template'
-        },
         nfo_template: {
             type: 'string',
             title: 'Nfo Template'
@@ -6367,13 +6685,12 @@ export const OptionalPathTemplateDefaultsSchema = {
         'poster_template',
         'fanart_template',
         'extrafanart_template',
-        'extrafanart_name_template',
         'nfo_template',
         'trailer_template',
         'subtitle_template'
     ],
     title: 'OptionalPathTemplateDefaults',
-    description: '附属模板缺省 (Library 对应列为 None 时 ORGANIZE 使用; 剧照文件名在写盘时按张数渲染).'
+    description: '附属模板缺省 (Library 对应列为 None 时 ORGANIZE 使用).'
 } as const;
 
 export const OrganizeConflictSchema = {
@@ -6590,7 +6907,7 @@ export const PathTemplateSchemaResponseSchema = {
         'subtitle_extensions_default'
     ],
     title: 'PathTemplateSchemaResponse',
-    description: '与 ORGANIZE 实际使用的默认值同源; 路径模板由 resolve_paths 解析, 剧照文件名模板由写盘阶段渲染.'
+    description: '与 resolve_paths 同源.'
 } as const;
 
 export const PlaybackSourceListResponseSchema = {
@@ -7044,7 +7361,8 @@ export const RefreshResultSchema = {
         scrape: {
             type: 'integer',
             title: 'Scrape'
-        }
+        },
+        associated: { type: 'integer', title: 'Associated', default: 0 }
     },
     type: 'object',
     required: [
@@ -7120,6 +7438,7 @@ export const RefreshSubmissionSchema = {
                 'pending'
             ]
         },
+        associate: { type: 'boolean', title: 'Associate', default: false },
         use_cache: {
             items: {
                 $ref: '#/components/schemas/CacheKind'
@@ -7800,6 +8119,25 @@ export const ScanModeSchema = {
     title: 'ScanMode'
 } as const;
 
+export const SceneSearchRequestSchema = {
+    properties: {
+        query: {
+            type: 'string',
+            maxLength: 200,
+            title: 'Query',
+            default: ''
+        },
+        date: {
+            type: 'string',
+            maxLength: 40,
+            title: 'Date',
+            default: ''
+        }
+    },
+    type: 'object',
+    title: 'SceneSearchRequest'
+} as const;
+
 export const ScheduleCreateRequestSchema = {
     properties: {
         name: {
@@ -8091,6 +8429,18 @@ export const ScrapeSubmissionSchema = {
             title: 'Media Id',
             description: 'MediaFile ID. 通常仅用于内部提交任务，手动提交无需指定'
         },
+        theporndb_uuid: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Theporndb Uuid',
+            description: 'WESTERN 手动指定的 ThePornDB UUID'
+        },
         content_type: {
             anyOf: [
                 {
@@ -8146,6 +8496,13 @@ export const ScrapingConfigSchema = {
             title: 'Poster Ratio',
             default: 0.7
         },
+        uncensored_poster_ratio: {
+            type: 'number',
+            maximum: 1,
+            minimum: 0.3,
+            title: 'Uncensored Poster Ratio',
+            default: 0.87
+        },
         poster_crop_skip_ratio: {
             type: 'number',
             maximum: 1,
@@ -8168,6 +8525,7 @@ export const ScrapingConfigSchema = {
                     enum: [
                         'airav',
                         'avbase',
+                        'aventertainments',
                         'avsox',
                         'dahlia',
                         'dmm',
@@ -8186,8 +8544,15 @@ export const ScrapingConfigSchema = {
                         'kin8',
                         'mgstage',
                         'official',
+                        '1pondo',
+                        'pacopacomama',
+                        'caribbeancom',
+                        'caribbeancompr',
+                        'd2pass',
                         'prestige',
                         'r18dev',
+                        '10musume',
+                        'tokyo_hot',
                         'theporndb',
                         'xcity'
                     ]
@@ -8209,6 +8574,7 @@ export const ScrapingConfigSchema = {
                     enum: [
                         'airav',
                         'avbase',
+                        'aventertainments',
                         'avsox',
                         'dahlia',
                         'dmm',
@@ -8227,8 +8593,15 @@ export const ScrapingConfigSchema = {
                         'kin8',
                         'mgstage',
                         'official',
+                        '1pondo',
+                        'pacopacomama',
+                        'caribbeancom',
+                        'caribbeancompr',
+                        'd2pass',
                         'prestige',
                         'r18dev',
+                        '10musume',
+                        'tokyo_hot',
                         'theporndb',
                         'xcity'
                     ]
@@ -8250,6 +8623,7 @@ export const ScrapingConfigSchema = {
                     enum: [
                         'airav',
                         'avbase',
+                        'aventertainments',
                         'avsox',
                         'dahlia',
                         'dmm',
@@ -8268,8 +8642,15 @@ export const ScrapingConfigSchema = {
                         'kin8',
                         'mgstage',
                         'official',
+                        '1pondo',
+                        'pacopacomama',
+                        'caribbeancom',
+                        'caribbeancompr',
+                        'd2pass',
                         'prestige',
                         'r18dev',
+                        '10musume',
+                        'tokyo_hot',
                         'theporndb',
                         'xcity'
                     ]
@@ -8927,6 +9308,7 @@ export const SiteNameSchema = {
     enum: [
         'airav',
         'avbase',
+        'aventertainments',
         'avsox',
         'dahlia',
         'dmm',
@@ -8947,9 +9329,18 @@ export const SiteNameSchema = {
         'mgstage',
         'minnano',
         'official',
+        '1pondo',
+        'pacopacomama',
+        'caribbeancom',
+        'caribbeancompr',
+        'd2pass',
         'prestige',
         'r18dev',
+        '10musume',
+        'tokyo_hot',
         'theporndb',
+        'tushy',
+        'tushy_raw',
         'wikipedia',
         'xcity'
     ],
@@ -9210,6 +9601,25 @@ export const SrPresetSchema = {
         'waifu-photo-2x'
     ],
     title: 'SrPreset'
+} as const;
+
+export const SuggestRequestSchema = {
+    properties: {
+        originals: {
+            items: {
+                type: 'string'
+            },
+            type: 'array',
+            maxItems: 30,
+            minItems: 1,
+            title: 'Originals'
+        }
+    },
+    type: 'object',
+    required: [
+        'originals'
+    ],
+    title: 'SuggestRequest'
 } as const;
 
 export const TaskBatchActionSchema = {
@@ -9720,6 +10130,68 @@ export const TaskListResponseSchema = {
     title: 'TaskListResponse'
 } as const;
 
+export const TaskLogEntrySchema = {
+    properties: {
+        timestamp: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Timestamp'
+        },
+        level: {
+            type: 'string',
+            title: 'Level'
+        },
+        source: {
+            type: 'string',
+            title: 'Source'
+        },
+        message: {
+            type: 'string',
+            title: 'Message'
+        },
+        context: {
+            additionalProperties: {
+                $ref: '#/components/schemas/JsonValue'
+            },
+            type: 'object',
+            title: 'Context'
+        }
+    },
+    type: 'object',
+    required: [
+        'level',
+        'source',
+        'message'
+    ],
+    title: 'TaskLogEntry',
+    description: '与 WebSocket LOG 事件同形; context 是原日志里未映射到固定字段的键.'
+} as const;
+
+export const TaskLogPageSchema = {
+    properties: {
+        entries: {
+            items: {
+                $ref: '#/components/schemas/TaskLogEntry'
+            },
+            type: 'array',
+            title: 'Entries'
+        },
+        truncated: {
+            type: 'boolean',
+            title: 'Truncated',
+            default: false
+        }
+    },
+    type: 'object',
+    title: 'TaskLogPage'
+} as const;
+
 export const TaskResponseSchema = {
     properties: {
         id: {
@@ -9938,12 +10410,12 @@ export const TaskTypeSchema = {
         'upscale',
         'r18_import',
         'actor_scrape',
+        'actor_push',
         'rescrape',
         'scan_invalid',
         'delete',
         'semantic_index',
-        'semantic_benchmark',
-        'actor_push'
+        'semantic_benchmark'
     ],
     title: 'TaskType'
 } as const;

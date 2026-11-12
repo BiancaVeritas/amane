@@ -1,8 +1,9 @@
 from collections.abc import Sequence
+from hashlib import sha256
 from typing import TYPE_CHECKING, Annotated, Literal, cast
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from pydantic import TypeAdapter
 
 from ...aggregate import compute_merge_updates
@@ -10,10 +11,13 @@ from ...db.embeddings import EmbeddingKind
 from ...db.models import Metadata, MetadataSortField, SavedQueryEntity, SortOrder, TaskType
 from ...db.repo_types import WriteMode
 from ...db.repos.media import file_phase_of
+from ...enums import MetadataField
 from ...handlers import ScrapePayload
+from ...llm import build_translator
 from ...media import manual_crop_image
+from ...media.file_type import detect_media_type_bytes
+from ...parsing import ContentType, summarize_file_phases
 from ...parsing import FilePhaseSummary as ParsedFilePhase
-from ...parsing import summarize_file_phases
 from ...semantic import SemanticUnavailable
 from ...utils.dates import normalize_calendar_date
 from ...utils.model import to_resp
@@ -30,7 +34,6 @@ from ..models import (
     MetadataDetailResponse,
     MetadataListResponse,
     MetadataLocksRequest,
-    MetadataMergeEntriesRequest,
     MetadataResponse,
     MetadataUserTagsRequest,
     PartialMetadata,
@@ -50,13 +53,23 @@ logger = structlog.get_logger()
 router = APIRouter(prefix="/metadata", tags=["metadata"])
 
 
-async def build_metadata_responses(repo: RepoDep, items: Sequence[Metadata]) -> list[MetadataResponse]:
+async def build_metadata_responses(
+    repo: RepoDep, items: Sequence[Metadata], runtime: RuntimeDep
+) -> list[MetadataResponse]:
     """列表与语义检索共用: 补 file_count / file_phase 聚合."""
     summaries = await repo.summarize_media_by_metadata(items)
+    actor_names = list(dict.fromkeys(name for item in items for name in item.actors if name))
+    actors = await repo.get_actors_by_names(actor_names) if actor_names else []
+    gender_by_name = {actor.name: actor.gender for actor in actors}
     responses: list[MetadataResponse] = []
     for m in items:
         summary = summaries.get(m.id) if m.id is not None else None
-        response = to_resp(MetadataResponse, m)
+        response = to_resp(MetadataResponse, m).model_copy(
+            update={
+                "tags": runtime.tag_mappings.map_tags(m.tags),
+                "actor_genders": {name: gender_by_name[name] for name in m.actors if name in gender_by_name},
+            }
+        )
         if summary is not None:
             response = response.model_copy(
                 update={
@@ -138,7 +151,7 @@ async def list_metadata(
         content_type=filters.content_type,
         id_subquery_sql=id_subquery_sql,
     )
-    return MetadataListResponse(items=await build_metadata_responses(repo, items), total=total)
+    return MetadataListResponse(items=await build_metadata_responses(repo, items, runtime), total=total)
 
 
 async def _semantic_list(
@@ -191,7 +204,7 @@ async def _semantic_list(
     items, _ = await repo.list_metadata(ids=ids, limit=len(ids))
     by_id = {item.id: item for item in items}
     ordered = [by_id[hit.metadata_id] for hit in hits if hit.metadata_id in by_id]
-    responses = {response.id: response for response in await build_metadata_responses(repo, ordered)}
+    responses = {response.id: response for response in await build_metadata_responses(repo, ordered, runtime)}
     return MetadataListResponse(
         items=[responses[hit.metadata_id] for hit in hits if hit.metadata_id in responses],
         total=total,
@@ -218,7 +231,7 @@ async def batch_delete_metadata(req: MetadataBatchIdsRequest, repo: RepoDep) -> 
 
 @router.post("/batch/scrape", status_code=202)
 async def batch_scrape_metadata(req: MetadataBatchScrapeRequest, repo: RepoDep) -> MetadataBatchScrapeResponse:
-    """以各自 number 重新刮削."""
+    """以各自 Metadata ID / ThePornDB UUID 重新刮削."""
     missing = 0
     payloads: list[ScrapePayload] = []
     for metadata_id in req.ids:
@@ -226,10 +239,18 @@ async def batch_scrape_metadata(req: MetadataBatchScrapeRequest, repo: RepoDep) 
         if metadata is None:
             missing += 1
             continue
+        resolved_type = req.content_type if req.content_type is not None else metadata.content_type
+        if resolved_type != metadata.content_type and (
+            resolved_type == ContentType.WESTERN or metadata.content_type == ContentType.WESTERN
+        ):
+            raise HTTPException(status_code=422, detail="WESTERN 重新刮削不能更改作品内容类型")
+        preserve_identity = resolved_type == metadata.content_type
         payloads.append(
             ScrapePayload(
                 number=metadata.number,
-                content_type=req.content_type if req.content_type is not None else metadata.content_type,
+                content_type=resolved_type,
+                metadata_id=metadata.id if preserve_identity else None,
+                theporndb_uuid=metadata.theporndb_uuid if preserve_identity else None,
                 use_cache=req.use_cache,
             )
         )
@@ -257,37 +278,8 @@ async def batch_metadata_user_tags(req: MetadataUserTagsRequest, repo: RepoDep) 
     return UserTagLinksResponse(changed=result.changed, unchanged=result.unchanged, missing=result.missing)
 
 
-@router.post("/merge-entries")
-async def merge_metadata_entries(req: MetadataMergeEntriesRequest, repo: RepoDep) -> MetadataResponse:
-    """把来源条目的 raw 快照补入目标并删除来源: 目标字段不变, 关联记录迁入目标.
-
-    ``rescrape`` 要求合并提交后再按目标番号入队 SCRAPE: 只有 raw 已落库, 复用快照的聚合
-    才能按当前优先级重建字段与站点级字典.
-    """
-    try:
-        metadata = await repo.merge_metadata_entries(req.target_id, req.source_ids)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e)) from e
-    if metadata is None:
-        raise HTTPException(status_code=404, detail="影片不存在")
-    rescrape_task_id: int | None = None
-    if req.rescrape:
-        task = await repo.create_task(
-            TaskType.SCRAPE,
-            ScrapePayload(number=metadata.number, content_type=metadata.content_type),
-        )
-        rescrape_task_id = task.id
-    logger.info(
-        "metadata entries merged",
-        target_id=req.target_id,
-        source_ids=req.source_ids,
-        rescrape_task_id=rescrape_task_id,
-    )
-    return to_resp(MetadataResponse, metadata)
-
-
 @router.get("/{metadata_id}")
-async def get_metadata(metadata_id: int, repo: RepoDep) -> MetadataDetailResponse:
+async def get_metadata(metadata_id: int, repo: RepoDep, runtime: RuntimeDep) -> MetadataDetailResponse:
     metadata = await repo.get_metadata(metadata_id)
     if metadata is None:
         raise HTTPException(status_code=404, detail="影片不存在")
@@ -304,9 +296,12 @@ async def get_metadata(metadata_id: int, repo: RepoDep) -> MetadataDetailRespons
         publisher_id,
         series_id,
     ) = await repo.resolve_metadata_facet_ids(metadata)
+    series_ids = await repo.resolve_metadata_series_ids(metadata)
+    tag_ids = runtime.tag_mappings.map_id_map(tag_ids)
     return MetadataDetailResponse(
         metadata=to_resp(MetadataResponse, metadata).model_copy(
             update={
+                "tags": runtime.tag_mappings.map_tags(metadata.tags),
                 "file_count": len(files),
                 "file_phase": _file_phase_resp(
                     summarize_file_phases((file_phase_of(f) for f in files), metadata.content_type)
@@ -323,11 +318,14 @@ async def get_metadata(metadata_id: int, repo: RepoDep) -> MetadataDetailRespons
         studio_id=studio_id,
         publisher_id=publisher_id,
         series_id=series_id,
+        series_ids=series_ids,
     )
 
 
 @router.patch("/{metadata_id}")
-async def update_metadata(metadata_id: int, req: PartialMetadata, repo: RepoDep) -> MetadataResponse:
+async def update_metadata(
+    metadata_id: int, req: PartialMetadata, repo: RepoDep, runtime: RuntimeDep
+) -> MetadataResponse:
     updates = cast("MetadataFields", {k: v for k, v in req.model_dump().items() if v is not None})
     if not updates:
         raise HTTPException(status_code=422, detail="没有需要修改的字段")
@@ -340,21 +338,26 @@ async def update_metadata(metadata_id: int, req: PartialMetadata, repo: RepoDep)
             updates["release"] = normalized
         else:
             raise HTTPException(status_code=422, detail="发行日期必须为 YYYY-MM-DD")
-    metadata = await repo.update_metadata(metadata_id, mode=WriteMode.MANUAL, **updates)
+    try:
+        metadata = await repo.update_metadata(metadata_id, mode=WriteMode.MANUAL, **updates)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     if metadata is None:
         raise HTTPException(status_code=404, detail="影片不存在")
     logger.info("metadata updated", metadata_id=metadata_id, fields=list(updates.keys()))
-    return to_resp(MetadataResponse, metadata)
+    return to_resp(MetadataResponse, metadata).model_copy(update={"tags": runtime.tag_mappings.map_tags(metadata.tags)})
 
 
 @router.put("/{metadata_id}/locks")
-async def set_metadata_locks(metadata_id: int, req: MetadataLocksRequest, repo: RepoDep) -> MetadataResponse:
+async def set_metadata_locks(
+    metadata_id: int, req: MetadataLocksRequest, repo: RepoDep, runtime: RuntimeDep
+) -> MetadataResponse:
     """整体替换锁定字段集合."""
     metadata = await repo.set_metadata_locks(metadata_id, req.fields)
     if metadata is None:
         raise HTTPException(status_code=404, detail="影片不存在")
     logger.info("metadata locks updated", metadata_id=metadata_id, fields=[str(field) for field in req.fields])
-    return to_resp(MetadataResponse, metadata)
+    return to_resp(MetadataResponse, metadata).model_copy(update={"tags": runtime.tag_mappings.map_tags(metadata.tags)})
 
 
 @router.delete("/{metadata_id}", status_code=204)
@@ -365,29 +368,74 @@ async def delete_metadata(metadata_id: int, repo: RepoDep) -> None:
     logger.info("metadata deleted", metadata_id=metadata_id)
 
 
+@router.post("/{metadata_id}/images/{kind}")
+async def upload_metadata_image(
+    metadata_id: int,
+    kind: Literal["cover", "thumb", "poster"],
+    file: Annotated[UploadFile, File(description="本地封面或海报图片")],
+    repo: RepoDep,
+    runtime: RuntimeDep,
+) -> MetadataResponse:
+    """替换影片封面/海报; 写入 Resource 并在同一手动写入中自动锁定对应 URL 字段."""
+    metadata = await repo.get_metadata(metadata_id)
+    if metadata is None:
+        raise HTTPException(status_code=404, detail="影片不存在")
+    data = await file.read(32 * 1024 * 1024 + 1)
+    if not data or len(data) > 32 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="图片不能为空且不能超过 32 MB")
+
+    mime = detect_media_type_bytes(data)
+    ext_by_mime = {
+        "image/jpeg": ".jpg",
+        "image/png": ".png",
+        "image/webp": ".webp",
+        "image/gif": ".gif",
+        "image/avif": ".avif",
+    }
+    ext = ext_by_mime.get(mime or "")
+    if ext is None:
+        raise HTTPException(status_code=415, detail="仅支持 JPEG、PNG、WebP、GIF 或 AVIF 图片")
+
+    try:
+        normalized_kind = "cover" if kind in {"cover", "thumb"} else "poster"
+        resource_url = await runtime.resource_store.store_uploaded_image(metadata_id, normalized_kind, data, ext)
+        if normalized_kind == "cover":
+            updated = await repo.update_metadata(metadata_id, mode=WriteMode.MANUAL, cover_urls=[resource_url])
+        else:
+            updated = await repo.update_metadata(metadata_id, mode=WriteMode.MANUAL, poster_urls=[resource_url])
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if updated is None:
+        raise HTTPException(status_code=404, detail="影片不存在")
+    logger.info(
+        "metadata image uploaded", metadata_id=metadata_id, kind=normalized_kind, sha256=sha256(data).hexdigest()
+    )
+    return to_resp(MetadataResponse, updated).model_copy(update={"tags": runtime.tag_mappings.map_tags(updated.tags)})
+
+
 @router.post("/{metadata_id}/crop-poster")
-async def crop_poster_from_thumb(
+async def crop_poster_from_cover(
     metadata_id: int,
     req: CropPosterRequest,
     repo: RepoDep,
     runtime: RuntimeDep,
 ) -> MetadataResponse:
-    """从封面 (thumb) 按像素框裁切海报, 写入派生 Resource 并更新 poster_urls.
+    """从封面 (cover) 按像素框裁切海报, 写入派生 Resource 并更新 poster_urls.
 
     先按 EXIF 转正、再顺时针旋转 ``req.rotation``, 框相对旋转后的图像.
     """
     metadata = await repo.get_metadata(metadata_id)
     if metadata is None:
         raise HTTPException(status_code=404, detail="影片不存在")
-    if not metadata.thumb_urls:
+    if not metadata.cover_urls:
         raise HTTPException(status_code=400, detail="无封面图可裁切")
 
     # 按像素框裁切封面, 写入派生 Resource
-    thumb_url = metadata.thumb_urls[0]
+    cover_url = metadata.cover_urls[0]
     box = (req.left, req.top, req.right, req.bottom)
     try:
         poster_url = await manual_crop_image(
-            thumb_url,
+            cover_url,
             box,
             runtime.resource_store,
             runtime.web_client,
@@ -395,6 +443,7 @@ async def crop_poster_from_thumb(
             runtime.config.cold.data_dir,
             subject="封面图",
             rotation=req.rotation,
+            source_name=metadata.image_sources.get(cover_url),
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
@@ -409,11 +458,53 @@ async def crop_poster_from_thumb(
         rotation=req.rotation,
         poster_url=poster_url,
     )
-    return to_resp(MetadataResponse, updated)
+    return to_resp(MetadataResponse, updated).model_copy(update={"tags": runtime.tag_mappings.map_tags(updated.tags)})
+
+
+async def _translate_selected_text(updates: dict[str, object], runtime: RuntimeDep, content_type: ContentType) -> None:
+    """Source picks refresh original text and re-run configured LLM translation; manual edits do not use this path."""
+    if content_type == ContentType.WESTERN:
+        return
+    hot = runtime.config.hot
+    if not hot.llm.enabled:
+        return
+    translator = build_translator(
+        enabled=hot.llm.enabled,
+        api_type=hot.llm.api_type,
+        api_key=hot.llm.api_key,
+        base_url=hot.llm.base_url,
+        model=hot.llm.model,
+        rate_limit=hot.llm.rate_limit,
+        proxy=hot.network.proxy,
+        system_prompt=hot.llm.system_prompt,
+        field_prompts=hot.llm.field_prompts,
+        cache=runtime.translation_cache,
+        coalescer=runtime.translation_coalescer,
+    )
+    if translator is None:
+        return
+    for field, original_field in ((MetadataField.TITLE, "original_title"), (MetadataField.PLOT, "original_plot")):
+        original = updates.get(original_field)
+        if field.value not in updates or not isinstance(original, str) or not original:
+            continue
+        if field not in hot.llm.translate_fields:
+            updates[field.value] = original
+            continue
+        target = hot.scraping.field_language.get(field)
+        if target is None:
+            updates[field.value] = original
+            continue
+        try:
+            translated = await translator.translate(original, target, field, use_cache=False)
+        except Exception:
+            logger.warning("metadata merge translation failed", field=field.value)
+            continue
+        if translated:
+            updates[field.value] = translated
 
 
 @router.post("/{metadata_id}/merge")
-async def merge_metadata(metadata_id: int, req: MergeRequest, repo: RepoDep) -> MetadataResponse:
+async def merge_metadata(metadata_id: int, req: MergeRequest, repo: RepoDep, runtime: RuntimeDep) -> MetadataResponse:
     if not req.selections:
         raise HTTPException(status_code=400, detail="未提供选择项")
 
@@ -421,7 +512,7 @@ async def merge_metadata(metadata_id: int, req: MergeRequest, repo: RepoDep) -> 
     if metadata is None:
         raise HTTPException(status_code=404, detail="影片不存在")
 
-    # 按 selections 从 raw 合并字段
+    # 按 selections 从 raw 合并字段; title/plot 的来源选择同时刷新原标题/原剧情并重跑翻译.
     try:
         updates = compute_merge_updates(metadata.raw, metadata.field_sources, req.selections)
     except ValueError as e:
@@ -429,9 +520,10 @@ async def merge_metadata(metadata_id: int, req: MergeRequest, repo: RepoDep) -> 
 
     if not updates:
         raise HTTPException(status_code=400, detail="没有有效的选择项")
+    await _translate_selected_text(updates, runtime, metadata.content_type)
 
     # 写回元数据
     updated = await repo.update_metadata(metadata_id, mode=WriteMode.MANUAL, **cast("MetadataFields", updates))
     assert updated is not None
     logger.info("metadata merged", metadata_id=metadata_id, selections=req.selections)
-    return to_resp(MetadataResponse, updated)
+    return to_resp(MetadataResponse, updated).model_copy(update={"tags": runtime.tag_mappings.map_tags(updated.tags)})

@@ -86,7 +86,7 @@ class JavBusCrawler(Crawler):
         actors = extract_all_texts(html, '//div[@class="star-name"]/a/text()')
 
         cover = extract_text(html, '//a[@class="bigImage"]/@href')
-        thumb_url = urljoin(url, cover) if cover else None
+        cover_url = urljoin(url, cover) if cover else None
 
         # poster: /cover/ -> /thumb/, _b.jpg -> .jpg
         poster_url = None
@@ -121,7 +121,9 @@ class JavBusCrawler(Crawler):
             series=series or None,
             directors=directors,
             poster_urls=[poster_url] if poster_url else [],
-            thumb_urls=[thumb_url] if thumb_url else [],
+            # JavBus 的 poster/thumb 是同一张封面的不同尺寸，不是独立原海报与双页封面.
+            original_poster_urls=[],
+            cover_urls=[cover_url] if cover_url else [],
             extrafanart=extrafanart,
             source_url=url,
             external_id=url,

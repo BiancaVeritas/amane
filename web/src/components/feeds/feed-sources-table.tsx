@@ -299,7 +299,9 @@ export function FeedSourcesTable({
             label={t("keywordDialog.replace")}
             description={t("keywordDialog.replaceHint")}
             checked={keywordReplace}
-            onChange={(event) => setKeywordReplace(event.currentTarget.checked)}
+            onChange={(event) =>
+              setKeywordReplace(event.target instanceof HTMLInputElement && event.target.checked)
+            }
           />
           <Group justify="flex-end">
             <Button variant="default" onClick={() => setKeywordOpen(false)}>

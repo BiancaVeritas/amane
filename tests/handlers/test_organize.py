@@ -12,7 +12,7 @@ from fastapi import HTTPException
 from PIL import Image
 
 from amane.config import HotSettings, WatermarkConfig
-from amane.db.models import MediaFileStatus
+from amane.db.models import MediaFileStatus, MediaIdentityType
 from amane.enums import DownloadableResource, LinkMode, MoveMode
 from amane.handlers import DeleteHandler, DeletePayload, LibraryTaskLocks, OrganizeHandler, OrganizePayload
 from amane.handlers.file import FileOperationsResult, _record_conflicts, commit_organized_media_file
@@ -69,6 +69,9 @@ async def test_organize_resolve_rejects_unknown_copy_resource(
             recursive=lib.recursive,
             patterns=lib.patterns,
             path=lib.path,
+            scan_paths=lib.scan_paths,
+            organize_path=lib.organize_path,
+            organize_paths=lib.organize_paths,
             write_nfo=lib.write_nfo,
             copy_resources=["nope"],
         )
@@ -95,7 +98,7 @@ async def test_organize_target_occupied_skips_and_reports(
     ghost = dest_dir / "NSFS-039(1).mp4"
     assert not ghost.exists()
 
-    lib = await repo.create_library(name="t", path=str(lib_root), write_nfo=False)
+    lib = await repo.create_library(name="t", path=str(lib_root), organize_path=str(lib_root), write_nfo=False)
     assert lib.id is not None
     meta = await repo.upsert_metadata(number="NSFS-039", studio="Studio")
     assert meta.id is not None
@@ -141,7 +144,7 @@ async def test_organize_unknown_target_state_counts_failed(
     src.parent.mkdir()
     src.write_bytes(b"second")
 
-    lib = await repo.create_library(name="t", path=str(lib_root), write_nfo=False)
+    lib = await repo.create_library(name="t", path=str(lib_root), organize_path=str(lib_root), write_nfo=False)
     assert lib.id is not None
     meta = await repo.upsert_metadata(number="NSFS-039", studio="Studio")
     assert meta.id is not None
@@ -187,7 +190,7 @@ async def test_organize_subtitle_target_occupied_is_reported(
     occupied_sub = dest_dir / "NSFS-039.srt"
     occupied_sub.write_text("existing subtitle", encoding="utf-8")
 
-    lib = await repo.create_library(name="t", path=str(lib_root), write_nfo=False)
+    lib = await repo.create_library(name="t", path=str(lib_root), organize_path=str(lib_root), write_nfo=False)
     assert lib.id is not None
     meta = await repo.upsert_metadata(number="NSFS-039", studio="Studio")
     assert meta.id is not None
@@ -232,7 +235,11 @@ async def test_template_extension_does_not_fake_conflict(
     template_path.write_bytes(b"other")
 
     lib = await repo.create_library(
-        name="t", path=str(lib_root), write_nfo=False, video_template="{studio}/{number}/{number}.mp4"
+        name="t",
+        path=str(lib_root),
+        organize_path=str(lib_root),
+        write_nfo=False,
+        video_template="{studio}/{number}/{number}.mp4",
     )
     assert lib.id is not None
     meta = await repo.upsert_metadata(number="NSFS-041", studio="Studio")
@@ -277,7 +284,7 @@ async def test_organize_appends_cd_suffix(repo: Repository, resource_store: Reso
     src = src_dir / "NSFS-039-CD1.mp4"
     src.write_bytes(b"cd1")
 
-    lib = await repo.create_library(name="t", path=str(lib_root), write_nfo=False)
+    lib = await repo.create_library(name="t", path=str(lib_root), organize_path=str(lib_root), write_nfo=False)
     assert lib.id is not None
     meta = await repo.upsert_metadata(number="NSFS-039", studio="Studio")
     assert meta.id is not None
@@ -309,7 +316,7 @@ async def test_organize_dash_number_suffix(repo: Repository, resource_store: Res
     src = src_dir / "NSFS-039-2.mp4"
     src.write_bytes(b"part2")
 
-    lib = await repo.create_library(name="t", path=str(lib_root), write_nfo=False)
+    lib = await repo.create_library(name="t", path=str(lib_root), organize_path=str(lib_root), write_nfo=False)
     assert lib.id is not None
     meta = await repo.upsert_metadata(number="NSFS-039", studio="Studio")
     assert meta.id is not None
@@ -343,7 +350,7 @@ async def test_organize_cd_pair_no_collision(repo: Repository, resource_store: R
     src1.write_bytes(b"cd1")
     src2.write_bytes(b"cd2")
 
-    lib = await repo.create_library(name="t", path=str(lib_root), write_nfo=False)
+    lib = await repo.create_library(name="t", path=str(lib_root), organize_path=str(lib_root), write_nfo=False)
     assert lib.id is not None
     meta = await repo.upsert_metadata(number="NSFS-039", studio="Studio")
     assert meta.id is not None
@@ -387,6 +394,7 @@ async def test_organize_custom_cd_suffix(repo: Repository, resource_store: Resou
     lib = await repo.create_library(
         name="t",
         path=str(lib_root),
+        organize_path=str(lib_root),
         write_nfo=False,
         video_template="{studio}/{number}/{number}[-第{cd?}集].{ext}",
     )
@@ -422,7 +430,7 @@ async def test_organize_writes_subtitle_tag(repo: Repository, resource_store: Re
     bare = src_dir / "NSFS-040.mp4"
     bare.write_bytes(b"bare")
 
-    lib = await repo.create_library(name="t", path=str(lib_root), write_nfo=False)
+    lib = await repo.create_library(name="t", path=str(lib_root), organize_path=str(lib_root), write_nfo=False)
     assert lib.id is not None
     meta_c = await repo.upsert_metadata(number="NSFS-039", studio="Studio")
     meta_b = await repo.upsert_metadata(number="NSFS-040", studio="Studio")
@@ -478,12 +486,13 @@ async def test_organize_writes_subtitle_tag_for_external_subtitle(
     lib = await repo.create_library(
         name="t",
         path=str(lib_root),
+        organize_path=str(lib_root),
         write_nfo=False,
         subtitle_extensions=["srt"],
         video_template="{studio}/{number}/{number}[-{sub?}].{ext}",
     )
     assert lib.id is not None
-    meta = await repo.upsert_metadata(number="MIDV-123", studio="Studio", thumb_urls=["https://s/t.jpg"])
+    meta = await repo.upsert_metadata(number="MIDV-123", studio="Studio", cover_urls=["https://s/t.jpg"])
     assert meta.id is not None
     source = await repo.create_media_file(
         lib.id,
@@ -537,9 +546,11 @@ async def test_organize_stamps_uncensored_from_entry_type(
     src = src_dir / f"{number}.mp4"
     src.write_bytes(b"video")
 
-    lib = await repo.create_library(name="t", path=str(lib_root), write_nfo=False, video_template="{number}.{ext}")
+    lib = await repo.create_library(
+        name="t", path=str(lib_root), organize_path=str(lib_root), write_nfo=False, video_template="{number}.{ext}"
+    )
     assert lib.id is not None
-    meta = await repo.upsert_metadata(number=number, thumb_urls=["https://s/t.jpg"])
+    meta = await repo.upsert_metadata(number=number, cover_urls=["https://s/t.jpg"])
     assert meta.id is not None
     source = await repo.create_media_file(
         lib.id, path=str(src), number=number, status=MediaFileStatus.SCRAPED, metadata_id=meta.id
@@ -579,7 +590,9 @@ async def test_organize_does_not_trash_blacklisted(
     video = src_dir / "NSFS-039.mp4"
     video.write_bytes(b"video")
 
-    lib = await repo.create_library(name="t", path=str(lib_root), write_nfo=False, blacklist_patterns=["广告"])
+    lib = await repo.create_library(
+        name="t", path=str(lib_root), organize_path=str(lib_root), write_nfo=False, blacklist_patterns=["广告"]
+    )
     assert lib.id is not None
     meta = await repo.upsert_metadata(number="NSFS-039", studio="Studio")
     assert meta.id is not None
@@ -609,7 +622,7 @@ async def test_organize_media_file_ids_only(repo: Repository, resource_store: Re
     keep.write_bytes(b"keep")
     target.write_bytes(b"video")
 
-    lib = await repo.create_library(name="t", path=str(lib_root), write_nfo=False)
+    lib = await repo.create_library(name="t", path=str(lib_root), organize_path=str(lib_root), write_nfo=False)
     assert lib.id is not None
     meta_keep = await repo.upsert_metadata(number="KEEP-001", studio="Studio")
     meta = await repo.upsert_metadata(number="NSFS-039", studio="Studio")
@@ -646,7 +659,7 @@ async def test_organize_path_prefix_does_not_prune_outside(
     video.write_bytes(b"video")
     ghost = lib_root / "other" / "gone.mp4"
 
-    lib = await repo.create_library(name="t", path=str(lib_root), write_nfo=False)
+    lib = await repo.create_library(name="t", path=str(lib_root), organize_path=str(lib_root), write_nfo=False)
     assert lib.id is not None
     meta = await repo.upsert_metadata(number="NSFS-039", studio="Studio")
     assert meta.id is not None
@@ -697,7 +710,7 @@ async def test_organize_resolve_rejects_foreign_ids(repo: Repository, tmp_path: 
 async def test_organize_empty_ids_empty_run(repo: Repository, resource_store: ResourceStore, tmp_path: Path) -> None:
     lib_root = tmp_path / "lib"
     lib_root.mkdir()
-    lib = await repo.create_library(name="t", path=str(lib_root), write_nfo=False)
+    lib = await repo.create_library(name="t", path=str(lib_root), organize_path=str(lib_root), write_nfo=False)
     assert lib.id is not None
     org = OrganizeHandler(repo, HotSettings(), resource_store)
     result = await org.handle(OrganizePayload(library_id=lib.id, media_file_ids=[]))
@@ -716,7 +729,7 @@ async def test_organize_ids_requires_library_root(
     src_dir.mkdir(parents=True)
     src = src_dir / "NSFS-039.mp4"
     src.write_bytes(b"video")
-    lib = await repo.create_library(name="t", path=str(lib_root), write_nfo=False)
+    lib = await repo.create_library(name="t", path=str(lib_root), organize_path=str(lib_root), write_nfo=False)
     assert lib.id is not None
     meta = await repo.upsert_metadata(number="NSFS-039", studio="Studio")
     assert meta.id is not None
@@ -745,14 +758,18 @@ async def test_organize_skips_rule_hits(
     src_dir.mkdir(parents=True)
     if case == "blacklist":
         src = src_dir / "新片广告.mp4"
-        lib = await repo.create_library(name="t", path=str(lib_root), write_nfo=False, blacklist_patterns=["广告"])
+        lib = await repo.create_library(
+            name="t", path=str(lib_root), organize_path=str(lib_root), write_nfo=False, blacklist_patterns=["广告"]
+        )
     elif case == "undersized":
         src = src_dir / "NSFS-039.mp4"
-        lib = await repo.create_library(name="t", path=str(lib_root), write_nfo=False, min_file_size=50)
+        lib = await repo.create_library(
+            name="t", path=str(lib_root), organize_path=str(lib_root), write_nfo=False, min_file_size=50
+        )
     else:
         src = lib_root / ".amane_trash" / "NSFS-039.mp4"
         src.parent.mkdir(parents=True)
-        lib = await repo.create_library(name="t", path=str(lib_root), write_nfo=False)
+        lib = await repo.create_library(name="t", path=str(lib_root), organize_path=str(lib_root), write_nfo=False)
     src.write_bytes(b"tiny")
     assert lib.id is not None
     meta = await repo.upsert_metadata(number="NSFS-039", studio="Studio")
@@ -791,7 +808,7 @@ async def test_organize_serializes_same_library(
     video = src_dir / "NSFS-039.mp4"
     video.write_bytes(b"video")
 
-    lib = await repo.create_library(name="t", path=str(lib_root), write_nfo=False)
+    lib = await repo.create_library(name="t", path=str(lib_root), organize_path=str(lib_root), write_nfo=False)
     assert lib.id is not None
     meta = await repo.upsert_metadata(number="NSFS-039", studio="Studio")
     assert meta.id is not None
@@ -821,7 +838,9 @@ async def test_organize_and_delete_do_not_overlap(
     ad = src_dir / "广告.mp4"
     video.write_bytes(b"video")
     ad.write_bytes(b"ad")
-    lib = await repo.create_library(name="t", path=str(lib_root), write_nfo=False, blacklist_patterns=["广告"])
+    lib = await repo.create_library(
+        name="t", path=str(lib_root), organize_path=str(lib_root), write_nfo=False, blacklist_patterns=["广告"]
+    )
     assert lib.id is not None
     meta = await repo.upsert_metadata(number="NSFS-039", studio="Studio")
     assert meta.id is not None
@@ -886,7 +905,7 @@ async def test_organize_moves_same_dir_subtitles(
     (src_dir / "NSFS-039.zh.ass").write_text("sub2")
     (src_dir / "readme.txt").write_text("skip")
 
-    lib = await repo.create_library(name="t", path=str(lib_root), write_nfo=False)
+    lib = await repo.create_library(name="t", path=str(lib_root), organize_path=str(lib_root), write_nfo=False)
     assert lib.id is not None
     meta = await repo.upsert_metadata(number="NSFS-039", studio="Studio")
     assert meta.id is not None
@@ -923,7 +942,7 @@ async def test_organize_subtitles_follow_cd(repo: Repository, resource_store: Re
     (src_dir / "b-CD2.ass").write_text("cd2sub")
     (src_dir / "chs.srt").write_text("unparsed")
 
-    lib = await repo.create_library(name="t", path=str(lib_root), write_nfo=False)
+    lib = await repo.create_library(name="t", path=str(lib_root), organize_path=str(lib_root), write_nfo=False)
     assert lib.id is not None
     meta = await repo.upsert_metadata(number="NSFS-039", studio="Studio")
     assert meta.id is not None
@@ -958,7 +977,9 @@ async def test_organize_empty_subtitle_extensions_leaves_subs(
     sub = src_dir / "chs.srt"
     sub.write_text("keep")
 
-    lib = await repo.create_library(name="t", path=str(lib_root), write_nfo=False, subtitle_extensions=[])
+    lib = await repo.create_library(
+        name="t", path=str(lib_root), organize_path=str(lib_root), write_nfo=False, subtitle_extensions=[]
+    )
     assert lib.id is not None
     meta = await repo.upsert_metadata(number="NSFS-039", studio="Studio")
     assert meta.id is not None
@@ -988,7 +1009,7 @@ async def test_organize_pairs_flat_subtitles_by_number(
     (src_dir / "ABC-123.srt").write_text("first")
     (src_dir / "DEF-456.srt").write_text("second")
 
-    lib = await repo.create_library(name="t", path=str(lib_root), write_nfo=False)
+    lib = await repo.create_library(name="t", path=str(lib_root), organize_path=str(lib_root), write_nfo=False)
     assert lib.id is not None
     meta_a = await repo.upsert_metadata(number="ABC-123", studio="Studio")
     meta_b = await repo.upsert_metadata(number="DEF-456", studio="Studio")
@@ -1039,7 +1060,7 @@ async def test_organize_pairs_number_and_cd_with_multi_lang(
     (src_dir / "DEF-456-CD1.srt").write_text("d1-sub")
     (src_dir / "DEF-456-CD2.ass").write_text("d2-sub")
 
-    lib = await repo.create_library(name="t", path=str(lib_root), write_nfo=False)
+    lib = await repo.create_library(name="t", path=str(lib_root), organize_path=str(lib_root), write_nfo=False)
     assert lib.id is not None
     meta_a = await repo.upsert_metadata(number="ABC-123", studio="Studio")
     meta_b = await repo.upsert_metadata(number="DEF-456", studio="Studio")
@@ -1089,6 +1110,7 @@ async def test_organize_writes_strm_and_nfo_next_to_link(
     lib = await repo.create_library(
         name="t",
         path=str(lib_root),
+        organize_path=str(lib_root),
         link_template=str(local / "{studio}" / "{number}" / "{number}.{ext}"),
         link_mode=LinkMode.STRM,
         copy_resources=[],
@@ -1136,6 +1158,7 @@ async def test_organize_strm_content_template_uses_actual_dest(
     lib = await repo.create_library(
         name="t",
         path=str(lib_root),
+        organize_path=str(lib_root),
         link_template=str(local / "{number}.{ext}"),
         link_mode=LinkMode.STRM,
         strm_content_template="/{video_relpath}",
@@ -1166,7 +1189,7 @@ async def test_reports_progress(repo: Repository, resource_store: ResourceStore,
     lib_root = tmp_path / "lib"
     src_dir = lib_root / "incoming"
     src_dir.mkdir(parents=True)
-    lib = await repo.create_library(name="t", path=str(lib_root), write_nfo=False)
+    lib = await repo.create_library(name="t", path=str(lib_root), organize_path=str(lib_root), write_nfo=False)
     assert lib.id is not None
 
     events: list[tuple[int, int, str]] = []
@@ -1241,7 +1264,7 @@ async def test_commit_organized_media_file(repo: Repository, tmp_path: Path, cas
     """目标路径在本库内则改 path; 已被占用则删本行; 不在本库内且源不在磁盘则删行."""
     lib_root = tmp_path / "lib"
     lib_root.mkdir()
-    lib = await repo.create_library(name="t", path=str(lib_root), write_nfo=False)
+    lib = await repo.create_library(name="t", path=str(lib_root), organize_path=str(lib_root), write_nfo=False)
     assert lib.id is not None
     meta = await repo.upsert_metadata(number="NSFS-039", studio="Studio")
     assert meta.id is not None
@@ -1311,6 +1334,43 @@ async def test_commit_organized_media_file(repo: Repository, tmp_path: Path, cas
 
 
 @pytest.mark.asyncio(loop_scope="function")
+async def test_move_outside_library_keeps_western_identity(repo: Repository, tmp_path: Path) -> None:
+    """跨库 MOVE 清理文件行, 但独立 OSHASH 身份仍可找回原 Metadata."""
+    lib_root = tmp_path / "watch"
+    lib_root.mkdir()
+    lib = await repo.create_library(name="watch", path=str(lib_root), organize_path=str(lib_root), write_nfo=False)
+    assert lib.id is not None
+
+    metadata = await repo.upsert_western_metadata("western-scene-uuid", "Lancelotstylesevolution.26.10.16")
+    assert metadata.id is not None
+    oshash = "persistent-oshash-after-move"
+    await repo.register_media_identity(metadata.id, MediaIdentityType.LOCAL_OSHASH, oshash)
+
+    source = lib_root / "incoming" / "scene.mp4"
+    source.parent.mkdir()
+    media = await repo.create_media_file(
+        lib.id,
+        path=str(source),
+        number=metadata.number,
+        oshash=oshash,
+        status=MediaFileStatus.SCRAPED,
+        metadata_id=metadata.id,
+    )
+    assert media.id is not None
+
+    destination = tmp_path / "emby" / "Studio" / "Lancelotstylesevolution.26.10.16.mp4"
+    destination.parent.mkdir(parents=True)
+    destination.write_bytes(b"moved video")
+    # MOVE 完成后的源路径已经不存在.
+    await commit_organized_media_file(repo, media, destination, lib_root)
+
+    assert await repo.get_media_file(media.id) is None
+    found = await repo.get_metadata_by_oshash(oshash)
+    assert found is not None
+    assert found.id == metadata.id
+
+
+@pytest.mark.asyncio(loop_scope="function")
 @pytest.mark.parametrize("mode", [MoveMode.MOVE, MoveMode.COPY])
 async def test_organize_placed_outside_library(
     repo: Repository, resource_store: ResourceStore, tmp_path: Path, mode: MoveMode
@@ -1328,13 +1388,14 @@ async def test_organize_placed_outside_library(
     lib = await repo.create_library(
         name="dl",
         path=str(lib_root),
+        organize_path=str(lib_root),
         write_nfo=False,
         copy_resources=[],
         move_mode=mode,
         video_template=f"{other.as_posix()}/{{studio}}/{{number}}/{{number}}.{{ext}}",
     )
     assert lib.id is not None
-    store_lib = await repo.create_library(name="store", path=str(other), write_nfo=False)
+    store_lib = await repo.create_library(name="store", path=str(other), organize_path=str(other), write_nfo=False)
     assert store_lib.id is not None
     meta = await repo.upsert_metadata(number="NSFS-039", studio="Studio")
     assert meta.id is not None
@@ -1373,7 +1434,7 @@ async def test_organize_prunes_path_outside_library_root(
     stray = tmp_path / "away" / "NSFS-039.mp4"
     stray.parent.mkdir()
     stray.write_bytes(b"out")
-    lib = await repo.create_library(name="t", path=str(lib_root), write_nfo=False)
+    lib = await repo.create_library(name="t", path=str(lib_root), organize_path=str(lib_root), write_nfo=False)
     assert lib.id is not None
     stray_row = await repo.create_media_file(lib.id, path=str(stray), number="NSFS-039")
     assert stray_row.id is not None
@@ -1391,7 +1452,7 @@ async def _seed_movable_video(repo: Repository, lib_root: Path) -> tuple[int, Pa
     src_dir.mkdir(parents=True)
     src = src_dir / "NSFS-039.mp4"
     src.write_bytes(b"video")
-    lib = await repo.create_library(name="t", path=str(lib_root), write_nfo=False)
+    lib = await repo.create_library(name="t", path=str(lib_root), organize_path=str(lib_root), write_nfo=False)
     assert lib.id is not None
     meta = await repo.upsert_metadata(number="NSFS-039", studio="Studio")
     assert meta.id is not None
@@ -1456,7 +1517,9 @@ async def test_organize_other_modes_leave_source_dir(
     src_dir.mkdir()
     src = src_dir / "NSFS-039.mp4"
     src.write_bytes(b"video")
-    lib = await repo.create_library(name="t", path=str(lib_root), write_nfo=False, move_mode=mode)
+    lib = await repo.create_library(
+        name="t", path=str(lib_root), organize_path=str(lib_root), write_nfo=False, move_mode=mode
+    )
     assert lib.id is not None
     meta = await repo.upsert_metadata(number="NSFS-039", studio="Studio")
     assert meta.id is not None

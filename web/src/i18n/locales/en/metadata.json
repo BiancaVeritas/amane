@@ -20,8 +20,6 @@
     "advancedHint": "Search each type and add filters",
     "facetPlaceholder": "Search…",
     "facetEmpty": "No matches",
-    "library": "Library",
-    "libraryAll": "All libraries",
     "hasFiles": "Linked files",
     "hasFilesAny": "Any",
     "hasFilesYes": "Has files",
@@ -48,7 +46,9 @@
       "uncensored": "Uncensored",
       "cracked": "Cracked",
       "leaked": "Leaked"
-    }
+    },
+    "library": "Library",
+    "libraryAll": "All libraries"
   },
   "filePhase": {
     "subtitle": "SUB",
@@ -82,6 +82,7 @@
   "detail": {
     "fields": {
       "title": "Title",
+      "originalTitle": "Original Title",
       "studio": "Studio",
       "publisher": "Publisher",
       "release": "Release Date",
@@ -93,8 +94,10 @@
       "actors": "Actors",
       "tags": "Tags",
       "plot": "Plot",
+      "originalPlot": "Original Plot",
       "trailer": "Trailer",
       "poster": "Poster",
+      "cover": "Cover",
       "thumb": "Cover",
       "extrafanart": "Fanart",
       "sourceUrls": "Source Links"
@@ -133,6 +136,10 @@
     "closeTrailer": "Close trailer",
     "trailerFailed": "This trailer could not be played",
     "coverUnavailable": "Cover unavailable",
+    "uploadCover": "Upload cover",
+    "uploadPoster": "Upload poster",
+    "uploadCoverSuccess": "Cover replaced and locked",
+    "uploadPosterSuccess": "Poster replaced and locked",
     "playback": "Playback",
     "playbackFailed": "This stream could not be played",
     "playbackFailedWithStatus": "This stream could not be played (HTTP {{status}})",
@@ -164,10 +171,12 @@
       "rotateLeft": "Rotate left 90°",
       "rotateRight": "Rotate right 90°",
       "resetRotation": "Reset",
+      "saveStandardPreset": "Save as standard preset",
+      "saveUncensoredPreset": "Save as uncensored preset",
       "confirm": "Crop & save",
       "needSelection": "Select a valid region first",
       "success": "Poster updated",
-      "noThumb": "A cover image is required to crop a poster"
+      "noCover": "A cover image is required to crop a poster"
     },
     "playbackCopyTimestamp": "Copy timestamp",
     "playbackCopyLink": "Copy link to current time",
@@ -222,7 +231,8 @@
   "view": {
     "grid": "Grid",
     "list": "List",
-    "cloud": "Cloud"
+    "cloud": "Cloud",
+    "cover": "Cover"
   },
   "favorite": {
     "add": "Favorite",
@@ -311,7 +321,14 @@
     "filmography_other": "Filmography ({{count}})",
     "viewAll": "View all {{count}}",
     "viewAll_one": "View all {{count}}",
-    "viewAll_other": "View all {{count}}"
+    "viewAll_other": "View all {{count}}",
+    "syncToMediaServer": "Sync to media server",
+    "syncSubmitted": "Actor sync task submitted",
+    "fullSync": "Full sync",
+    "incrementalSync": "Incremental sync",
+    "chooseSyncMode": "Choose sync mode",
+    "fullSyncConfirmTitle": "Confirm full sync",
+    "fullSyncConfirmMessage": "Actor fields with values in Amane will overwrite the corresponding media server fields. Fields empty in Amane will be left unchanged. Continue?"
   },
   "notFound": "Film not found",
   "invalidId": "Invalid film ID",
@@ -320,6 +337,9 @@
   "editor": {
     "title": {
       "label": "Title"
+    },
+    "original_title": {
+      "label": "Original Title"
     },
     "actors": {
       "label": "Actors"
@@ -346,14 +366,23 @@
     "plot": {
       "label": "Plot"
     },
+    "original_plot": {
+      "label": "Original Plot"
+    },
     "directors": {
       "label": "Directors"
     },
-    "poster_urls": {
-      "label": "Poster URLs"
+    "original_poster_urls": {
+      "label": "Original Poster URL"
     },
-    "thumb_urls": {
-      "label": "Thumb URLs"
+    "original_cover_urls": {
+      "label": "Original Cover URL"
+    },
+    "poster_urls": {
+      "label": "Poster URL"
+    },
+    "cover_urls": {
+      "label": "Cover URL"
     },
     "trailer_urls": {
       "label": "Trailer URLs"
@@ -365,10 +394,22 @@
       "label": "Scores"
     },
     "external_ids": {
-      "label": "External IDs"
+      "label": "External IDs",
+      "options": {
+        "caribbeancom": "Caribbeancom",
+        "caribbeancompr": "Caribbeancompr",
+        "pacopacomama": "Pacopacomama",
+        "tokyo_hot": "Tokyo-Hot"
+      }
     },
     "source_urls": {
-      "label": "Source Links"
+      "label": "Source Links",
+      "options": {
+        "caribbeancom": "Caribbeancom",
+        "caribbeancompr": "Caribbeancompr",
+        "pacopacomama": "Pacopacomama",
+        "tokyo_hot": "Tokyo-Hot"
+      }
     }
   },
   "manage": {
@@ -381,21 +422,6 @@
     "mergeConfirmBody": "Merge {{count}} sources into the target",
     "mergeConfirmBody_one": "Merge {{count}} source into the target",
     "mergeConfirmBody_other": "Merge {{count}} sources into the target",
-    "mergeEntriesLead": "Merge {{count}} films into \"{{number}}\"",
-    "mergeEntriesLead_one": "Merge {{count}} film into \"{{number}}\"",
-    "mergeEntriesLead_other": "Merge {{count}} films into \"{{number}}\"",
-    "mergeEntriesKeep": "The target keeps its current fields",
-    "mergeEntriesRaw": "Scraped source snapshots of the other films are merged into the target",
-    "mergeEntriesLinks": "Comments, user tags and linked files move to the target",
-    "mergeEntriesDelete": "The other films are deleted",
-    "mergeEntriesRescrape": "Re-scrape after merge (re-aggregate fields by priority)",
-    "mergeActorLead": "Merge {{count}} actors into \"{{name}}\"",
-    "mergeActorLead_one": "Merge {{count}} actor into \"{{name}}\"",
-    "mergeActorLead_other": "Merge {{count}} actors into \"{{name}}\"",
-    "mergeActorAlias": "Source actor names become aliases of the target",
-    "mergeActorFill": "Person info fills the target's gaps",
-    "mergeActorTags": "Source actor user tags move to the target",
-    "mergeActorDelete": "Source actors are deleted",
     "deleteFacetBody": "Remove \"{{name}}\" from all titles and add it to the drop list; later scrapes will drop it",
     "deleteUserTagBody": "Permanently delete user tag \"{{name}}\"? It will be removed from all titles",
     "rulesTitle": "Facet rules",

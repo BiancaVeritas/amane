@@ -68,7 +68,6 @@ from .metadata import (
     MetadataDetailResponse,
     MetadataListResponse,
     MetadataLocksRequest,
-    MetadataMergeEntriesRequest,
     MetadataResponse,
     MetadataUserTagsRequest,
     PartialMetadata,

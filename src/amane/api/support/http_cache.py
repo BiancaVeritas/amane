@@ -1,12 +1,13 @@
-"""资源图 HTTP 缓存头 - 就地超分后 URL 不变, 靠 content_hash ETag 协商失效.
+"""资源图 HTTP 缓存头.
 
-``Cache-Control: public, no-cache``: 允许存本地, 但每次使用前必须带 ``If-None-Match`` 再验证;
-未变 → 304, 超分更改字节 → 200 新体. 不用固定 max-age (新鲜期内会跳过协商).
+SR 开启: URL 不变且文件就地覆盖, 用 ``public, no-cache`` + ETag 协商失效.
+SR 关闭: 原图不变, 用 ``public, max-age=2592000`` 缓存 30 天.
 """
 
 from fastapi import Request, Response
 
 RESOURCE_CACHE_HEADERS = {"Cache-Control": "public, no-cache"}
+ORIGINAL_RESOURCE_CACHE_HEADERS = {"Cache-Control": "public, max-age=2592000"}
 
 
 def format_etag(content_hash: str) -> str:

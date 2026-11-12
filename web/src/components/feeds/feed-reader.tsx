@@ -686,7 +686,9 @@ export function FeedReader({
       <Switch
         size="sm"
         checked={dedupe}
-        onChange={(event) => onDedupeChange(event.currentTarget.checked)}
+        onChange={(event) =>
+          onDedupeChange(event.target instanceof HTMLInputElement && event.target.checked)
+        }
         label={t("reader.dedupe")}
       />
     </>

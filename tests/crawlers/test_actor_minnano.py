@@ -91,3 +91,9 @@ def test_parse_detail_without_profile() -> None:
 def test_parse_detail_without_name() -> None:
     page = '<div class="act-profile"><table><tr><td><h2>（AV女優）</h2></td></tr></table></div>'
     assert parse_minnano_detail(page, page_url="u", base_url="https://www.minnano-av.com") is None
+
+
+def test_parse_figure_keeps_individual_measurements_and_standalone_cup() -> None:
+    assert _parse_figure("B70") == (None, 70, None, None, None)
+    assert _parse_figure("Cカップ") == (None, None, None, None, "C")
+    assert _parse_figure("B70 / Cカップ / W52") == (None, 70, 52, None, "C")

@@ -10,7 +10,7 @@ import {
   Text,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
-import { IconArrowBackUp, IconRotate, IconRotateClockwise } from "@tabler/icons-react";
+import { IconArrowBackUp, IconRotate } from "@tabler/icons-react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import ReactCrop, { type Crop, type PixelCrop } from "react-image-crop";
 import "react-image-crop/dist/ReactCrop.css";
@@ -46,6 +46,8 @@ export interface CropDialogLabels {
   rotateLeft: string;
   rotateRight: string;
   resetRotation: string;
+  saveStandardPreset?: string;
+  saveUncensoredPreset?: string;
 }
 
 export interface ImageCropDialogProps {
@@ -53,7 +55,7 @@ export interface ImageCropDialogProps {
   onClose: () => void;
   /** 源图 URL (外部或内部); 对话框显示与后端同一份字节. */
   imageUrl: string;
-  /** 初始与锁定宽高比 (w/h); 变化时重置选区并重新装载图片. */
+  /** 打开时用于初始化裁剪框的宽高比 (w/h). */
   defaultAspect: number;
   /** 高度受限时初始框的水平位置: center 居中, right 靠右. */
   initialAnchor: "center" | "right";
@@ -61,12 +63,13 @@ export interface ImageCropDialogProps {
   /** 提交自然像素框与旋转角度; 提交后保持打开, 由调用方在成功后关闭. */
   onSubmit: (box: CropBox, rotation: CropRotation) => void;
   submitting: boolean;
+  onSaveStandardPreset?: (aspect: number) => void;
+  onSaveUncensoredPreset?: (aspect: number) => void;
+  savingPreset?: boolean;
 }
 
 interface DecodedImage {
-  /** 已按 EXIF 转正的显示源, `drawImage` 可直接使用. */
   element: HTMLImageElement;
-  /** 指向源字节的对象 URL, 替换或关闭时回收. */
   url: string;
   width: number;
   height: number;
@@ -239,13 +242,7 @@ function fitLockedBox(
   return { left, top, width, height };
 }
 
-/**
- * blob → 已按 EXIF 转正的 `<img>`.
- *
- * 不走 `createImageBitmap`: 要它转正必须传 `imageOrientation: "from-image"`, 而该取值 Chromium 112 起才有,
- * 下限内核 (99) 直接抛 TypeError; `<img>` 的默认 `image-orientation: from-image` 自 81 起生效.
- * `drawImage` 接受 `<img>`, 旋转与坐标路径不变.
- */
+/** blob → 已按 EXIF 转正的 img; Chromium 99 不支持 imageOrientation from-image. */
 async function decodeImage(blob: Blob): Promise<DecodedImage> {
   const url = URL.createObjectURL(blob);
   const element = new Image();
@@ -255,9 +252,9 @@ async function decodeImage(blob: Blob): Promise<DecodedImage> {
       element.addEventListener("error", () => reject(new Error("图片解码失败")), { once: true });
       element.src = url;
     });
-  } catch (err) {
+  } catch (error) {
     URL.revokeObjectURL(url);
-    throw err;
+    throw error;
   }
   return { element, url, width: element.naturalWidth, height: element.naturalHeight };
 }
@@ -277,13 +274,16 @@ export function ImageCropDialog({
   labels,
   onSubmit,
   submitting,
+  onSaveStandardPreset,
+  onSaveUncensoredPreset,
+  savingPreset = false,
 }: ImageCropDialogProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [source, setSource] = useState<DecodedImage | null>(null);
   const [rotation, setRotation] = useState<CropRotation>(0);
   const [crop, setCrop] = useState<Crop>();
   const [completedCrop, setCompletedCrop] = useState<PixelCrop>();
-  const [lockAspect, setLockAspect] = useState(true);
+  const [lockAspect, setLockAspect] = useState(false);
   const [aspectRatio, setAspectRatio] = useState(defaultAspect);
   const [box, setBox] = useState<BoxState>(EMPTY_BOX);
   const [loadError, setLoadError] = useState(false);
@@ -295,14 +295,14 @@ export function ImageCropDialog({
 
   // 比例变化只重置选区; 同一张图不重拉. 换图时连位图与角度一起重置.
   const imageKey = opened ? imageUrl : "";
-  const sessionKey = `${imageKey}:${defaultAspect}`;
+  const sessionKey = imageKey;
   const [prevSession, setPrevSession] = useState(sessionKey);
   const [prevImage, setPrevImage] = useState(imageKey);
   if (sessionKey !== prevSession) {
     setPrevSession(sessionKey);
     setCompletedCrop(undefined);
     setBox(EMPTY_BOX);
-    setLockAspect(true);
+    setLockAspect(false);
     setAspectRatio(defaultAspect);
     if (imageKey !== prevImage) {
       setPrevImage(imageKey);
@@ -332,15 +332,16 @@ export function ImageCropDialog({
         const res = await apiFetch(proxied, { cache: "no-store", signal: ac.signal });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const blob = await res.blob();
+        // 显式要求按 EXIF 方向解码: 与后端 `exif_transpose` 后的像素系一致.
         const image = await decodeImage(blob);
         if (ac.signal.aborted) {
           URL.revokeObjectURL(image.url);
           return;
         }
         setSource(image);
-      } catch (err) {
+      } catch (error) {
         if (!ac.signal.aborted) {
-          console.error("[crop] 载入失败", err);
+          console.error("[crop] 载入失败", error);
           setLoadError(true);
         }
       }
@@ -359,12 +360,10 @@ export function ImageCropDialog({
 
   const syncBoxFromCrop = useCallback((pixelCrop: PixelCrop, canvas: HTMLCanvasElement) => {
     const natural = toNaturalBox(pixelCrop, canvas);
-    setBox({
-      left: natural.left,
-      top: natural.top,
-      width: natural.right - natural.left,
-      height: natural.bottom - natural.top,
-    });
+    const width = natural.right - natural.left;
+    const height = natural.bottom - natural.top;
+    setBox({ left: natural.left, top: natural.top, width, height });
+    if (width > 0 && height > 0) setAspectRatio(Number((width / height).toFixed(4)));
   }, []);
 
   // 换角度后按新坐标系重绘, 并把选区重置为该比例下的默认框 (原框已不在画布内).
@@ -430,23 +429,6 @@ export function ImageCropDialog({
     }
 
     commitBox(fitLockedBox(next, naturalSize, aspect, anchor));
-  };
-
-  const reshapeWithAspect = (nextAspect: number) => {
-    const aspect = clampAspect(nextAspect, defaultAspect);
-    setAspectRatio(aspect);
-    if (!naturalSize) return;
-    // 未锁定时只更新比例值, 不强制修改选区; 锁定时按新比例重塑
-    if (!lockAspect) return;
-    const height = box.height > 0 ? box.height : naturalSize.height;
-    const top = box.height > 0 ? box.top : 0;
-    const preferRight = box.width === 0 || box.left + box.width >= naturalSize.width - 1;
-    let width = Math.max(1, Math.round(height * aspect));
-    let left = box.left;
-    if (preferRight || left + width > naturalSize.width) {
-      left = Math.max(0, naturalSize.width - width);
-    }
-    applyNaturalBox({ left, top, width, height }, { locked: true, aspect, anchor: "height" });
   };
 
   const rotateBy = (delta: 90 | 270) => {
@@ -542,7 +524,7 @@ export function ImageCropDialog({
             disabled={!source}
             aria-label={labels.rotateLeft}
           >
-            <IconRotate size={18} />
+            <IconRotate size={18} style={{ transform: "scaleX(-1)" }} />
           </ActionIcon>
           <ActionIcon
             variant="default"
@@ -551,7 +533,7 @@ export function ImageCropDialog({
             disabled={!source}
             aria-label={labels.rotateRight}
           >
-            <IconRotateClockwise size={18} />
+            <IconRotate size={18} />
           </ActionIcon>
           <ActionIcon
             variant="default"
@@ -573,16 +555,13 @@ export function ImageCropDialog({
               max={MAX_ASPECT}
               step={0.01}
               decimalScale={3}
-              onChange={(v) => {
-                if (typeof v !== "number") return;
-                reshapeWithAspect(v);
-              }}
+              readOnly
             />
             <Switch
               label={labels.lockAspect}
               checked={lockAspect}
               onChange={(e) => {
-                const checked = e.currentTarget.checked;
+                const checked = e.target instanceof HTMLInputElement && e.target.checked;
                 setLockAspect(checked);
                 if (checked) {
                   // 按输入框中的宽高比约束当前选区 (不反推覆盖输入值)
@@ -598,6 +577,32 @@ export function ImageCropDialog({
               }}
             />
           </Stack>
+          {onSaveStandardPreset && (
+            <Button
+              size="sm"
+              variant="light"
+              onClick={() => onSaveStandardPreset(aspectRatio)}
+              loading={savingPreset}
+              disabled={
+                !source || !box.width || !box.height || aspectRatio < 0.3 || aspectRatio > 1
+              }
+            >
+              {labels.saveStandardPreset}
+            </Button>
+          )}
+          {onSaveUncensoredPreset && (
+            <Button
+              size="sm"
+              variant="light"
+              onClick={() => onSaveUncensoredPreset(aspectRatio)}
+              loading={savingPreset}
+              disabled={
+                !source || !box.width || !box.height || aspectRatio < 0.3 || aspectRatio > 1
+              }
+            >
+              {labels.saveUncensoredPreset}
+            </Button>
+          )}
           <NumberInput
             label={labels.left}
             value={box.left}

@@ -57,6 +57,6 @@ class GetchuCrawler(Crawler):
             studio=studio or None,
             release=release or None,
             tags=tags,
-            thumb_urls=[cover] if cover else [],
+            cover_urls=[cover] if cover else [],
             source_url=url,
         )

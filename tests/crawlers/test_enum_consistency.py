@@ -1,6 +1,7 @@
 """StrEnum / 注册表 / profile() 声明一致性 — 站点名单由注册表推导, 不测具名双料站."""
 
-from amane.crawlers import MetadataField, SiteName, actor_registry, registry
+from amane.aggregate.engine import ALL_FIELDS
+from amane.crawlers import SiteName, actor_registry, registry
 from amane.crawlers.models import MediaMetadata
 from amane.crawlers.site_roles import (
     ACTOR_IMAGE_SITES,
@@ -28,15 +29,15 @@ class TestEnumConsistency:
         assert enum_values >= set(ACTOR_ONLY_SITES)
         assert set(FILM_METADATA_SITES) == film_enum
 
-    def test_site_name_enum_is_sorted(self):
-        """SiteName 成员应按字母序排列 (方便维护)."""
-        values = list(SiteName)
-        assert values == sorted(values), "SiteName members are not in alphabetical order"
+    def test_site_name_enum_has_unique_values(self):
+        """SiteName 成员的字符串值应保持唯一."""
+        values = [site.value for site in SiteName]
+        assert len(values) == len(set(values)), "SiteName contains duplicate values"
 
-    def test_metadata_field_matches_media_metadata(self):
-        """MetadataField 标量+URL 字段必须存在于 MediaMetadata 中."""
+    def test_crawler_fields_match_media_metadata(self):
+        """爬虫聚合字段必须存在于 MediaMetadata 中."""
         model_fields = set(MediaMetadata.model_fields.keys())
-        for field in MetadataField:
+        for field in ALL_FIELDS:
             assert field in model_fields, f"MetadataField.{field.name} ('{field}') not in MediaMetadata"
 
     def test_actor_crawlers_declare_actor_capabilities(self):

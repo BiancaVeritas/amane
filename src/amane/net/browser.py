@@ -94,6 +94,7 @@ class BrowserPool:
         web_client: WebClient,
         timeout_ms: float,
         bsk_path: str | None = None,
+        remote_url: str = "http://127.0.0.1:9222",
     ) -> None:
         self._default = default_backend
         self._solver_url = solver_url
@@ -101,6 +102,7 @@ class BrowserPool:
         self._web = web_client
         self._timeout_ms = timeout_ms
         self._bsk_path = bsk_path
+        self._remote_url = remote_url.rstrip("/")
         self._instances: dict[BrowserBackendName, BrowserBackend] = {}
         self._closed = False
 
@@ -155,6 +157,8 @@ class BrowserPool:
                 if self._proxy:
                     logger.warning("bsk backend ignores global proxy", proxy=self._proxy)
                 return BskBackend(bsk_path=self._bsk_path, default_timeout=self._timeout_ms)
+            case BrowserBackendName.REMOTE:
+                return RemoteCdpBackend(url=self._remote_url, default_timeout=self._timeout_ms)
             case BrowserBackendName.SOLVER:
                 return SolverBackend(
                     web_provider=lambda: self._web,
@@ -509,6 +513,21 @@ class CamoufoxBackend(_LocalBackend):
         if not isinstance(browser, Browser):
             raise RuntimeError("camoufox persistent context is not supported")
         return browser
+
+
+class RemoteCdpBackend(_LocalBackend):
+    """连接独立 Chromium 容器的 CDP; 关闭时只断开客户端, 不关闭远端浏览器进程."""
+
+    def __init__(self, *, url: str, default_timeout: float) -> None:
+        super().__init__(proxy=None, default_timeout=default_timeout)
+        self._url = url
+
+    async def _launch(self, stack: AsyncExitStack) -> _BrowserLike:
+        from patchright.async_api import async_playwright
+
+        playwright = await stack.enter_async_context(async_playwright())
+        # 不调用 browser.close(), 避免关闭 NAS 容器中的浏览器进程.
+        return await playwright.chromium.connect_over_cdp(self._url, timeout=self._default_timeout)
 
 
 class SolverBackend:

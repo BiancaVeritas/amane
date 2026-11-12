@@ -5,12 +5,13 @@ from sqlalchemy import delete as sqla_delete
 from sqlalchemy import func, or_
 from sqlalchemy.sql.functions import count
 from sqlmodel import col, select
+from sqlmodel.ext.asyncio.session import AsyncSession
 from sqlmodel.sql.expression import SelectOfScalar
 
 from ...parsing import ContentType, FilePhase, FilePhaseSummary, Mosaic, file_phase_from_path, summarize_file_phases
 from ...utils.collections import unique_ids
 from ...utils.path import nfc_path
-from ..models import MediaFile, MediaFileStatus, MediaSortField, Metadata, SortOrder
+from ..models import MediaFile, MediaFileStatus, MediaSortField, Metadata, MetadataLibrary, SortOrder
 from ..repo_types import _MEDIA_SORT_COLUMNS, MediaFileUpdates, _apply_media_phase_filters, _order_clause, _utcnow
 from .base import RepositoryMixinBase, chunks
 
@@ -53,6 +54,27 @@ class MediaRepoMixin(RepositoryMixinBase):
             await session.commit()
             await session.refresh(media)
             return media
+
+    async def create_media_file_if_absent(
+        self, library_id: int, **updates: Unpack[MediaFileUpdates]
+    ) -> tuple[MediaFile, bool]:
+        """按全局唯一 path 原子登记; 返回 (记录, 是否新建), 不会跨库转移已有记录."""
+        path = updates.get("path")
+        if path is None:
+            raise ValueError("MediaFile.path is required")
+        normalized = nfc_path(path)
+        async with self._session() as session:
+            connection = await session.connection()
+            await connection.exec_driver_sql("BEGIN IMMEDIATE")
+            existing = (await session.exec(select(MediaFile).where(MediaFile.path == normalized).limit(1))).first()
+            if existing is not None:
+                return existing, False
+            media = MediaFile(library_id=library_id, **{**updates, "path": normalized})
+            _apply_path_phase(media)
+            session.add(media)
+            await session.commit()
+            await session.refresh(media)
+            return media, True
 
     async def get_media_file(self, media_id: int) -> MediaFile | None:
         async with self._session() as session:
@@ -185,33 +207,66 @@ class MediaRepoMixin(RepositoryMixinBase):
             result = await session.exec(stmt)
             return result.one() or 0
 
-    async def update_media_file(self, media_id: int, **updates: Unpack[MediaFileUpdates]) -> MediaFile | None:
+    async def update_media_file_in_session(
+        self, session: AsyncSession, media_id: int, **updates: Unpack[MediaFileUpdates]
+    ) -> MediaFile | None:
+        """在调用方事务中更新 MediaFile; 不提交、不刷新 Session."""
+        media = await session.get(MediaFile, media_id)
+        if media is None:
+            return None
+        # 显式赋值, 禁止 setattr; 字段集由 MediaFileUpdates 与 MediaFile 静态对齐.
+        if "path" in updates:
+            media.path = nfc_path(updates["path"])
+            _apply_path_phase(media)
+        if "number" in updates:
+            media.number = updates["number"]
+        if "oshash" in updates:
+            media.oshash = updates["oshash"]
+        if "size" in updates:
+            media.size = updates["size"]
+        if "duration" in updates:
+            media.duration = updates["duration"]
+        if "codec" in updates:
+            media.codec = updates["codec"]
+        if "status" in updates:
+            media.status = updates["status"]
+        if "metadata_id" in updates:
+            media.metadata_id = updates["metadata_id"]
+        if "has_external_subtitle" in updates:
+            media.has_external_subtitle = updates["has_external_subtitle"]
+        media.updated_at = _utcnow()
+        session.add(media)
+        await session.flush()
+        return media
+
+    async def finalize_media_file(self, media_id: int, metadata_id: int | None) -> MediaFile | None:
+        """成功刮削时原子更新文件关联与 Metadata 当前媒体库归属."""
         async with self._session() as session:
-            media = await session.get(MediaFile, media_id)
+            media = await self.update_media_file_in_session(
+                session, media_id, status=MediaFileStatus.SCRAPED, metadata_id=metadata_id
+            )
             if media is None:
                 return None
-            # 显式赋值, 禁止 setattr; 字段集由 MediaFileUpdates 与 MediaFile 静态对齐.
-            if "path" in updates:
-                media.path = nfc_path(updates["path"])
-                _apply_path_phase(media)
-            if "number" in updates:
-                media.number = updates["number"]
-            if "oshash" in updates:
-                media.oshash = updates["oshash"]
-            if "size" in updates:
-                media.size = updates["size"]
-            if "duration" in updates:
-                media.duration = updates["duration"]
-            if "codec" in updates:
-                media.codec = updates["codec"]
-            if "status" in updates:
-                media.status = updates["status"]
-            if "metadata_id" in updates:
-                media.metadata_id = updates["metadata_id"]
-            if "has_external_subtitle" in updates:
-                media.has_external_subtitle = updates["has_external_subtitle"]
-            media.updated_at = _utcnow()
-            session.add(media)
+            if metadata_id is not None and await session.get(Metadata, metadata_id) is not None:
+                link = (
+                    await session.exec(select(MetadataLibrary).where(MetadataLibrary.metadata_id == metadata_id))
+                ).first()
+                now = _utcnow()
+                if link is None:
+                    session.add(MetadataLibrary(metadata_id=metadata_id, library_id=media.library_id, updated_at=now))
+                else:
+                    link.library_id = media.library_id
+                    link.updated_at = now
+                    session.add(link)
+            await session.commit()
+            await session.refresh(media)
+            return media
+
+    async def update_media_file(self, media_id: int, **updates: Unpack[MediaFileUpdates]) -> MediaFile | None:
+        async with self._session() as session:
+            media = await self.update_media_file_in_session(session, media_id, **updates)
+            if media is None:
+                return None
             await session.commit()
             await session.refresh(media)
             return media

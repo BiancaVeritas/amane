@@ -211,7 +211,9 @@ class FacetsRepoMixin(RepositoryMixinBase):
             }
             studio = (await _rows_by_names(session, Studio, [meta.studio] if meta.studio else []))[:1]
             publisher = (await _rows_by_names(session, Publisher, [meta.publisher] if meta.publisher else []))[:1]
-            series = (await _rows_by_names(session, Series, [meta.series] if meta.series else []))[:1]
+            series_names = normalize_names(meta.series_names or ([meta.series] if meta.series else []))
+            series_rows = await _rows_by_names(session, Series, series_names)
+            series_ids = {row.name: row.id for row in series_rows if row.id is not None}
             return (
                 actor_ids,
                 actor_genders,
@@ -219,8 +221,15 @@ class FacetsRepoMixin(RepositoryMixinBase):
                 tag_ids,
                 studio[0].id if studio else None,
                 publisher[0].id if publisher else None,
-                series[0].id if series else None,
+                next((series_ids[name] for name in series_names if name in series_ids), None),
             )
+
+    async def resolve_metadata_series_ids(self, meta: Metadata) -> dict[str, int]:
+        """返回影片全部系列名称到实体 ID 的映射; 保持旧的 facet ID 元组接口不变."""
+        async with self._session() as session:
+            names = normalize_names(meta.series_names or ([meta.series] if meta.series else []))
+            rows = await _rows_by_names(session, Series, names)
+            return {row.name: row.id for row in rows if row.id is not None}
 
     async def list_facets(
         self,
@@ -259,6 +268,15 @@ class FacetsRepoMixin(RepositoryMixinBase):
         async with self._session() as session:
             return await session.get(Actor, actor_id)
 
+    async def get_actors(self, actor_ids: Sequence[int]) -> list[Actor]:
+        """按 ID 批量查询演员，不存在的 ID 不会出现在结果中。"""
+        ids = unique_ids(actor_ids)
+        if not ids:
+            return []
+        async with self._session() as session:
+            stmt = select(Actor).where(col(Actor.id).in_(ids))
+            return list((await session.exec(stmt)).all())
+
     async def get_actor_names(self, actor_ids: Sequence[int]) -> dict[int, str]:
         """不存在的 id 不出现在结果中."""
         ids = list(dict.fromkeys(int(i) for i in actor_ids if i))
@@ -267,43 +285,6 @@ class FacetsRepoMixin(RepositoryMixinBase):
         async with self._session() as session:
             rows = (await session.exec(select(Actor.id, Actor.name).where(col(Actor.id).in_(ids)))).all()
             return {int(i): str(n) for i, n in rows if i is not None}
-
-    async def get_actors(self, actor_ids: Sequence[int]) -> list[Actor]:
-        """按 ID 保序批量查; 不存在的 id 不出现."""
-        ids = unique_ids(actor_ids)
-        if not ids:
-            return []
-        by_id: dict[int, Actor] = {}
-        async with self._session() as session:
-            for start in range(0, len(ids), 500):
-                chunk = ids[start : start + 500]
-                rows = (await session.exec(select(Actor).where(col(Actor.id).in_(chunk)))).all()
-                by_id.update({int(actor.id): actor for actor in rows if actor.id is not None})
-        return [by_id[actor_id] for actor_id in ids if actor_id in by_id]
-
-    async def get_actor_aliases_map(self, actor_ids: Sequence[int] | None = None) -> dict[int, list[str]]:
-        """按 actor_id 分组的别名; ``None`` 取全表, 否则按 500 个 id 分批查."""
-        rows: list[tuple[int, str]] = []
-        async with self._session() as session:
-            if actor_ids is None:
-                stmt = select(ActorAlias.actor_id, ActorAlias.name).order_by(
-                    col(ActorAlias.actor_id), col(ActorAlias.position), col(ActorAlias.id)
-                )
-                rows = [(int(actor_id), str(name)) for actor_id, name in (await session.exec(stmt)).all()]
-            else:
-                ids = unique_ids(actor_ids)
-                for start in range(0, len(ids), 500):
-                    chunk = ids[start : start + 500]
-                    stmt = (
-                        select(ActorAlias.actor_id, ActorAlias.name)
-                        .where(col(ActorAlias.actor_id).in_(chunk))
-                        .order_by(col(ActorAlias.actor_id), col(ActorAlias.position), col(ActorAlias.id))
-                    )
-                    rows.extend((int(actor_id), str(name)) for actor_id, name in (await session.exec(stmt)).all())
-        out: dict[int, list[str]] = {}
-        for actor_id, name in rows:
-            out.setdefault(actor_id, []).append(name)
-        return out
 
     async def get_actors_by_names(self, names: Sequence[str]) -> list[Actor]:
         """按展示名批量查; 不存在的名字不出现."""
@@ -376,6 +357,23 @@ class FacetsRepoMixin(RepositoryMixinBase):
         """保序; 不含展示名."""
         async with self._session() as session:
             return await list_actor_aliases(session, actor_id)
+
+    async def get_actor_aliases_map(self, actor_ids: Collection[int] | None = None) -> dict[int, list[str]]:
+        """批量读取演员别名, 按演员 ID 分组并保持各自 position 顺序.
+
+        ``actor_ids=None`` 表示读取全部演员; 空集合返回空映射.
+        """
+        if actor_ids is not None and not actor_ids:
+            return {}
+        stmt = select(ActorAlias).order_by(col(ActorAlias.actor_id), col(ActorAlias.position), col(ActorAlias.id))
+        if actor_ids is not None:
+            stmt = stmt.where(col(ActorAlias.actor_id).in_(actor_ids))
+        async with self._session() as session:
+            rows = (await session.exec(stmt)).all()
+        result: dict[int, list[str]] = {}
+        for row in rows:
+            result.setdefault(row.actor_id, []).append(row.name)
+        return result
 
     async def lookup_actors_by_name(self, name: str) -> list[Actor]:
         """只读候选, 不创建实体."""

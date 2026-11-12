@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from urllib.parse import quote, urljoin, urlsplit
+from urllib.parse import quote, urljoin, urlsplit, urlunsplit
 
 from parsel import Selector
 
@@ -79,8 +79,9 @@ def pick_javdb_actor_search_hit(html: Selector, name: str, *, base_url: str) -> 
 
 def parse_javdb_actor_detail(html_text: str, *, page_url: str, base_url: str) -> ActorMetadata | None:
     html = Selector(text=html_text)
-    raw_names = extract_text(html, "string(//span[contains(@class,'actor-section-name')])")
-    names = _split_names(raw_names)
+    # 不要先用 XPath string() 扁平化整个节点: JavDB 页面可能把多个演员链接
+    # 放在同一个 actor-section-name 容器中, string() 会将它们粘成一个名字.
+    names = _actor_section_names(html, page_url=page_url)
     if not names:
         return None
     name, extra = names[0], names[1:]
@@ -105,9 +106,10 @@ def parse_javdb_actor_detail(html_text: str, *, page_url: str, base_url: str) ->
     style = extract_text(html, '//div[contains(@class,"actor-avatar")]//span[contains(@class,"avatar")]/@style')
     avatar = _background_image_url(style)
     if avatar and not _PLACEHOLDER_AVATAR_RE.search(avatar):
-        image_urls.append(urljoin(base_url + "/", avatar))
+        image_urls.append(_rewrite_to_base_origin(urljoin(base_url + "/", avatar), base_url))
 
     source = extract_text(html, '//link[@rel="canonical"]/@href') or page_url
+    source = _rewrite_to_base_origin(urljoin(base_url + "/", source), base_url)
     actor_id = _actor_id_from_href(urlsplit(source).path) or _actor_id_from_href(urlsplit(page_url).path)
 
     return ActorMetadata(
@@ -120,11 +122,45 @@ def parse_javdb_actor_detail(html_text: str, *, page_url: str, base_url: str) ->
     )
 
 
+def _actor_section_names(html: Selector, *, page_url: str) -> list[str]:
+    """提取演员名称; 容器含多个演员档案链接时, 每个链接必须独立成名.
+
+    只在链接确实指向不同 /actors/<id> 档案时采用逐链接提取, 避免把同一人的
+    普通别名链接误拆成多个演员. 无法确认链接结构时回退到文本分隔符解析.
+    """
+    containers = html.xpath("//span[contains(@class,'actor-section-name')]")
+    if not containers:
+        return []
+
+    linked: list[tuple[str, str]] = []
+    for node in containers[0].xpath(".//a[@href]"):
+        name = (node.xpath("string(.)").get() or "").strip()
+        href = (node.xpath("@href").get() or "").strip()
+        actor_id = _actor_id_from_href(href)
+        if name and actor_id:
+            linked.append((actor_id, name))
+
+    unique_ids = {actor_id for actor_id, _ in linked}
+    if len(unique_ids) > 1:
+        canonical_url = extract_text(html, '//link[@rel="canonical"]/@href') or page_url
+        current_id = _actor_id_from_href(urlsplit(canonical_url).path)
+        # 容器意外包含多个演员档案链接时, 只取当前详情页对应的演员;
+        # 其它链接是其它演员, 绝不能降级为当前演员的 aliases.
+        selected = next((name for actor_id, name in linked if actor_id == current_id), None)
+        if selected is None:
+            selected = linked[0][1]
+        normalized = normalize_name(selected)
+        return [normalized] if normalized else []
+
+    raw = (containers[0].xpath("string(.)").get() or "").strip()
+    return _split_names(raw)
+
+
 def _split_names(raw: str) -> list[str]:
     if not raw:
         return []
     names: list[str] = []
-    for part in re.split(r"[,，]", raw):
+    for part in re.split(r"[,，、]", raw):
         name = _UNCENSORED_MARKER_RE.sub("", normalize_name(part))
         if name:
             names.append(name)
@@ -150,6 +186,15 @@ def _actor_id_from_href(href: str) -> str | None:
     if slug.lower() in _ACTOR_INDEX_SLUGS:
         return None
     return slug
+
+
+def _rewrite_to_base_origin(url: str, base_url: str) -> str:
+    """JAVDB 镜像返回的 canonical / 头像可能仍指向官方主站; 统一改回配置的镜像源."""
+    target = urlsplit(url)
+    base = urlsplit(base_url)
+    if not target.scheme or not target.netloc or not base.scheme or not base.netloc:
+        return url
+    return urlunsplit((base.scheme, base.netloc, target.path, target.query, target.fragment))
 
 
 def _background_image_url(style: str) -> str | None:

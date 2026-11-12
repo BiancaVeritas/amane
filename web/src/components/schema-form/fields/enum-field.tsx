@@ -25,7 +25,8 @@ export function EnumField({
 
   // Toggle vs Select is schema-driven, not variant-driven - bare mode keeps
   // toggle for ≤5 simple enums (looks better in dict KV rows / table cells).
-  if (simple && enumValues.length <= 5) {
+  // 浏览器后端选项并排展示, 便于直接切换 PC / NAS / Solver 等模式.
+  if ((name === "network.browser.backend" && simple) || (simple && enumValues.length <= 5)) {
     return (
       <EnumToggleField
         name={name}

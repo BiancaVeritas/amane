@@ -227,15 +227,10 @@ async def test_list_and_batch_feed_items(feed_deps: AgentDeps) -> None:
         feed_id=feed.id,
         request=AgentFeedItemBatch(action=FeedItemBatchAction.SCRAPE, ids=[first.id, duplicate.id, no_number.id]),
     )
-    assert scraped == {"affected": 3, "missing": 0, "skipped": 1, "submitted": 1}
+    assert "error" in scraped
+    assert "OSHASH" in scraped["error"]
     tasks = await feed_deps.repo.list_tasks()
-    assert len(tasks) == 1
-    assert tasks[0].payload == {
-        "number": "ABC-001",
-        "content_type": "western",
-        "media_file_id": None,
-        "use_cache": [],
-    }
+    assert tasks == []
 
 
 @pytest.mark.asyncio

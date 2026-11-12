@@ -49,13 +49,13 @@ async def _load_query(
     if metadata is None:
         raise HTTPException(status_code=404, detail="影片不存在")
     files = await repo.get_media_by_metadata_id(metadata_id)
-    library_paths: dict[int, str] = {}
+    library_paths: dict[int, list[str]] = {}
     for item in files:
         if item.library_id in library_paths:
             continue
         library = await repo.get_library(item.library_id)
         if library is not None:
-            library_paths[item.library_id] = library.path
+            library_paths[item.library_id] = library.scan_paths or [library.path]
     return playback_query(metadata, files, selected_key=selected_key, library_paths=library_paths)
 
 

@@ -131,3 +131,26 @@ class TestConfigRebuild:
         assert resp.status_code == 200
         assert runtime.browser is rebuilt
         assert rebuilt._closed is False
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_media_server_api_key_is_masked_and_mask_roundtrip_preserves_secret(self, client: AsyncClient):
+        configured = await client.patch(
+            "config",
+            json={"media_server": {"kind": "emby", "url": "http://127.0.0.1:8096", "api_key": "secret-token"}},
+        )
+        assert configured.status_code == 200
+        assert configured.json()["media_server"]["api_key"] == "**********"
+
+        fetched = await client.get("config")
+        assert fetched.json()["media_server"]["api_key"] == "**********"
+
+        roundtrip = await client.patch(
+            "config", json={"media_server": {"kind": "emby", "url": "http://127.0.0.1:8096", "api_key": "**********"}}
+        )
+        assert roundtrip.status_code == 200
+        assert roundtrip.json()["media_server"]["api_key"] == "**********"
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_media_server_connection_test_requires_configuration(self, client: AsyncClient):
+        response = await client.post("config/media-server/test", json={"kind": "jellyfin", "verify_tls": True})
+        assert response.status_code == 400

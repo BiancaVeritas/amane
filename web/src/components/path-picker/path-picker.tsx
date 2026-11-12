@@ -80,7 +80,7 @@ export function PathPicker({
           centered
         >
           <FileBrowser
-            initialPath={value || initialPath || "."}
+            initialPath={value || initialPath || "__roots__"}
             selectionType={pathType}
             allowMultiple={false}
             showPathInput={true}

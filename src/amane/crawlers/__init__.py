@@ -17,7 +17,11 @@ from .registry import registry
 from .sites import (
     AiravCrawler,
     AvbaseCrawler,
+    AVEntertainmentsCrawler,
     AvsoxCrawler,
+    CaribbeancomCrawler,
+    CaribbeancomprCrawler,
+    D2PassCrawler,
     DahliaCrawler,
     DmmCrawler,
     FalenoCrawler,
@@ -35,9 +39,13 @@ from .sites import (
     Kin8Crawler,
     MGStageCrawler,
     OfficialCrawler,
+    PacopacomamaCrawler,
+    PondoCrawler,
     PrestigeCrawler,
     R18DevCrawler,
+    TenmusumeCrawler,
     ThePornDBCrawler,
+    TokyoHotCrawler,
     XCityCrawler,
 )
 
@@ -50,6 +58,7 @@ registry.register(JavLibraryCrawler)
 registry.register(FreejavbtCrawler)
 registry.register(Jav321Crawler)
 registry.register(AiravCrawler)
+registry.register(AVEntertainmentsCrawler)
 registry.register(AvsoxCrawler)
 registry.register(AvbaseCrawler)
 registry.register(XCityCrawler)
@@ -62,20 +71,31 @@ registry.register(FC2PPVDBCrawler)
 registry.register(GetchuCrawler)
 registry.register(IqqtvCrawler)
 registry.register(PrestigeCrawler)
+registry.register(PondoCrawler)
+registry.register(PacopacomamaCrawler)
+registry.register(CaribbeancomCrawler)
+registry.register(CaribbeancomprCrawler)
+registry.register(D2PassCrawler)
 registry.register(R18DevCrawler)
+registry.register(TenmusumeCrawler)
 registry.register(ThePornDBCrawler)
 registry.register(OfficialCrawler)
+registry.register(TokyoHotCrawler)
 
 # 演员站在 amane.crawlers.actor 导入时注册.
 
 __all__ = [
+    "AVEntertainmentsCrawler",
     "ActorCrawler",
     "ActorMetadata",
     "AiravCrawler",
     "AvbaseActorCrawler",
     "AvbaseCrawler",
     "AvsoxCrawler",
+    "CaribbeancomCrawler",
+    "CaribbeancomprCrawler",
     "Crawler",
+    "D2PassCrawler",
     "DahliaCrawler",
     "DmmCrawler",
     "FC2ClubCrawler",
@@ -102,11 +122,15 @@ __all__ = [
     "MetadataField",
     "MinnanoActorCrawler",
     "OfficialCrawler",
+    "PacopacomamaCrawler",
+    "PondoCrawler",
     "PrestigeCrawler",
     "R18DevCrawler",
     "SiteName",
+    "TenmusumeCrawler",
     "ThePornDBActorCrawler",
     "ThePornDBCrawler",
+    "TokyoHotCrawler",
     "WikipediaActorCrawler",
     "XCityCrawler",
     "actor_registry",

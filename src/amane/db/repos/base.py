@@ -7,8 +7,11 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 if TYPE_CHECKING:
     import asyncio
     from collections.abc import Iterator
+    from typing import Unpack
 
     from ..embeddings import EmbeddingStore
+    from ..models import MediaFile
+    from ..repo_types import MediaFileUpdates
     from ..repository import MediaChangeHook
 
 # SQLite 单条语句的绑定变量上限 (3.32+ 为 32766). 500 给语句里其它占位留余量.
@@ -36,4 +39,10 @@ class RepositoryMixinBase:
         raise NotImplementedError
 
     async def notify_media_changed(self, metadata_id: int) -> None:
+        raise NotImplementedError
+
+    async def update_media_file_in_session(
+        self, session: AsyncSession, media_id: int, **updates: Unpack[MediaFileUpdates]
+    ) -> MediaFile | None:
+        """声明由 MediaRepoMixin 提供、供其他 Repository mixin 协作调用的事务内接口."""
         raise NotImplementedError

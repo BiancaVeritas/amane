@@ -172,5 +172,24 @@
     "description": "Rendering this page threw an uncaught exception; details below",
     "retry": "Retry",
     "switchServer": "Switch server"
+  },
+  "browseSettings": {
+    "title": "Display settings",
+    "cardSize": "Image size",
+    "pageSize": "Items per page",
+    "sizes": {
+      "0": "Tiny",
+      "1": "Extra small",
+      "2": "Small",
+      "3": "Medium",
+      "4": "Default",
+      "5": "Large",
+      "6": "Extra large",
+      "7": "Huge"
+    }
+  },
+  "detail": {
+    "commentSeek": "Seek to {{time}}",
+    "playbackUnavailable": "Playback source unavailable"
   }
 }

@@ -264,13 +264,17 @@ export function FeedFormFields({
         label={t("fields.enabled")}
         description={t("fields.enabledHint")}
         checked={form.enabled}
-        onChange={(e) => patch({ enabled: e.currentTarget.checked })}
+        onChange={(e) =>
+          patch({ enabled: e.target instanceof HTMLInputElement && e.target.checked })
+        }
       />
       <Switch
         label={t("fields.autoEnqueue")}
         description={t("fields.autoEnqueueHint")}
         checked={form.autoEnqueue}
-        onChange={(e) => patch({ autoEnqueue: e.currentTarget.checked })}
+        onChange={(e) =>
+          patch({ autoEnqueue: e.target instanceof HTMLInputElement && e.target.checked })
+        }
       />
     </Stack>
   );

@@ -130,7 +130,7 @@ class JavDBCrawler(Crawler):
 
         actors = _parse_actors(html)
 
-        thumb_url = extract_text(html, "//img[@class='video-cover']/@src")
+        cover_url = extract_text(html, "//img[@class='video-cover']/@src")
 
         score_text = extract_text(html, "//span[@class='score-stars']/following-sibling::text()[1]")
         score = self._parse_score(score_text)
@@ -149,7 +149,7 @@ class JavDBCrawler(Crawler):
             tags=tags,
             series=series or None,
             directors=directors,
-            thumb_urls=[thumb_url] if thumb_url else [],
+            cover_urls=[cover_url] if cover_url else [],
             score=score,
             extrafanart=extrafanart,
             trailer_urls=[trailer_url] if trailer_url else [],

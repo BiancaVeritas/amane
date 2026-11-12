@@ -378,7 +378,7 @@ async def _seed_metadata(repo: Repository, images: dict[str, MovieImages]) -> di
             plot=PLOT,
             directors=movie.directors,
             poster_urls=[movie_images.poster],
-            thumb_urls=[movie_images.thumb],
+            cover_urls=[movie_images.thumb],
             extrafanart_urls=extrafanart,
             scores=scores,
             source_urls=source_urls,

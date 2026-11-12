@@ -78,6 +78,6 @@ class Kin8Crawler(Crawler):
             title=title,
             actors=film_actors(actors),
             tags=tags,
-            thumb_urls=[cover] if cover else [],
+            cover_urls=[cover] if cover else [],
             source_url=url,
         )

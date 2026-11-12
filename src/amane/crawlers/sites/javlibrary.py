@@ -20,8 +20,7 @@ class JavLibraryCrawler(Crawler):
         text = await self.client.get_html(url)
         html = Selector(text=text)
 
-        # 站内唯一命中时检索地址直接 302 到详情页, 页面上没有结果列表: 详情页本身就是答案,
-        # 按 品番 确认后取它的规范地址. 相近番号同样会被重定向, 因此不能直接采用.
+        # 唯一命中时检索地址可能 302 到详情页; 校验品番后才接受 canonical.
         if not html.xpath('//div[@class="video"]'):
             detail_number = extract_text(html, '//div[@id="video_id"]//td[@class="text"]/text()')
             canonical = html.xpath('//link[@rel="canonical"]/@href').get()
@@ -78,7 +77,7 @@ class JavLibraryCrawler(Crawler):
             runtime=runtime,
             tags=tags,
             directors=directors,
-            thumb_urls=[cover] if cover else [],
+            cover_urls=[cover] if cover else [],
             score=score,
             source_url=url,
         )

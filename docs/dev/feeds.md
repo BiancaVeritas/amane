@@ -4,7 +4,7 @@
 
 ## 定位
 
-`Feed` 是远程目录事件源, 与 `Library` + Watcher (本地目录事件) 并列. 产物只有 by-number `SCRAPE` (`media_file_id=None`); 不下载 enclosure / 种子, 不写入 Library, 文件之后出现仍由 Watcher 关联 MediaFile.
+`Feed` 是远程目录事件源, 与 `Library` + Watcher (本地目录事件) 并列. 产物是番号级 `SCRAPE` (`media_file_id=None`), 但 WESTERN 无法仅凭番号确定 Scene ID, 因此不会自动入队或允许 Feed 批量按番号刮削; 不下载 enclosure / 种子, 不写入 Library, 文件之后出现仍由 Watcher 关联 MediaFile.
 
 **不是** `Schedule`: Schedule 是用户 routine → 入队 Task 并占用 Worker, Feed 拉取是生产者, 间隔写在源上 (`interval_seconds` + `next_fetch_at`), 不纳入 HotSettings, 不并入 `CronScheduler`.
 
@@ -35,7 +35,7 @@
 
 跨源列表 `GET /feeds/items` (注册顺序见 [api.md](api.md)): `feed_id` 优先于 `group`; `group` 缺省为全部, 空串只含未分组源, 非空为前缀匹配. 单源列表经由 `GET /feeds/{id}/items`.
 
-按番号关联片库时, 列表先按筛选 / 排序取出当前页 id (不读 `description`), 再只对这些行 JOIN Metadata 返回 `metadata_id`. JOIN 必须用 `number COLLATE NOCASE` 才能使用 `ix_metadata_number` — 对列套 `lower()` 会让 SQLite 在 LIMIT 前做 nested loop. 排序索引是表达式 `coalesce(published_at, created_at), id`, 必须与 ORDER BY 一致. 前端不按番号逐条搜片库 (现有 `GET /metadata?search=` 是模糊检索且会 N+1).
+按番号关联片库时, 列表先按筛选 / 排序取出当前页 id (不读 `description`), 再只对这些行 JOIN Metadata 返回 `metadata_id`. 仅非 WESTERN Feed 条目允许按 `number COLLATE NOCASE` 关联; WESTERN 同番号可能对应多条作品, 不自动关联. 非 WESTERN 查询使用 `ix_metadata_number_non_western`; 对列套 `lower()` 会让 SQLite 无法命中索引. 排序索引是表达式 `coalesce(published_at, created_at), id`, 必须与 ORDER BY 一致. 前端不按番号逐条搜片库 (现有 `GET /metadata?search=` 是模糊检索且会 N+1).
 
 历史操作统一经由 `POST /feeds/{id}/items/batch`, body 为一个 `action` 与一组 FeedItem ID; 阅读器跨源多选时按 `feed_id` 分组多次调用. 输入 ID 先去重, 只处理属于当前 Feed 的行, 不存在或跨 Feed 的计入 `missing`; 前四个 action 在一个 Repository 事务内执行且幂等, `scrape` 在一次任务创建事务中批量入队. `affected` 包含匹配到但状态本来就一致的行.
 
@@ -43,7 +43,7 @@
 - `unignore`: 清除忽略状态, 只恢复可见性, 不自动提交 SCRAPE.
 - `read` / `unread`: 写入 / 清除 `read_at`, 幂等, 不改变忽略状态, 不入队 SCRAPE.
 - `delete`: 永久删除历史行, 不影响已有 Task / Metadata / Resource; 远程源再次返回相同 `item_key` 时重新视为新条目.
-- `scrape`: 按当前 Feed 的 `content_type` / `use_cache` 为有番号条目创建番号级 SCRAPE; 同批次番号大小写不敏感去重, 无番号计入 `skipped`, 手动任务优先级为 `0`. 配置在任务创建时写入 payload, 后续修改 Feed 不影响已入队任务.
+- `scrape`: 按当前 Feed 的 `content_type` / `use_cache` 为有番号条目创建 SCRAPE; 非 WESTERN 按番号执行, WESTERN 不能仅凭 Feed 番号确定 Scene ID, 必须通过带文件 OSHASH 的片库刮削或手动指定 Scene ID. 同批次番号大小写不敏感去重, 无番号计入 `skipped`, 手动任务优先级为 `0`. 配置在任务创建时写入 payload, 后续修改 Feed 不影响已入队任务.
 
 阅读器 (`/feeds`) 只消费条目, 源 CRUD 在 `/feeds/sources`; 被忽略条目仍允许手动刮削, 无番号仍可参与批量操作 (由后端计入 `skipped`). FeedItem 没有独立于 batch action 的手动刮削端点.
 

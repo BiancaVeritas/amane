@@ -1,6 +1,10 @@
 from .airav import AiravCrawler
 from .avbase import AvbaseCrawler
+from .aventertainments import AVEntertainmentsCrawler
 from .avsox import AvsoxCrawler
+from .caribbeancom import CaribbeancomCrawler
+from .caribbeancompr import CaribbeancomprCrawler
+from .d2pass import D2PassCrawler
 from .dahlia import DahliaCrawler
 from .dmm import DmmCrawler
 from .faleno import FalenoCrawler
@@ -18,15 +22,23 @@ from .javlibrary import JavLibraryCrawler
 from .kin8 import Kin8Crawler
 from .mgstage import MGStageCrawler
 from .official import OfficialCrawler
+from .pacopacomama import PacopacomamaCrawler
+from .pondo import PondoCrawler
 from .prestige import PrestigeCrawler
 from .r18dev import R18DevCrawler
+from .tenmusume import TenmusumeCrawler
 from .theporndb import ThePornDBCrawler
+from .tokyo_hot import TokyoHotCrawler
 from .xcity import XCityCrawler
 
 __all__ = [
+    "AVEntertainmentsCrawler",
     "AiravCrawler",
     "AvbaseCrawler",
     "AvsoxCrawler",
+    "CaribbeancomCrawler",
+    "CaribbeancomprCrawler",
+    "D2PassCrawler",
     "DahliaCrawler",
     "DmmCrawler",
     "FC2ClubCrawler",
@@ -44,8 +56,12 @@ __all__ = [
     "Kin8Crawler",
     "MGStageCrawler",
     "OfficialCrawler",
+    "PacopacomamaCrawler",
+    "PondoCrawler",
     "PrestigeCrawler",
     "R18DevCrawler",
+    "TenmusumeCrawler",
     "ThePornDBCrawler",
+    "TokyoHotCrawler",
     "XCityCrawler",
 ]

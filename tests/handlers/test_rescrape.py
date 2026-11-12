@@ -68,6 +68,19 @@ async def test_content_type_inference(repo: Repository):
 
 
 @pytest.mark.asyncio(loop_scope="function")
+async def test_western_rescrape_carries_metadata_and_theporndb_uuidentity(repo: Repository):
+    metadata = await repo.upsert_western_metadata("scene-123", "Lancelotstylesevolution.26.10.16", title="Western")
+    handler = RescrapeHandler(repo)
+
+    result = await handler.handle(RescrapePayload(limit=10))
+
+    followup = next(f for f in (result.followups or []) if f.task_type == TaskType.SCRAPE)
+    assert followup.payload["metadata_id"] == metadata.id
+    assert followup.payload["theporndb_uuid"] == "scene-123"
+    assert followup.payload["number"] == metadata.number
+
+
+@pytest.mark.asyncio(loop_scope="function")
 async def test_min_age_days_computes_cutoff(repo: Repository, monkeypatch: pytest.MonkeyPatch):
     captured: dict = {}
 

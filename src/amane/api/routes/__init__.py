@@ -15,6 +15,7 @@ from .libraries import router as libraries_router
 from .media import router as media_router
 from .metadata import router as metadata_router
 from .network import router as network_router
+from .oshash_submissions import router as oshash_submissions_router
 from .playback import router as playback_router
 from .plugins import router as plugins_router
 from .resources import router as resources_router
@@ -22,7 +23,9 @@ from .saved_queries import router as saved_queries_router
 from .schedules import router as schedules_router
 from .semantic import router as semantic_router
 from .system import router as system_router
+from .tag_mappings import router as tag_mappings_router
 from .tasks import router as tasks_router
+from .theporndb_scenes import router as theporndb_scenes_router
 from .tools import router as tools_router
 from .webhooks import router as webhooks_router
 from .ws import router as ws_router
@@ -38,6 +41,8 @@ router.include_router(files_router)
 router.include_router(media_router)
 router.include_router(metadata_router)
 router.include_router(network_router)
+router.include_router(oshash_submissions_router)
+router.include_router(theporndb_scenes_router)
 router.include_router(playback_router)
 router.include_router(plugins_router)
 router.include_router(actors_router)
@@ -48,6 +53,7 @@ router.include_router(resources_router)
 router.include_router(schedules_router)
 router.include_router(system_router)
 router.include_router(tasks_router)
+router.include_router(tag_mappings_router)
 router.include_router(tools_router)
 router.include_router(libraries_router)
 router.include_router(webhooks_router)

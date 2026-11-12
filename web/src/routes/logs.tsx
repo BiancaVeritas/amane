@@ -196,7 +196,9 @@ function LogsPage() {
           <Switch
             label={t("actions.autoScroll")}
             checked={autoScroll}
-            onChange={(e) => handleAutoScrollChange(e.currentTarget.checked)}
+            onChange={(e) =>
+              handleAutoScrollChange(e.target instanceof HTMLInputElement && e.target.checked)
+            }
           />
           <Button
             size="xs"

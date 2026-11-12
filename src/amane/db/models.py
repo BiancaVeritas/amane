@@ -15,13 +15,20 @@ from ..library import (
     SubtitleExtensions,
     TrailerPattern,
 )
-from ..organize.path_templates import VIDEO_TEMPLATE_DEFAULT, ExtrafanartNameTemplate, PathTemplate
+from ..organize.path_templates import VIDEO_TEMPLATE_DEFAULT, PathTemplate
 from ..organize.strm_content import StrmContentTemplate
 from ..parsing import VR_TAGS, ContentType, Mosaic, is_vr
 
 
 def _utcnow() -> datetime:
     return datetime.now(UTC)
+
+
+class MediaIdentityType(StrEnum):
+    """WESTERN 媒体的稳定身份类型。"""
+
+    LOCAL_OSHASH = "LOCAL_OSHASH"
+    FILE_115_ID = "115_FILE_ID"
 
 
 class MediaFileStatus(StrEnum):
@@ -39,12 +46,12 @@ class TaskType(StrEnum):
     UPSCALE = "upscale"
     R18_IMPORT = "r18_import"
     ACTOR_SCRAPE = "actor_scrape"
+    ACTOR_PUSH = "actor_push"
     RESCRAPE = "rescrape"
     SCAN_INVALID = "scan_invalid"
     DELETE = "delete"
     SEMANTIC_INDEX = "semantic_index"
     SEMANTIC_BENCHMARK = "semantic_benchmark"
-    ACTOR_PUSH = "actor_push"
 
 
 class RoutineType(StrEnum):
@@ -180,13 +187,29 @@ class _HasSubtitleProperty(property):
         self._reject()
 
 
+class OshashSubmission(SQLModel, table=True):
+    """待向 ThePornDB 提交的场景 OSHASH；失败保留，成功删除。"""
+
+    __tablename__ = "oshash_submissions"  # type: ignore[assignment]
+    __table_args__ = (UniqueConstraint("theporndb_uuid", "oshash", name="uq_oshash_submission_scene_hash"),)
+
+    id: int | None = Field(default=None, primary_key=True)
+    theporndb_uuid: str = Field(index=True)
+    oshash: str
+    duration: int
+    title: str | None = None
+    path: str
+    created_at: datetime = Field(default_factory=_utcnow)
+    last_error: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
+
+
 class MediaFile(SQLModel, table=True):
     __tablename__ = "media_files"  # type: ignore[assignment]
 
     id: int | None = Field(default=None, primary_key=True)
     # 库内身份为 NFC. 写入与按路径查找只经 Repository (`nfc_path`).
     path: str = Field(unique=True, nullable=False, index=True)
-    oshash: str | None = None
+    oshash: str | None = Field(default=None, index=True)
     size: int | None = None
     duration: float | None = None
     codec: str | None = None
@@ -244,15 +267,33 @@ class _VrProperty(property):
 
 class Metadata(SQLModel, table=True):
     __tablename__ = "metadata"  # type: ignore[assignment]
-    # number 唯一性大小写不敏感 (COLLATE NOCASE); 存库保留首次写入的原始大小写.
-    __table_args__ = (Index("ix_metadata_number", text("number COLLATE NOCASE"), unique=True),)
+    # 非 WESTERN 仍按番号唯一; WESTERN 按 ThePornDB ThePornDB UUID 唯一, 番号允许重复.
+    # 旧 WESTERN 记录在重新刮削前 theporndb_uuid 可为空, 新刮削入口负责保证其非空.
+    __table_args__ = (
+        Index("ix_metadata_number_lookup", text("number COLLATE NOCASE"), unique=False),
+        Index(
+            "ix_metadata_number_non_western",
+            text("number COLLATE NOCASE"),
+            unique=True,
+            sqlite_where=text("content_type != 'WESTERN'"),
+        ),
+        Index(
+            "ix_metadata_western_theporndb_uuid",
+            text("lower(theporndb_uuid)"),
+            unique=True,
+            sqlite_where=text("content_type = 'WESTERN' AND theporndb_uuid IS NOT NULL"),
+        ),
+    )
 
     id: int | None = Field(default=None, primary_key=True)
     number: str = Field(nullable=False)
+    #: ThePornDB ThePornDB UUID; WESTERN 的作品身份. 旧数据允许暂时为空, 新刮削必须补齐.
+    theporndb_uuid: str | None = Field(default=None, index=False)
     #: 番号类型; 只在条目创建时落定 (契约见 docs/dev/data-model.md), 不随挂载文件或后续刮削变化, 也不进对外 PATCH.
     content_type: ContentType = Field(default=ContentType.WESTERN, index=True)
 
     title: str | None = None
+    original_title: str | None = None
     actors: list[str] = Field(default_factory=list, sa_column=Column(JSON))
     # studio/publisher/series 同时投影到目录表.
     studio: str | None = Field(default=None, index=True)
@@ -261,12 +302,22 @@ class Metadata(SQLModel, table=True):
     runtime: int | None = None
     tags: list[str] = Field(default_factory=list, sa_column=Column(JSON))
     series: str | None = Field(default=None, index=True)
+    # 多系列规范化关联的有序名称投影；series 保留首个系列供旧调用方兼容。
+    series_names: list[str] = Field(
+        default_factory=list, sa_column=Column(JSON, nullable=False, server_default=text("'[]'"))
+    )
     # 长文本存纯文本, 上游 HTML/实体在入库前经 utils.text 归一, 见 docs/dev/data-model.md.
     plot: str | None = None
+    original_plot: str | None = None
     directors: list[str] = Field(default_factory=list, sa_column=Column(JSON))
 
     poster_urls: list[str] = Field(default_factory=list, sa_column=Column(JSON))
-    thumb_urls: list[str] = Field(default_factory=list, sa_column=Column(JSON))
+    # 刮削来源的原始海报地址; 与可能被裁剪资源 URL 替换的 poster_urls 分离.
+    original_poster_urls: list[str] = Field(default_factory=list, sa_column=Column(JSON))
+    # Python 业务命名统一为 cover; 物理列名保留以兼容既有 SQLite 数据库.
+    cover_urls: list[str] = Field(default_factory=list, sa_column=Column("thumb_urls", JSON))
+    # 刮削来源的原始封面地址; 手动替换后仍保留供 NFO 输出.
+    original_cover_urls: list[str] = Field(default_factory=list, sa_column=Column("original_thumb_urls", JSON))
     trailer_urls: list[str] = Field(default_factory=list, sa_column=Column(JSON))
 
     # 按站点分组, 禁止扁平合并.
@@ -276,6 +327,8 @@ class Metadata(SQLModel, table=True):
     external_ids: dict[str, str] = Field(default_factory=dict, sa_column=Column(JSON))
     source_urls: dict[str, str] = Field(default_factory=dict, sa_column=Column(JSON))
     field_sources: dict[str, str] = Field(default_factory=dict, sa_column=Column(JSON))
+    # 原始图片 URL 到刮削来源的映射；旧记录为空时沿用全局代理策略。
+    image_sources: dict[str, str] = Field(default_factory=dict, sa_column=Column(JSON))
     # 各站原始快照, 供离线重新聚合.
     raw: dict[str, dict[str, Any]] = Field(default_factory=dict, sa_column=Column(JSON))
     # 字段级锁定; 契约见 docs/dev/data-model.md.
@@ -291,8 +344,8 @@ class Metadata(SQLModel, table=True):
         return self.poster_urls[0] if self.poster_urls else None
 
     @property
-    def thumb_url(self) -> str | None:
-        return self.thumb_urls[0] if self.thumb_urls else None
+    def cover_url(self) -> str | None:
+        return self.cover_urls[0] if self.cover_urls else None
 
     @property
     def trailer_url(self) -> str | None:
@@ -300,7 +353,7 @@ class Metadata(SQLModel, table=True):
 
     @property
     def extrafanart(self) -> list[str]:
-        """最高优先级站点的剧照, 与 poster_url / thumb_url 取首项一致."""
+        """最高优先级站点的剧照, 与 poster_url / cover_url 取首项一致."""
         if not self.extrafanart_urls:
             return []
         return list(next(iter(self.extrafanart_urls.values())))
@@ -317,6 +370,28 @@ class Metadata(SQLModel, table=True):
         return is_vr(self.tags or [])
 
 
+class MediaIdentity(SQLModel, table=True):
+    """独立于文件路径的 WESTERN 稳定身份索引。"""
+
+    __tablename__ = "media_identities"  # type: ignore[assignment]
+    __table_args__ = (
+        Index(
+            "ix_media_identities_type_value",
+            "identity_type",
+            text("lower(identity_value)"),
+            unique=True,
+        ),
+        Index("ix_media_identities_metadata_id", "metadata_id"),
+    )
+
+    id: int | None = Field(default=None, primary_key=True)
+    metadata_id: int = Field(foreign_key="metadata.id", ondelete="CASCADE", nullable=False)
+    identity_type: MediaIdentityType = Field(nullable=False, index=False)
+    identity_value: str = Field(nullable=False)
+    created_at: datetime = Field(default_factory=_utcnow)
+    updated_at: datetime = Field(default_factory=_utcnow)
+
+
 def metadata_vr_predicate() -> ColumnElement[bool]:
     """`Metadata.vr` 的 SQL 等价式: 标签整体命中 `parsing.VR_TAGS` (忽略大小写与首尾空白).
 
@@ -329,8 +404,8 @@ def metadata_vr_predicate() -> ColumnElement[bool]:
 def metadata_number_predicate(number: str) -> ColumnElement[bool]:
     """番号相等判定, 大小写不敏感.
 
-    比较必须带 ``COLLATE NOCASE`` 才能命中 ``ix_metadata_number``; 等价式 ``lower(number) = lower(?)``
-    无法命中该索引, 计划退化为覆盖索引扫描, 成本随表行数增长.
+    大小写不敏感的番号查找使用 ``ix_metadata_number_lookup``; 非 WESTERN 的唯一性由部分唯一索引
+    ``ix_metadata_number_non_western`` 另行保证. WESTERN 同番号允许多条, 调用方不得仅凭此谓词确定作品身份.
     """
     return col(Metadata.number).collate("NOCASE") == number
 
@@ -367,6 +442,18 @@ class TaskLink(SQLModel, table=True):
     created_at: datetime = Field(default_factory=_utcnow)
 
 
+class MetadataLibrary(SQLModel, table=True):
+    """Metadata 的唯一当前媒体库归属; MediaFile 索引清理不影响此关系."""
+
+    __tablename__ = "metadata_library"  # type: ignore[assignment]
+    __table_args__ = (UniqueConstraint("metadata_id", name="uq_metadata_library_metadata"),)
+
+    id: int | None = Field(default=None, primary_key=True)
+    metadata_id: int = Field(foreign_key="metadata.id", nullable=False, index=True)
+    library_id: int = Field(foreign_key="libraries.id", nullable=False, index=True)
+    updated_at: datetime = Field(default_factory=_utcnow, nullable=False)
+
+
 class Library(SQLModel, table=True):
     """每个 MediaFile 必须持久关联到唯一 Library (library_id 非空 FK)."""
 
@@ -375,8 +462,15 @@ class Library(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     name: str = Field(nullable=False)
     path: str = Field(nullable=False)
+    """兼容单根目录调用的首个扫描路径; 新逻辑以 scan_paths 为准."""
+    scan_paths: list[str] = Field(default_factory=list, sa_column=Column(JSON, nullable=False))
+    """媒体库扫描根目录列表; Watcher 仅监听这些路径."""
+    organize_path: str | None = Field(default=None)
+    """兼容单整理根目录调用; 新逻辑以 organize_paths 为准."""
+    organize_paths: list[str] = Field(default_factory=list, sa_column=Column(JSON, nullable=False))
+    """整理根目录列表; 仅恰好一条时允许整理落盘."""
     automation: LibraryAutomation = Field(default=LibraryAutomation.SCRAPE)
-    """自动化级别: none 不监控 / watch 仅入库 / scrape 入库并自动刮削. 库本身始终有效."""
+    """自动化级别: none 关闭 / watch 仅监控 / refresh 监控并内部刷新关联 / scrape 监控并刮削."""
     auto_organize: bool = Field(default=False)
     """刮削成功后为该文件自动入队 ORGANIZE (单文件范围, 随刮削任务成链).
 
@@ -400,8 +494,6 @@ class Library(SQLModel, table=True):
     poster_template: PathTemplate | None = None
     fanart_template: PathTemplate | None = None
     extrafanart_template: PathTemplate | None = None
-    extrafanart_name_template: ExtrafanartNameTemplate | None = None
-    """剧照文件名模板; 空则 `{index}.jpg`. 只能是文件名, 必须含 `{index}` 或 `{index_padded}`."""
     nfo_template: PathTemplate | None = None
     trailer_template: PathTemplate | None = None
     subtitle_template: PathTemplate | None = None
@@ -511,7 +603,6 @@ class Resource(SQLModel, table=True):
     """文件 SHA-256; 就地超分后必须更新."""
     size: int | None = None
     mime_type: str | None = None
-    """入库与就地超分后按内容判定; ``NULL`` 与 ``application/octet-stream`` 表示类型未定."""
     meta: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON))
     """派生/处理追溯. 裁剪: {'op':'crop','src':源url,'args':str};
     任意资源被超分后追加 {'sr': {tool,model,scale}}. 原始未处理图为 {}."""
@@ -676,6 +767,16 @@ class MetadataTag(SQLModel, table=True):
 
     metadata_id: int = Field(foreign_key="metadata.id", primary_key=True, ondelete="CASCADE")
     tag_id: int = Field(foreign_key="tags.id", primary_key=True)
+    position: int = Field(default=0)
+
+
+class MetadataSeries(SQLModel, table=True):
+    """影片与系列的多对多关系；position 保留来源给出的顺序。"""
+
+    __tablename__ = "metadata_series"  # type: ignore[assignment]
+
+    metadata_id: int = Field(foreign_key="metadata.id", primary_key=True, ondelete="CASCADE")
+    series_id: int = Field(foreign_key="series.id", primary_key=True, index=True)
     position: int = Field(default=0)
 
 

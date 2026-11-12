@@ -67,6 +67,39 @@ class TestFacetSync:
         studios, _ = await repo.list_facets(FacetKind.STUDIO)
         assert studios[0].name == "StudioX" and studios[0].count == 1
 
+    async def test_multi_series_links_filter_and_management(self, repo: Repository) -> None:
+        meta = await repo.upsert_metadata(number="SERIES-001", series_names=["Series A", "Series B", "Series A"])
+        assert meta.id is not None
+        assert meta.series == "Series A"
+        assert meta.series_names == ["Series A", "Series B"]
+
+        facets, total = await repo.list_facets(FacetKind.SERIES)
+        assert total == 2
+        ids = {item.name: item.id for item in facets}
+        series_b_id = ids["Series B"]
+        assert series_b_id is not None
+        assert (await repo.list_metadata(series_ids=[series_b_id]))[1] == 1
+        assert await repo.resolve_metadata_series_ids(meta) == ids
+
+        await repo.rename_facet(FacetKind.SERIES, ids["Series B"], "Series Renamed")
+        refreshed = await repo.get_metadata(meta.id)
+        assert refreshed is not None
+        assert refreshed.series_names == ["Series A", "Series Renamed"]
+
+        facets, _ = await repo.list_facets(FacetKind.SERIES)
+        renamed_id = next(item.id for item in facets if item.name == "Series Renamed")
+        assert renamed_id is not None
+        await repo.delete_facet(FacetKind.SERIES, renamed_id)
+        refreshed = await repo.get_metadata(meta.id)
+        assert refreshed is not None
+        assert refreshed.series_names == ["Series A"]
+
+        # 旧调用方只传 series=None 时也必须同步清空规范化多系列字段.
+        await repo.upsert_metadata(number="SERIES-001", series=None)
+        refreshed = await repo.get_metadata(meta.id)
+        assert refreshed is not None
+        assert refreshed.series is None and refreshed.series_names == []
+
     async def test_empty_actors_clears_junction(self, repo: Repository) -> None:
         meta = await repo.upsert_metadata(number="ABC-002", actors=["Alice"])
         assert meta.id is not None
@@ -384,11 +417,11 @@ _LIST_KINDS: tuple[tuple[FacetKind, str], ...] = (
     (FacetKind.ACTOR, "actors"),
     (FacetKind.DIRECTOR, "directors"),
     (FacetKind.TAG, "tags"),
+    (FacetKind.SERIES, "series_names"),
 )
 _SCALAR_KINDS: tuple[tuple[FacetKind, str], ...] = (
     (FacetKind.STUDIO, "studio"),
     (FacetKind.PUBLISHER, "publisher"),
-    (FacetKind.SERIES, "series"),
 )
 _FAVORITE_KINDS: tuple[tuple[FacetKind, str], ...] = (
     (FacetKind.DIRECTOR, "director"),
@@ -400,7 +433,7 @@ _FAVORITE_KINDS: tuple[tuple[FacetKind, str], ...] = (
 
 
 async def _seed_favorite_facet(repo: Repository, number: str, kind: FacetKind, value: str) -> Metadata:
-    if kind in (FacetKind.DIRECTOR, FacetKind.TAG):
+    if kind in (FacetKind.DIRECTOR, FacetKind.TAG, FacetKind.SERIES):
         return await _seed_list(repo, number, kind, [value])
     return await _seed_scalar(repo, number, kind, value)
 
@@ -419,6 +452,8 @@ async def _seed_list(repo: Repository, number: str, kind: FacetKind, values: lis
         return await repo.upsert_metadata(number=number, directors=values)
     if kind == FacetKind.TAG:
         return await repo.upsert_metadata(number=number, tags=values)
+    if kind == FacetKind.SERIES:
+        return await repo.upsert_metadata(number=number, series_names=values)
     raise ValueError(kind)
 
 
@@ -427,8 +462,6 @@ async def _seed_scalar(repo: Repository, number: str, kind: FacetKind, value: st
         return await repo.upsert_metadata(number=number, studio=value)
     if kind == FacetKind.PUBLISHER:
         return await repo.upsert_metadata(number=number, publisher=value)
-    if kind == FacetKind.SERIES:
-        return await repo.upsert_metadata(number=number, series=value)
     raise ValueError(kind)
 
 
@@ -439,6 +472,8 @@ def _list_names(meta: Metadata, kind: FacetKind) -> list[str]:
         return meta.directors
     if kind == FacetKind.TAG:
         return meta.tags
+    if kind == FacetKind.SERIES:
+        return meta.series_names or ([meta.series] if meta.series else [])
     raise ValueError(kind)
 
 
@@ -447,8 +482,6 @@ def _scalar_name(meta: Metadata, kind: FacetKind) -> str | None:
         return meta.studio
     if kind == FacetKind.PUBLISHER:
         return meta.publisher
-    if kind == FacetKind.SERIES:
-        return meta.series
     raise ValueError(kind)
 
 
@@ -779,8 +812,8 @@ class TestFacetFavorites:
         assert renamed is not None and renamed.is_favorite is True
 
     async def test_merge_carries_favorite(self, repo: Repository) -> None:
-        # 链接分类 (tag) 与标量分类 (studio) 的合并路径不同, 两种各跑一次
-        for kind in (FacetKind.TAG, FacetKind.STUDIO):
+        # 链接分类 (tag / series) 与标量分类 (studio) 的合并路径分别覆盖
+        for kind in (FacetKind.TAG, FacetKind.SERIES, FacetKind.STUDIO):
             await _seed_favorite_facet(repo, f"FV-MG-{kind}-a", kind, "Src")
             await _seed_favorite_facet(repo, f"FV-MG-{kind}-b", kind, "Dst")
             target = await _facet_id(repo, kind, "Dst")

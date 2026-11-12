@@ -8,6 +8,7 @@ from amane.crawlers.parsing import (
     NumberMatch,
     clean_string,
     extract_all_texts,
+    extract_linked_texts,
     extract_text,
     fc2_article_id,
     fold_name,
@@ -77,6 +78,16 @@ class TestExtractText:
         sel = Selector(text=SAMPLE_HTML)
         result = extract_text(sel, "//h1[@class='nonexistent']/text()")
         assert result == ""
+
+
+def test_extract_linked_texts_preserves_anchor_boundaries_and_full_names():
+    html = Selector(
+        text="""<div class='actors'>
+      <a href='/a/1'>AAA（BBB）</a><a href='/a/2'>CCC(BBB)</a>
+      <a href='/a/3'>DDD EEE</a>
+    </div><div class='other'><a>Not an actor</a></div>"""
+    )
+    assert extract_linked_texts(html, "//div[@class='actors']") == ["AAA（BBB）", "CCC(BBB)", "DDD EEE"]
 
 
 class TestExtractAllTexts:

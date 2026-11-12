@@ -31,7 +31,7 @@ TITLE = MetadataField.TITLE
 PLOT = MetadataField.PLOT
 AGGREGATE_FIELDS = (
     MetadataField.POSTER_URLS,
-    MetadataField.THUMB_URLS,
+    MetadataField.COVER_URLS,
     MetadataField.TRAILER_URLS,
     MetadataField.EXTRAFANART,
     MetadataField.SCORE,
@@ -174,7 +174,7 @@ def _full_metadata(**overrides) -> MediaMetadata:
         "release": "2025-01-01",
         "runtime": 90,
         "tags": ["T"],
-        "thumb_urls": ["http://t.jpg"],
+        "cover_urls": ["http://t.jpg"],
         "poster_urls": ["http://p.jpg"],
         "score": 7.0,
         "directors": ["D"],
@@ -296,6 +296,19 @@ class TestExecuteGraph:
         assert state.result.field_sources["tags"] == "dmm"
         assert state.result.title == "T1"
         assert state.result.studio == "S1"
+
+    @pytest.mark.asyncio
+    async def test_series_names_resolve_even_when_compatibility_scalar_is_empty(self):
+        """多系列来源只填写 series_names 时也必须参与 SERIES 字段链解析."""
+        fp = defaultdict(lambda: [DB])
+        graph = build_graph(fp, {})
+        crawler = MockCrawler(MediaMetadata(number="X", series_names=["Series A", "Series B"]))
+
+        state = await execute_graph(graph, {K1: crawler}, SearchQuery("X"))
+
+        assert state.result.series == "Series A"
+        assert state.result.series_names == ["Series A", "Series B"]
+        assert state.result.field_sources["series"] == "javdb"
 
     @pytest.mark.asyncio
     async def test_all_values_empty_keeps_fields_unresolved(self):
@@ -510,13 +523,13 @@ class TestTwoPhaseExecution:
         graph = build_graph(fp, {})
 
         first = RecordingCrawler(
-            _full_metadata(number="X", poster_urls=["http://p1.jpg"], thumb_urls=["http://t1.jpg"])
+            _full_metadata(number="X", poster_urls=["http://p1.jpg"], cover_urls=["http://t1.jpg"])
         )
         declared = RecordingCrawler(
             _full_metadata(
                 number="X",
                 poster_urls=["http://p2.jpg"],
-                thumb_urls=["http://t2.jpg"],
+                cover_urls=["http://t2.jpg"],
                 trailer_urls=["http://tr2.mp4"],
             )
         )
@@ -527,10 +540,10 @@ class TestTwoPhaseExecution:
 
         assert declared.partials[0] is not None
         assert declared.partials[0].poster_urls == ["http://p1.jpg"]
-        assert declared.partials[0].thumb_urls == ["http://t1.jpg"]
+        assert declared.partials[0].cover_urls == ["http://t1.jpg"]
         assert declared.partials[0].trailer_urls == ["http://tr.mp4"]
         assert state.result.poster_urls == ["http://p1.jpg", "http://p2.jpg"]
-        assert state.result.thumb_urls == ["http://t1.jpg", "http://t2.jpg"]
+        assert state.result.cover_urls == ["http://t1.jpg", "http://t2.jpg"]
         assert state.result.trailer_urls == ["http://tr.mp4", "http://tr2.mp4"]
 
     @pytest.mark.asyncio
@@ -659,6 +672,74 @@ class TestAggregate:
         assert result.field_sources == {}
         assert result.metadata.poster_urls == ["http://p.jpg"]
         assert result.raw
+
+    @pytest.mark.asyncio
+    async def test_explicitly_missing_original_poster_does_not_fall_back_to_cover_derived_poster(self):
+        """爬虫明确声明没有独立原海报时, 展示用 poster_urls 不得冒充原海报."""
+        crawler = MockCrawler(
+            result=MediaMetadata(
+                number="X",
+                poster_urls=["https://example/derived-from-cover.jpg"],
+                original_poster_urls=[],
+            )
+        )
+        result = await aggregate(SearchQuery("X"), {K1: crawler}, defaultdict(lambda: [DB]))
+        assert result.metadata.poster_urls == ["https://example/derived-from-cover.jpg"]
+        assert result.metadata.original_poster_urls == []
+
+    @pytest.mark.asyncio
+    async def test_missing_original_poster_does_not_infer_from_poster_urls(self):
+        """未明确返回原海报地址时保持为空, 不从展示/派生海报推断."""
+        crawler = MockCrawler(result=MediaMetadata(number="X", poster_urls=["https://example/poster.jpg"]))
+        result = await aggregate(SearchQuery("X"), {K1: crawler}, defaultdict(lambda: [DB]))
+        assert result.metadata.original_poster_urls == []
+
+    @pytest.mark.asyncio
+    async def test_double_page_image_pair_must_come_from_the_same_source(self):
+        first = MockCrawler(
+            result=MediaMetadata(
+                number="X",
+                poster_urls=["https://example/a-jacket.jpg"],
+                original_poster_urls=["https://example/a-jacket.jpg"],
+                cover_urls=[],
+            )
+        )
+        second = MockCrawler(
+            result=MediaMetadata(
+                number="X",
+                poster_urls=[],
+                original_poster_urls=[],
+                cover_urls=["https://example/b-cover.jpg"],
+            )
+        )
+        result = await aggregate(
+            SearchQuery("X"),
+            {K1: first, K2: second},
+            defaultdict(lambda: [DB, DMM]),
+        )
+        assert result.metadata.original_poster_urls == ["https://example/a-jacket.jpg"]
+        assert result.metadata.cover_urls == ["https://example/b-cover.jpg"]
+        assert result.metadata.double_page_poster_urls == []
+        assert result.metadata.double_page_original_poster_urls == []
+        assert result.metadata.double_page_cover_urls == []
+
+    @pytest.mark.asyncio
+    async def test_double_page_image_pair_is_retained_from_one_source(self):
+        crawler = MockCrawler(
+            result=MediaMetadata(
+                number="X",
+                poster_urls=["https://example/jacket.jpg"],
+                original_poster_urls=["https://example/jacket.jpg"],
+                cover_urls=["https://example/bigcover.jpg"],
+                double_page_poster_urls=["https://example/jacket.jpg"],
+                double_page_original_poster_urls=["https://example/jacket.jpg"],
+                double_page_cover_urls=["https://example/bigcover.jpg"],
+            )
+        )
+        result = await aggregate(SearchQuery("X"), {K1: crawler}, defaultdict(lambda: [DB]))
+        assert result.metadata.double_page_poster_urls == ["https://example/jacket.jpg"]
+        assert result.metadata.double_page_original_poster_urls == ["https://example/jacket.jpg"]
+        assert result.metadata.double_page_cover_urls == ["https://example/bigcover.jpg"]
 
     @pytest.mark.asyncio
     async def test_raw_contains_fetched_snapshots(self):
@@ -828,7 +909,7 @@ class TestComplexScenarios:
                 "title": "FromPlugin",
                 "actors": ["P1"],
                 "poster_urls": ["http://plugin/poster.jpg"],
-                "thumb_urls": ["http://plugin/thumb.jpg"],
+                "cover_urls": ["http://plugin/thumb.jpg"],
                 "extrafanart": ["http://plugin/e1.jpg"],
                 "score": 4.1,
             }
@@ -840,7 +921,7 @@ class TestComplexScenarios:
                 "actors": ["J1"],
                 "studio": "Freedom",
                 "poster_urls": [],
-                "thumb_urls": ["http://jdbstatic/cover.jpg"],
+                "cover_urls": ["http://jdbstatic/cover.jpg"],
                 "extrafanart": ["http://jdbstatic/e1.jpg"],
                 "score": 4.36,
             }
@@ -862,7 +943,14 @@ class TestComplexScenarios:
         assert [a.name for a in state.result.actors] == ["P1"]
         assert state.result.field_sources["actors"] == PLUGIN_K
         assert state.result.poster_urls == ["http://plugin/poster.jpg"]
-        assert state.result.thumb_urls == ["http://jdbstatic/cover.jpg", "http://plugin/thumb.jpg"]
+        assert state.result.cover_urls == ["http://jdbstatic/cover.jpg", "http://plugin/thumb.jpg"]
+        assert state.result.image_sources == {
+            "http://jdbstatic/cover.jpg": "javdb",
+            "http://plugin/thumb.jpg": PLUGIN_K,
+            "http://plugin/poster.jpg": PLUGIN_K,
+            "http://jdbstatic/e1.jpg": "javdb",
+            "http://plugin/e1.jpg": PLUGIN_K,
+        }
         assert list(state.result.extrafanart_urls) == ["javdb", PLUGIN_K]
         assert [s.site for s in state.result.scores] == [PLUGIN_K, "javdb"]
         assert [s.score for s in state.result.scores] == [4.1, 4.36]
@@ -877,16 +965,16 @@ class TestComplexScenarios:
             graph,
             {
                 K1: MockCrawler(
-                    MediaMetadata(number="X", title="T", poster_urls=[], thumb_urls=["http://javdb/t.jpg"], score=1.0)
+                    MediaMetadata(number="X", title="T", poster_urls=[], cover_urls=["http://javdb/t.jpg"], score=1.0)
                 ),
                 "dmm": MockCrawler(
-                    MediaMetadata(number="X", poster_urls=["http://dmm/p.jpg"], thumb_urls=[], score=None)
+                    MediaMetadata(number="X", poster_urls=["http://dmm/p.jpg"], cover_urls=[], score=None)
                 ),
                 PLUGIN_K: MockCrawler(
                     MediaMetadata(
                         number="X",
                         poster_urls=["http://plugin/p.jpg"],
-                        thumb_urls=["http://plugin/t.jpg"],
+                        cover_urls=["http://plugin/t.jpg"],
                         score=9.0,
                     )
                 ),
@@ -895,7 +983,7 @@ class TestComplexScenarios:
         )
 
         assert state.result.poster_urls == ["http://dmm/p.jpg", "http://plugin/p.jpg"]
-        assert state.result.thumb_urls == ["http://javdb/t.jpg", "http://plugin/t.jpg"]
+        assert state.result.cover_urls == ["http://javdb/t.jpg", "http://plugin/t.jpg"]
         assert [s.site for s in state.result.scores] == [PLUGIN_K, "javdb"]
 
     @pytest.mark.asyncio
@@ -907,15 +995,15 @@ class TestComplexScenarios:
         state = await execute_graph(
             graph,
             {
-                "dmm": MockCrawler(MediaMetadata(number="X", thumb_urls=["http://dmm/pl.jpg"])),
+                "dmm": MockCrawler(MediaMetadata(number="X", cover_urls=["http://dmm/pl.jpg"])),
                 PLUGIN_K: MockCrawler(
-                    MediaMetadata(number="X", thumb_urls=["http://dmm/pl.jpg", "http://pics/pl.jpg"])
+                    MediaMetadata(number="X", cover_urls=["http://dmm/pl.jpg", "http://pics/pl.jpg"])
                 ),
             },
             SearchQuery("X"),
         )
 
-        assert state.result.thumb_urls == ["http://dmm/pl.jpg", "http://pics/pl.jpg"]
+        assert state.result.cover_urls == ["http://dmm/pl.jpg", "http://pics/pl.jpg"]
 
 
 # ============================================================

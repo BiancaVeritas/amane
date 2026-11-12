@@ -22,7 +22,6 @@ logger = structlog.get_logger()
 
 
 def _is_image(mime: str | None, path: Path) -> bool:
-    # 记录给出确定类型时直接判定; 未定 (含通用二进制占位) 时按内容复核.
     if mime and mime != OCTET_STREAM_MIME:
         return mime.startswith(IMAGE_MIME_PREFIX)
     detected = detect_media_type(path)

@@ -50,7 +50,7 @@ class R18Video(BaseModel):
     release_date: datetime.date | None = None
     sample_url: str | None = None
     jacket_full_url: str | None = None
-    jacket_thumb_url: str | None = None
+    jacket_cover_url: str | None = None
     gallery_full_first: str | None = None
     gallery_full_last: str | None = None
     gallery_thumb_first: str | None = None

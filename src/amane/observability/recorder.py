@@ -6,6 +6,7 @@ import contextlib
 import json
 import logging
 import shutil
+from collections.abc import MutableMapping
 from contextvars import ContextVar, Token
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -62,6 +63,25 @@ class TaskIdFilter(logging.Filter):
 
     def filter(self, record: logging.LogRecord) -> bool:
         return _task_id_ctx.get() == self._task_id
+
+
+def _timestamp_from_log_record(
+    _: Any,
+    __: str,
+    event_dict: MutableMapping[str, Any],
+) -> MutableMapping[str, Any]:
+    record = event_dict.get("_record")
+    if isinstance(record, logging.LogRecord):
+        event_dict["timestamp"] = (
+            datetime.fromtimestamp(record.created, UTC).isoformat(timespec="microseconds").replace("+00:00", "Z")
+        )
+
+        standard_fields = logging.makeLogRecord({}).__dict__
+        for key, value in record.__dict__.items():
+            if key not in standard_fields and key not in event_dict:
+                event_dict[key] = value
+
+    return event_dict
 
 
 def task_dir_for(log_dir: Path, task_id: int) -> Path:
@@ -350,7 +370,15 @@ class Recorder:
                 processors=[
                     structlog.stdlib.ProcessorFormatter.remove_processors_meta,
                     structlog.processors.JSONRenderer(),
-                ]
+                ],
+                foreign_pre_chain=[
+                    structlog.contextvars.merge_contextvars,
+                    structlog.stdlib.add_logger_name,
+                    structlog.stdlib.add_log_level,
+                    _timestamp_from_log_record,
+                    structlog.processors.StackInfoRenderer(),
+                    structlog.processors.ExceptionRenderer(),
+                ],
             )
         )
         handler.addFilter(TaskIdFilter(self.task_id))

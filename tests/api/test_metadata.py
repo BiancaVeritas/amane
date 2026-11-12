@@ -6,7 +6,7 @@ import pytest
 import pytest_asyncio
 from PIL import Image
 
-from amane.db.models import MediaFileStatus, Metadata, TaskType
+from amane.db.models import MediaFileStatus, Metadata
 from amane.enums import ActorGender
 
 if TYPE_CHECKING:
@@ -127,6 +127,32 @@ class TestMetadataHttp:
         assert (await client.delete("metadata/9999")).status_code == 404
 
     @pytest.mark.asyncio(loop_scope="function")
+    async def test_western_external_id_editor_roundtrips_theporndb_uuid(self, client: AsyncClient, repo: Repository):
+        metadata = await repo.upsert_western_metadata(
+            theporndb_uuid="5ad1967c-5cef-4020-8256-50227acf985b",
+            number="LANCELOT-001",
+            external_ids={"javdb": "javdb-123"},
+        )
+        assert metadata.id is not None
+
+        detail = await client.get(f"metadata/{metadata.id}")
+        assert detail.status_code == 200
+        assert detail.json()["metadata"]["theporndb_uuid"] == "5ad1967c-5cef-4020-8256-50227acf985b"
+
+        updated = await client.patch(
+            f"metadata/{metadata.id}",
+            json={
+                "external_ids": {
+                    "theporndb": "5ad1967c-5cef-4020-8256-50227acf985b",
+                    "javdb": "javdb-456",
+                }
+            },
+        )
+        assert updated.status_code == 200
+        assert updated.json()["theporndb_uuid"] == "5ad1967c-5cef-4020-8256-50227acf985b"
+        assert updated.json()["external_ids"] == {"javdb": "javdb-456"}
+
+    @pytest.mark.asyncio(loop_scope="function")
     async def test_detail_file_rows_carry_derived_phase(self, client: AsyncClient, repo: Repository):
         """详情里的文件行与条目相位同源: 有码条目的文件行带 censored, 带无码标记的再带 uncensored."""
         meta = await repo.upsert_metadata(number="MIDV-123")
@@ -168,30 +194,6 @@ class TestMetadataHttp:
         assert "vr" not in (await client.get("metadata/schema")).json()["properties"]
 
     @pytest.mark.asyncio(loop_scope="function")
-    async def test_list_library_filter(self, client: AsyncClient, repo: Repository):
-        """HTTP 接线: library_id 可重复, 多库取并集; 非法 id 422."""
-        second = await repo.create_library(name="second", path="/second")
-        assert second.id is not None
-        in_first = await repo.upsert_metadata(number="LIB-FIRST")
-        in_second = await repo.upsert_metadata(number="LIB-SECOND")
-        assert in_first.id is not None and in_second.id is not None
-        await repo.create_media_file(library_id=1, path="/lib/first.mp4", metadata_id=in_first.id)
-        await repo.create_media_file(library_id=second.id, path="/lib/second.mp4", metadata_id=in_second.id)
-
-        first = await client.get("metadata", params={"library_id": 1, "sort_by": "number", "order": "asc"})
-        assert first.status_code == 200
-        assert [i["number"] for i in first.json()["items"]] == ["LIB-FIRST"]
-
-        both = await client.get(
-            "metadata",
-            params=[("library_id", 1), ("library_id", second.id), ("sort_by", "number"), ("order", "asc")],
-        )
-        assert both.status_code == 200
-        assert [i["number"] for i in both.json()["items"]] == ["LIB-FIRST", "LIB-SECOND"]
-
-        assert (await client.get("metadata?library_id=abc")).status_code == 422
-
-    @pytest.mark.asyncio(loop_scope="function")
     async def test_schema_includes_editable_fields(self, client: AsyncClient):
         resp = await client.get("metadata/schema")
         assert resp.status_code == 200
@@ -214,7 +216,7 @@ class TestMetadataHttp:
         assert resp.status_code == 200
         assert resp.json()["title"] == "dmm title"
         assert resp.json()["field_sources"]["title"] == "dmm"
-        assert resp.json()["locked_fields"] == ["title"]
+        assert resp.json()["locked_fields"] == ["title", "original_title"]
 
         none_meta = await repo.upsert_metadata(
             number="ABC-004", field_sources={"title": "javdb"}, raw={"javdb": {"title": None}}
@@ -230,66 +232,9 @@ class TestMetadataHttp:
         assert "nonexistent" in bad.json()["detail"]
 
     @pytest.mark.asyncio(loop_scope="function")
-    async def test_merge_entries_http(self, client: AsyncClient, repo: Repository):
-        target = await repo.upsert_metadata(number="MRG-100", title="target", raw={"javdb": {"title": "target"}})
-        source = await repo.upsert_metadata(number="MRG-0100", title="source", raw={"dmm": {"title": "source"}})
-        assert target.id is not None and source.id is not None
-
-        resp = await client.post(
-            "metadata/merge-entries",
-            json={"target_id": target.id, "source_ids": [source.id, source.id]},
-        )
-        assert resp.status_code == 200
-        body = resp.json()
-        assert body["id"] == target.id
-        assert body["title"] == "target"
-        assert body["raw"] == {"javdb": {"title": "target"}, "dmm": {"title": "source"}}
-        assert (await client.get(f"metadata/{source.id}")).status_code == 404
-
-        extra = await repo.upsert_metadata(number="MRG-200")
-        assert extra.id is not None
-        empty = await client.post("metadata/merge-entries", json={"target_id": target.id, "source_ids": []})
-        assert empty.status_code == 422
-        assert (
-            await client.post("metadata/merge-entries", json={"target_id": 9999, "source_ids": [extra.id]})
-        ).status_code == 404
-        assert (
-            await client.post("metadata/merge-entries", json={"target_id": target.id, "source_ids": [target.id]})
-        ).status_code == 400
-        missing = await client.post("metadata/merge-entries", json={"target_id": target.id, "source_ids": [9999]})
-        assert missing.status_code == 400
-        assert "9999" in missing.json()["detail"]
-        assert (await client.get(f"metadata/{extra.id}")).status_code == 200
-
-    @pytest.mark.asyncio(loop_scope="function")
-    async def test_merge_entries_rescrape_http(self, client: AsyncClient, repo: Repository):
-        alone = await repo.upsert_metadata(number="MRG-300", raw={"javdb": {"title": "target"}})
-        gone = await repo.upsert_metadata(number="MRG-0300", raw={"dmm": {"title": "source"}})
-        assert alone.id is not None and gone.id is not None
-
-        defaults = await client.post("metadata/merge-entries", json={"target_id": alone.id, "source_ids": [gone.id]})
-        assert defaults.status_code == 200
-        assert await repo.list_tasks(task_types=[TaskType.SCRAPE]) == []
-
-        target = await repo.upsert_metadata(number="MRG-301", raw={"javdb": {"title": "target"}})
-        source = await repo.upsert_metadata(number="MRG-0301", raw={"dmm": {"title": "source"}})
-        assert target.id is not None and source.id is not None
-
-        resp = await client.post(
-            "metadata/merge-entries",
-            json={"target_id": target.id, "source_ids": [source.id], "rescrape": True},
-        )
-        assert resp.status_code == 200
-        tasks = await repo.list_tasks(task_types=[TaskType.SCRAPE])
-        assert len(tasks) == 1
-        assert tasks[0].payload["number"] == target.number
-        assert tasks[0].payload["content_type"] == target.content_type.value
-        assert set(tasks[0].payload["use_cache"]) == {"metadata", "trans"}
-
-    @pytest.mark.asyncio(loop_scope="function")
     async def test_crop_poster_http(self, client: AsyncClient, repo: Repository, app: FastAPI):
         meta = await repo.upsert_metadata(
-            number="CROP-001", thumb_urls=["https://example.com/t.jpg"], poster_urls=["https://example.com/old-p.jpg"]
+            number="CROP-001", cover_urls=["https://example.com/t.jpg"], poster_urls=["https://example.com/old-p.jpg"]
         )
         assert meta.id is not None
 
@@ -311,7 +256,7 @@ class TestMetadataHttp:
         data = resp.json()
         assert len(data["poster_urls"]) == 1
         assert data["poster_urls"][0].startswith("/api/resources/")
-        assert data["thumb_urls"] == ["https://example.com/t.jpg"]
+        assert data["cover_urls"] == ["https://example.com/t.jpg"]
         # 裁切写入 poster_urls 并自动锁定.
         assert data["locked_fields"] == ["poster_urls"]
 
@@ -381,6 +326,10 @@ class TestMetadataHttp:
         cleared = await client.put(f"metadata/{meta.id}/locks", json={"fields": []})
         assert cleared.status_code == 200
         assert cleared.json()["locked_fields"] == []
+
+        legacy = await client.put(f"metadata/{meta.id}/locks", json={"fields": ["thumb_urls"]})
+        assert legacy.status_code == 200
+        assert legacy.json()["locked_fields"] == ["cover_urls"]
 
         bad = await client.put(f"metadata/{meta.id}/locks", json={"fields": ["bogus"]})
         assert bad.status_code == 422

@@ -98,33 +98,49 @@ export const ActorCard = memo(function ActorCard({ item }: ActorCardProps) {
           <Text size="sm" fw={600} lineClamp={1} title={item.name}>
             {item.name}
           </Text>
-          {birthdayLabel && (
-            <Group gap={5} wrap="nowrap" align="center" title={birthdayLabel}>
-              <Box
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  flexShrink: 0,
-                  width: 18,
-                  height: 18,
-                  borderRadius: "var(--mantine-radius-sm)",
-                  background: "var(--mantine-color-cyan-filled)",
-                  color: "var(--mantine-color-white)",
-                }}
+          <Group
+            gap={5}
+            wrap="nowrap"
+            align="center"
+            title={birthdayLabel ?? undefined}
+            style={{ minHeight: 18 }}
+          >
+            {birthdayLabel ? (
+              <>
+                <Box
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    flexShrink: 0,
+                    width: 18,
+                    height: 18,
+                    borderRadius: "var(--mantine-radius-sm)",
+                    background: "var(--mantine-color-cyan-filled)",
+                    color: "var(--mantine-color-white)",
+                  }}
+                >
+                  <IconCalendar size={11} stroke={2.2} />
+                </Box>
+                <Text size="xs" fw={600} lineClamp={1} style={{ minWidth: 0, flex: 1 }} c="dimmed">
+                  {birthdayLabel}
+                </Text>
+              </>
+            ) : null}
+          </Group>
+          <Group gap={6} wrap="nowrap" align="center" style={{ minHeight: 18 }}>
+            {metaBits.map((bit) => (
+              <Text
+                key={bit}
+                size="xs"
+                c="dimmed"
+                lineClamp={1}
+                style={{ minWidth: 0, flex: "0 1 auto" }}
               >
-                <IconCalendar size={11} stroke={2.2} />
-              </Box>
-              <Text size="xs" fw={600} lineClamp={1} style={{ minWidth: 0, flex: 1 }} c="dimmed">
-                {birthdayLabel}
+                {bit}
               </Text>
-            </Group>
-          )}
-          {metaBits.length > 0 && (
-            <Text size="xs" c="dimmed" lineClamp={1}>
-              {metaBits.join(" · ")}
-            </Text>
-          )}
+            ))}
+          </Group>
         </Stack>
       </Card>
     </Link>

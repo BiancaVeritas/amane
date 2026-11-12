@@ -110,6 +110,24 @@ export function LibraryActionButtons({
                   type: "refresh",
                   library_id: library.id,
                   scan: ["add"],
+                  associate: true,
+                  scrape: [],
+                },
+              })
+            }
+          >
+            <Text size="sm">{t("scan.modes.associate.label")}</Text>
+            <Text size="xs" c="dimmed">
+              {t("scan.modes.associate.desc")}
+            </Text>
+          </Menu.Item>
+          <Menu.Item
+            onClick={() =>
+              scanMutation.mutate({
+                body: {
+                  type: "refresh",
+                  library_id: library.id,
+                  scan: ["add"],
                   scrape: ["pending"],
                 },
               })

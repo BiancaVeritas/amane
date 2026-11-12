@@ -68,9 +68,9 @@ def to_metadata(detail: R18VideoDetail, number: str, language: Language | None =
     series = detail.series.best(language) if detail.series else None
 
     # jacket_full 作 thumb, jacket_thumb 作 poster; dump 不存域名与扩展名, 这里补全.
-    poster_urls = image_candidates(f"{PICS_CDN}/{v.jacket_thumb_url}.jpg") if v.jacket_thumb_url else []
-    jacket_path = v.jacket_full_url or v.jacket_thumb_url
-    thumb_urls = image_candidates(f"{PICS_CDN}/{jacket_path}.jpg") if jacket_path else []
+    poster_urls = image_candidates(f"{PICS_CDN}/{v.jacket_cover_url}.jpg") if v.jacket_cover_url else []
+    jacket_path = v.jacket_full_url or v.jacket_cover_url
+    cover_urls = image_candidates(f"{PICS_CDN}/{jacket_path}.jpg") if jacket_path else []
 
     # 剧照: gallery_full 优先, 再回退 gallery_thumb.
     extrafanart = _generate_gallery(v.gallery_full_first, v.gallery_full_last)
@@ -92,7 +92,7 @@ def to_metadata(detail: R18VideoDetail, number: str, language: Language | None =
         series=series,
         plot=plot or None,
         poster_urls=poster_urls,
-        thumb_urls=thumb_urls,
+        cover_urls=cover_urls,
         trailer_urls=[detail.trailer_url] if detail.trailer_url else [],
         score=score,
         external_id=v.content_id,

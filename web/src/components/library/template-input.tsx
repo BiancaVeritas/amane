@@ -91,7 +91,7 @@ export function TemplateInput({
     return () => {
       observer.disconnect();
     };
-  }, [sync, value]);
+  }, [sync]);
 
   const filled = value.length > 0;
   const tokens = filled ? tokenizeTemplate(value, catalog) : [];

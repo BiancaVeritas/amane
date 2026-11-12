@@ -17,10 +17,10 @@ class TestJacketUrls:
         video = R18Video(
             content_id="ssis00497",
             jacket_full_url="digital/video/ssis00497/ssis00497pl",
-            jacket_thumb_url="digital/video/ssis00497/ssis00497ps",
+            jacket_cover_url="digital/video/ssis00497/ssis00497ps",
         )
         meta = to_metadata(R18VideoDetail(video=video), "SSIS-497")
-        assert meta.thumb_urls == [
+        assert meta.cover_urls == [
             "https://awsimgsrc.dmm.co.jp/pics_dig/digital/video/ssis00497/ssis00497pl.jpg",
             "https://pics.dmm.co.jp/digital/video/ssis00497/ssis00497pl.jpg",
         ]
@@ -31,19 +31,19 @@ class TestJacketUrls:
 
     def test_missing_full_falls_back_to_thumb(self):
         """jacket_full 为空时封面与海报都取 jacket_thumb."""
-        video = R18Video(content_id="n_617db0242", jacket_thumb_url="mono/movie/japanese/n_617db0242/n_617db0242pl")
+        video = R18Video(content_id="n_617db0242", jacket_cover_url="mono/movie/japanese/n_617db0242/n_617db0242pl")
         meta = to_metadata(R18VideoDetail(video=video), "N-617DB0242")
         expected = [
             "https://awsimgsrc.dmm.co.jp/pics_dig/mono/movie/n_617db0242/n_617db0242pl.jpg",
             "https://pics.dmm.co.jp/mono/movie/japanese/n_617db0242/n_617db0242pl.jpg",
         ]
-        assert meta.thumb_urls == expected
+        assert meta.cover_urls == expected
         assert meta.poster_urls == expected
 
     def test_missing_both_gives_empty_lists(self):
         """两列都为空时不给候选, 不产生空串地址."""
         meta = to_metadata(R18VideoDetail(video=R18Video(content_id="ssis00497")), "SSIS-497")
-        assert meta.thumb_urls == []
+        assert meta.cover_urls == []
         assert meta.poster_urls == []
 
 

@@ -3,5 +3,6 @@
   "empty": "Empty directory",
   "selectAll": "Select all",
   "selectDir": "Select this directory",
-  "toggleHidden": "Toggle hidden files"
+  "toggleHidden": "Toggle hidden files",
+  "locations": "Locations"
 }

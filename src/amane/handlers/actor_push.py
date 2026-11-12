@@ -150,7 +150,7 @@ class ActorPushHandler(TaskHandler[ActorPushPayload, ActorPushResult]):
                     index,
                     aliases.get(actor.id or 0, []),
                     seen_persons=seen_persons,
-                    force=payload.force,
+                    mode=payload.mode,
                     counts=counts,
                 )
                 await self.report_progress(done, len(actors), actor.name)
@@ -189,7 +189,7 @@ class ActorPushHandler(TaskHandler[ActorPushPayload, ActorPushResult]):
         aliases: Sequence[str],
         *,
         seen_persons: set[str],
-        force: bool,
+        mode: str,
         counts: _Counts,
     ) -> None:
         names = [actor.name, *aliases]
@@ -212,7 +212,7 @@ class ActorPushHandler(TaskHandler[ActorPushPayload, ActorPushResult]):
                 continue
             seen_persons.add(person.id)
             counts.matched += 1
-            await self._sync_person(actor, person, portrait, client, force=force, counts=counts)
+            await self._sync_person(actor, person, portrait, client, aliases=aliases, mode=mode, counts=counts)
 
     async def _find_persons(
         self,
@@ -263,11 +263,13 @@ class ActorPushHandler(TaskHandler[ActorPushPayload, ActorPushResult]):
         portrait: _PortraitSource | None,
         client: MediaServerClientLike,
         *,
-        force: bool,
+        aliases: Sequence[str],
+        mode: str,
         counts: _Counts,
     ) -> None:
-        updates = _profile_updates(actor, person, force=force)
-        needs_image = portrait is not None and (force or not person.has_primary_image)
+        updates = _profile_updates(actor, person, aliases, mode=mode)
+        # 按用户规则：每次手动同步都重新上传本地头像，不因目标已有头像而跳过。
+        needs_image = portrait is not None
         if not updates and not needs_image:
             counts.skipped += 1
             return
@@ -316,19 +318,41 @@ class ActorPushHandler(TaskHandler[ActorPushPayload, ActorPushResult]):
         )
 
 
-def _profile_updates(actor: Actor, person: MediaPerson, *, force: bool) -> dict[str, object]:
-    """按覆盖规则给出目标字段; 不把空值写成清空动作."""
+def _profile_updates(
+    actor: Actor, person: MediaPerson, aliases: Sequence[str] = (), *, mode: str = "incremental"
+) -> dict[str, object]:
+    """生成演员资料更新; full 覆盖 Amane 有值字段, incremental 仅补目标空字段。"""
     updates: dict[str, object] = {}
-    if actor.overview and (force or not _has_text(person.overview)):
-        updates["Overview"] = actor.overview
+    overview_lines: list[str] = []
+    values = [
+        ("别名", "、".join(dict.fromkeys(a.strip() for a in aliases if a.strip()))),
+        ("性别", {"female": "女", "male": "男"}.get(str(actor.gender), "")),
+        ("生日", actor.birthday or ""),
+        ("出生地", actor.birthplace or ""),
+        ("身高", f"{actor.height} cm" if actor.height else ""),
+        ("罩杯", actor.cup or ""),
+        (
+            "三围",
+            " / ".join(
+                f"{label} {value}"
+                for label, value in (("B", actor.bust), ("W", actor.waist), ("H", actor.hip))
+                if value
+            ),
+        ),
+        ("简介", actor.overview or ""),
+    ]
+    overview_lines.extend(f"{label}：{value}" for label, value in values if value)
+    overview = "\n".join(overview_lines)
+    if overview and (mode == "full" or not _has_text(person.overview)):
+        updates["Overview"] = overview
 
     if actor.birthday and _ISO_DATE.fullmatch(actor.birthday):
-        if force or not person.premiere_date:
+        if mode == "full" or not person.premiere_date:
             updates["PremiereDate"] = actor.birthday
-        if force or person.production_year is None:
+        if mode == "full" or person.production_year is None:
             updates["ProductionYear"] = int(actor.birthday[:4])
 
-    if actor.birthplace and (force or not _has_text_list(person.production_locations)):
+    if actor.birthplace and (mode == "full" or not _has_text_list(person.production_locations)):
         updates["ProductionLocations"] = [actor.birthplace]
     return updates
 

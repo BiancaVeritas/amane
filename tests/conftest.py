@@ -1,6 +1,5 @@
 """全局测试 fixtures"""
 
-import io
 import os
 from contextlib import contextmanager
 from ipaddress import ip_address
@@ -8,11 +7,9 @@ from typing import TYPE_CHECKING
 
 import pytest
 import pytest_asyncio
-from PIL import Image
 from sqlalchemy import event
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlmodel import select
-from sqlmodel.ext.asyncio.session import AsyncSession
 
 from amane.db.embeddings import EmbeddingStore
 from amane.db.models import Resource
@@ -21,7 +18,7 @@ from amane.media import ResourceStore
 from tests.schema_template import copy_schema
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncGenerator, Awaitable, Callable, Iterator, Sequence
+    from collections.abc import AsyncGenerator, Iterator, Sequence
     from pathlib import Path
 
     from sqlalchemy.ext.asyncio import AsyncEngine
@@ -29,7 +26,7 @@ if TYPE_CHECKING:
 
 @pytest.fixture
 def public_dns(monkeypatch: pytest.MonkeyPatch) -> None:
-    """把域名解析成公网地址, 地址字面量按原值: 出站策略的用例不访问网络."""
+    """把域名解析成公网地址, 测试不访问真实 DNS."""
 
     async def _resolve(host: str, port: int) -> set[str]:
         try:
@@ -99,42 +96,44 @@ async def repo(tmp_path: Path) -> AsyncGenerator[Repository]:
 
 
 @pytest_asyncio.fixture
-async def resource_engine(tmp_path: Path) -> AsyncGenerator[AsyncEngine]:
-    db_path = tmp_path / "resources.db"
-    copy_schema(db_path)
-    engine = _file_engine(db_path)
-    yield engine
-
-    await engine.dispose()
-
-
-@pytest_asyncio.fixture
-async def resource_store(resource_engine: AsyncEngine, tmp_path: Path) -> ResourceStore:
+async def resource_store(tmp_path: Path) -> AsyncGenerator[ResourceStore]:
     """独立的 ResourceStore (文件 DB + tmp 目录).
 
     handler 现强制注入 ResourceStore; 测试不触发真实下载时仅作占位.
     """
-    return ResourceStore(engine=resource_engine, base_dir=tmp_path / "resources")
+    db_path = tmp_path / "resources.db"
+    copy_schema(db_path)
+    engine = _file_engine(db_path)
+    yield ResourceStore(engine=engine, base_dir=tmp_path / "resources")
+
+    await engine.dispose()
 
 
 @pytest.fixture
-def set_resource_mime(resource_engine: AsyncEngine) -> Callable[[str, str | None], Awaitable[None]]:
-    """改写已落盘资源的媒体类型; 用于构造与盘上内容无关的存量行."""
+def set_resource_mime(resource_store: ResourceStore):
+    """修改测试资源记录中的 MIME 类型。"""
 
-    async def apply(url: str, mime: str | None) -> None:
-        async with AsyncSession(resource_engine, expire_on_commit=False) as session:
+    async def _set_mime(url: str, mime_type: str | None) -> None:
+        async with resource_store._session() as session:
             result = await session.exec(select(Resource).where(Resource.url == url))
-            record = result.first()
-            assert record is not None
-            record.mime_type = mime
+            resource = result.first()
+            if resource is None:
+                raise AssertionError(f"Resource not found: {url}")
+
+            resource.mime_type = mime_type
+            session.add(resource)
             await session.commit()
 
-    return apply
+    return _set_mime
 
 
 @pytest.fixture
 def bmp_bytes() -> bytes:
-    """最小合法 BMP: 文件头未登记, 须由 PIL 判定."""
-    buf = io.BytesIO()
-    Image.new("RGB", (8, 8), "red").save(buf, "BMP")
-    return buf.getvalue()
+    """生成一个有效的 BMP 测试图片。"""
+    from io import BytesIO
+
+    from PIL import Image
+
+    buffer = BytesIO()
+    Image.new("RGB", (1, 1), color=(255, 0, 0)).save(buffer, format="BMP")
+    return buffer.getvalue()

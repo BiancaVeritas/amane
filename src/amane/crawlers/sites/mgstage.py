@@ -101,7 +101,7 @@ class MGStageCrawler(Crawler):
         release = release_raw.strip() if release_raw else None
 
         cover = extract_text(html, '//a[@id="EnlargeImage"]/@href', '//img[@class="enlarge_image"]/@src')
-        thumb_url = cover or None
+        cover_url = cover or None
         poster_url = _poster_url(cover)
 
         extrafanart = extract_all_texts(html, '//dl[@id="sample-photo"]//li/a/@href')
@@ -124,7 +124,11 @@ class MGStageCrawler(Crawler):
             series=series or None,
             plot=plot or None,
             poster_urls=[poster_url] if poster_url else [],
-            thumb_urls=[thumb_url] if thumb_url else [],
+            original_poster_urls=[poster_url] if poster_url else [],
+            cover_urls=[cover_url] if cover_url else [],
+            double_page_poster_urls=[poster_url] if poster_url and cover_url else [],
+            double_page_original_poster_urls=[poster_url] if poster_url and cover_url else [],
+            double_page_cover_urls=[cover_url] if poster_url and cover_url else [],
             extrafanart=extrafanart,
             source_url=url,
             external_id=url,

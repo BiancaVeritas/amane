@@ -2,7 +2,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import AliasChoices, BaseModel, Field, field_validator, model_validator
 
 from ..enums import ActorGender
 from ..utils.dates import normalize_calendar_date
@@ -19,6 +19,8 @@ class SearchQuery:
     file_path: str | None = None
     file_hash: str | None = None
     content_type: ContentType | None = None
+    # WESTERN 手动指定或重新刮削时的 ThePornDB UUID.
+    theporndb_uuid: str | None = None
     # 前序聚合结果 (已定值单源标量 + 第一段已抓到的图片地址), 只读; 仅 ``SourceTrait.NEEDS_PARTIAL`` 来源非空.
     # 为 ``None`` 当且仅当本次来源不在第二段; 单源路由下是空对象而非 ``None``.
     partial_result: AggregatedMetadata | None = None
@@ -67,12 +69,21 @@ class MediaMetadata(BaseModel):
     runtime: int | None = None
     tags: list[str] = Field(default_factory=list)
     series: str | None = None
+    series_names: list[str] = Field(default_factory=list)
     plot: str | None = None
     poster_urls: list[str] = Field(default_factory=list)
-    thumb_urls: list[str] = Field(default_factory=list)
+    # None 表示旧爬虫未区分原始海报, 可兼容使用 poster_urls; 空列表表示明确没有独立海报.
+    original_poster_urls: list[str] | None = None
+    cover_urls: list[str] = Field(default_factory=list, validation_alias=AliasChoices("cover_urls", "thumb_urls"))
+    # 只有爬虫确认这三组图片分别代表原海报与双页封面时才填写.
+    # 不允许聚合层仅凭 original_poster_urls + cover_urls 推断, 因为它们可能只是同图不同尺寸.
+    double_page_poster_urls: list[str] = Field(default_factory=list)
+    double_page_original_poster_urls: list[str] = Field(default_factory=list)
+    double_page_cover_urls: list[str] = Field(default_factory=list)
     trailer_urls: list[str] = Field(default_factory=list)
     score: float | None = None
     external_id: str | None = None
+    theporndb_uuid: str | None = None
     source_url: str | None = None
     directors: list[str] = Field(default_factory=list)
     extrafanart: list[str] = Field(default_factory=list)

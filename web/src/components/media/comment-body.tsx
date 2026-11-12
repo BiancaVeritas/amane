@@ -1,7 +1,9 @@
 import { Anchor, Tooltip } from "@mantine/core";
 import type { Element } from "hast";
-import { memo, useMemo, useState } from "react";
+import { createContext, memo, useContext, useState } from "react";
+import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 import type { Components, Options } from "react-markdown";
 
 import { MarkdownContent } from "@/components/markdown/markdown-content";
@@ -22,6 +24,15 @@ type CommentBodyProps = {
 };
 
 type SeekInfo = { seconds: number; time: string };
+
+type CommentBodyContextValue = {
+  canSeek: boolean;
+  onSeek: (seconds: number) => void;
+  interactive: boolean;
+  t: TFunction<"metadata">;
+};
+
+const CommentBodyContext = createContext<CommentBodyContextValue | null>(null);
 
 function readSeek(node: Readonly<Element> | undefined): SeekInfo | null {
   const seconds = node?.properties["data-seek"];
@@ -55,6 +66,60 @@ function CommentImage({ src, alt }: { src: string; alt: string }) {
   );
 }
 
+function CommentTimestamp({ node, children }: { node?: Element; children?: ReactNode }) {
+  const context = useContext(CommentBodyContext);
+  const seek = readSeek(node);
+  if (seek == null) return <span>{children}</span>;
+
+  if (context == null || !context.interactive) {
+    return <span className={classes.timestampStatic}>{children}</span>;
+  }
+
+  return context.canSeek ? (
+    <Tooltip label={context.t("detail.commentSeek", { time: seek.time })}>
+      <button
+        type="button"
+        className={classes.timestamp}
+        onClick={() => context.onSeek(seek.seconds)}
+      >
+        {children}
+      </button>
+    </Tooltip>
+  ) : (
+    <Tooltip label={context.t("detail.playbackUnavailable")}>
+      <span className={classes.disabledTimestamp}>{children}</span>
+    </Tooltip>
+  );
+}
+
+function CommentAnchor({
+  href,
+  title,
+  children,
+}: {
+  href?: string;
+  title?: string;
+  children?: ReactNode;
+}) {
+  return href ? (
+    <Anchor className={classes.link} href={href} title={title} target="_blank" rel="noreferrer">
+      {children}
+    </Anchor>
+  ) : (
+    <>{children}</>
+  );
+}
+
+function CommentMarkdownImage({ src, alt }: { src?: string; alt?: string }) {
+  return src ? <CommentImage src={src} alt={alt ?? ""} /> : null;
+}
+
+const COMMENT_COMPONENTS: Components = {
+  span: CommentTimestamp,
+  a: CommentAnchor,
+  img: CommentMarkdownImage,
+};
+
 /**
  * 评论正文: 按 GFM 渲染, 时间戳渲染为跳转入口, 链接在新标签页打开.
  *
@@ -69,57 +134,15 @@ export const CommentBody = memo(function CommentBody({
   compact = false,
 }: CommentBodyProps) {
   const { t } = useTranslation("metadata");
-  const components = useMemo<Components>(
-    () => ({
-      span: ({ node, children }) => {
-        const seek = readSeek(node);
-        if (seek == null) {
-          return <span>{children}</span>;
-        }
-        if (!interactive) {
-          return <span className={classes.timestampStatic}>{children}</span>;
-        }
-        return canSeek ? (
-          <Tooltip label={t("detail.commentSeek", { time: seek.time })}>
-            <button
-              type="button"
-              className={classes.timestamp}
-              onClick={() => onSeek(seek.seconds)}
-            >
-              {children}
-            </button>
-          </Tooltip>
-        ) : (
-          <Tooltip label={t("detail.playbackUnavailable")}>
-            <span className={classes.disabledTimestamp}>{children}</span>
-          </Tooltip>
-        );
-      },
-      a: ({ href, title, children }) =>
-        href ? (
-          <Anchor
-            className={classes.link}
-            href={href}
-            title={title}
-            target="_blank"
-            rel="noreferrer"
-          >
-            {children}
-          </Anchor>
-        ) : (
-          <>{children}</>
-        ),
-      img: ({ src, alt }) => (src ? <CommentImage src={src} alt={alt ?? ""} /> : null),
-    }),
-    [canSeek, interactive, onSeek, t],
-  );
 
   return (
-    <MarkdownContent
-      text={body}
-      className={compact ? `${classes.body} ${classes.bodyCompact}` : classes.body}
-      components={components}
-      rehypePlugins={REHYPE_PLUGINS}
-    />
+    <CommentBodyContext.Provider value={{ canSeek, onSeek, interactive, t }}>
+      <MarkdownContent
+        text={body}
+        className={compact ? `${classes.body} ${classes.bodyCompact}` : classes.body}
+        components={COMMENT_COMPONENTS}
+        rehypePlugins={REHYPE_PLUGINS}
+      />
+    </CommentBodyContext.Provider>
   );
 });

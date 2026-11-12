@@ -232,7 +232,9 @@ export function InventoryTree({
             size="xs"
             checked={showNoise}
             label={t("cleanup.showNoise")}
-            onChange={(event) => setShowNoise(event.currentTarget.checked)}
+            onChange={(event) =>
+              setShowNoise(event.target instanceof HTMLInputElement && event.target.checked)
+            }
           />
           <Button
             size="xs"

@@ -5,8 +5,11 @@
 内部 URL ``/api/resources/{hash}`` 是对既有 Resource 的引用, 解析为本地文件而不发请求.
 """
 
+from __future__ import annotations
+
 import asyncio
 import hashlib
+import mimetypes
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from enum import StrEnum
@@ -20,7 +23,6 @@ from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from ..db.models import Resource
-from .file_type import detect_media_type
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator, Awaitable, Callable
@@ -34,9 +36,9 @@ logger = structlog.get_logger()
 
 RESOURCE_URL_PREFIX = "/api/resources"
 
-# 上游把已下架资源重定向到 200 的占位图 (DMM 的 now_printing, up-timely 的 noimage) 时不能算获取成功:
+# 上游把已下架资源重定向到 200 的占位图 (DMM 的 now_printing) 时不能算获取成功:
 # 否则该 URL 会被判为可用并前置, 前端最终显示占位图本身.
-_PLACEHOLDER_PATH_MARKERS: tuple[str, ...] = ("/now_printing/", "/noimage.")
+_PLACEHOLDER_PATH_MARKERS: tuple[str, ...] = ("/now_printing/",)
 
 
 def _is_placeholder_url(url: str) -> bool:
@@ -148,59 +150,72 @@ class ResourceStore:
     def data_dir(self) -> Path:
         return self._base_dir.parent
 
-    async def resolve(self, url: str) -> Path | None:
+    async def resolve_record(self, url: str) -> tuple[Resource, Path] | None:
+        """一次查询同时返回记录与文件, 供图片响应直接读取哈希, 避免命中后重复查库."""
         async with self._session() as session:
-            stmt = select(Resource).where(Resource.url == url)
-            result = await session.exec(stmt)
+            result = await session.exec(select(Resource).where(Resource.url == url))
             record = result.first()
             if record is None:
                 return None
-
             full_path = self._base_dir / record.file_path
             if not full_path.exists():
-                # 文件丢失则删除记录.
                 logger.warning("resource file missing, invalidating record", url=url, path=str(full_path))
                 await session.delete(record)
                 await session.commit()
                 return None
+            return record, full_path
 
-            return full_path
+    async def resolve(self, url: str) -> Path | None:
+        found = await self.resolve_record(url)
+        return found[1] if found is not None else None
+
+    async def acquire_with_record(
+        self,
+        url: str,
+        client: WebClient,
+        *,
+        source: str | None = None,
+        egress: EgressPolicy | None = None,
+        max_bytes: int | None = None,
+    ) -> tuple[Resource, Path] | None:
+        # 内部 URL 是对既有 Resource 的引用: 直接解析本地文件, 不下载也不写记录.
+        internal = internal_url_hash(url)
+        if internal is not None:
+            return await self.get_by_url_hash(internal)
+        # 同 URL 串行, 保留就地超分覆盖时的写入顺序.
+        async with self._serialized(url):
+            return await self._acquire_locked_with_record(
+                url, client, source=source, egress=egress, max_bytes=max_bytes
+            )
 
     async def acquire(
         self,
         url: str,
         client: WebClient,
         *,
+        source: str | None = None,
         egress: EgressPolicy | None = None,
         max_bytes: int | None = None,
     ) -> Path | None:
-        """``egress`` / ``max_bytes`` 原样交给下载通道: URL 来自第三方数据时由调用方给出策略."""
-        # 内部 URL 是对既有 Resource 的引用: 直接解析本地文件, 不下载也不写记录.
-        internal = internal_url_hash(url)
-        if internal is not None:
-            found = await self.get_by_url_hash(internal)
-            return found[1] if found else None
+        found = await self.acquire_with_record(url, client, source=source, egress=egress, max_bytes=max_bytes)
+        return found[1] if found is not None else None
 
-        # 同一 URL 的内容写入串行: 一起到达的调用都判缓存未命中, 若各自下载并改名到同一路径,
-        # 后写会覆盖先写 (含先写方刚做完的就地超分), 而先写方的记录仍然作数.
-        async with self._serialized(url):
-            return await self._acquire_locked(url, client, egress=egress, max_bytes=max_bytes)
-
-    async def _acquire_locked(
+    async def _acquire_locked_with_record(
         self,
         url: str,
         client: WebClient,
         *,
-        egress: EgressPolicy | None,
-        max_bytes: int | None,
-    ) -> Path | None:
-        # 缓存命中且文件存在则直出. 判据是记录 + 文件存在, 不看哈希: 超分是就地覆盖, 哈希每次都会变.
-        cached = await self.resolve(url)
-        if cached:
+        source: str | None = None,
+        egress: EgressPolicy | None = None,
+        max_bytes: int | None = None,
+    ) -> tuple[Resource, Path] | None:
+        # 命中时记录与路径一次查询取回; 不看哈希, 因为超分会就地覆盖并更新哈希.
+        cached = await self.resolve_record(url)
+        if cached is not None:
             return cached
 
         # 上游改派占位图时跳过, 不占用 dest 也不写记录.
-        final_url = await client.resolve_final_url(url, egress=egress)
+        final_url = await client.resolve_final_url(url, source=source, egress=egress)
         if _is_placeholder_url(final_url):
             logger.warning("resource is upstream placeholder", url=url, final_url=final_url)
             return None
@@ -216,7 +231,7 @@ class ResourceStore:
         # 临时文件保留原扩展名: download 的实现可能按扩展名决定写出的格式.
         tmp = dest.with_name(f"{dest.stem}.{uuid4().hex}.part{dest.suffix}")
         try:
-            if not await client.download(url, tmp, egress=egress, max_bytes=max_bytes):
+            if not await client.download(url, tmp, source=source, egress=egress, max_bytes=max_bytes):
                 logger.warning("resource download failed", url=url, host=urlsplit(url).hostname)
                 return None
             tmp.replace(dest)
@@ -224,7 +239,9 @@ class ResourceStore:
             tmp.unlink(missing_ok=True)
 
         size = dest.stat().st_size
-        mime = detect_media_type(dest)
+        from .file_type import detect_media_type
+
+        mime = detect_media_type(dest) or mimetypes.guess_type(str(dest))[0]
         content_hash = self._hash_file(dest)
 
         # 写入记录.
@@ -239,9 +256,23 @@ class ResourceStore:
             session.add(record)
             await session.commit()
 
-        return dest
+        return record, dest
 
-    async def resolve_source(self, url: str, client: WebClient) -> ResolvedSource | None:
+    async def store_uploaded_image(self, metadata_id: int, kind: str, data: bytes, ext: str) -> str:
+        """持久化影片详情页上传的图片, 返回内部 Resource URL. 相同内容可复用缓存."""
+        digest = hashlib.sha256(data).hexdigest()
+        locator = f"manual-upload:metadata:{metadata_id}:{kind}"
+
+        async def producer(dest: Path) -> bool:
+            dest.write_bytes(data)
+            return True
+
+        resource = await self.acquire_derived(locator, "upload", digest, producer, ext=ext)
+        if resource is None:
+            raise ValueError("图片保存失败")
+        return f"{RESOURCE_URL_PREFIX}/{self.url_hash(resource.url)}"
+
+    async def resolve_source(self, url: str, client: WebClient, *, source: str | None = None) -> ResolvedSource | None:
         """处理入口的源解析: 内部 URL 定位既有 Resource, 外部仅接受 http(s), 其余返回 None."""
         internal = internal_url_hash(url)
         if internal is not None:
@@ -261,6 +292,21 @@ class ResourceStore:
         async with self._session() as session:
             result = await session.exec(select(Resource).where(Resource.url == url))
             return result.first()
+
+    async def cached_path(self, url: str) -> Path | None:
+        """只读取已缓存且校验通过的资源; 不回源、不修复、不改写锁定图片."""
+        internal_hash = internal_url_hash(url)
+        if internal_hash is not None:
+            found = await self.get_by_url_hash(internal_hash)
+            if found is None:
+                return None
+            resource, path = found
+        else:
+            resource = await self.get_by_url(url)
+            if resource is None:
+                return None
+            path = self.full_path(resource)
+        return path if self._matches_record(path, resource) else None
 
     async def list_all(self) -> list[Resource]:
         async with self._session() as session:
@@ -308,7 +354,7 @@ class ResourceStore:
                 return None
 
             size = dest.stat().st_size
-            mime = detect_media_type(dest)
+            mime = mimetypes.guess_type(str(dest))[0]
             content_hash = self._hash_file(dest)
             meta = {"op": op, "src": src_url, "args": args}
 
@@ -371,10 +417,12 @@ class ResourceStore:
             finally:
                 tmp.unlink(missing_ok=True)
 
-            # 原地替换后重新量取, 记入的就是盘上那份. 输出格式由超分配置决定, 媒体类型须一并重算.
+            # 原地替换后重新量取, 记入的就是盘上那份.
             size = src.stat().st_size
             content_hash = self._hash_file(src)
-            mime = detect_media_type(src)
+            from .file_type import detect_media_type
+
+            mime_type = detect_media_type(src) or mimetypes.guess_type(str(src))[0]
             new_meta = dict(record.meta) if record.meta else {}
             new_meta["sr"] = sr_args
 
@@ -385,7 +433,7 @@ class ResourceStore:
                     return UpscaleOutcome.SKIPPED
                 row.size = size
                 row.content_hash = content_hash
-                row.mime_type = mime
+                row.mime_type = mime_type
                 row.meta = new_meta
                 session.add(row)
                 await session.commit()
@@ -416,7 +464,8 @@ class ResourceStore:
         for site in priority:
             if site not in urls_by_site:
                 continue
-            results = await asyncio.gather(*[self.acquire(u, client) for u in urls_by_site[site]])
+            source = site.split(":", 1)[0]
+            results = await asyncio.gather(*[self.acquire(url, client, source=source) for url in urls_by_site[site]])
             paths = [p for p in results if p is not None]
             if paths:
                 return paths

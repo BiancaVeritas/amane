@@ -26,10 +26,16 @@ interface FanartLightboxProps {
   images: string[];
   initialIndex?: number;
   onClose: () => void;
+  imageSources?: Record<string, string>;
 }
 
 /** Fullscreen image viewer with keyboard prev/next/escape and intrinsic resolution. */
-export function FanartLightbox({ images, initialIndex = 0, onClose }: FanartLightboxProps) {
+export function FanartLightbox({
+  images,
+  initialIndex = 0,
+  onClose,
+  imageSources,
+}: FanartLightboxProps) {
   const { t } = useTranslation("common");
   const [index, setIndex] = useState(() =>
     Math.min(Math.max(initialIndex, 0), Math.max(images.length - 1, 0)),
@@ -74,7 +80,10 @@ export function FanartLightbox({ images, initialIndex = 0, onClose }: FanartLigh
     goTo(dx < 0 ? 1 : -1);
   };
 
-  const src = images.length > 0 ? (proxyImageUrl(images[index]) ?? images[index]) : "";
+  const src =
+    images.length > 0
+      ? (proxyImageUrl(images[index], imageSources?.[images[index]]) ?? images[index])
+      : "";
   const { src: queuedSrc, release } = useQueuedImageUrl(src);
 
   const [seenSrc, setSeenSrc] = useState(queuedSrc);
@@ -256,6 +265,7 @@ interface ThumbStripProps {
   /** Called after opening lightbox; use to stopPropagation from parent selectors. */
   onThumbClick?: (e: MouseEvent) => void;
   empty?: ReactNode;
+  imageSources?: Record<string, string>;
 }
 
 /** Thumbnail strip that opens FanartLightbox on click. */
@@ -265,6 +275,7 @@ export function FanartStrip({
   thumbStyle,
   onThumbClick,
   empty = null,
+  imageSources,
 }: ThumbStripProps) {
   const [opened, { open, close }] = useDisclosure(false);
   const [start, setStart] = useState(0);
@@ -315,7 +326,7 @@ export function FanartStrip({
             }}
           >
             <ProxyImage
-              src={proxyImageUrl(url) ?? url}
+              src={proxyImageUrl(url, imageSources?.[url]) ?? url}
               alt={`thumb-${i}`}
               referrerPolicy="no-referrer"
               style={size}
@@ -343,7 +354,14 @@ export function FanartStrip({
           </Box>
         )}
       </Group>
-      {opened && <FanartLightbox images={images} initialIndex={start} onClose={close} />}
+      {opened && (
+        <FanartLightbox
+          images={images}
+          initialIndex={start}
+          onClose={close}
+          imageSources={imageSources}
+        />
+      )}
     </>
   );
 }

@@ -175,14 +175,30 @@ export function FilePhaseOverlay({ phase, bottomExtra }: FilePhaseOverlayProps) 
   return (
     <>
       {mosaic.length > 0 && (
-        <Group pos="absolute" top={6} left={6} gap={4} wrap="wrap" style={CORNER_GROUP}>
+        <Group
+          pos="absolute"
+          top={6}
+          left={6}
+          gap={4}
+          wrap="nowrap"
+          align="flex-start"
+          style={{ ...CORNER_GROUP, flexDirection: "column" }}
+        >
           {mosaic.map((chip) => (
             <PhaseOverlayChip key={chip.key} chip={chip} />
           ))}
         </Group>
       )}
       {(media.length > 0 || bottomExtra != null) && (
-        <Group pos="absolute" bottom={6} left={6} gap={4} wrap="wrap" style={CORNER_GROUP}>
+        <Group
+          pos="absolute"
+          bottom={6}
+          left={6}
+          gap={4}
+          wrap="nowrap"
+          align="flex-start"
+          style={{ ...CORNER_GROUP, flexDirection: "column" }}
+        >
           {media.map((chip) => (
             <PhaseOverlayChip key={chip.key} chip={chip} />
           ))}

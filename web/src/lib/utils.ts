@@ -7,10 +7,15 @@ export function isRecord(v: unknown): v is Record<string, unknown> {
  * 将外链图片 URL 包装为后端代理 URL, 绕过浏览器 CORS / 防盗链限制.
  * 仅 http(s) 协议经代理, 其他 (data:, blob:, 相对路径) 原样返回.
  */
-export function proxyImageUrl(url: string | null | undefined): string | undefined {
+export function proxyImageUrl(
+  url: string | null | undefined,
+  source?: string | null,
+): string | undefined {
   if (!url) return undefined;
   if (/^https?:\/\//i.test(url)) {
-    return `/api/resources/proxy?url=${encodeURIComponent(url)}`;
+    const params = new URLSearchParams({ url });
+    if (source) params.set("source", source);
+    return `/api/resources/proxy?${params.toString()}`;
   }
   return url;
 }

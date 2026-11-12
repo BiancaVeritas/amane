@@ -292,7 +292,9 @@ function SchedulesPage() {
           <Switch
             label={t("fields.enabled")}
             checked={editEnabled}
-            onChange={(e) => setEditEnabled(e.currentTarget.checked)}
+            onChange={(e) =>
+              setEditEnabled(e.target instanceof HTMLInputElement && e.target.checked)
+            }
           />
           {editing != null && (
             <>

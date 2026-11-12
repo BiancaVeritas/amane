@@ -36,10 +36,13 @@ class ScanInvalidHandler(TaskHandler[ScanInvalidPayload, ScanInvalidResult]):
         if library is None:
             return TaskResult(success=False, error=f"媒体库 {payload.library_id} 不存在")
         assert library.id is not None
-        library_root = Path(library.path)
+        library_roots = [Path(root) for root in (library.scan_paths or [library.path])]
+        scope_dir = Path(payload.path) if payload.path else library_roots[0]
+        library_root = next((root for root in library_roots if scope_dir == root or root in scope_dir.parents), None)
+        if library_root is None:
+            return TaskResult(success=False, error=f"扫描目录不属于当前媒体库: {scope_dir}")
         if not await path_is_dir(library_root):
-            return TaskResult(success=False, error=f"不是目录: {library.path}")
-        scope_dir = Path(payload.path) if payload.path else library_root
+            return TaskResult(success=False, error=f"不是目录: {library_root}")
         if not await path_is_dir(scope_dir):
             return TaskResult(success=False, error=f"不是目录: {scope_dir}")
 

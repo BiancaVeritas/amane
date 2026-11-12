@@ -56,7 +56,6 @@
     "progress": "Progress"
   },
   "empty": "No tasks",
-  "listLoadFailed": "Failed to load tasks",
   "benchmark": {
     "imagesPerSecond": "Image embedding {{value}} images/s",
     "queryMs": "Single query {{value}} ms",
@@ -88,7 +87,12 @@
   "loadMoreChildren_one": "Load more ({{count}})",
   "loadMoreChildren_other": "Load more ({{count}})",
   "logView": {
-    "empty": "No logs"
+    "empty": "No logs",
+    "loadFailed": "History log unavailable",
+    "retry": "Retry",
+    "historyUnavailable": "Historical logs could not be loaded; live logs remain available.",
+    "loading": "Loading…",
+    "truncated": "Showing recent log entries"
   },
   "reason": {
     "http_error": "Request rejected by the site",
@@ -193,8 +197,7 @@
       "scan_invalid": "Scan unwanted",
       "delete": "Delete",
       "semantic_index": "Semantic index",
-      "semantic_benchmark": "Benchmark",
-      "actor_push": "Push actors"
+      "semantic_benchmark": "Benchmark"
     },
     "cleanup": {
       "remove_missing_files": {
@@ -253,6 +256,10 @@
         "label": "File ID",
         "description": "Not needed for manual scrape"
       },
+      "theporndb_uuid": {
+        "label": "ThePornDB UUID",
+        "description": "The ThePornDB UUID from ThePornDB"
+      },
       "content_type": {
         "label": "Content Type",
         "description": "Leave empty to detect automatically",
@@ -308,6 +315,10 @@
         "label": "Path",
         "description": "Scan only a subdirectory of the library"
       },
+      "paths": {
+        "label": "Paths",
+        "description": "Additional directories to scan"
+      },
       "scan": {
         "label": "Scan Mode",
         "$": {
@@ -327,6 +338,10 @@
             "skip": "Skip"
           }
         }
+      },
+      "associate": {
+        "label": "Scan and update new files",
+        "description": "Associate new files using existing internal identities; no scraping or stale-record cleanup"
       },
       "use_cache": {
         "label": "Use Cache",
@@ -443,11 +458,15 @@
     "actor_push": {
       "actor_ids": {
         "label": "Actor IDs",
-        "description": "Leave empty for all actors"
+        "description": "Leave empty to sync all actors"
       },
-      "force": {
-        "label": "Force overwrite",
-        "description": "Overwrite existing images and person fields on the media server"
+      "mode": {
+        "label": "Sync mode",
+        "description": "Full sync overwrites existing media server fields with non-empty Amane data; incremental sync only fills empty fields",
+        "options": {
+          "full": "Full sync",
+          "incremental": "Incremental sync"
+        }
       }
     }
   },
@@ -472,5 +491,12 @@
   "worker": {
     "pause": "Pause",
     "resume": "Resume"
-  }
+  },
+  "types": {
+    "actor_push": "Push actors"
+  },
+  "taskTypes": {
+    "actor_push": "Push actors"
+  },
+  "listLoadFailed": "Failed to load tasks"
 }

@@ -34,9 +34,15 @@ _KIN8_SHARED_HOUSE = _scene("4072", title="KIN8 Shared House", date="2025-07-31"
 _KIN8_0001 = _scene("0001", title="KIN8 First", date="2009-01-14", studio="Kin8tengoku")
 _OTHER_4072 = _scene("4072", title="Aiden Starr and Danny Wylde", date="2013-02-04", studio="Men In Pain")
 _SSIS_497 = _scene("SSIS-497", title="Sample Title", date="2024-01-01", studio="S1")
-_BLACKED = _scene("blacked:first-anal", title="First Anal", date="2026-03-29", studio="Blacked")
-_BLACKED_SAME_DAY = _scene("blacked:another", title="Another", date="2026-03-29", studio="Blacked")
-_BLACKED_OTHER_STUDIO = _scene("blackedraw:first-anal", title="First Anal", date="2026-03-29", studio="BlackedRaw")
+_BLACKED = _scene(
+    "blacked:first-anal", title="First Anal", date="2026-03-29", studio="Blacked", scene_id="blacked-scene-1"
+)
+_BLACKED_SAME_DAY = _scene(
+    "blacked:another", title="Another", date="2026-03-29", studio="Blacked", scene_id="blacked-scene-2"
+)
+_BLACKED_OTHER_STUDIO = _scene(
+    "blackedraw:first-anal", title="First Anal", date="2026-03-29", studio="BlackedRaw", scene_id="blacked-scene-3"
+)
 
 PICK_SCENE_CASES: list[tuple[str, list[dict[str, Any]], dict[str, Any] | None]] = [
     # kin8 番号带站前缀, TPDB 的 code 是站内 4 位补零 id
@@ -98,22 +104,59 @@ async def test_fetch(number: str, scenes: list[dict[str, Any]], expected: tuple[
 
 
 @pytest.mark.asyncio
-async def test_fetch_western_type_filter() -> None:
-    """kin8 归欧美链后经 ``?type=Scene`` 检索."""
+async def test_western_multiple_number_results_match_unique_studio_and_date_without_hash() -> None:
+    """多条番号搜索结果中, 唯一片商 + 日期匹配可直接命中, 不要求 OSHASH."""
+    studio = "Lancelot Styles evolution"
+    other_date_a = _scene("lancelot:other-a", title="Other A", date="2026-09-10", studio=studio)
+    other_date_b = _scene("lancelot:other-b", title="Other B", date="2026-09-10", studio=studio)
+    exact = _scene("lancelot:exact", title="Exact", date="2026-10-09", studio=studio)
     web = AsyncMock()
-    web.post_json.return_value = {"data": {"searchScene": [_KIN8_CUTIE]}}
+    web.post_json.return_value = {"data": {"searchScene": [other_date_a, exact, other_date_b]}}
     crawler = _crawler(web)
 
-    metadata = await crawler.fetch(SearchQuery(number="KIN8-0236", content_type=ContentType.WESTERN))
+    metadata = await crawler.fetch(
+        SearchQuery(number="LancelotStylesEvolution.26.10.09", content_type=ContentType.WESTERN)
+    )
 
     assert metadata is not None
-    assert metadata.number == "0236"
+    assert metadata.external_id == exact["id"]
+    assert web.post_json.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_western_multiple_same_date_results_without_hash_are_rejected() -> None:
+    """同片商同日期仍有多个候选时, 没有 OSHASH 不猜测."""
+    web = AsyncMock()
+    web.post_json.return_value = {"data": {"searchScene": [_BLACKED, _BLACKED_SAME_DAY]}}
+    crawler = _crawler(web)
+
+    metadata = await crawler.fetch(SearchQuery(number="Blacked.26.03.29", content_type=ContentType.WESTERN))
+
+    assert metadata is None
+    assert web.post_json.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_fetch_by_scene_id() -> None:
+    """指定 Scene ID 直接通过 findScene 获取, 不调用指纹或番号搜索."""
+    web = AsyncMock()
+    web.post_json.return_value = {"data": {"findScene": _KIN8_CUTIE}}
+    crawler = _crawler(web)
+
+    metadata = await crawler.fetch(
+        SearchQuery(number="KIN8-0236", content_type=ContentType.WESTERN, theporndb_uuid=_KIN8_CUTIE["id"].upper())
+    )
+
+    assert metadata is not None
+    assert metadata.external_id == _KIN8_CUTIE["id"]
+    assert web.post_json.await_count == 1
+    assert web.post_json.await_args.kwargs["json"]["variables"] == {"id": _KIN8_CUTIE["id"].upper()}
     assert web.post_json.await_args.args[0] == "https://theporndb.net/graphql?type=Scene"
 
 
 FINGERPRINT_SHAPES: list[tuple[object, dict[str, Any] | None]] = [
     ([[_BLACKED]], _BLACKED),
-    # 同一个指纹会挂多条 OSHASH 变体, 应答里的首条即命中
+    # 未提供番号时保留非 WESTERN 旧行为; WESTERN 调用会额外传入番号并校验唯一性.
     ([[_BLACKED, _BLACKED_SAME_DAY]], _BLACKED),
     ([[]], None),
     # 外层按入参逐条对应, 只发一个指纹, 第二组不参与判定
@@ -132,22 +175,96 @@ def test_pick_fingerprint_scene(results: object, expected: dict[str, Any] | None
     assert pick_fingerprint_scene(results) == expected
 
 
+def test_pick_western_fingerprint_scene_filters_by_number_and_requires_unique_scene() -> None:
+    """OSHASH 可能返回多个 Scene; 先用番号的片商与日期过滤, 再按 Scene ID 判唯一."""
+    other_studio = _BLACKED_OTHER_STUDIO
+    same_number = _BLACKED
+    duplicate_same_scene = dict(_BLACKED)
+    multiple_same_number = _BLACKED_SAME_DAY
+
+    assert pick_fingerprint_scene([[other_studio, same_number]], "Blacked.26.03.29") == same_number
+    assert pick_fingerprint_scene([[other_studio]], "Blacked.26.03.29") is None
+    assert pick_fingerprint_scene([[same_number, duplicate_same_scene]], "Blacked.26.03.29") == same_number
+    assert pick_fingerprint_scene([[same_number, multiple_same_number]], "Blacked.26.03.29") is None
+
+
 @pytest.mark.asyncio
-async def test_fetch_by_fingerprint() -> None:
-    """指纹命中走 stash-box 批量字段, 命中后不再发番号检索."""
+async def test_western_unique_number_result_does_not_require_oshash() -> None:
+    """番号检索恰好一条时直接刮削, 不要求 OSHASH."""
     web = AsyncMock()
-    web.post_json.return_value = {"data": {"findScenesBySceneFingerprints": [[_BLACKED]]}}
+    web.post_json.return_value = {"data": {"searchScene": [_BLACKED]}}
     crawler = _crawler(web)
 
-    metadata = await crawler.fetch(SearchQuery(number="Blacked.26.03.29", file_hash=_OSHASH))
+    metadata = await crawler.fetch(SearchQuery(number="Blacked.26.03.29", content_type=ContentType.WESTERN))
 
     assert metadata is not None
-    assert (metadata.number, metadata.studio) == ("blacked:first-anal", "Blacked")
+    assert metadata.external_id == _BLACKED["id"]
     assert web.post_json.await_count == 1
-    body = web.post_json.await_args.kwargs["json"]
-    # 变量按上游最严格的可空标注声明, TPDB 的宽松声明同样接受
-    assert "$fingerprints: [[FingerprintQueryInput!]!]!" in body["query"]
-    assert body["variables"] == {"fingerprints": [[{"hash": _OSHASH, "algorithm": "OSHASH"}]]}
+    assert web.post_json.await_args.kwargs["json"]["variables"] == {"term": "Blacked.26.03.29"}
+
+
+@pytest.mark.asyncio
+async def test_western_multiple_number_results_use_oshash_to_disambiguate() -> None:
+    """番号有多个候选时, 仅 OSHASH 命中其中一条才允许刮削."""
+    web = AsyncMock()
+    web.post_json.side_effect = [
+        {"data": {"searchScene": [_BLACKED, _BLACKED_SAME_DAY]}},
+        {"data": {"findScenesBySceneFingerprints": [[_BLACKED]]}},
+    ]
+    crawler = _crawler(web)
+
+    metadata = await crawler.fetch(
+        SearchQuery(number="Blacked.26.03.29", file_hash=_OSHASH, content_type=ContentType.WESTERN)
+    )
+
+    assert metadata is not None
+    assert metadata.external_id == _BLACKED["id"]
+    assert web.post_json.await_count == 2
+    assert web.post_json.await_args_list[0].kwargs["json"]["variables"] == {"term": "Blacked.26.03.29"}
+    assert web.post_json.await_args_list[1].kwargs["json"]["variables"] == {
+        "fingerprints": [[{"hash": _OSHASH, "algorithm": "OSHASH"}]]
+    }
+
+
+@pytest.mark.asyncio
+async def test_western_oshash_disambiguates_same_number_candidates_by_scene_id() -> None:
+    web = AsyncMock()
+    web.post_json.side_effect = [
+        {"data": {"searchScene": [_BLACKED, _BLACKED_SAME_DAY]}},
+        {"data": {"findScenesBySceneFingerprints": [[_BLACKED]]}},
+    ]
+    crawler = _crawler(web)
+
+    metadata = await crawler.fetch(
+        SearchQuery(number="Blacked.26.03.29", file_hash=_OSHASH, content_type=ContentType.WESTERN)
+    )
+
+    assert metadata is not None
+    assert metadata.external_id == _BLACKED["id"]
+
+
+@pytest.mark.asyncio
+async def test_western_zero_number_results_returns_not_found() -> None:
+    web = AsyncMock()
+    web.post_json.return_value = {"data": {"searchScene": []}}
+    crawler = _crawler(web)
+
+    metadata = await crawler.fetch(SearchQuery(number="Blacked.26.03.29", content_type=ContentType.WESTERN))
+
+    assert metadata is None
+    assert web.post_json.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_western_multiple_number_results_without_oshash_are_rejected() -> None:
+    web = AsyncMock()
+    web.post_json.return_value = {"data": {"searchScene": [_BLACKED, _BLACKED_SAME_DAY]}}
+    crawler = _crawler(web)
+
+    metadata = await crawler.fetch(SearchQuery(number="Blacked.26.03.29", content_type=ContentType.WESTERN))
+
+    assert metadata is None
+    assert web.post_json.await_count == 1
 
 
 FINGERPRINT_MISS_CASES: list[dict[str, Any]] = [

@@ -56,6 +56,6 @@ class FC2PPVDBCrawler(Crawler):
             actors=film_actors(actors),
             release=release,
             tags=tags,
-            thumb_urls=[cover] if cover else [],
+            cover_urls=[cover] if cover else [],
             source_url=url,
         )

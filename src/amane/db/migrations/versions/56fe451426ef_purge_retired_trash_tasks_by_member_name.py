@@ -22,9 +22,18 @@ def upgrade() -> None:
 
     链上的边先删, 免得留下指向已删任务的悬空行 (外键开启的库会拒绝删除被引用的行).
     """
-    op.execute(sa.text("DELETE FROM task_links WHERE parent_task_id IN (SELECT id FROM tasks WHERE type = 'TRASH')"))
-    op.execute(sa.text("DELETE FROM task_links WHERE child_task_id IN (SELECT id FROM tasks WHERE type = 'TRASH')"))
-    op.execute(sa.text("DELETE FROM tasks WHERE type = 'TRASH'"))
+    for task_type in ("TRASH", "trash"):
+        op.execute(
+            sa.text(
+                "DELETE FROM task_links WHERE parent_task_id IN (SELECT id FROM tasks WHERE type = :task_type)"
+            ).bindparams(task_type=task_type)
+        )
+        op.execute(
+            sa.text(
+                "DELETE FROM task_links WHERE child_task_id IN (SELECT id FROM tasks WHERE type = :task_type)"
+            ).bindparams(task_type=task_type)
+        )
+        op.execute(sa.text("DELETE FROM tasks WHERE type = :task_type").bindparams(task_type=task_type))
 
 
 def downgrade() -> None:

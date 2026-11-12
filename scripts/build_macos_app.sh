@@ -56,6 +56,8 @@ done < <(.venv/bin/python scripts/stdlib_modules.py)
   --add-data "$ROOT/src/amane/media/watermarks:amane/media/watermarks" \
   --add-data "$ROOT/src/amane/utils/zhcdict.json:amane/utils" \
   --add-data "$ROOT/src/amane/utils/zhconv_overrides.json:amane/utils" \
+  --add-data "$ROOT/src/amane/crawlers/sites/caribbeancompr_heyzo_index.json:amane/crawlers/sites" \
+  --add-data "$ROOT/src/amane/crawlers/sites/d2pass_heyzo_index.json:amane/crawlers/sites" \
   --add-data "$ROOT/alembic.ini:." \
   --collect-submodules amane \
   --exclude-module patchright \

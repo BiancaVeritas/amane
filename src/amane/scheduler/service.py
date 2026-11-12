@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import os
-from collections.abc import Coroutine, Sequence
+from collections.abc import Callable, Coroutine, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -12,7 +12,13 @@ import structlog
 from ..db.models import Library, TaskType
 from ..enums import LibraryAutomation, LibraryIngest
 from ..events import EventBus, EventType
-from ..handlers._common import refresh_external_subtitle, register_media_file, scan_library
+from ..handlers._common import (
+    LibraryTaskLocks,
+    refresh_external_subtitle,
+    refresh_media_association,
+    register_media_file,
+    scan_library,
+)
 from ..handlers.models import ScrapePayload
 from ..library import LibraryFileKind, LibraryScan
 from ..parsing import parse_file_info
@@ -66,6 +72,7 @@ class WatcherService:
         debounce_seconds: float = 3.0,
         check_interval: float = _CHECK_INTERVAL,
         observer_timeout: float = 1.0,
+        library_locks: LibraryTaskLocks | None = None,
     ):
         self._repo = repo
         self._event_bus = event_bus
@@ -77,7 +84,16 @@ class WatcherService:
         self._watcher: FileWatcher | None = None
         self._debounce_task: asyncio.Task | None = None
         self._cloud_routes: dict[int, CloudDriveRoute] = {}
+        # 与 REFRESH / ORGANIZE / DELETE 共享同一把媒体库锁，避免 watcher 与任务并发改索引。
+        self._library_locks = library_locks if library_locks is not None else LibraryTaskLocks()
+        self._event_queues: dict[int, asyncio.Queue] = {}
+        self._event_pending: dict[int, set[tuple[str, str]]] = {}
+        self._event_workers: dict[int, asyncio.Task[None]] = {}
+        self._clouddrive_tasks: set[asyncio.Task[None]] = set()
+        self._loop: asyncio.AbstractEventLoop | None = None
         self._running = False
+        # 仅在 watcher 生命周期内接收来自 observer 线程的新事件。
+        self._accept_events = False
 
     @property
     def is_running(self) -> bool:
@@ -158,6 +174,8 @@ class WatcherService:
     async def start(self) -> None:
         if self._running:
             return
+        self._loop = asyncio.get_running_loop()
+        self._accept_events = True
 
         libraries = await self._repo.list_libraries(watch_only=True)
         if not libraries:
@@ -175,15 +193,17 @@ class WatcherService:
             try:
                 for lib in native:
                     assert lib.id is not None
-                    logger.info("watching library", library_id=lib.id, path=lib.path, recursive=lib.recursive)
-                    self._watcher.watch(
-                        lib.path,
-                        library_id=lib.id,
-                        recursive=lib.recursive,
-                        patterns=lib.patterns,
-                        skip_patterns=[lib.trailer_pattern, *(lib.blacklist_patterns or [])],
-                        min_file_size=lib.min_file_size,
-                    )
+                    scan_paths = lib.scan_paths or [lib.path]
+                    for scan_path in scan_paths:
+                        logger.info("watching library", library_id=lib.id, path=scan_path, recursive=lib.recursive)
+                        self._watcher.watch(
+                            scan_path,
+                            library_id=lib.id,
+                            recursive=lib.recursive,
+                            patterns=lib.patterns,
+                            skip_patterns=[lib.trailer_pattern, *(lib.blacklist_patterns or [])],
+                            min_file_size=lib.min_file_size,
+                        )
             except OSError as exc:
                 self._log_observer_start_error(exc)
                 self._abandon_watcher()
@@ -199,6 +219,13 @@ class WatcherService:
         )
 
     async def stop(self) -> None:
+        # 先关闭事件入口，再停止 observer；已投递到主循环的回调仍会执行并入队。
+        self._accept_events = False
+        # 不要先取消 worker，否则已接收的文件变化事件可能被静默丢弃。
+        if self._watcher:
+            self._watcher.stop()
+            self._watcher = None
+
         self._running = False
         self._cloud_routes.clear()
         if self._debounce_task:
@@ -207,29 +234,58 @@ class WatcherService:
                 await self._debounce_task
             self._debounce_task = None
 
-        if self._watcher:
-            self._watcher.stop()
-            self._watcher = None
-
+        # observer 已确认退出，此时不会再产生新的线程回调。用 loop barrier
+        # 等待此前 call_soon_threadsafe 排入的回调全部执行完毕并完成入队。
+        loop = self._loop
+        if loop is not None and not loop.is_closed():
+            barrier = loop.create_future()
+            loop.call_soon(barrier.set_result, None)
+            await barrier
+        queues = list(self._event_queues.values())
+        if queues:
+            await asyncio.gather(*(queue.join() for queue in queues))
+        workers = list(self._event_workers.values())
+        if workers:
+            await asyncio.gather(*workers, return_exceptions=True)
+        self._event_queues.clear()
+        self._event_pending.clear()
+        self._event_workers.clear()
+        self._loop = None
         logger.info("watcher service stopped")
 
     def sync_library(self, lib: Library) -> None:
         """按库当前 automation / ingest 热更新监控."""
         assert lib.id is not None
-        self.remove_library(lib.id)
         if lib.automation is LibraryAutomation.NONE:
+            self.remove_library(lib.id)
             return
         if lib.ingest is LibraryIngest.CLOUDDRIVE:
+            self.remove_library(lib.id)
             self._register_cloud(lib)
             return
-        self.add_library(
-            lib.path,
-            lib.id,
-            recursive=lib.recursive,
-            patterns=lib.patterns,
-            skip_patterns=[lib.trailer_pattern, *(lib.blacklist_patterns or [])],
-            min_file_size=lib.min_file_size,
-        )
+
+        scan_paths = lib.scan_paths or [lib.path]
+        watch_specs = [
+            (
+                scan_path,
+                lib.recursive,
+                lib.patterns,
+                [lib.trailer_pattern, *(lib.blacklist_patterns or [])],
+                lib.min_file_size,
+            )
+            for scan_path in scan_paths
+        ]
+        self._cloud_routes.pop(lib.id, None)
+        if self._watcher is None:
+            self._watcher = self._new_watcher()
+            try:
+                self._watcher.replace_library(lib.id, watch_specs)
+            except Exception:
+                self._watcher = None
+                raise
+            self._try_start_observer()
+        else:
+            self._watcher.replace_library(lib.id, watch_specs)
 
     def add_library(
         self,
@@ -270,16 +326,11 @@ class WatcherService:
             self._running = True
             logger.info("watcher service started for new library", library_id=library_id, path=path)
             return
-        self._watcher.unwatch(library_id)
-        self._watcher.watch(
-            path,
-            library_id=library_id,
-            recursive=recursive,
-            patterns=patterns,
-            skip_patterns=skip_patterns,
-            min_file_size=min_file_size,
+        self._watcher.replace_library(
+            library_id,
+            [(path, recursive, patterns, skip_patterns, min_file_size)],
         )
-        logger.info("library watch added", library_id=library_id, path=path, recursive=recursive)
+        logger.info("library watch replaced", library_id=library_id, path=path, recursive=recursive)
 
     def remove_library(self, library_id: int) -> None:
         """运行时热移除监控库; watcher 未启动或该库未监控则为无操作."""
@@ -291,7 +342,24 @@ class WatcherService:
 
     def submit_clouddrive(self, changes: Sequence[CloudDriveChange]) -> None:
         """HTTP 线程已在事件循环上; 后台处理以免 FUSE 扫描堵住 webhook."""
-        self._schedule_async(self.ingest_clouddrive(changes))
+        self._schedule_async(self._create_clouddrive_task, tuple(changes))
+
+    def _create_clouddrive_task(self, changes: Sequence[CloudDriveChange]) -> None:
+        """在服务事件循环上创建并跟踪云盘通知处理任务。"""
+        task = asyncio.create_task(self.ingest_clouddrive(changes))
+        self._clouddrive_tasks.add(task)
+        task.add_done_callback(self._on_clouddrive_task_done)
+
+    def _on_clouddrive_task_done(self, task: asyncio.Task[None]) -> None:
+        self._clouddrive_tasks.discard(task)
+        if task.cancelled():
+            return
+        error = task.exception()
+        if error is not None:
+            logger.error(
+                "clouddrive event ingestion failed",
+                exc_info=(type(error), error, error.__traceback__),
+            )
 
     async def ingest_clouddrive(self, changes: Sequence[CloudDriveChange]) -> None:
         routes = list(self._cloud_routes.values())
@@ -441,24 +509,84 @@ class WatcherService:
             if self._accept_cloud_file(dest_route, dest):
                 await self._on_file_found(dest, dest_route.library_id)
 
-    def _on_file_found_sync(self, path: Path, library_id: int) -> None:
-        self._schedule_async(self._on_file_found(path, library_id))
+    def _enqueue_library_event(
+        self,
+        library_id: int,
+        key: tuple[str, str],
+        operation: Callable[[], Coroutine[Any, Any, Any]],
+    ) -> None:
+        """同库事件进入单 worker 队列；同类同路径的待处理事件合并。"""
+        queue = self._event_queues.setdefault(library_id, asyncio.Queue())
+        pending = self._event_pending.setdefault(library_id, set())
+        if key in pending:
+            return
+        pending.add(key)
+        queue.put_nowait((key, operation))
+        worker = self._event_workers.get(library_id)
+        if worker is None or worker.done():
+            self._event_workers[library_id] = asyncio.create_task(self._library_event_worker(library_id))
 
-    def _on_file_deleted_sync(self, path: Path, _library_id: int) -> None:
-        self._schedule_async(self._on_file_deleted(path))
+    async def _library_event_worker(self, library_id: int) -> None:
+        queue = self._event_queues[library_id]
+        pending = self._event_pending[library_id]
+        try:
+            while True:
+                try:
+                    key, operation = queue.get_nowait()
+                except asyncio.QueueEmpty:
+                    return
+                try:
+                    lock = await self._library_locks.get(library_id)
+                    async with lock:
+                        await operation()
+                except asyncio.CancelledError:
+                    raise
+                except Exception:
+                    logger.exception("watcher event failed", library_id=library_id, event=key[0], path=key[1])
+                finally:
+                    pending.discard(key)
+                    queue.task_done()
+        finally:
+            # 清除 worker 前再次检查队列，避免“队列刚空、worker 即将退出”时新事件无人消费。
+            current = self._event_workers.get(library_id)
+            if current is asyncio.current_task():
+                self._event_workers.pop(library_id, None)
+            if not queue.empty() and self._running:
+                self._event_workers[library_id] = asyncio.create_task(self._library_event_worker(library_id))
+
+    def _queue_path_event(
+        self,
+        library_id: int,
+        event: str,
+        path: Path,
+        operation: Callable[[], Coroutine[Any, Any, Any]],
+    ) -> None:
+        key = (event, os.path.normcase(os.path.normpath(str(path))))
+        self._schedule_async(self._enqueue_library_event, library_id, key, operation)
+
+    def _on_file_found_sync(self, path: Path, library_id: int) -> None:
+        self._queue_path_event(library_id, "found", path, lambda: self._on_file_found(path, library_id))
+
+    def _on_file_deleted_sync(self, path: Path, library_id: int) -> None:
+        self._queue_path_event(library_id, "deleted", path, lambda: self._on_file_deleted(path))
 
     def _on_dir_deleted_sync(self, path: Path, library_id: int) -> None:
-        self._schedule_async(self._delete_under(library_id, path))
+        self._queue_path_event(library_id, "dir_deleted", path, lambda: self._delete_under(library_id, path))
 
     def _on_file_moved_sync(self, src: Path, dest: Path, library_id: int) -> None:
-        self._schedule_async(self._on_file_moved(src, dest, library_id))
+        self._queue_path_event(library_id, "moved", src, lambda: self._on_file_moved(src, dest, library_id))
 
-    def _schedule_async(self, coro: Coroutine[Any, Any, Any]) -> None:
-        try:
-            loop = asyncio.get_running_loop()
-            loop.call_soon_threadsafe(asyncio.ensure_future, coro)
-        except RuntimeError:
-            logger.warning("no event loop available")
+    def _schedule_async(self, callback: Callable[..., Any], *args: Any) -> None:
+        # 停止后不再接收新回调；停止前已投递到 loop 的回调会在 join 后统一排空。
+        if not self._accept_events:
+            return
+        # Watchdog callbacks run on observer threads. Schedule the enqueue callback
+        # directly on the service loop instead of creating one coroutine/task per event.
+        loop = self._loop
+        if loop is None or loop.is_closed():
+            logger.warning("no event loop available; watcher event ignored")
+            return
+        loop.call_soon_threadsafe(callback, *args)
 
     async def _on_file_found(self, path: Path, library_id: int) -> None:
         path_str = str(path)
@@ -470,6 +598,8 @@ class WatcherService:
 
         library = await self._repo.get_library(library_id)
         media = await register_media_file(self._repo, library_id, path, library=library)
+        if media is None:
+            return
         assert media.id is not None
         logger.info("file discovered", path=path_str, media_file_id=media.id, library_id=library_id)
 
@@ -479,8 +609,11 @@ class WatcherService:
             logger.debug("cannot parse number", path=path_str)
             parsed = None
 
+        if library is not None and library.automation == LibraryAutomation.REFRESH:
+            await refresh_media_association(self._repo, media)
         if parsed is not None and parsed.number is not None:
-            await self._repo.update_media_file(media.id, number=parsed.number)
+            if library is None or library.automation != LibraryAutomation.REFRESH:
+                await self._repo.update_media_file(media.id, number=parsed.number)
             if library is not None and library.automation == LibraryAutomation.SCRAPE:
                 task = await self._repo.create_task(
                     task_type=TaskType.SCRAPE,
@@ -518,6 +651,8 @@ class WatcherService:
         updated = await self._repo.update_media_file(media.id, path=dest_str)
         if updated is not None and library is not None:
             await refresh_external_subtitle(self._repo, updated, library)
+            if library.automation == LibraryAutomation.REFRESH:
+                await refresh_media_association(self._repo, updated)
         logger.info("file path updated", src=src_str, dest=dest_str, media_file_id=media.id)
 
     async def _debounce_loop(self) -> None:

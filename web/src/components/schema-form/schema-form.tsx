@@ -42,7 +42,9 @@ function deepEqual(a: unknown, b: unknown): boolean {
 /** Keys that stay full-width even when `fieldLayout="grid"`. */
 const WIDE_TEXT_KEYS = new Set([
   "title",
+  "original_title",
   "plot",
+  "original_plot",
   "overview",
   "description",
   "body",
@@ -151,6 +153,8 @@ interface SchemaFormProps {
    * - `grid`: consecutive short scalars share a 2-col row on `sm+`.
    */
   fieldLayout?: "stack" | "grid";
+  /** Optional per-field actions rendered beside the field heading area. */
+  fieldActions?: Record<string, ReactNode>;
 }
 
 export function SchemaForm({
@@ -165,6 +169,7 @@ export function SchemaForm({
   submitLabel,
   submitDisabled = false,
   fieldLayout = "stack",
+  fieldActions,
 }: SchemaFormProps) {
   const { t } = useTranslation("common");
   const formId = useId();
@@ -285,15 +290,22 @@ export function SchemaForm({
   );
 
   const fieldBlocks: ReactNode[] = rows.map((row, rowIdx) => {
-    const fields = row.map(({ key, schema: fieldSchema }) => (
-      <FieldRouter
-        key={key}
-        name={`${prefix}.${key}`}
-        schema={fieldSchema}
-        form={form}
-        i18nPrefix={i18nPrefix}
-      />
-    ));
+    const fields = row.map(({ key, schema: fieldSchema }) => {
+      const action = fieldActions?.[key];
+      return (
+        <Group key={key} align="flex-start" wrap="nowrap" gap="xs">
+          <Box style={{ flex: 1, minWidth: 0 }}>
+            <FieldRouter
+              name={`${prefix}.${key}`}
+              schema={fieldSchema}
+              form={form}
+              i18nPrefix={i18nPrefix}
+            />
+          </Box>
+          {action}
+        </Group>
+      );
+    });
     const rowStyle =
       rowIdx > 0 ? { borderTop: "1px solid var(--mantine-color-default-border)" } : undefined;
     if (row.length === 1) {

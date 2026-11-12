@@ -20,6 +20,7 @@ import { useDisclosure } from "@mantine/hooks";
 import { notifications } from "@mantine/notifications";
 import {
   IconAlertCircle,
+  IconCalendar,
   IconCheck,
   IconCrop,
   IconExternalLink,
@@ -28,6 +29,7 @@ import {
   IconLock,
   IconLockOpen,
   IconPencil,
+  IconPhoto,
   IconPhotoOff,
   IconPlayerPlay,
   IconRefresh,
@@ -62,15 +64,20 @@ import { UserTagActions } from "@/components/media/user-tag-add";
 import { VrBadge } from "@/components/media/vr-badge";
 import { FanartLightbox, FanartStrip } from "@/components/media/fanart-lightbox";
 import { FilePhaseBadges, FilePhaseOverlay } from "@/components/media/file-phase-badges";
+import { OverlayChip, OverlayChipLabel } from "@/components/media/overlay-chip";
+import { VrOverlayChip } from "@/components/media/vr-badge";
 import { PosterCropDialog } from "@/components/media/poster-crop-dialog";
 import { MergeDialog } from "@/components/metadata/merge-dialog";
 import { type JSONSchemaObject, resolveSchema } from "@/components/schema-form/schema";
 import { SchemaForm } from "@/components/schema-form/schema-form";
 import { extractErrorMessage } from "@/lib/api-error";
+import { apiFetch } from "@/lib/api-token";
 import { confirm } from "@/lib/confirm";
 import { USER_TAG_FACET_LIST } from "@/lib/facets";
 import { FIELD_LABEL_KEY, LOCKABLE_FIELDS } from "@/lib/media/metadata-fields";
-import { proxyImageUrl } from "@/lib/utils";
+import { formatReleaseYearMonth } from "@/lib/format-release";
+import { isRecord, proxyImageUrl } from "@/lib/utils";
+import { displaySourceName } from "@/lib/source-display";
 import { ProxyImage } from "@/components/media/proxy-image";
 import { CommentSection } from "@/components/media/comment-section";
 import { PlaybackPanel } from "@/components/media/playback-panel";
@@ -133,6 +140,13 @@ function FieldBlock({
   );
 }
 
+// 中日文成对字段共享一个锁控件; 写入时仍展开为后端现有的两个字段锁.
+function pairedLockFields(field: MetadataField): MetadataField[] {
+  if (field === "title" || field === "original_title") return ["title", "original_title"];
+  if (field === "plot" || field === "original_plot") return ["plot", "original_plot"];
+  return [field];
+}
+
 function TitleDetailPage() {
   const { metadataId } = Route.useParams();
   const { t } = useTranslation(["metadata", "library", "common"]);
@@ -141,11 +155,14 @@ function TitleDetailPage() {
   const [editOpen, setEditOpen] = useState(false);
   const [mergeOpen, setMergeOpen] = useState(false);
   const [cropOpen, setCropOpen] = useState(false);
+  const coverUploadRef = useRef<HTMLInputElement>(null);
+  const posterUploadRef = useRef<HTMLInputElement>(null);
+  const [uploadingImage, setUploadingImage] = useState<"cover" | "poster" | null>(null);
   const [coverLightboxOpen, coverLightbox] = useDisclosure(false);
   const [playingTrailer, setPlayingTrailer] = useState(false);
   // 播放失败的预告片地址: 只对该地址有效, 记录之外 (条目切换或重新刮削换了地址) 一律不算失败.
   const [failedTrailerUrl, setFailedTrailerUrl] = useState<string | null>(null);
-  const [thumbBroken, setThumbBroken] = useState(false);
+  const [coverBroken, setCoverBroken] = useState(false);
   const [posterBroken, setPosterBroken] = useState(false);
   // 评论时间戳的跳转: 本地请求负责即时响应 (同一秒连点也要重新触发), 地址栏的 `t` 负责分享与刷新定位.
   const [seekRequest, setSeekRequest] = useState<SeekRequest | null>(null);
@@ -189,7 +206,7 @@ function TitleDetailPage() {
   if (id !== prevId) {
     setPrevId(id);
     setPlayingTrailer(false);
-    setThumbBroken(false);
+    setCoverBroken(false);
     setPosterBroken(false);
   }
 
@@ -202,6 +219,44 @@ function TitleDetailPage() {
     void queryClient.invalidateQueries({
       queryKey: getMetadataQueryKey({ path: { metadata_id: id } }),
     });
+  };
+
+  const handleImageUpload = async (kind: "cover" | "poster", file?: File) => {
+    if (!file) return;
+    setUploadingImage(kind);
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      const response = await apiFetch(`/api/metadata/${id}/images/${kind}`, {
+        method: "POST",
+        body: form,
+      });
+      if (!response.ok) {
+        let message = t("common:toast.operationFailed");
+        try {
+          const payload = (await response.json()) as { detail?: string };
+          if (payload.detail) message = payload.detail;
+        } catch {
+          // Keep the generic error when the response is not JSON.
+        }
+        throw new Error(message);
+      }
+      notifications.show({
+        message:
+          kind === "cover" ? t("detail.uploadCoverSuccess") : t("detail.uploadPosterSuccess"),
+        color: "blue",
+      });
+      invalidateDetail();
+    } catch (err) {
+      notifications.show({
+        message: err instanceof Error ? err.message : t("common:toast.operationFailed"),
+        color: "red",
+      });
+    } finally {
+      setUploadingImage(null);
+      if (kind === "cover" && coverUploadRef.current) coverUploadRef.current.value = "";
+      if (kind === "poster" && posterUploadRef.current) posterUploadRef.current.value = "";
+    }
   };
 
   const scrapeMutation = useMutation({
@@ -390,18 +445,21 @@ function TitleDetailPage() {
   }
 
   const item: MetadataResponse = data.metadata;
-  // 详情只展示一张主图: 优先横版封面 (thumb), 失败或不存在时回退竖版海报.
-  const thumbSrc = item.thumb_url ?? item.thumb_urls?.[0] ?? null;
+  // 详情只展示一张主图: 优先横版封面, 失败或不存在时回退竖版海报.
+  const coverImageSrc = item.cover_url ?? item.cover_urls?.[0] ?? null;
   const posterSrc = item.poster_url ?? item.poster_urls?.[0] ?? null;
   const coverSrc =
-    thumbSrc && !thumbBroken ? thumbSrc : posterSrc && !posterBroken ? posterSrc : null;
-  const coverUrl = proxyImageUrl(coverSrc);
-  const coverFailed = Boolean((thumbSrc || posterSrc) && !coverUrl);
+    coverImageSrc && !coverBroken ? coverImageSrc : posterSrc && !posterBroken ? posterSrc : null;
+  const coverSource = coverSrc ? item.image_sources?.[coverSrc] : undefined;
+  const coverUrl = proxyImageUrl(coverSrc, coverSource);
+  const coverFailed = Boolean((coverImageSrc || posterSrc) && !coverUrl);
   // 取成局部量, 供播放分支在回调里引用 (属性访问的收窄不进闭包).
   const trailerUrl = item.trailer_url ?? null;
   const hasExtrafanart = item.extrafanart && item.extrafanart.length > 0;
   const runtime = formatRuntime(item.runtime);
-  const allLocked = LOCKABLE_FIELDS.every((field) => lockedFields.has(field));
+  const allLocked = LOCKABLE_FIELDS.filter(
+    (field) => field !== "original_title" && field !== "original_plot",
+  ).every((field) => pairedLockFields(field).some((candidate) => lockedFields.has(candidate)));
 
   function applyLocks(fields: readonly MetadataField[], pending: MetadataField | null = null) {
     const target = [...fields];
@@ -415,11 +473,13 @@ function TitleDetailPage() {
   }
 
   function toggleLock(field: MetadataField) {
+    const pair = pairedLockFields(field);
     const next = new Set(lockedFields);
-    if (next.has(field)) {
-      next.delete(field);
+    // 只要一侧已锁, 点击共享开关就同时解锁两侧, 修复历史上可能存在的不一致状态.
+    if (pair.some((candidate) => next.has(candidate))) {
+      pair.forEach((candidate) => next.delete(candidate));
     } else {
-      next.add(field);
+      pair.forEach((candidate) => next.add(candidate));
     }
     applyLocks(
       LOCKABLE_FIELDS.filter((candidate) => next.has(candidate)),
@@ -427,16 +487,19 @@ function TitleDetailPage() {
     );
   }
 
-  const lockProps = (field: MetadataField): LockProps<MetadataField> => ({
-    field,
-    locked: lockedFields.has(field),
-    busy: pendingLock === field,
-    onToggleLock: toggleLock,
-  });
+  const lockProps = (field: MetadataField): LockProps<MetadataField> => {
+    const pair = pairedLockFields(field);
+    return {
+      field,
+      locked: pair.some((candidate) => lockedFields.has(candidate)),
+      busy: pair.includes(pendingLock as MetadataField),
+      onToggleLock: toggleLock,
+    };
+  };
 
   function handleCoverError() {
-    if (coverSrc && coverSrc === thumbSrc) {
-      setThumbBroken(true);
+    if (coverSrc && coverSrc === coverImageSrc) {
+      setCoverBroken(true);
       return;
     }
     if (coverSrc && coverSrc === posterSrc) {
@@ -506,7 +569,44 @@ function TitleDetailPage() {
                 placeholder={<div style={{ aspectRatio: "16 / 9" }} aria-hidden />}
               />
             )}
-            {!playingTrailer && <FilePhaseOverlay phase={item.file_phase} />}
+            {!playingTrailer && (
+              <>
+                <FilePhaseOverlay phase={item.file_phase} />
+                {(item.vr || item.score != null) && (
+                  <Group
+                    pos="absolute"
+                    top={6}
+                    right={6}
+                    gap={4}
+                    wrap="nowrap"
+                    align="flex-end"
+                    style={{ flexDirection: "column" }}
+                  >
+                    {item.vr && <VrOverlayChip />}
+                    {item.score != null && (
+                      <OverlayChip>
+                        <IconStar
+                          size={11}
+                          color="var(--mantine-color-yellow-4)"
+                          fill="var(--mantine-color-yellow-4)"
+                        />
+                        <OverlayChipLabel>{item.score.toFixed(1)}</OverlayChipLabel>
+                      </OverlayChip>
+                    )}
+                  </Group>
+                )}
+                {formatReleaseYearMonth(item.release) && (
+                  <Box pos="absolute" bottom={6} right={6}>
+                    <OverlayChip>
+                      <IconCalendar size={12} color="var(--mantine-color-cyan-3)" />
+                      <OverlayChipLabel ff="monospace" lts={0.3}>
+                        {formatReleaseYearMonth(item.release)}
+                      </OverlayChipLabel>
+                    </OverlayChip>
+                  </Box>
+                )}
+              </>
+            )}
 
             {playingTrailer && trailerUrl != null ? (
               <>
@@ -613,20 +713,54 @@ function TitleDetailPage() {
             )}
           </div>
           <Group gap="xs" wrap="wrap">
-            <Tooltip label={t("detail.cropPoster.noThumb")} disabled={thumbSrc != null}>
+            <input
+              ref={coverUploadRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp,image/gif,image/avif"
+              hidden
+              onChange={(event) => void handleImageUpload("cover", event.currentTarget.files?.[0])}
+            />
+            <input
+              ref={posterUploadRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp,image/gif,image/avif"
+              hidden
+              onChange={(event) => void handleImageUpload("poster", event.currentTarget.files?.[0])}
+            />
+            <Tooltip label={t("detail.cropPoster.noCover")} disabled={coverImageSrc != null}>
               <Box display="inline-block">
                 <Button
                   size="xs"
                   variant="light"
                   leftSection={<IconCrop size={14} />}
-                  disabled={!thumbSrc}
+                  disabled={!coverImageSrc}
                   onClick={() => setCropOpen(true)}
                 >
                   {t("detail.cropPoster.action")}
                 </Button>
               </Box>
             </Tooltip>
-            <LockChip label={t("detail.fields.thumb")} {...lockProps("thumb_urls")} />
+            <Button
+              size="xs"
+              variant="light"
+              leftSection={<IconPhoto size={14} />}
+              loading={uploadingImage === "cover"}
+              disabled={uploadingImage !== null}
+              onClick={() => coverUploadRef.current?.click()}
+            >
+              {t("detail.uploadCover")}
+            </Button>
+            <Button
+              size="xs"
+              variant="light"
+              leftSection={<IconPhoto size={14} />}
+              loading={uploadingImage === "poster"}
+              disabled={uploadingImage !== null}
+              onClick={() => posterUploadRef.current?.click()}
+            >
+              {t("detail.uploadPoster")}
+            </Button>
+            <LockChip label={t("detail.fields.cover")} {...lockProps("cover_urls")} />
             <LockChip label={t("detail.fields.poster")} {...lockProps("poster_urls")} />
             <LockChip label={t("detail.fields.trailer")} {...lockProps("trailer_urls")} />
           </Group>
@@ -637,11 +771,23 @@ function TitleDetailPage() {
             <Title order={2} ff="monospace">
               {item.number}
             </Title>
-            {item.title && (
-              <Group gap={4} align="center" wrap="nowrap">
-                <Text c="dimmed">{item.title}</Text>
-                <LockToggle {...lockProps("title")} />
-              </Group>
+            {(item.title || item.original_title) && (
+              <Stack gap={2}>
+                {item.title && (
+                  <Group gap={4} align="center" wrap="nowrap">
+                    <Text c="dimmed">{item.title}</Text>
+                    <LockToggle {...lockProps("title")} />
+                  </Group>
+                )}
+                {item.original_title && (
+                  <Group gap={4} align="center" wrap="nowrap">
+                    <Text size="sm" c="dimmed">
+                      {t("detail.fields.originalTitle")}: {item.original_title}
+                    </Text>
+                    {!item.title && <LockToggle {...lockProps("title")} />}
+                  </Group>
+                )}
+              </Stack>
             )}
           </div>
 
@@ -656,9 +802,23 @@ function TitleDetailPage() {
                 <FacetBadge kind="publisher" id={data.publisher_id} name={item.publisher} />
               </FieldBlock>
             )}
-            {item.series && (
+            {(item.series_names?.length || item.series) && (
               <FieldBlock label={t("detail.fields.series")} lock={lockProps("series")}>
-                <FacetBadge kind="series" id={data.series_id} name={item.series} />
+                <Group gap={6} wrap="wrap">
+                  {(item.series_names?.length
+                    ? item.series_names
+                    : item.series
+                      ? [item.series]
+                      : []
+                  ).map((name) => (
+                    <FacetBadge
+                      key={name}
+                      kind="series"
+                      id={data.series_ids?.[name] ?? (name === item.series ? data.series_id : null)}
+                      name={name}
+                    />
+                  ))}
+                </Group>
               </FieldBlock>
             )}
             {item.release && (
@@ -760,7 +920,7 @@ function TitleDetailPage() {
                         textDecoration: "none",
                       }}
                     >
-                      {site}
+                      {displaySourceName(site)}
                     </Badge>,
                   ];
                 })}
@@ -768,12 +928,26 @@ function TitleDetailPage() {
             </FieldBlock>
           )}
 
-          {item.plot && (
-            <FieldBlock label={t("detail.fields.plot")} lock={lockProps("plot")}>
-              <Text size="sm" style={{ whiteSpace: "pre-line" }}>
-                {item.plot}
-              </Text>
-            </FieldBlock>
+          {(item.plot || item.original_plot) && (
+            <Stack gap="sm">
+              {item.plot && (
+                <FieldBlock label={t("detail.fields.plot")} lock={lockProps("plot")}>
+                  <Text size="sm" style={{ whiteSpace: "pre-line" }}>
+                    {item.plot}
+                  </Text>
+                </FieldBlock>
+              )}
+              {item.original_plot && (
+                <FieldBlock
+                  label={t("detail.fields.originalPlot")}
+                  lock={!item.plot ? lockProps("plot") : undefined}
+                >
+                  <Text size="sm" style={{ whiteSpace: "pre-line" }}>
+                    {item.original_plot}
+                  </Text>
+                </FieldBlock>
+              )}
+            </Stack>
           )}
 
           {hasExtrafanart && (
@@ -781,7 +955,10 @@ function TitleDetailPage() {
               label={`${t("detail.fields.extrafanart")} (${item.extrafanart?.length})`}
               lock={lockProps("extrafanart")}
             >
-              <FanartStrip images={item.extrafanart ?? []} />
+              <FanartStrip
+                images={item.extrafanart ?? []}
+                imageSources={item.image_sources ?? {}}
+              />
             </FieldBlock>
           )}
 
@@ -847,18 +1024,26 @@ function TitleDetailPage() {
                   {allLocked ? t("lock.clearAll") : t("lock.all")}
                 </Menu.Item>
                 <Menu.Divider />
-                {LOCKABLE_FIELDS.map((field) => (
-                  <Menu.Item
-                    key={field}
-                    onClick={() => toggleLock(field)}
-                    leftSection={
-                      lockedFields.has(field) ? <IconLock size={14} /> : <IconLockOpen size={14} />
-                    }
-                    rightSection={lockedFields.has(field) ? <IconCheck size={14} /> : undefined}
-                  >
-                    {t(FIELD_LABEL_KEY[field])}
-                  </Menu.Item>
-                ))}
+                {LOCKABLE_FIELDS.filter(
+                  (field) => field !== "original_title" && field !== "original_plot",
+                ).map((field) => {
+                  const pair = pairedLockFields(field);
+                  const isLocked = pair.some((candidate) => lockedFields.has(candidate));
+                  const label =
+                    pair.length === 2
+                      ? `${t(FIELD_LABEL_KEY[pair[0]])} / ${t(FIELD_LABEL_KEY[pair[1]])}`
+                      : t(FIELD_LABEL_KEY[field]);
+                  return (
+                    <Menu.Item
+                      key={field}
+                      onClick={() => toggleLock(field)}
+                      leftSection={isLocked ? <IconLock size={14} /> : <IconLockOpen size={14} />}
+                      rightSection={isLocked ? <IconCheck size={14} /> : undefined}
+                    >
+                      {label}
+                    </Menu.Item>
+                  );
+                })}
               </Menu.Dropdown>
             </Menu>
             <Button
@@ -960,8 +1145,17 @@ function TitleDetailPage() {
             values={(() => {
               const bag: Record<string, unknown> = { ...item };
               const out: Record<string, unknown> = {};
+              // WESTERN 编辑界面把专用 UUID 列映射为 external_ids.theporndb 行显示；
+              // 保存时仓储层再将该行写回 theporndb_uuid, 不改变其他分类的编辑行为.
+              const westernExternalIds = isRecord(bag.external_ids) ? { ...bag.external_ids } : {};
+              if (item.content_type === "western") {
+                westernExternalIds.theporndb = item.theporndb_uuid ?? "";
+              }
               for (const key of Object.keys(editSchema.properties ?? {})) {
-                out[key] = bag[key] ?? null;
+                out[key] =
+                  key === "external_ids" && item.content_type === "western"
+                    ? westernExternalIds
+                    : (bag[key] ?? null);
               }
               return out;
             })()}
@@ -982,12 +1176,13 @@ function TitleDetailPage() {
         onMerged={invalidateDetail}
       />
 
-      {thumbSrc && (
+      {coverImageSrc && (
         <PosterCropDialog
           opened={cropOpen}
           onClose={() => setCropOpen(false)}
           metadataId={id}
-          thumbUrl={thumbSrc}
+          coverUrl={coverImageSrc}
+          contentType={item.content_type}
           onSuccess={() => {
             invalidateDetail();
             void queryClient.invalidateQueries({ queryKey: listMetadataQueryKey() });
@@ -996,7 +1191,11 @@ function TitleDetailPage() {
       )}
 
       {coverLightboxOpen && coverSrc && (
-        <FanartLightbox images={[coverSrc]} onClose={coverLightbox.close} />
+        <FanartLightbox
+          images={[coverSrc]}
+          onClose={coverLightbox.close}
+          imageSources={item.image_sources ?? {}}
+        />
       )}
     </Stack>
   );

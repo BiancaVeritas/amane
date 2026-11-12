@@ -15,7 +15,7 @@ import { notifications } from "@mantine/notifications";
 import { IconDots, IconFolderDown, IconForms, IconRefresh, IconTrash } from "@tabler/icons-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { listMediaQueryKey } from "@/client/@tanstack/react-query.gen";
 import { batchDeleteMedia, batchSubmitTasks, deleteMedia, submitTask } from "@/client/sdk.gen";
@@ -161,7 +161,26 @@ export function LibraryMediaTable({
   const { t } = useTranslation(["library", "common"]);
   const queryClient = useQueryClient();
   const limit = useUIStore((s) => s.pageSizes.libraryMedia);
-  const { selected, selectedIds, toggleOne, toggleAll, isAllSelected, clear } = useIdSelection();
+  const { selected, selectedIds, toggleAll, isAllSelected, clear, setSelected } = useIdSelection();
+  const selectionAnchorId = useRef<number | null>(null);
+  // 在 pointerdown 阶段读取鼠标事件自带的 Shift 状态; Checkbox 的 change 事件
+  // 不携带 shiftKey, 而键盘 keyup 还可能早于鼠标释放, 因此不依赖 keydown/keyup.
+  const shiftSelectionRef = useRef(false);
+  useEffect(() => {
+    const handlePointerDown = (event: PointerEvent) => {
+      shiftSelectionRef.current = event.shiftKey;
+    };
+    const handleWindowBlur = () => {
+      shiftSelectionRef.current = false;
+    };
+
+    window.addEventListener("pointerdown", handlePointerDown, true);
+    window.addEventListener("blur", handleWindowBlur);
+    return () => {
+      window.removeEventListener("pointerdown", handlePointerDown, true);
+      window.removeEventListener("blur", handleWindowBlur);
+    };
+  }, []);
   const [batchScraping, setBatchScraping] = useState(false);
   const [batchOrganizing, setBatchOrganizing] = useState(false);
   const [batchDeleting, setBatchDeleting] = useState(false);
@@ -259,7 +278,11 @@ export function LibraryMediaTable({
     invalidate();
   }
 
-  async function handleOverrideScrape(number: string, contentType: ContentType | undefined) {
+  async function handleOverrideScrape(
+    number: string,
+    contentType: ContentType | undefined,
+    theporndbUuid: string | undefined,
+  ) {
     if (overrideTarget == null) return;
     setOverrideSaving(true);
     try {
@@ -269,6 +292,7 @@ export function LibraryMediaTable({
           media_id: overrideTarget.id,
           number,
           ...(contentType != null ? { content_type: contentType } : {}),
+          ...(theporndbUuid != null ? { theporndb_uuid: theporndbUuid } : {}),
         },
         throwOnError: true,
       });
@@ -302,6 +326,36 @@ export function LibraryMediaTable({
   const totalPages = Math.max(1, Math.ceil(total / limit));
   const pageIds = items.map((i) => i.id);
   const allSelected = isAllSelected(pageIds);
+
+  function handleRowSelection(id: number, checked: boolean, shiftKey: boolean) {
+    const currentIndex = pageIds.indexOf(id);
+    const anchorIndex =
+      selectionAnchorId.current == null ? -1 : pageIds.indexOf(selectionAnchorId.current);
+
+    if (shiftKey && anchorIndex >= 0 && currentIndex >= 0) {
+      const start = Math.min(anchorIndex, currentIndex);
+      const end = Math.max(anchorIndex, currentIndex);
+      const rangeIds = pageIds.slice(start, end + 1);
+      setSelected((prev) => {
+        const next = new Set(prev);
+        for (const rangeId of rangeIds) {
+          if (checked) next.add(rangeId);
+          else next.delete(rangeId);
+        }
+        return next;
+      });
+      return;
+    }
+
+    selectionAnchorId.current = id;
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  }
+
   const effectiveSortBy = sortBy ?? "updated_at";
   const effectiveOrder = order ?? "desc";
   const busy = batchScraping || batchOrganizing || batchDeleting;
@@ -444,7 +498,16 @@ export function LibraryMediaTable({
                 bg={selected.has(item.id) ? "var(--mantine-color-blue-light)" : undefined}
               >
                 <Table.Td>
-                  <Checkbox checked={selected.has(item.id)} onChange={() => toggleOne(item.id)} />
+                  <Checkbox
+                    checked={selected.has(item.id)}
+                    onChange={(event) => {
+                      const checked =
+                        event.target instanceof HTMLInputElement && event.target.checked;
+                      const shiftKey = shiftSelectionRef.current;
+                      shiftSelectionRef.current = false;
+                      handleRowSelection(item.id, checked, shiftKey);
+                    }}
+                  />
                 </Table.Td>
                 <Table.Td style={CELL_OVERFLOW} visibleFrom={METADATA_VISIBLE_FROM}>
                   {item.metadata_id != null ? (
@@ -592,7 +655,9 @@ export function LibraryMediaTable({
         onClose={() => {
           if (!overrideSaving) setOverrideTarget(null);
         }}
-        onSubmit={(number, contentType) => void handleOverrideScrape(number, contentType)}
+        onSubmit={(number, contentType, theporndbUuid) =>
+          void handleOverrideScrape(number, contentType, theporndbUuid)
+        }
       />
       <MediaDeleteDialog
         libraryId={libraryId}

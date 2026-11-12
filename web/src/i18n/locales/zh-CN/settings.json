@@ -2,7 +2,6 @@
   "title": "设置",
   "tabs": {
     "scraping": "影片刮削",
-    "media_server": "媒体服务器",
     "actor_scraping": "演员刮削",
     "agent": "智能体",
     "network": "网络",
@@ -12,8 +11,10 @@
     "sr": "图像超分",
     "llm": "LLM 翻译",
     "watermark": "水印",
-    "semantic": "语义检索"
+    "semantic": "语义检索",
+    "media_server": "媒体服务器"
   },
+  "restoreDefault": "恢复默认",
   "config": {
     "loadError": "加载配置失败"
   },
@@ -60,8 +61,12 @@
         "description": "已有海报与封面高度之比超过此值则不裁切"
       },
       "poster_ratio": {
-        "label": "海报裁切比例",
-        "description": "从封面裁切海报的宽高比"
+        "label": "常规海报裁剪比例",
+        "description": "非无码影片从封面裁切海报的宽高比；日本有码沿用此设置。"
+      },
+      "uncensored_poster_ratio": {
+        "label": "无码海报裁剪比例",
+        "description": "无码影片独立使用的海报裁剪宽高比；裁剪开关与常规影片共用。"
       },
       "jpeg_quality": {
         "label": "JPEG 质量",
@@ -82,7 +87,7 @@
           "publisher": "发行商",
           "plot": "剧情",
           "poster_urls": "海报",
-          "thumb_urls": "封面",
+          "cover_urls": "封面",
           "trailer_urls": "预告片",
           "extrafanart": "剧照",
           "score": "评分"
@@ -91,6 +96,7 @@
           "options": {
             "airav": "airav",
             "avbase": "avbase",
+            "aventertainments": "aventertainments",
             "avsox": "avsox",
             "dahlia": "dahlia",
             "dmm": "dmm",
@@ -114,13 +120,22 @@
             "prestige": "prestige",
             "r18dev": "r18dev",
             "theporndb": "theporndb",
+            "tushy": "Tushy",
+            "tushy_raw": "Tushy Raw",
             "wikipedia": "wikipedia",
-            "xcity": "xcity"
+            "xcity": "xcity",
+            "10musume": "10musume",
+            "1pondo": "1pondo",
+            "caribbeancom": "Caribbeancom",
+            "caribbeancompr": "Caribbeancompr",
+            "pacopacomama": "Pacopacomama",
+            "tokyo_hot": "Tokyo-Hot"
           },
           "$": {
             "options": {
               "airav": "airav",
               "avbase": "avbase",
+              "aventertainments": "aventertainments",
               "avsox": "avsox",
               "dahlia": "dahlia",
               "dmm": "dmm",
@@ -144,8 +159,17 @@
               "prestige": "prestige",
               "r18dev": "r18dev",
               "theporndb": "theporndb",
+              "tushy": "Tushy",
+              "tushy_raw": "Tushy Raw",
               "wikipedia": "wikipedia",
-              "xcity": "xcity"
+              "xcity": "xcity",
+              "10musume": "10musume",
+              "1pondo": "1pondo",
+              "caribbeancom": "Caribbeancom",
+              "caribbeancompr": "Caribbeancompr",
+              "pacopacomama": "Pacopacomama",
+              "tokyo_hot": "Tokyo-Hot",
+              "d2pass": "d2pass"
             }
           }
         }
@@ -165,7 +189,7 @@
           "publisher": "发行商",
           "plot": "剧情",
           "poster_urls": "海报",
-          "thumb_urls": "封面",
+          "cover_urls": "封面",
           "trailer_urls": "预告片",
           "extrafanart": "剧照",
           "score": "评分"
@@ -174,6 +198,7 @@
           "options": {
             "airav": "airav",
             "avbase": "avbase",
+            "aventertainments": "aventertainments",
             "avsox": "avsox",
             "dahlia": "dahlia",
             "dmm": "dmm",
@@ -197,13 +222,22 @@
             "prestige": "prestige",
             "r18dev": "r18dev",
             "theporndb": "theporndb",
+            "tushy": "Tushy",
+            "tushy_raw": "Tushy Raw",
             "wikipedia": "wikipedia",
-            "xcity": "xcity"
+            "xcity": "xcity",
+            "10musume": "10musume",
+            "1pondo": "1pondo",
+            "caribbeancom": "Caribbeancom",
+            "caribbeancompr": "Caribbeancompr",
+            "pacopacomama": "Pacopacomama",
+            "tokyo_hot": "Tokyo-Hot"
           },
           "$": {
             "options": {
               "airav": "airav",
               "avbase": "avbase",
+              "aventertainments": "aventertainments",
               "avsox": "avsox",
               "dahlia": "dahlia",
               "dmm": "dmm",
@@ -227,8 +261,17 @@
               "prestige": "prestige",
               "r18dev": "r18dev",
               "theporndb": "theporndb",
+              "tushy": "Tushy",
+              "tushy_raw": "Tushy Raw",
               "wikipedia": "wikipedia",
-              "xcity": "xcity"
+              "xcity": "xcity",
+              "10musume": "10musume",
+              "1pondo": "1pondo",
+              "caribbeancom": "Caribbeancom",
+              "caribbeancompr": "Caribbeancompr",
+              "pacopacomama": "Pacopacomama",
+              "tokyo_hot": "Tokyo-Hot",
+              "d2pass": "d2pass"
             }
           }
         }
@@ -247,7 +290,7 @@
           "publisher": "发行商",
           "plot": "剧情",
           "poster_urls": "海报",
-          "thumb_urls": "封面",
+          "cover_urls": "封面",
           "trailer_urls": "预告片",
           "extrafanart": "剧照",
           "score": "评分"
@@ -267,6 +310,7 @@
         "options": {
           "airav": "airav",
           "avbase": "avbase",
+          "aventertainments": "aventertainments",
           "avsox": "avsox",
           "dahlia": "dahlia",
           "dmm": "dmm",
@@ -322,6 +366,7 @@
               "patchright": "Patchright",
               "camoufox": "Camoufox",
               "bsk": "BrowserSkill",
+              "remote": "NAS 独立浏览器",
               "solver": "Solver 服务"
             }
           },
@@ -403,6 +448,7 @@
           "options": {
             "airav": "airav",
             "avbase": "avbase",
+            "aventertainments": "aventertainments",
             "avsox": "avsox",
             "dahlia": "dahlia",
             "dmm": "dmm",
@@ -426,13 +472,22 @@
             "prestige": "prestige",
             "r18dev": "r18dev",
             "theporndb": "theporndb",
+            "tushy": "Tushy",
+            "tushy_raw": "Tushy Raw",
             "wikipedia": "wikipedia",
-            "xcity": "xcity"
+            "xcity": "xcity",
+            "10musume": "10musume",
+            "1pondo": "1pondo",
+            "caribbeancom": "Caribbeancom",
+            "caribbeancompr": "Caribbeancompr",
+            "pacopacomama": "Pacopacomama",
+            "tokyo_hot": "Tokyo-Hot"
           },
           "$": {
             "options": {
               "airav": "airav",
               "avbase": "avbase",
+              "aventertainments": "aventertainments",
               "avsox": "avsox",
               "dahlia": "dahlia",
               "dmm": "dmm",
@@ -456,33 +511,20 @@
               "prestige": "prestige",
               "r18dev": "r18dev",
               "theporndb": "theporndb",
+              "tushy": "Tushy",
+              "tushy_raw": "Tushy Raw",
               "wikipedia": "wikipedia",
-              "xcity": "xcity"
+              "xcity": "xcity",
+              "10musume": "10musume",
+              "1pondo": "1pondo",
+              "caribbeancom": "Caribbeancom",
+              "caribbeancompr": "Caribbeancompr",
+              "pacopacomama": "Pacopacomama",
+              "tokyo_hot": "Tokyo-Hot",
+              "d2pass": "d2pass"
             }
           }
         }
-      }
-    },
-    "media_server": {
-      "label": "媒体服务器",
-      "kind": {
-        "label": "类型",
-        "options": {
-          "emby": "Emby",
-          "jellyfin": "Jellyfin"
-        }
-      },
-      "url": {
-        "label": "地址",
-        "description": "服务器地址, 含协议、端口与可选子路径"
-      },
-      "api_key": {
-        "label": "API Key",
-        "description": "管理员 API Key"
-      },
-      "verify_tls": {
-        "label": "校验证书",
-        "description": "校验 HTTPS 证书; 自签名证书可关闭"
       }
     },
     "network": {
@@ -515,6 +557,7 @@
             "patchright": "Patchright",
             "camoufox": "Camoufox",
             "bsk": "BrowserSkill",
+            "remote": "NAS 独立浏览器",
             "solver": "Solver 服务"
           }
         },
@@ -525,6 +568,10 @@
         "solver_url": {
           "label": "Solver 地址",
           "description": "FlareSolverr 兼容服务地址, 仅 solver 后端使用"
+        },
+        "remote_url": {
+          "label": "NAS 独立浏览器",
+          "description": "Chromium 容器的 CDP 地址，例如 http://192.168.1.100:9222；请勿暴露到公网"
         }
       },
       "chunked_threshold": {
@@ -660,6 +707,7 @@
         "$": {
           "options": {
             "title": "标题",
+            "original_title": "原标题",
             "actors": "演员",
             "tags": "标签",
             "release": "发行日期",
@@ -669,8 +717,9 @@
             "studio": "制作商",
             "publisher": "发行商",
             "plot": "剧情",
+            "original_plot": "原剧情",
             "poster_urls": "海报",
-            "thumb_urls": "封面",
+            "cover_urls": "封面",
             "trailer_urls": "预告片",
             "extrafanart": "剧照",
             "score": "评分"
@@ -697,7 +746,7 @@
           "publisher": "发行商",
           "plot": "剧情",
           "poster_urls": "海报",
-          "thumb_urls": "封面",
+          "cover_urls": "封面",
           "trailer_urls": "预告片",
           "extrafanart": "剧照",
           "score": "评分"
@@ -836,6 +885,8 @@
             "javdb": "javdb",
             "minnano": "minnano",
             "theporndb": "theporndb",
+            "tushy": "Tushy",
+            "tushy_raw": "Tushy Raw",
             "wikipedia": "wikipedia"
           }
         }
@@ -843,11 +894,15 @@
       "image_sites": {
         "label": "头像来源优先级",
         "options": {
-          "gfriends": "gfriends"
+          "gfriends": "gfriends",
+          "tushy": "Tushy",
+          "tushy_raw": "Tushy Raw"
         },
         "$": {
           "options": {
-            "gfriends": "gfriends"
+            "gfriends": "gfriends",
+            "tushy": "Tushy",
+            "tushy_raw": "Tushy Raw"
           }
         }
       },
@@ -861,10 +916,6 @@
       "gfriends_repo": {
         "label": "gFriends 仓库",
         "description": "gFriends GitHub 仓库 URL"
-      },
-      "auto_push": {
-        "label": "自动推送",
-        "description": "演员刮削成功后自动推送到媒体服务器"
       }
     },
     "plugins": {
@@ -882,6 +933,33 @@
         "label": "自动维护",
         "description": "图片变化后立即重算该条目的向量; 打开时模型常驻内存"
       }
+    },
+    "media_server": {
+      "kind": {
+        "label": "服务器类型",
+        "description": "选择 Emby 或 Jellyfin",
+        "options": {
+          "emby": "Emby",
+          "jellyfin": "Jellyfin"
+        }
+      },
+      "url": {
+        "label": "服务器地址",
+        "description": "填写完整地址，例如 http://127.0.0.1:8096"
+      },
+      "api_key": {
+        "label": "API Key",
+        "description": "媒体服务器管理员 API Key"
+      },
+      "verify_tls": {
+        "label": "验证 TLS 证书",
+        "description": "自签名证书可关闭"
+      }
     }
+  },
+  "mediaServer": {
+    "testConnection": "测试连接",
+    "testSuccess": "连接成功，可读取 {{count}} 个演员",
+    "testFailed": "连接失败"
   }
 }

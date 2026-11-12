@@ -113,6 +113,6 @@ def build_schema_docs() -> str:
         " `metadata.actors/tags/directors` are JSON arrays whose resolved projections are"
         " `metadata_actors/metadata_tags/metadata_directors` — join those"
         " (`actor_aliases.name` alone is not unique).",
-        "- `metadata.number` is unique case-insensitively: compare with `COLLATE NOCASE`.",
+        "- Non-WESTERN `metadata.number` is unique case-insensitively (`COLLATE NOCASE`); WESTERN identity is the unique ThePornDB `theporndb_uuid`, so WESTERN numbers may repeat.",
     ]
     return "\n".join(lines)

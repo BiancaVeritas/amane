@@ -171,15 +171,15 @@ export type ActorPushSubmission = {
     /**
      * Actor Ids
      *
-     * 要推送的演员 ID; 空表示全部演员
+     * 要同步的演员 ID; 空表示全部演员
      */
     actor_ids?: Array<number>;
     /**
-     * Force
+     * Mode
      *
-     * 覆盖媒体服务器上已有的头像与人物字段
+     * 同步模式: full 用 Amane 非空资料覆盖; incremental 仅补充目标空字段
      */
-    force?: boolean;
+    mode?: 'full' | 'incremental';
     /**
      * Type
      */
@@ -370,13 +370,13 @@ export type ActorScrapingConfig = {
      *
      * 资料来源顺序 (单源字段填空优先级); 仅演员资料来源
      */
-    profile_sites?: Array<'minnano' | 'javdb' | 'wikipedia' | 'theporndb' | 'avbase'>;
+    profile_sites?: Array<'minnano' | 'theporndb' | 'wikipedia' | 'javdb' | 'avbase'>;
     /**
      * Image Sites
      *
      * 头像来源顺序 (优先于资料来源附图); 仅演员头像来源
      */
-    image_sites?: Array<'gfriends'>;
+    image_sites?: Array<'tushy' | 'tushy_raw' | 'gfriends'>;
     /**
      * Download Images
      */
@@ -385,12 +385,6 @@ export type ActorScrapingConfig = {
      * Auto Scrape
      */
     auto_scrape?: boolean;
-    /**
-     * Auto Push
-     *
-     * 演员刮削成功后自动将该演员推送到媒体服务器
-     */
-    auto_push?: boolean;
     /**
      * Gfriends Repo
      *
@@ -700,6 +694,26 @@ export type ApprovalsRow = {
 };
 
 /**
+ * BatchDelete
+ */
+export type BatchDelete = {
+    /**
+     * Ids
+     */
+    ids: Array<number>;
+};
+
+/**
+ * BatchSubmit
+ */
+export type BatchSubmit = {
+    /**
+     * Ids
+     */
+    ids: Array<number>;
+};
+
+/**
  * Body_install_plugin
  */
 export type BodyInstallPlugin = {
@@ -715,6 +729,18 @@ export type BodyInstallPlugin = {
      * Server path to a plugin directory or zip
      */
     path?: string | null;
+};
+
+/**
+ * Body_upload_metadata_image
+ */
+export type BodyUploadMetadataImage = {
+    /**
+     * File
+     *
+     * 本地封面或海报图片
+     */
+    file: Blob | File;
 };
 
 /**
@@ -748,7 +774,7 @@ export type BrowserBackendItemResponse = {
 /**
  * BrowserBackendName
  */
-export type BrowserBackendName = 'off' | 'patchright' | 'camoufox' | 'bsk' | 'solver';
+export type BrowserBackendName = 'off' | 'patchright' | 'camoufox' | 'bsk' | 'remote' | 'solver';
 
 /**
  * BrowserBackendReportResponse
@@ -780,6 +806,10 @@ export type BrowserConfig = {
      * Solver Url
      */
     solver_url?: string;
+    /**
+     * Remote Url
+     */
+    remote_url?: string;
 };
 
 /**
@@ -1072,7 +1102,7 @@ export type CropAvatarRequest = {
 /**
  * CropPosterRequest
  *
- * 从封面图按像素框裁切海报 (相对 thumb 当前本地文件像素; 含就地超分后尺寸).
+ * 从封面图按像素框裁切海报 (相对 cover 当前本地文件像素; 含就地超分后尺寸).
  */
 export type CropPosterRequest = {
     /**
@@ -2109,7 +2139,7 @@ export type Language = 'zh_cn' | 'zh_tw' | 'jp' | 'en';
  *
  * 媒体库自动化级别 (只控制发现侧). 含更低级别的行为; 自动整理由 `Library.auto_organize` 单独控制.
  */
-export type LibraryAutomation = 'none' | 'watch' | 'scrape';
+export type LibraryAutomation = 'none' | 'watch' | 'refresh' | 'scrape';
 
 /**
  * LibraryCreateRequest
@@ -2123,6 +2153,12 @@ export type LibraryCreateRequest = {
      * Path
      */
     path: string;
+    /** Scan Paths */
+    scan_paths?: Array<string>;
+    /** Organize Path */
+    organize_path?: string | null;
+    /** Organize Paths */
+    organize_paths?: Array<string>;
     automation?: LibraryAutomation;
     /**
      * Auto Organize
@@ -2171,10 +2207,6 @@ export type LibraryCreateRequest = {
      * Extrafanart Template
      */
     extrafanart_template?: string | null;
-    /**
-     * Extrafanart Name Template
-     */
-    extrafanart_name_template?: string | null;
     /**
      * Nfo Template
      */
@@ -2250,6 +2282,12 @@ export type LibraryResponse = {
      * Path
      */
     path: string;
+    /** Scan Paths */
+    scan_paths: Array<string>;
+    /** Organize Path */
+    organize_path?: string | null;
+    /** Organize Paths */
+    organize_paths: Array<string>;
     automation: LibraryAutomation;
     /**
      * Auto Organize
@@ -2298,10 +2336,6 @@ export type LibraryResponse = {
      * Extrafanart Template
      */
     extrafanart_template?: string | null;
-    /**
-     * Extrafanart Name Template
-     */
-    extrafanart_name_template?: string | null;
     /**
      * Nfo Template
      */
@@ -2352,6 +2386,8 @@ export type LibraryUpdateRequest = {
      * Path
      */
     path?: string | null;
+    /** Organize Path */
+    organize_path?: string | null;
     automation?: LibraryAutomation | null;
     /**
      * Auto Organize
@@ -2400,10 +2436,6 @@ export type LibraryUpdateRequest = {
      * Extrafanart Template
      */
     extrafanart_template?: string | null;
-    /**
-     * Extrafanart Name Template
-     */
-    extrafanart_name_template?: string | null;
     /**
      * Nfo Template
      */
@@ -2467,6 +2499,20 @@ export type LoggingConfig = {
  * Manufacturer
  */
 export type Manufacturer = 'attackers' | 'befree' | 'bi' | 'bibian' | 'das' | 'ebody' | 'fitch' | 'hajime_kikaku' | 'honnaka' | 'hunter' | 'idea_pocket' | 'kawaii' | 'kirakira' | 'madonna' | 'miman' | 'mko_labo' | 'moodyz' | 'muku' | 'mvg' | 'nanpa_japan' | 'oppai' | 'opera' | 'premium_beauty' | 'rookie' | 's1' | 'tameikegoro' | 'tosatsu' | 'v' | 'wanz_factory';
+
+/**
+ * MappingUpdate
+ */
+export type MappingUpdate = {
+    /**
+     * Original
+     */
+    original: string;
+    /**
+     * Translation
+     */
+    translation?: string | null;
+};
 
 /**
  * MediaBatchDeleteRequest
@@ -2786,12 +2832,18 @@ export type MetadataDetailResponse = {
      * Series Id
      */
     series_id?: number | null;
+    /**
+     * Series Ids
+     */
+    series_ids?: {
+        [key: string]: number;
+    };
 };
 
 /**
  * MetadataField
  */
-export type MetadataField = 'title' | 'plot' | 'actors' | 'directors' | 'tags' | 'series' | 'release' | 'runtime' | 'publisher' | 'studio' | 'poster_urls' | 'thumb_urls' | 'trailer_urls' | 'extrafanart' | 'score';
+export type MetadataField = 'title' | 'original_title' | 'plot' | 'original_plot' | 'actors' | 'directors' | 'tags' | 'series' | 'release' | 'runtime' | 'publisher' | 'studio' | 'poster_urls' | 'cover_urls' | 'trailer_urls' | 'extrafanart' | 'score';
 
 /**
  * MetadataListResponse
@@ -2826,30 +2878,6 @@ export type MetadataLocksRequest = {
 };
 
 /**
- * MetadataMergeEntriesRequest
- */
-export type MetadataMergeEntriesRequest = {
-    /**
-     * Target Id
-     *
-     * 合并目标 Metadata ID; 其字段与已有站点快照保持不变
-     */
-    target_id: number;
-    /**
-     * Source Ids
-     *
-     * 待合并的 Metadata ID 列表; 按顺序补入 raw 快照
-     */
-    source_ids: Array<number>;
-    /**
-     * Rescrape
-     *
-     * 合并后按当前优先级对目标番号入队 SCRAPE, 复用 raw 缓存重新聚合字段
-     */
-    rescrape?: boolean;
-};
-
-/**
  * MetadataPartial
  */
 export type MetadataPartial = {
@@ -2857,6 +2885,10 @@ export type MetadataPartial = {
      * Title
      */
     title?: string | null;
+    /**
+     * Original Title
+     */
+    original_title?: string | null;
     /**
      * Actors
      */
@@ -2886,9 +2918,17 @@ export type MetadataPartial = {
      */
     series?: string | null;
     /**
+     * Series Names
+     */
+    series_names?: Array<string> | null;
+    /**
      * Plot
      */
     plot?: string | null;
+    /**
+     * Original Plot
+     */
+    original_plot?: string | null;
     /**
      * Directors
      */
@@ -2898,9 +2938,17 @@ export type MetadataPartial = {
      */
     poster_urls?: Array<string> | null;
     /**
-     * Thumb Urls
+     * Original Poster Urls
      */
-    thumb_urls?: Array<string> | null;
+    original_poster_urls?: Array<string> | null;
+    /**
+     * Cover Urls
+     */
+    cover_urls?: Array<string> | null;
+    /**
+     * Original Cover Urls
+     */
+    original_cover_urls?: Array<string> | null;
     /**
      * Trailer Urls
      */
@@ -2949,9 +2997,19 @@ export type MetadataResponse = {
      */
     title?: string | null;
     /**
+     * Original Title
+     */
+    original_title?: string | null;
+    /**
      * Actors
      */
     actors?: Array<string>;
+    /**
+     * Actor Genders
+     */
+    actor_genders?: {
+        [key: string]: ActorGender;
+    };
     /**
      * Studio
      */
@@ -2977,9 +3035,17 @@ export type MetadataResponse = {
      */
     series?: string | null;
     /**
+     * Series Names
+     */
+    series_names?: Array<string>;
+    /**
      * Plot
      */
     plot?: string | null;
+    /**
+     * Original Plot
+     */
+    original_plot?: string | null;
     /**
      * Directors
      */
@@ -2989,9 +3055,9 @@ export type MetadataResponse = {
      */
     poster_url?: string | null;
     /**
-     * Thumb Url
+     * Cover Url
      */
-    thumb_url?: string | null;
+    cover_url?: string | null;
     /**
      * Trailer Url
      */
@@ -3009,13 +3075,21 @@ export type MetadataResponse = {
      */
     vr?: boolean;
     /**
+     * Original Poster Urls
+     */
+    original_poster_urls?: Array<string>;
+    /**
      * Poster Urls
      */
     poster_urls?: Array<string>;
     /**
-     * Thumb Urls
+     * Cover Urls
      */
-    thumb_urls?: Array<string>;
+    cover_urls?: Array<string>;
+    /**
+     * Original Cover Urls
+     */
+    original_cover_urls?: Array<string>;
     /**
      * Trailer Urls
      */
@@ -3039,6 +3113,10 @@ export type MetadataResponse = {
         [key: string]: unknown;
     };
     /**
+     * Theporndb Uuid
+     */
+    theporndb_uuid?: string | null;
+    /**
      * Source Urls
      */
     source_urls?: {
@@ -3049,6 +3127,12 @@ export type MetadataResponse = {
      */
     field_sources?: {
         [key: string]: unknown;
+    };
+    /**
+     * Image Sources
+     */
+    image_sources?: {
+        [key: string]: string;
     };
     /**
      * Raw
@@ -3166,7 +3250,7 @@ export type NetworkConfig = {
 /**
  * OptionalPathTemplateDefaults
  *
- * 附属模板缺省 (Library 对应列为 None 时 ORGANIZE 使用; 剧照文件名在写盘时按张数渲染).
+ * 附属模板缺省 (Library 对应列为 None 时 ORGANIZE 使用).
  */
 export type OptionalPathTemplateDefaults = {
     /**
@@ -3185,10 +3269,6 @@ export type OptionalPathTemplateDefaults = {
      * Extrafanart Template
      */
     extrafanart_template: string;
-    /**
-     * Extrafanart Name Template
-     */
-    extrafanart_name_template: string;
     /**
      * Nfo Template
      */
@@ -3326,7 +3406,7 @@ export type PathTemplatePlaceholder = {
 /**
  * PathTemplateSchemaResponse
  *
- * 与 ORGANIZE 实际使用的默认值同源; 路径模板由 resolve_paths 解析, 剧照文件名模板由写盘阶段渲染.
+ * 与 resolve_paths 同源.
  */
 export type PathTemplateSchemaResponse = {
     /**
@@ -3651,6 +3731,8 @@ export type RefreshResult = {
      * Scrape
      */
     scrape: number;
+    /** Number of files associated using existing internal identities */
+    associated?: number;
 };
 
 /**
@@ -3689,6 +3771,8 @@ export type RefreshSubmission = {
      * Scrape
      */
     scrape?: Array<MediaFileStatus>;
+    /** Associate using existing internal identities without scraping */
+    associate?: boolean;
     /**
      * Use Cache
      */
@@ -4108,6 +4192,20 @@ export type ScanInvalidSubmission = {
 export type ScanMode = 'add' | 'remove';
 
 /**
+ * SceneSearchRequest
+ */
+export type SceneSearchRequest = {
+    /**
+     * Query
+     */
+    query?: string;
+    /**
+     * Date
+     */
+    date?: string;
+};
+
+/**
  * ScheduleCreateRequest
  */
 export type ScheduleCreateRequest = {
@@ -4259,6 +4357,12 @@ export type ScrapeSubmission = {
      */
     media_id?: number | null;
     /**
+     * Theporndb Uuid
+     *
+     * WESTERN 手动指定的 ThePornDB UUID
+     */
+    theporndb_uuid?: string | null;
+    /**
      * 内容类型; 未给出时: 仅 media_id 按文件路径推断, 有 number 时按番号推断
      */
     content_type?: ContentType | null;
@@ -4293,6 +4397,10 @@ export type ScrapingConfig = {
      */
     poster_ratio?: number;
     /**
+     * Uncensored Poster Ratio
+     */
+    uncensored_poster_ratio?: number;
+    /**
      * Poster Crop Skip Ratio
      */
     poster_crop_skip_ratio?: number;
@@ -4304,19 +4412,19 @@ export type ScrapingConfig = {
      * Content Routes
      */
     content_routes?: {
-        [key in ContentType]?: Array<'airav' | 'avbase' | 'avsox' | 'dahlia' | 'dmm' | 'faleno' | 'fc2' | 'fc2club' | 'fc2ppvdb' | 'freejavbt' | 'getchu' | 'giga' | 'iqqtv' | 'jav321' | 'javbus' | 'javdb' | 'javlibrary' | 'kin8' | 'mgstage' | 'official' | 'prestige' | 'r18dev' | 'theporndb' | 'xcity'>;
+        [key in ContentType]?: Array<'airav' | 'avbase' | 'aventertainments' | 'avsox' | 'dahlia' | 'dmm' | 'faleno' | 'fc2' | 'fc2club' | 'fc2ppvdb' | 'freejavbt' | 'getchu' | 'giga' | 'iqqtv' | 'jav321' | 'javbus' | 'javdb' | 'javlibrary' | 'kin8' | 'mgstage' | 'official' | '1pondo' | 'pacopacomama' | 'caribbeancom' | 'caribbeancompr' | 'd2pass' | 'prestige' | 'r18dev' | '10musume' | 'tokyo_hot' | 'theporndb' | 'xcity'>;
     };
     /**
      * Field Priority
      */
     field_priority?: {
-        [key in MetadataField]?: Array<'airav' | 'avbase' | 'avsox' | 'dahlia' | 'dmm' | 'faleno' | 'fc2' | 'fc2club' | 'fc2ppvdb' | 'freejavbt' | 'getchu' | 'giga' | 'iqqtv' | 'jav321' | 'javbus' | 'javdb' | 'javlibrary' | 'kin8' | 'mgstage' | 'official' | 'prestige' | 'r18dev' | 'theporndb' | 'xcity'>;
+        [key in MetadataField]?: Array<'airav' | 'avbase' | 'aventertainments' | 'avsox' | 'dahlia' | 'dmm' | 'faleno' | 'fc2' | 'fc2club' | 'fc2ppvdb' | 'freejavbt' | 'getchu' | 'giga' | 'iqqtv' | 'jav321' | 'javbus' | 'javdb' | 'javlibrary' | 'kin8' | 'mgstage' | 'official' | '1pondo' | 'pacopacomama' | 'caribbeancom' | 'caribbeancompr' | 'd2pass' | 'prestige' | 'r18dev' | '10musume' | 'tokyo_hot' | 'theporndb' | 'xcity'>;
     };
     /**
      * Field Blacklist
      */
     field_blacklist?: {
-        [key in MetadataField]?: Array<'airav' | 'avbase' | 'avsox' | 'dahlia' | 'dmm' | 'faleno' | 'fc2' | 'fc2club' | 'fc2ppvdb' | 'freejavbt' | 'getchu' | 'giga' | 'iqqtv' | 'jav321' | 'javbus' | 'javdb' | 'javlibrary' | 'kin8' | 'mgstage' | 'official' | 'prestige' | 'r18dev' | 'theporndb' | 'xcity'>;
+        [key in MetadataField]?: Array<'airav' | 'avbase' | 'aventertainments' | 'avsox' | 'dahlia' | 'dmm' | 'faleno' | 'fc2' | 'fc2club' | 'fc2ppvdb' | 'freejavbt' | 'getchu' | 'giga' | 'iqqtv' | 'jav321' | 'javbus' | 'javdb' | 'javlibrary' | 'kin8' | 'mgstage' | 'official' | '1pondo' | 'pacopacomama' | 'caribbeancom' | 'caribbeancompr' | 'd2pass' | 'prestige' | 'r18dev' | '10musume' | 'tokyo_hot' | 'theporndb' | 'xcity'>;
     };
     /**
      * Field Language
@@ -4725,7 +4833,7 @@ export type SiteConfig = {
  *
  * 爬虫站点名称 (影片与演员源共用).
  */
-export type SiteName = 'airav' | 'avbase' | 'avsox' | 'dahlia' | 'dmm' | 'faleno' | 'fc2' | 'fc2club' | 'fc2ppvdb' | 'freejavbt' | 'getchu' | 'gfriends' | 'giga' | 'iqqtv' | 'jav321' | 'javbus' | 'javdb' | 'javlibrary' | 'kin8' | 'mgstage' | 'minnano' | 'official' | 'prestige' | 'r18dev' | 'theporndb' | 'wikipedia' | 'xcity';
+export type SiteName = 'airav' | 'avbase' | 'aventertainments' | 'avsox' | 'dahlia' | 'dmm' | 'faleno' | 'fc2' | 'fc2club' | 'fc2ppvdb' | 'freejavbt' | 'getchu' | 'gfriends' | 'giga' | 'iqqtv' | 'jav321' | 'javbus' | 'javdb' | 'javlibrary' | 'kin8' | 'mgstage' | 'minnano' | 'official' | '1pondo' | 'pacopacomama' | 'caribbeancom' | 'caribbeancompr' | 'd2pass' | 'prestige' | 'r18dev' | '10musume' | 'tokyo_hot' | 'theporndb' | 'tushy' | 'tushy_raw' | 'wikipedia' | 'xcity';
 
 /**
  * SiteOutcomeKind
@@ -4867,6 +4975,16 @@ export type SrConfig = {
  * SrPreset
  */
 export type SrPreset = 'realesr-photo-4x' | 'waifu-photo-2x';
+
+/**
+ * SuggestRequest
+ */
+export type SuggestRequest = {
+    /**
+     * Originals
+     */
+    originals: Array<string>;
+};
 
 /**
  * TaskBatchAction
@@ -5109,6 +5227,50 @@ export type TaskListResponse = {
 };
 
 /**
+ * TaskLogEntry
+ *
+ * 与 WebSocket LOG 事件同形; context 是原日志里未映射到固定字段的键.
+ */
+export type TaskLogEntry = {
+    /**
+     * Timestamp
+     */
+    timestamp?: string | null;
+    /**
+     * Level
+     */
+    level: string;
+    /**
+     * Source
+     */
+    source: string;
+    /**
+     * Message
+     */
+    message: string;
+    /**
+     * Context
+     */
+    context?: {
+        [key: string]: JsonValue;
+    };
+};
+
+/**
+ * TaskLogPage
+ */
+export type TaskLogPage = {
+    /**
+     * Entries
+     */
+    entries?: Array<TaskLogEntry>;
+    /**
+     * Truncated
+     */
+    truncated?: boolean;
+};
+
+/**
  * TaskResponse
  *
  * 详情: 额外带 payload 与按类型的 result.
@@ -5208,7 +5370,7 @@ export type TaskStatus = 'queued' | 'running' | 'done' | 'failed';
 /**
  * TaskType
  */
-export type TaskType = 'scrape' | 'organize' | 'refresh' | 'cleanup' | 'upscale' | 'r18_import' | 'actor_scrape' | 'rescrape' | 'scan_invalid' | 'delete' | 'semantic_index' | 'semantic_benchmark' | 'actor_push';
+export type TaskType = 'scrape' | 'organize' | 'refresh' | 'cleanup' | 'upscale' | 'r18_import' | 'actor_scrape' | 'actor_push' | 'rescrape' | 'scan_invalid' | 'delete' | 'semantic_index' | 'semantic_benchmark';
 
 /**
  * TaskWorkerResponse
@@ -5745,6 +5907,35 @@ export type GetAgentGuideResponses = {
 };
 
 export type GetAgentGuideResponse = GetAgentGuideResponses[keyof GetAgentGuideResponses];
+
+export type TestMediaServerConnectionData = {
+    body: MediaServerConfig;
+    path?: never;
+    query?: never;
+    url: '/api/config/media-server/test';
+};
+
+export type TestMediaServerConnectionErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type TestMediaServerConnectionError = TestMediaServerConnectionErrors[keyof TestMediaServerConnectionErrors];
+
+export type TestMediaServerConnectionResponses = {
+    /**
+     * Response Test Media Server Connection
+     *
+     * Successful Response
+     */
+    200: {
+        [key: string]: unknown;
+    };
+};
+
+export type TestMediaServerConnectionResponse = TestMediaServerConnectionResponses[keyof TestMediaServerConnectionResponses];
 
 export type GetConfigData = {
     body?: never;
@@ -6313,7 +6504,7 @@ export type ListMetadataData = {
         /**
          * Library Id
          *
-         * Filter by linked MediaFile library id(s); OR
+         * Filter by current media library id(s)
          */
         library_id?: Array<number> | null;
         /**
@@ -6461,31 +6652,6 @@ export type BatchMetadataUserTagsResponses = {
 
 export type BatchMetadataUserTagsResponse = BatchMetadataUserTagsResponses[keyof BatchMetadataUserTagsResponses];
 
-export type MergeMetadataEntriesData = {
-    body: MetadataMergeEntriesRequest;
-    path?: never;
-    query?: never;
-    url: '/api/metadata/merge-entries';
-};
-
-export type MergeMetadataEntriesErrors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type MergeMetadataEntriesError = MergeMetadataEntriesErrors[keyof MergeMetadataEntriesErrors];
-
-export type MergeMetadataEntriesResponses = {
-    /**
-     * Successful Response
-     */
-    200: MetadataResponse;
-};
-
-export type MergeMetadataEntriesResponse = MergeMetadataEntriesResponses[keyof MergeMetadataEntriesResponses];
-
 export type DeleteMetadataData = {
     body?: never;
     path: {
@@ -6606,7 +6772,41 @@ export type SetMetadataLocksResponses = {
 
 export type SetMetadataLocksResponse = SetMetadataLocksResponses[keyof SetMetadataLocksResponses];
 
-export type CropPosterFromThumbData = {
+export type UploadMetadataImageData = {
+    body: BodyUploadMetadataImage;
+    path: {
+        /**
+         * Metadata Id
+         */
+        metadata_id: number;
+        /**
+         * Kind
+         */
+        kind: 'cover' | 'thumb' | 'poster';
+    };
+    query?: never;
+    url: '/api/metadata/{metadata_id}/images/{kind}';
+};
+
+export type UploadMetadataImageErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type UploadMetadataImageError = UploadMetadataImageErrors[keyof UploadMetadataImageErrors];
+
+export type UploadMetadataImageResponses = {
+    /**
+     * Successful Response
+     */
+    200: MetadataResponse;
+};
+
+export type UploadMetadataImageResponse = UploadMetadataImageResponses[keyof UploadMetadataImageResponses];
+
+export type CropPosterFromCoverData = {
     body: CropPosterRequest;
     path: {
         /**
@@ -6618,23 +6818,23 @@ export type CropPosterFromThumbData = {
     url: '/api/metadata/{metadata_id}/crop-poster';
 };
 
-export type CropPosterFromThumbErrors = {
+export type CropPosterFromCoverErrors = {
     /**
      * Validation Error
      */
     422: HttpValidationError;
 };
 
-export type CropPosterFromThumbError = CropPosterFromThumbErrors[keyof CropPosterFromThumbErrors];
+export type CropPosterFromCoverError = CropPosterFromCoverErrors[keyof CropPosterFromCoverErrors];
 
-export type CropPosterFromThumbResponses = {
+export type CropPosterFromCoverResponses = {
     /**
      * Successful Response
      */
     200: MetadataResponse;
 };
 
-export type CropPosterFromThumbResponse = CropPosterFromThumbResponses[keyof CropPosterFromThumbResponses];
+export type CropPosterFromCoverResponse = CropPosterFromCoverResponses[keyof CropPosterFromCoverResponses];
 
 export type MergeMetadataData = {
     body: MergeRequest;
@@ -6709,6 +6909,171 @@ export type CheckConnectivityResponses = {
 };
 
 export type CheckConnectivityResponse = CheckConnectivityResponses[keyof CheckConnectivityResponses];
+
+export type ListSubmissionsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Offset
+         */
+        offset?: number;
+        /**
+         * Limit
+         */
+        limit?: number;
+    };
+    url: '/api/oshash-submissions';
+};
+
+export type ListSubmissionsErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListSubmissionsError = ListSubmissionsErrors[keyof ListSubmissionsErrors];
+
+export type ListSubmissionsResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
+export type SubmitOneData = {
+    body?: never;
+    path: {
+        /**
+         * Submission Id
+         */
+        submission_id: number;
+    };
+    query?: never;
+    url: '/api/oshash-submissions/{submission_id}/submit';
+};
+
+export type SubmitOneErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type SubmitOneError = SubmitOneErrors[keyof SubmitOneErrors];
+
+export type SubmitOneResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
+export type SubmitBatchData = {
+    body: BatchSubmit;
+    path?: never;
+    query?: never;
+    url: '/api/oshash-submissions/batch';
+};
+
+export type SubmitBatchErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type SubmitBatchError = SubmitBatchErrors[keyof SubmitBatchErrors];
+
+export type SubmitBatchResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
+export type DeleteOneData = {
+    body?: never;
+    path: {
+        /**
+         * Submission Id
+         */
+        submission_id: number;
+    };
+    query?: never;
+    url: '/api/oshash-submissions/{submission_id}';
+};
+
+export type DeleteOneErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type DeleteOneError = DeleteOneErrors[keyof DeleteOneErrors];
+
+export type DeleteOneResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
+export type DeleteBatchData = {
+    body: BatchDelete;
+    path?: never;
+    query?: never;
+    url: '/api/oshash-submissions/delete';
+};
+
+export type DeleteBatchErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type DeleteBatchError = DeleteBatchErrors[keyof DeleteBatchErrors];
+
+export type DeleteBatchResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
+export type SearchScenesData = {
+    body: SceneSearchRequest;
+    path?: never;
+    query?: never;
+    url: '/api/theporndb-scenes/search';
+};
+
+export type SearchScenesErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type SearchScenesError = SearchScenesErrors[keyof SearchScenesErrors];
+
+export type SearchScenesResponses = {
+    /**
+     * Response Search Scenes
+     *
+     * Successful Response
+     */
+    200: {
+        [key: string]: Array<{
+            [key: string]: unknown;
+        }>;
+    };
+};
+
+export type SearchScenesResponse = SearchScenesResponses[keyof SearchScenesResponses];
 
 export type ListPlaybackSourcesData = {
     body?: never;
@@ -8275,6 +8640,18 @@ export type ProxyImageData = {
          * External image URL to proxy
          */
         url: string;
+        /**
+         * Mode
+         *
+         * Browser cache mode
+         */
+        mode?: string | null;
+        /**
+         * Source
+         *
+         * Owning scraper source
+         */
+        source?: string | null;
     };
     url: '/api/resources/proxy';
 };
@@ -8303,7 +8680,14 @@ export type ServeResourceData = {
          */
         url_hash: string;
     };
-    query?: never;
+    query?: {
+        /**
+         * Mode
+         *
+         * Browser cache mode
+         */
+        mode?: string | null;
+    };
     url: '/api/resources/{url_hash}';
 };
 
@@ -8851,6 +9235,43 @@ export type GetTaskResponses = {
 
 export type GetTaskResponse = GetTaskResponses[keyof GetTaskResponses];
 
+export type GetTaskLogData = {
+    body?: never;
+    path: {
+        /**
+         * Task Id
+         */
+        task_id: number;
+    };
+    query?: {
+        /**
+         * Limit
+         *
+         * Max entries from the end of task.log
+         */
+        limit?: number;
+    };
+    url: '/api/tasks/{task_id}/log';
+};
+
+export type GetTaskLogErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type GetTaskLogError = GetTaskLogErrors[keyof GetTaskLogErrors];
+
+export type GetTaskLogResponses = {
+    /**
+     * Successful Response
+     */
+    200: TaskLogPage;
+};
+
+export type GetTaskLogResponse = GetTaskLogResponses[keyof GetTaskLogResponses];
+
 export type GetTaskRecordData = {
     body?: never;
     path: {
@@ -8880,6 +9301,172 @@ export type GetTaskRecordErrors = {
 export type GetTaskRecordError = GetTaskRecordErrors[keyof GetTaskRecordErrors];
 
 export type GetTaskRecordResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
+export type ListMappingsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Status
+         */
+        status?: 'all' | 'pending' | 'mapped';
+        /**
+         * Language
+         */
+        language?: 'all' | 'ja' | 'en' | 'zh' | 'other';
+        /**
+         * Frequency
+         */
+        frequency?: 'all' | 'high';
+        /**
+         * Search
+         */
+        search?: string;
+        /**
+         * Offset
+         */
+        offset?: number;
+        /**
+         * Limit
+         */
+        limit?: number;
+    };
+    url: '/api/tag-mappings';
+};
+
+export type ListMappingsErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListMappingsError = ListMappingsErrors[keyof ListMappingsErrors];
+
+export type ListMappingsResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
+export type SaveMappingData = {
+    body: MappingUpdate;
+    path?: never;
+    query?: never;
+    url: '/api/tag-mappings';
+};
+
+export type SaveMappingErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type SaveMappingError = SaveMappingErrors[keyof SaveMappingErrors];
+
+export type SaveMappingResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
+export type DeleteMappingData = {
+    body?: never;
+    path: {
+        /**
+         * Original
+         */
+        original: string;
+    };
+    query?: never;
+    url: '/api/tag-mappings/{original}';
+};
+
+export type DeleteMappingErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type DeleteMappingError = DeleteMappingErrors[keyof DeleteMappingErrors];
+
+export type DeleteMappingResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type DeleteMappingResponse = DeleteMappingResponses[keyof DeleteMappingResponses];
+
+export type ExportMappingsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/tag-mappings/export';
+};
+
+export type ExportMappingsResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
+export type ImportMappingsData = {
+    /**
+     * Payload
+     */
+    body: {
+        [key: string]: unknown;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/tag-mappings/import';
+};
+
+export type ImportMappingsErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ImportMappingsError = ImportMappingsErrors[keyof ImportMappingsErrors];
+
+export type ImportMappingsResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
+export type SuggestMappingsData = {
+    body: SuggestRequest;
+    path?: never;
+    query?: never;
+    url: '/api/tag-mappings/suggest';
+};
+
+export type SuggestMappingsErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type SuggestMappingsError = SuggestMappingsErrors[keyof SuggestMappingsErrors];
+
+export type SuggestMappingsResponses = {
     /**
      * Successful Response
      */

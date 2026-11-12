@@ -31,7 +31,6 @@ interface FacetFilterControlsProps {
   /** 当前已激活的过滤参数; 已选同一实体时禁用对应选项. */
   filters: FacetFilters;
   onSelect: (kind: FacetKind, id: number) => void;
-  /** 当前媒体库筛选; 空数组 = 全部. */
   libraryIds: number[];
   libraries: LibraryResponse[];
   onLibrariesChange: (ids: number[]) => void;
@@ -159,6 +158,17 @@ export function FacetFilterControls({
           {t("search.advancedHint")}
         </Text>
         <SimpleGrid cols={{ base: 1, xs: 2, sm: 3, md: 4 }} spacing="sm">
+          <MultiSelect
+            label={t("search.library")}
+            placeholder={libraryIds.length > 0 ? undefined : t("search.libraryAll")}
+            data={libraries.map((library) => ({ value: String(library.id), label: library.name }))}
+            value={libraryIds.map(String)}
+            onChange={(values) =>
+              onLibrariesChange(values.map(Number).filter((id) => Number.isInteger(id) && id > 0))
+            }
+            clearable
+            size="sm"
+          />
           {FACET_KINDS.map((kind) => (
             <KindFacetPicker
               key={kind}
@@ -177,20 +187,6 @@ export function FacetFilterControls({
             ]}
             value={triSelectValue(hasFiles)}
             onChange={(v) => onHasFilesChange(parseTriSelect(v))}
-            clearable
-            size="sm"
-          />
-          <MultiSelect
-            label={t("search.library")}
-            placeholder={libraryIds.length > 0 ? undefined : t("search.libraryAll")}
-            data={libraries.map((library) => ({
-              value: String(library.id),
-              label: library.name,
-            }))}
-            value={libraryIds.map(String)}
-            onChange={(values) =>
-              onLibrariesChange(values.map(Number).filter((id) => Number.isInteger(id) && id > 0))
-            }
             clearable
             size="sm"
           />

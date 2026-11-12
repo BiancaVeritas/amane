@@ -166,7 +166,10 @@ async def start_app(config: ConfigManager | None = None) -> AppSession:
     )
 
     # 信任边界: 安全目录 + API token
-    safe_dirs = build_safe_dirs(cold, repo_watch_paths=[lib.path for lib in await repo.list_libraries()])
+    safe_dirs = build_safe_dirs(
+        cold,
+        repo_watch_paths=[path for lib in await repo.list_libraries() for path in (lib.scan_paths or [lib.path])],
+    )
     if safe_dirs is None:
         logger.info("safe dirs unrestricted", sentinel=SAFE_DIRS_ALLOW_ALL)
     else:
@@ -228,6 +231,7 @@ async def start_app(config: ConfigManager | None = None) -> AppSession:
             use_polling=hot.watcher.use_polling,
             media_extensions=hot.watcher.media_extensions,
             debounce_seconds=hot.watcher.debounce_seconds,
+            library_locks=library_locks,
         )
         await watcher_service.start()
     except Exception:

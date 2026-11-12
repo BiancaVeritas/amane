@@ -75,11 +75,11 @@ def test_every_mosaic_marker_has_a_nature() -> None:
 @pytest.mark.parametrize(
     ("values", "expected"),
     [
-        ((), None),
-        ((None, None), None),
+        ((), "1080p"),
+        ((None, None), "1080p"),
         (("1080p", "4K", "720p"), "4K"),
         (("HD", "1080p"), "1080p"),
-        (("unknown",), None),
+        (("unknown",), "1080p"),
     ],
 )
 def test_max_definition(values: tuple[str | None, ...], expected: str | None) -> None:

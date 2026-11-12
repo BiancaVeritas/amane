@@ -5,6 +5,7 @@ import sys
 import threading
 import time
 from pathlib import Path
+from typing import cast
 
 import pytest
 from watchdog.events import (
@@ -312,6 +313,165 @@ class TestFileWatcher:
         handler._pending_dir_deletes[str(target)] = time.time() - DEBOUNCE_SECONDS - 1
         watcher.check_debounced()
         assert deleted == [(target, 1)]
+
+    def test_replace_library_commits_only_after_all_paths_registered(self, tmp_path: Path, monkeypatch):
+        """新路径全部注册成功后才替换旧监听; 注册失败时旧监听保持不变."""
+        import amane.scheduler.watcher as watcher_module
+
+        class FakeObserver:
+            def __init__(self, **kwargs: object) -> None:
+                self.scheduled: list[tuple[object, str, object]] = []
+                self.unscheduled: list[object] = []
+                self.fail_on: str | None = None
+
+            def schedule(self, handler: object, path: str, recursive: bool = True) -> object:
+                if path == self.fail_on:
+                    raise OSError("simulated schedule failure")
+                watch = object()
+                self.scheduled.append((watch, path, handler))
+                return watch
+
+            def unschedule(self, watch: object) -> None:
+                self.unscheduled.append(watch)
+
+        monkeypatch.setattr(watcher_module, "_NativeObserver", FakeObserver)
+        watcher = FileWatcher(on_file_found=lambda p, _lib: None)
+        old_path = str(tmp_path / "old")
+        new_a = str(tmp_path / "new-a")
+        new_b = str(tmp_path / "new-b")
+        watcher.replace_library(7, [(old_path, True, None, None, 0)])
+        assert watcher._observer is not None
+        observer = cast(FakeObserver, watcher._observer)
+        old_watch = watcher._watches[7][0]
+
+        observer.fail_on = new_b
+        with pytest.raises(OSError, match="simulated schedule failure"):
+            watcher.replace_library(7, [(new_a, True, None, None, 0), (new_b, True, None, None, 0)])
+
+        assert watcher._watches[7] == [old_watch]
+        assert [handler._root_key for handler in watcher._handlers] == [watcher._handlers[0]._root_key]
+        assert old_watch not in observer.unscheduled
+        assert len(observer.unscheduled) == 1  # 仅回滚本次成功注册的 new-a
+
+        observer.fail_on = None
+        watcher.replace_library(7, [(new_a, True, None, None, 0), (new_b, True, None, None, 0)])
+        assert len(watcher._watches[7]) == 2
+        assert old_watch in observer.unscheduled
+        assert [item[0] for item in watcher._watching if item[3] == 7] == [new_a, new_b]
+
+    def test_replace_library_flushes_old_handler_pending_events(self, tmp_path: Path, monkeypatch):
+        """热更新成功切换前, 旧 handler 防抖中的事件必须交接给服务回调."""
+        import amane.scheduler.watcher as watcher_module
+
+        class FakeObserver:
+            def __init__(self, **kwargs):
+                self.unscheduled = []
+
+            def schedule(self, handler, path, recursive=True):
+                return object()
+
+            def unschedule(self, watch):
+                self.unscheduled.append(watch)
+
+        monkeypatch.setattr(watcher_module, "_NativeObserver", FakeObserver)
+        found = []
+        deleted = []
+        dir_deleted = []
+        moved = []
+        watcher = FileWatcher(
+            on_file_found=lambda path, lib: found.append((path, lib)),
+            on_file_deleted=lambda path, lib: deleted.append((path, lib)),
+            on_dir_deleted=lambda path, lib: dir_deleted.append((path, lib)),
+            on_file_moved=lambda src, dest, lib: moved.append((src, dest, lib)),
+        )
+        old_path = str(tmp_path / "old")
+        watcher.replace_library(9, [(old_path, True, None, None, 0)])
+        handler = watcher._handlers[0]
+        created = tmp_path / "old" / "created.mp4"
+        removed = tmp_path / "old" / "removed.mp4"
+        src, dest = tmp_path / "old" / "src.mp4", tmp_path / "old" / "dest.mp4"
+        handler._pending[str(created)] = time.time()
+        handler._pending_deletes[str(removed)] = time.time()
+        removed_dir = tmp_path / "old" / "removed-directory"
+        handler._pending_dir_deletes[str(removed_dir)] = time.time()
+        handler._pending_moves[str(dest)] = (str(src), time.time())
+
+        watcher.replace_library(9, [(str(tmp_path / "new"), True, None, None, 0)])
+
+        assert found == [(created, 9)]
+        assert deleted == [(removed, 9)]
+        assert dir_deleted == [(removed_dir, 9)]
+        assert moved == [(src, dest, 9)]
+        assert handler._pending_dir_deletes == {}
+        assert handler._pending == {}
+        assert handler._pending_deletes == {}
+        assert handler._pending_moves == {}
+
+    def test_replace_library_preserves_cross_type_event_order(self, tmp_path: Path, monkeypatch):
+        """热更新交接不同类型事件时，必须保留它们原本的发生顺序。"""
+        import amane.scheduler.watcher as watcher_module
+
+        class FakeObserver:
+            def __init__(self, **kwargs):
+                pass
+
+            def schedule(self, handler, path, recursive=True):
+                return object()
+
+            def unschedule(self, watch):
+                pass
+
+        monkeypatch.setattr(watcher_module, "_NativeObserver", FakeObserver)
+        received = []
+        watcher = FileWatcher(
+            on_file_found=lambda path, lib: received.append(("created", path)),
+            on_dir_deleted=lambda path, lib: received.append(("dir_deleted", path)),
+        )
+        old_path = str(tmp_path / "old")
+        watcher.replace_library(10, [(old_path, True, None, None, 0)])
+        handler = watcher._handlers[0]
+        created = tmp_path / "old" / "new.mp4"
+        removed_dir = tmp_path / "old" / "removed-dir"
+        now = time.time()
+        handler._pending[str(created)] = now
+        handler._pending_dir_deletes[str(removed_dir)] = now + 0.01
+
+        watcher.replace_library(10, [(str(tmp_path / "new"), True, None, None, 0)])
+
+        assert received == [("created", created), ("dir_deleted", removed_dir)]
+
+    def test_pending_events_use_sequence_when_timestamps_match(self, tmp_path: Path, monkeypatch):
+        """时间戳相同时，热更新交接仍按 Handler 收到事件的顺序排序。"""
+        import amane.scheduler.watcher as watcher_module
+
+        class FakeObserver:
+            def __init__(self, **kwargs):
+                pass
+
+            def schedule(self, handler, path, recursive=True):
+                return object()
+
+            def unschedule(self, watch):
+                pass
+
+        monkeypatch.setattr(watcher_module, "_NativeObserver", FakeObserver)
+        monkeypatch.setattr(watcher_module.time, "time", lambda: 1234.0)
+        received = []
+        watcher = FileWatcher(
+            on_file_found=lambda path, lib: received.append(("created", path)),
+            on_dir_deleted=lambda path, lib: received.append(("dir_deleted", path)),
+        )
+        root = tmp_path / "old"
+        watcher.replace_library(11, [(str(root), True, None, None, 0)])
+        handler = watcher._handlers[0]
+        created = root / "new.mp4"
+        deleted_dir = root / "removed"
+        handler._handle(str(created))
+        handler._record_prefix_delete(str(deleted_dir))
+
+        watcher.replace_library(11, [(str(tmp_path / "new"), True, None, None, 0)])
+
+        assert received == [("created", created), ("dir_deleted", deleted_dir)]
 
     def test_multiple_watch_paths(self, tmp_path: Path):
         dir1 = tmp_path / "dir1"

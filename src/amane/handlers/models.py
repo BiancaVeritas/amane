@@ -4,7 +4,7 @@ from enum import StrEnum
 from typing import TYPE_CHECKING, Literal
 
 from fastapi import HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_serializer
 from starlette.status import HTTP_403_FORBIDDEN
 
 from ..db import Library, MediaFileStatus, Repository
@@ -36,16 +36,17 @@ class LibraryBase(BaseModel):
         lib = await repo.get_library(self.library_id)
         if lib is None:
             raise HTTPException(status_code=404, detail=f"媒体库 {self.library_id} 不存在")
-        if self.path and not is_descendant(self.path, lib.path):
+        scan_roots = lib.scan_paths or [lib.path]
+        if self.path and not any(is_descendant(self.path, root) for root in scan_roots):
             raise HTTPException(
                 status_code=HTTP_403_FORBIDDEN,
-                detail=f"路径 {self.path} 不在媒体库路径 {lib.path} 之下",
+                detail=f"路径 {self.path} 不在媒体库的任何扫描路径之下",
             )
         # 范围路径与库路径必须同一形式 (文件选择器给的是真实路径): 索引与清理清单都按字面路径比较,
         # 两种写法会把同一个文件算成两条索引. 库路径尚未解析为真实路径的旧库保持原样, 否则范围会与既有索引分家.
         if self.path and is_resolved_path(lib.path):
             self.path = str(resolved_path(self.path))
-        self.path = self.path or lib.path
+        self.path = self.path or scan_roots[0]
         self._apply_library(lib)
 
     def _apply_library(self, lib: Library) -> None:
@@ -83,11 +84,15 @@ class CacheKind(StrEnum):
 
 
 class RefreshPayload(LibraryScanBase):
+    # 多扫描根目录由同一个 REFRESH 任务按列表顺序逐个执行，避免同时遍历多个磁盘。
+    paths: list[str] = Field(default_factory=list)
     scan: set[ScanMode] = {ScanMode.add}
     """空集 = 不扫描."""
     scrape: set[MediaFileStatus] = {MediaFileStatus.PENDING}
     use_cache: set[CacheKind] = {CacheKind.metadata, CacheKind.trans}
     """空集 = 全部强制刷新. 原样转发给派生的 SCRAPE."""
+    associate: bool = False
+    """仅通过内部已有身份恢复文件关联，不创建刮削任务，不写入番号/115 ID/OSHASH 身份。"""
 
 
 class RefreshResult(BaseModel):
@@ -95,6 +100,16 @@ class RefreshResult(BaseModel):
     added: int
     removed: int
     scrape: int
+    associated: int = 0
+
+    @model_serializer(mode="wrap")
+    def _serialize_legacy_compatible(self, handler):
+        data = handler(self)
+        # 旧任务结果没有 associated; 不把默认值伪装成历史记录中的字段。
+        # 新结果显式写入 0 或正数时仍原样返回。
+        if "associated" not in self.model_fields_set:
+            data.pop("associated", None)
+        return data
 
 
 # --- SCRAPE ---
@@ -104,11 +119,16 @@ class ScrapePayload(BaseModel):
     number: str
     content_type: ContentType = ContentType.CENSORED
     media_file_id: int | None = None
+    # 重新刮削以 Metadata ID 锁定原作品; 手动兜底可直接指定 ThePornDB UUID.
+    metadata_id: int | None = None
+    theporndb_uuid: str | None = None
     use_cache: set[CacheKind] = {CacheKind.metadata, CacheKind.trans}
 
 
 def build_feed_scrape_payload(feed: Feed, number: str) -> ScrapePayload:
     content_type = feed.content_type or infer_content_type(number)
+    if content_type == ContentType.WESTERN:
+        raise ValueError("WESTERN Feed items require a media-file OSHASH or an explicit ThePornDB UUID")
 
     use_cache: set[CacheKind] = set()
     for raw_kind in feed.use_cache:
@@ -372,32 +392,24 @@ class ActorScrapeResult(BaseModel):
 
 
 class ActorPushPayload(BaseModel):
-    actor_ids: list[int] = Field(default_factory=list, description="要推送的演员 ID; 空表示全部演员")
-    force: bool = Field(default=False, description="覆盖媒体服务器上已有的头像与人物字段")
+    actor_ids: list[int] = Field(default_factory=list, description="要同步的演员 ID; 空表示全部演员")
+    mode: Literal["full", "incremental"] = Field(
+        default="full", description="同步模式: full 用 Amane 非空资料覆盖; incremental 仅补充目标空字段"
+    )
 
 
 class ActorPushResult(BaseModel):
     type: Literal[TaskType.ACTOR_PUSH] = TaskType.ACTOR_PUSH
     requested: int
-    """本次选中的演员数; 自带 ID 列表时含不存在的 id."""
     matched: int
-    """媒体服务器上命中的同名人物条目数; 同一人物按 Id 只计一次."""
     updated: int
-    """写入了至少一个字段的人物数."""
     images: int
-    """上传的主图数."""
     skipped: int
-    """无需写入的人物数; 写入失败只计 ``failed``."""
     not_found: int
-    """媒体服务器上没有同名人物的演员数."""
     no_image: int
-    """本地没有可推送头像的演员数."""
     missing: int
-    """自带 ID 列表中不存在的演员数."""
     failed: int
-    """失败的人物数; 明细见 ``failures``."""
     failures: list[str]
-    """失败明细 (演员 / 人物: 原因), 有上限."""
 
 
 # --- RESCRAPE ---

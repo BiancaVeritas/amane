@@ -40,7 +40,9 @@ export function FileBrowser({
 }: FileBrowserProps) {
   const { t } = useTranslation(["fileBrowser", "common"]);
   const [path, setPath] = useState(initialPath);
-  const [pathInputValue, setPathInputValue] = useState(initialPath);
+  const [pathInputValue, setPathInputValue] = useState(
+    initialPath === "__roots__" ? "" : initialPath,
+  );
   // 相对路径输入时的基准目录 (当前浏览位置); 绝对导航时清空, 由服务端缺省回退.
   const [base, setBase] = useState<string | null>(null);
   const [selectedPaths, setSelectedPaths] = useState(new Set<string>());
@@ -51,6 +53,8 @@ export function FileBrowser({
     base: base ?? undefined,
     show_hidden: showHidden,
   });
+  // 根目录列表同时用于构建 NAS 安全根目录内的面包屑, 避免显示/跳转到安全目录之外的父级。
+  const { data: rootsData } = useFileList({ path: "__roots__", show_hidden: false });
   const items = data?.items ?? [];
   const total = data?.total;
 
@@ -128,20 +132,50 @@ export function FileBrowser({
 
   const handleBreadcrumbClick = (targetPath: string) => {
     setPath(targetPath);
-    setPathInputValue(targetPath);
+    setPathInputValue(targetPath === "__roots__" ? "" : targetPath);
     setBase(null);
   };
 
   const handleReset = () => {
     setPath(initialPath);
-    setPathInputValue(initialPath);
+    setPathInputValue(initialPath === "__roots__" ? "" : initialPath);
     setBase(null);
   };
 
   // Breadcrumb 由服务端规范路径 (根 + 段) 驱动, 三类前缀互斥, 无平台猜测.
   // load 期间 data 保留上一次响应 (keepPreviousData), 面包屑不闪烁.
   const parts = splitCanonicalPath(data?.path ?? lastGoodPath ?? "");
-  const rows = parts.root ? [parts.root, ...parts.segments] : [];
+  const currentPath = data?.path ?? lastGoodPath ?? path;
+  const isRootsView = currentPath === "__roots__";
+  const normalizedCurrentPath = currentPath
+    .replace(/\\/g, "/")
+    .replace(/\/$/, "")
+    .toLocaleLowerCase();
+  const matchingRoot = (rootsData?.items ?? [])
+    .filter((item) => item.type === "directory")
+    .map((item) => ({
+      item,
+      normalizedPath: item.path.replace(/\\/g, "/").replace(/\/$/, "").toLocaleLowerCase(),
+    }))
+    .filter(
+      ({ normalizedPath }) =>
+        normalizedCurrentPath === normalizedPath ||
+        normalizedCurrentPath.startsWith(`${normalizedPath}/`) ||
+        normalizedPath === "",
+    )
+    .sort((a, b) => b.normalizedPath.length - a.normalizedPath.length)[0]?.item;
+  const relativeSegments = matchingRoot
+    ? currentPath
+        .replace(/\\/g, "/")
+        .slice(matchingRoot.path.replace(/\\/g, "/").replace(/\/$/, "").length)
+        .split("/")
+        .filter(Boolean)
+    : parts.segments;
+  const rows = matchingRoot
+    ? [matchingRoot.name || matchingRoot.path, ...relativeSegments]
+    : parts.root
+      ? [parts.root, ...parts.segments]
+      : [];
   const rowLen = rows.length;
 
   // Dynamic breadcrumb collapse: always show first 2 + last 2, hide middle segments on overflow
@@ -200,6 +234,22 @@ export function FileBrowser({
 
       {/* Breadcrumbs */}
       <Group ref={breadcrumbRef} gap={2} wrap="nowrap" style={{ overflowX: "auto" }}>
+        {!isRootsView && matchingRoot?.path !== "/" && (
+          <>
+            <UnstyledButton
+              onClick={() => handleBreadcrumbClick("__roots__")}
+              px={4}
+              style={{ borderRadius: "var(--mantine-radius-sm)", whiteSpace: "nowrap" }}
+            >
+              <Text size="sm" c="dimmed">
+                {t("locations")}
+              </Text>
+            </UnstyledButton>
+            {rows.length > 0 && (
+              <IconChevronRight size={12} style={{ flexShrink: 0, opacity: 0.6 }} />
+            )}
+          </>
+        )}
         {rows.map((row, index) => {
           // Always show first MIN_FIRST + last MIN_LAST; hide middle segments on overflow
           const len = rowLen;
@@ -221,7 +271,12 @@ export function FileBrowser({
             }
             return null;
           }
-          const targetPath = canonicalAncestor(parts, index);
+          const targetPath = matchingRoot
+            ? index === 0
+              ? matchingRoot.path
+              : `${matchingRoot.path.replace(/\\/g, "/").replace(/\/$/, "")}/${relativeSegments.slice(0, index).join("/")}`
+            : canonicalAncestor(parts, index);
+          const rowLabel = row;
           return (
             <Group key={targetPath} gap={2} wrap="nowrap" style={{ flexShrink: 0 }}>
               {index > 0 && <IconChevronRight size={12} style={{ flexShrink: 0, opacity: 0.6 }} />}
@@ -231,7 +286,7 @@ export function FileBrowser({
                 style={{ borderRadius: "var(--mantine-radius-sm)", whiteSpace: "nowrap" }}
               >
                 <Text size="sm" c="dimmed">
-                  {row}
+                  {rowLabel}
                 </Text>
               </UnstyledButton>
             </Group>
@@ -397,6 +452,7 @@ export function FileBrowser({
           disabled={
             isLoading ||
             !!error ||
+            data?.path === "__roots__" ||
             (selectedPaths.size === 0 && (allowMultiple || selectionType === "file"))
           }
         >

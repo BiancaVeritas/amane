@@ -996,7 +996,7 @@ class SemanticService:
 
     async def _resolve_cover(self, metadata: Metadata) -> _Image | None:
         """海报优先, 缩略图作为回退; 只接受已写入磁盘的 Resource."""
-        for url in (metadata.poster_url, metadata.thumb_url):
+        for url in (metadata.poster_url, metadata.cover_url):
             if not url:
                 continue
             found = await self._resolve_resource(url)

@@ -96,7 +96,42 @@ async def probe_solver(
     return BackendProbe(backend=BrowserBackendName.SOLVER, available=True, detail=endpoint)
 
 
-async def probe_backends(*, solver_url: str, bsk_path: str | None = None) -> tuple[BackendProbe, ...]:
+async def probe_remote_browser(
+    url: str, *, timeout_s: float = 2.0, transport: httpx2.AsyncBaseTransport | None = None
+) -> BackendProbe:
+    """验证 Chromium CDP HTTP 接口, 不能把单纯端口开放误判为可用."""
+    endpoint = f"{url.rstrip('/')}/json/version"
+    try:
+        async with httpx2.AsyncClient(timeout=timeout_s, transport=transport, trust_env=False) as client:
+            response = await client.get(endpoint)
+    except Exception as exc:
+        return BackendProbe(
+            backend=BrowserBackendName.REMOTE,
+            available=False,
+            detail=f"无法连接 NAS 浏览器: {type(exc).__name__}: {exc}",
+        )
+    if response.status_code >= 400:
+        return BackendProbe(
+            backend=BrowserBackendName.REMOTE, available=False, detail=f"CDP 返回 HTTP {response.status_code}"
+        )
+    try:
+        payload = response.json()
+    except ValueError:
+        return BackendProbe(backend=BrowserBackendName.REMOTE, available=False, detail="CDP 应答不是 JSON")
+    if not isinstance(payload, dict) or not isinstance(payload.get("webSocketDebuggerUrl"), str):
+        return BackendProbe(backend=BrowserBackendName.REMOTE, available=False, detail="不是有效的 Chromium CDP 服务")
+    version = payload.get("Browser")
+    return BackendProbe(
+        backend=BrowserBackendName.REMOTE,
+        available=True,
+        detail=endpoint,
+        version=version if isinstance(version, str) else None,
+    )
+
+
+async def probe_backends(
+    *, solver_url: str, bsk_path: str | None = None, remote_url: str = "http://127.0.0.1:9222"
+) -> tuple[BackendProbe, ...]:
     """按固定顺序探测全部后端; ``off`` 不是可缺的后端, 不出现在结果里."""
     probes = [_module_probe(backend, module) for backend, module in _MODULE_BACKENDS.items()]
     status = await probe_bsk(bsk_path)
@@ -117,5 +152,6 @@ async def probe_backends(*, solver_url: str, bsk_path: str | None = None) -> tup
             ),
         )
     )
+    probes.append(await probe_remote_browser(remote_url))
     probes.append(await probe_solver(solver_url))
     return tuple(probes)

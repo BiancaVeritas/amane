@@ -33,6 +33,7 @@ async def test_site_proxy_applies_to_every_site_host():
         assert stack.web_client._proxy_for(httpx.URL(url).host) == _SITE_PROXY, url
     # 未配置的 host 仍走全局代理
     assert stack.web_client._proxy_for("never-configured.example.com") == _GLOBAL_PROXY
+    assert stack.web_client._source_proxies[str(_SITE)] == _SITE_PROXY
     await stack.web_client.close()
 
 
@@ -46,6 +47,7 @@ async def test_site_proxy_includes_configured_base_url():
     stack = build_network_stack(hot)
 
     assert stack.web_client._proxy_for("mirror.example") == _SITE_PROXY
+    assert stack.web_client._source_proxies[str(_SITE)] == _SITE_PROXY
     await stack.web_client.close()
 
 
@@ -59,6 +61,9 @@ async def test_use_proxy_false_goes_direct():
 
     for url in _site_hosts(_SITE):
         assert stack.web_client._proxy_for(httpx.URL(url).host) is None, url
+    # 图片 CDN 不在 JavDB 页面 host 列表中时，显式来源仍强制直连。
+    assert str(_SITE) in stack.web_client._source_proxies
+    assert stack.web_client._source_proxies[str(_SITE)] is None
     await stack.web_client.close()
 
 
@@ -71,6 +76,7 @@ async def test_without_site_proxy_everything_uses_global():
 
     for url in _site_hosts(_SITE):
         assert stack.web_client._proxy_for(httpx.URL(url).host) == _GLOBAL_PROXY, url
+    assert str(_SITE) not in stack.web_client._source_proxies
     await stack.web_client.close()
 
 

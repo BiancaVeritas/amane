@@ -54,7 +54,7 @@ class XCityCrawler(Crawler):
             release=release_raw or None,
             runtime=runtime,
             tags=tags,
-            thumb_urls=[cover] if cover else [],
+            cover_urls=[cover] if cover else [],
             source_url=url,
         )
 

@@ -50,7 +50,7 @@ def fake_metadata():
             "studio": "Studio X",
             "release": "2026-01-15",
             "runtime": 120,
-            "thumb_urls": ["https://img.example.com/thumb.jpg"],
+            "cover_urls": ["https://img.example.com/thumb.jpg"],
             "poster_urls": ["https://img.example.com/p1.jpg", "https://img.example.com/p2.jpg"],
             "extrafanart": ["https://img.example.com/extra1.jpg"],
         }
@@ -113,7 +113,7 @@ async def test_full_pipeline_with_post_processing(repo: Repository, fake_factory
     assert organized_file.exists()
     nfo_file = target_dir / "MIDV-123.nfo"
     assert nfo_file.exists()
-    assert "<title>MIDV-123 Test Title</title>" in nfo_file.read_text()
+    assert "<title>MIDV-123 Test Title</title>" in nfo_file.read_text(encoding="utf-8")
     assert not src_file.exists()
 
     assert media.id is not None
