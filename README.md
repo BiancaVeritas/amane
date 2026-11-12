@@ -19,7 +19,7 @@
 
 ---
 
-> **分发说明**: 本仓库是 [Amane](https://github.com/sqzw-x/amane) 的衍生分发. 当前分支 `hakureireimu123/v0.26.0` 收录第三方构建的 v0.26.0 修改版, 与 `custom/*` 分支相互独立; 对应的 Docker 镜像为 `ghcr.io/biancaveritas/hakureireimu123`, 同样独立于 `ghcr.io/biancaveritas/amane`. 代码来源、授权与署名见 [NOTICE.md](NOTICE.md).
+> **分发说明**: 本仓库是 [Amane](https://github.com/sqzw-x/amane) 的修改版. 当前分支 `hakureireimu123/v0.26.0` 是基于官方 v0.26.0 的自家修改版, 与 `custom/*` 分支是两条独立开发线; 对应的 Docker 镜像为 `ghcr.io/biancaveritas/hakureireimu123`, 独立于 `custom/*` 使用的 `ghcr.io/biancaveritas/amane`. 授权与 AI 使用披露见 [NOTICE.md](NOTICE.md).
 
 Amane 是一个影片**元数据服务**, 核心是数据库中以番号为单位的影片条目. 番号可以手工输入、按模板批量生成、从 RSS 订阅中发现, 也可以由智能体或媒体库扫描提交.
 
