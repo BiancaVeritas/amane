@@ -19,7 +19,9 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
 
 COPY pyproject.toml uv.lock README.md ./
 COPY src ./src
-RUN uv sync --no-dev --frozen --no-editable
+# --no-managed-python: 只用镜像自带的解释器. 否则 uv 会按 requires-python 自己去下载最新的
+# 3.15, 而 onnxruntime 只发 cp314 轮子, 装不上. --python 再显式钉一次, 双保险.
+RUN uv sync --no-dev --frozen --no-editable --no-managed-python --python /usr/local/bin/python
 
 # --- 最终镜像 ---
 FROM base
