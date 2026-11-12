@@ -27,6 +27,36 @@ async def build_actor_lookup_names(session: AsyncSession, actor: Actor) -> list[
     return [actor.name, *await list_actor_aliases(session, actor.id or 0)]
 
 
+async def find_mutual_alias_pairs(session: AsyncSession, actor_id: int) -> list[Actor]:
+    """找出与 ``actor_id`` 互为别名的演员: A 的别名含 B, 且 B 的别名含 A.
+
+    这种交叉指向说明是同一个人在两处写法不同 —— 各自都把对方的展示名当别名.
+    单向指向不算: 那可能只是碰巧同名, 交给用户判断.
+    """
+    actor = await session.get(Actor, actor_id)
+    if actor is None or actor.id is None:
+        return []
+    own_aliases = set(await list_actor_aliases(session, actor.id))
+    if not own_aliases:
+        return []
+    # 别名里有自己展示名的演员 (对方把本演员当别名)
+    rows = (
+        await session.exec(
+            select(ActorAlias.actor_id, ActorAlias.name).where(col(ActorAlias.name) == actor.name)
+        )
+    ).all()
+    candidates = {int(aid) for aid, _name in rows} - {actor.id}
+    if not candidates:
+        return []
+    peers: list[Actor] = []
+    for other_id in sorted(candidates):
+        other = await session.get(Actor, other_id)
+        if other is None or other.name not in own_aliases:
+            continue
+        peers.append(other)
+    return peers
+
+
 async def resolve_actor_by_name(session: AsyncSession, name: str) -> Actor | None:
     """空名返回 None. 歧义或无命中时以该名字新建展示名实体."""
     if not name:

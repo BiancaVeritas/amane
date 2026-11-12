@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
+import structlog
 from sqlalchemy import bindparam, literal, or_, update
 from sqlalchemy import delete as sqla_delete
 from sqlalchemy.orm import Mapped
@@ -15,7 +16,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from ...enums import ActorField, ActorGender
 from ...parsing import split_actor_aliases
 from ...utils.collections import unique_ids
-from ..actor_lookup import list_actor_aliases, resolve_actor_by_name
+from ..actor_lookup import find_mutual_alias_pairs, list_actor_aliases, resolve_actor_by_name
 from ..actor_person import locked_fields_of, merge_person_fields_into_target
 from ..facet_rules import (
     FacetFieldValues,
@@ -62,6 +63,8 @@ from ..repo_types import (
     _utcnow,
 )
 from .base import chunks
+
+logger = structlog.get_logger()
 
 # 关联表投影: Metadata list JSON 为真值 (actor/director/tag), 或纯挂载 (user_tag).
 # 标量投影: Metadata.studio/publisher/series 字符串为真值, 实体表按 name 对齐.
@@ -1094,11 +1097,46 @@ async def clean_actor_names(
         actor = await session.get(Actor, actor_id)
         if actor is not None and ActorField.ALIASES not in locked_fields_of(actor):
             await add_actor_aliases(session, actor, aliases)
+    # 互为别名的两个演员并成一个: A 的别名含 B 且 B 的别名含 A 说明是同一个人.
+    canonical = await _merge_mutual_alias_actors(session, canonical)
     if canonical == meta.actors:
         return
     meta.actors = canonical
     session.add(meta)
     await session.flush()
+
+
+async def _merge_mutual_alias_actors(session: AsyncSession, names: list[str]) -> list[str]:
+    """把互为别名的演员并成一个, 返回合并后的展示名列表.
+
+    命中时以先出现的那个为目标 (列表顺序即刮削来源的优先级), 其余并入并改写真值.
+    合并不会跨事务: 全部动作都落在调用方已有的写事务里.
+    """
+    if len(names) < 2:
+        return names
+    merged_away: dict[str, str] = {}
+    survivors: list[str] = []
+    for name in names:
+        actor = await resolve_actor_by_name(session, name)
+        if actor is None or actor.id is None:
+            continue
+        peers = await find_mutual_alias_pairs(session, actor.id)
+        for peer in peers:
+            if peer.id is None or peer.name in merged_away:
+                continue
+            logger.info(
+                "mutual alias actors merged",
+                target=actor.name,
+                source=peer.name,
+            )
+            await merge_link_facets(session, LINK_FACETS[FacetKind.ACTOR], actor.id, {peer.id})
+            merged_away[peer.name] = actor.name
+    for name in names:
+        final = merged_away.get(name, name)
+        if final not in survivors:
+            survivors.append(final)
+    return survivors
+
 
 
 async def sync_metadata_facets(session: AsyncSession, meta: Metadata) -> None:
