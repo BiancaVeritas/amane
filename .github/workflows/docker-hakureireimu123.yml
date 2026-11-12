@@ -1,7 +1,7 @@
-name: Publish hakureireimu123 Docker image
+name: Publish amane-hakureireimu123 Docker image
 
-# 仅用于 hakureireimu123/* 分支: 构建第三方版本镜像并推到独立 GHCR 包.
-# 与 custom/* 分支的 ghcr.io/biancaveritas/amane 分开, 两个包互不覆盖.
+# 仅用于 hakureireimu123/* 分支: 构建修改版镜像并推到独立 GHCR 包.
+# 包与 custom/* 分支使用的 ghcr.io/biancaveritas/amane 分开, 两者的 latest 互不影响.
 on:
   push:
     branches:
@@ -22,7 +22,7 @@ jobs:
       - uses: actions/checkout@v7
 
       - name: Image name
-        run: echo "IMAGE=${REGISTRY}/$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')/hakureireimu123" >> "$GITHUB_ENV"
+        run: echo "IMAGE=${REGISTRY}/$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')/amane-hakureireimu123" >> "$GITHUB_ENV"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
@@ -39,11 +39,12 @@ jobs:
         uses: docker/metadata-action@v6
         with:
           images: ${{ env.IMAGE }}
-          # hakureireimu123/v0.26.0 -> hakureireimu123-v0.26.0; 固定别名 latest; 短 sha 便于回溯
+          # 包名已含 hakureireimu123, 标签不再重复该前缀:
+          # hakureireimu123/v0.26.0 -> v0.26.0; 固定别名 latest; 短 sha 便于回溯
           tags: |
-            type=ref,event=branch
+            type=match,pattern=hakureireimu123/(v.*),group=1
             type=raw,value=latest
-            type=sha,format=short,prefix=hakureireimu123-
+            type=sha,format=short
 
       - name: Build and push
         uses: docker/build-push-action@v7

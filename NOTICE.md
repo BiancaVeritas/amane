@@ -17,7 +17,7 @@
 
 - 新增本文件
 - 新增镜像构建工作流 `.github/workflows/docker-hakureireimu123.yml`
-- `compose.yaml` 的镜像地址指向 `ghcr.io/biancaveritas/hakureireimu123`
+- `compose.yaml` 的镜像地址指向 `ghcr.io/biancaveritas/amane-hakureireimu123`
 - `README.md` 增加分发说明
 
 上述四项为分发侧的改动. 功能层面的改动清单见 [CHANGELOG.md](CHANGELOG.md).
@@ -28,4 +28,4 @@
 
 ## 镜像
 
-`ghcr.io/biancaveritas/hakureireimu123` 由本仓库的 GitHub Actions 构建, 与 `custom/*` 分支构建的 `ghcr.io/biancaveritas/amane` 相互独立.
+`ghcr.io/biancaveritas/amane-hakureireimu123` 由本仓库的 GitHub Actions 构建, 与 `custom/*` 分支构建的 `ghcr.io/biancaveritas/amane` 是两个独立包, 各自的 `latest` 互不影响.
