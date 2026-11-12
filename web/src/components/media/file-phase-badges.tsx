@@ -6,7 +6,6 @@ import {
   IconEye,
   IconLockOpen,
   IconSubtitles,
-  IconTag,
 } from "@tabler/icons-react";
 import type { TFunction } from "i18next";
 import type { ReactNode } from "react";
@@ -59,9 +58,10 @@ const PHASE_CHIP = exhaustiveRecord<PhaseChipKey>()({
     iconColor: "var(--mantine-color-teal-3)",
   },
   ltx: {
-    color: "orange",
-    Icon: IconTag,
-    iconColor: "var(--mantine-color-orange-4)",
+    // 与「破解」同一副外观: 两者都是「可以去码」的同一类副本, 没必要用两套图标区分.
+    color: "grape",
+    Icon: IconLockOpen,
+    iconColor: "var(--mantine-color-grape-3)",
   },
   def: {
     color: "blue",
@@ -101,7 +101,7 @@ function mosaicChips(phase: FilePhaseLike, t: TFunction<"metadata">): PhaseChip[
     chips.push({ key: "leak", label: t("filePhase.leaked") });
   }
   if (phase.ltx === true) {
-    chips.push({ key: "ltx", label: "LTX" });
+    chips.push({ key: "ltx", label: " LTX " });
   }
   return chips;
 }
@@ -194,7 +194,8 @@ export function FilePhaseOverlay({ phase, topExtra, bottomExtra }: FilePhaseOver
           left={6}
           gap={4}
           wrap="nowrap"
-          align="flex-start"
+          // 有码 / LTX 那组按内容等宽, 右边缘才齐; 内容长的照常超出.
+          align="stretch"
           style={{ ...CORNER_GROUP, flexDirection: "column" }}
         >
           {mosaic.map((chip) => (
@@ -209,6 +210,7 @@ export function FilePhaseOverlay({ phase, topExtra, bottomExtra }: FilePhaseOver
           left={6}
           gap={4}
           wrap="nowrap"
+          // 分辨率 / 中字 / 年龄 保持各自内容宽度, 不被 1080p 之类撑成一样宽.
           align="flex-start"
           style={{ ...CORNER_GROUP, flexDirection: "column" }}
         >

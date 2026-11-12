@@ -17,7 +17,16 @@ interface OverlayChipProps {
 
 export function OverlayChip({ children, title, "aria-label": ariaLabel }: OverlayChipProps) {
   const chip = (
-    <Group gap={4} wrap="nowrap" px={7} py={3} style={OVERLAY_CHIP_STYLE} aria-label={ariaLabel}>
+    <Group
+      gap={4}
+      wrap="nowrap"
+      px={7}
+      py={3}
+      // 同组 chip 被拉到同宽后, 内容居中才不会一边空一大截.
+      justify="center"
+      style={OVERLAY_CHIP_STYLE}
+      aria-label={ariaLabel}
+    >
       {children}
     </Group>
   );

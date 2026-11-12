@@ -1,7 +1,13 @@
 import pytest
 
 from amane.crawlers import registry
-from amane.crawlers.sites.caribbeancom import CaribbeancomCrawler, _detail, _number, _runtime_minutes
+from amane.crawlers.sites.caribbeancom import (
+    CaribbeancomCrawler,
+    _detail,
+    _number,
+    _release_from_number,
+    _runtime_minutes,
+)
 from amane.enums import SiteName
 
 
@@ -123,3 +129,24 @@ async def test_connectivity_probes_actual_detail_page() -> None:
     outcome = await crawler.check_connectivity()
     assert isinstance(outcome, ConnectivityOutcome)
     assert outcome.status.value == "ok"
+
+
+def test_release_falls_back_to_number_date() -> None:
+    """站方已从详情页删掉「配信日」, 只能按番号 MMDDYY 推算 (与 metatube 同规则)."""
+    assert _release_from_number("011211-589") == "2011-01-12"
+    assert _release_from_number("081517-479") == "2017-08-15"
+    assert _release_from_number("013117-589") == "2017-01-31"
+
+
+@pytest.mark.parametrize(
+    "number",
+    [
+        "123199-001",  # 年份超出合理范围
+        "012690-001",
+        "ABC-123",  # 不是 caribbean 番号
+        "1231-001",  # 位数不对
+        "130132-001",  # 13 月, 非法日期
+    ],
+)
+def test_release_from_number_rejects_bad_input(number: str) -> None:
+    assert _release_from_number(number) is None

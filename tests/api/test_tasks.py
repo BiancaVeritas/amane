@@ -8,7 +8,7 @@ import pytest
 from pydantic import BaseModel
 
 from amane.api.models.tasks import ScrapeRequest, TaskResultPayload
-from amane.db.models import TaskType
+from amane.db.models import MediaFileStatus, TaskType
 from amane.enums import DownloadableResource
 from amane.handlers import models as handler_models
 
@@ -256,6 +256,37 @@ class TestBatchTasks:
         cancelled = await client.post("tasks/batch", json={"action": "cancel", "task_ids": [queued.id]})
         assert cancelled.status_code == 200
         assert cancelled.json()["affected"] == 1
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_delete_task_keeps_media_files(
+        self, client: AsyncClient, repo: Repository, stop_worker: None, tmp_path: Path
+    ):
+        """删任务只清执行流水, 不能连带删媒体文件索引.
+
+        否则一清任务, 详情页的「关联文件」就全空了, 而磁盘上的文件还在.
+        """
+        lib = await repo.create_library(name="keep", path=str(tmp_path))
+        assert lib.id is not None
+        media = await repo.create_media_file(
+            lib.id,
+            path=str(tmp_path / "ABC-123.mp4"),
+            number="ABC-123",
+            status=MediaFileStatus.SCRAPED,
+        )
+        assert media.id is not None
+
+        task = await repo.create_task(
+            TaskType.SCRAPE, payload={"number": "ABC-123", "media_file_id": media.id}
+        )
+        assert task.id is not None
+        await repo.complete_task(task.id)
+
+        resp = await client.post("tasks/batch", json={"action": "delete", "task_ids": [task.id]})
+        assert resp.status_code == 200
+        assert resp.json()["affected"] == 1
+
+        # 任务没了, 但文件索引必须还在.
+        assert await repo.get_media_file(media.id) is not None
 
         failed = await repo.create_task(task_type=TaskType.SCRAPE, payload={"number": "X"})
         assert failed.id is not None

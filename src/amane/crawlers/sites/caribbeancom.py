@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import datetime
 import json
 import re
 from html.parser import HTMLParser
@@ -158,6 +159,27 @@ def _detail(html: str, page_url: str) -> tuple[dict[str, object], list[str]]:
     return metadata, gallery
 
 
+def _release_from_number(number: str) -> str | None:
+    """番号前 6 位 MMDDYY 推算上映日期; 推不出或不是合法日期时返回 None.
+
+    站方已从详情页删掉「配信日」, 只能退回番号编码. 规则与 metatube 的
+    fallback 一致: ``010206`` 即 月-日-两位年. 这只说明编号里的日期,
+    不保证等于真实发行日, 但比留空有用.
+    """
+    match = re.match(r"(\d{2})(\d{2})(\d{2})[-_]\d+", number)
+    if not match:
+        return None
+    month, day, year = match.groups()
+    try:
+        parsed = datetime.date(2000 + int(year), int(month), int(day))
+    except ValueError:
+        return None
+    # 年份明显不合理时宁可返回 None: caribbean 站的番号年份都在 2000 之后且不超过今年.
+    if not 2000 <= parsed.year <= datetime.datetime.now(tz=datetime.UTC).year:
+        return None
+    return parsed.isoformat()
+
+
 def _runtime_minutes(value: str) -> int | None:
     match = re.fullmatch(r"\s*(\d{1,2}):(\d{2}):(\d{2})\s*", value)
     if not match:
@@ -206,7 +228,11 @@ class CaribbeancomCrawler(Crawler):
             title=metadata["title"] if isinstance(metadata["title"], str) else None,
             plot=metadata["plot"] if isinstance(metadata["plot"], str) else None,
             actors=film_actors(metadata["actors"] if isinstance(metadata["actors"], list) else []),
-            release=metadata["release"] if isinstance(metadata["release"], str) else None,
+            release=(
+                metadata["release"]
+                if isinstance(metadata["release"], str) and metadata["release"]
+                else _release_from_number(requested)
+            ),
             runtime=metadata["runtime"] if isinstance(metadata["runtime"], int) else None,
             series=metadata["series"] if isinstance(metadata["series"], str) else None,
             tags=metadata["tags"] if isinstance(metadata["tags"], list) else [],

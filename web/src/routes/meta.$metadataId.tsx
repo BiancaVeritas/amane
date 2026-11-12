@@ -1323,6 +1323,10 @@ function TitleDetailPage() {
                   align: "right",
                   // 预填厂商前缀 (S2MBD-047 → S2MBD), 而不是完整番号: 规则本来就是按系列命中.
                   number_prefix: vendorPrefix(item.number),
+                  // 系列与制作商一并带上: 同一系列的封面构图基本一致, 少填一项就要重来一次.
+                  // 元数据的系列真值在 series_names (可多条), 规则只能选一个, 取第一条.
+                  series: item.series_names?.[0] ?? item.series ?? null,
+                  studio: item.studio ?? null,
                   ...win,
                 });
               }}

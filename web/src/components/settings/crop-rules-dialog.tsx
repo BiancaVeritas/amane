@@ -72,11 +72,27 @@ function facetNames(payload: { items?: { name: string }[] } | undefined): string
 }
 
 /**
+ * 选项里补上当前值.
+ *
+ * facet 列表是分页的 (默认只回 50 条), 详情页预填的系列/制作商很可能不在这一页里;
+ * 不补的话 Mantine 找不到对应项, 输入框就显示成空的, 看着像没导入.
+ */
+function withCurrent(names: string[], current: string | null | undefined): string[] {
+  if (!current || names.includes(current)) {
+    return names;
+  }
+  return [...names, current];
+}
+
+/**
  * 精准裁切规则的**列表**.
  *
  * 规则的增改在独立的 ``CropRuleEditorDialog`` 里做 —— 列表与编辑各占一层, 关掉编辑就回到
  * 列表, 不会把两者挤在同一个弹框里互相干扰.
  */
+/** 规则编辑器的下拉一次取够: 系列可能有几十上百条, 默认 50 条会把要选的那条挤掉. */
+const FACET_PICK_LIMIT = 1000;
+
 export function CropRulesDialog({ opened, onClose, rules, onChange }: CropRulesDialogProps) {
   const { t } = useTranslation(["settings", "common"]);
   const [editing, setEditing] = useState<{ rule: CropRule; index: number | null } | null>(null);
@@ -233,15 +249,15 @@ export function CropRuleEditorDialog({
 
   // 系列 / 制作商 / 发行商都从已有分类里选, 免得手打的名字与刮削结果对不上.
   const { data: seriesFacets } = useQuery({
-    ...listFacetsOptions({ path: { kind: "series" } }),
+    ...listFacetsOptions({ path: { kind: "series" }, query: { limit: FACET_PICK_LIMIT } }),
     enabled: opened,
   });
   const { data: studioFacets } = useQuery({
-    ...listFacetsOptions({ path: { kind: "studio" } }),
+    ...listFacetsOptions({ path: { kind: "studio" }, query: { limit: FACET_PICK_LIMIT } }),
     enabled: opened,
   });
   const { data: publisherFacets } = useQuery({
-    ...listFacetsOptions({ path: { kind: "publisher" } }),
+    ...listFacetsOptions({ path: { kind: "publisher" }, query: { limit: FACET_PICK_LIMIT } }),
     enabled: opened,
   });
 
@@ -262,7 +278,7 @@ export function CropRuleEditorDialog({
               label={t("fields.scraping.poster_crop_rules.$.series.label")}
               searchable
               clearable
-              data={facetNames(seriesFacets)}
+              data={withCurrent(facetNames(seriesFacets), draft.series)}
               value={draft.series ?? null}
               onChange={(v) => setDraft({ ...draft, series: v })}
             />
@@ -288,7 +304,7 @@ export function CropRuleEditorDialog({
               label={t("fields.scraping.poster_crop_rules.$.studio.label")}
               searchable
               clearable
-              data={facetNames(studioFacets)}
+              data={withCurrent(facetNames(studioFacets), draft.studio)}
               value={draft.studio ?? null}
               onChange={(v) => setDraft({ ...draft, studio: v })}
             />
@@ -297,7 +313,7 @@ export function CropRuleEditorDialog({
               label={t("fields.scraping.poster_crop_rules.$.publisher.label")}
               searchable
               clearable
-              data={facetNames(publisherFacets)}
+              data={withCurrent(facetNames(publisherFacets), draft.publisher)}
               value={draft.publisher ?? null}
               onChange={(v) => setDraft({ ...draft, publisher: v })}
             />
