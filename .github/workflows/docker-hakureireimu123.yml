@@ -39,10 +39,9 @@ jobs:
         uses: docker/metadata-action@v6
         with:
           images: ${{ env.IMAGE }}
-          # 包名已含 hakureireimu123, 标签不再重复该前缀:
-          # hakureireimu123/v0.26.0 -> v0.26.0; 固定别名 latest; 短 sha 便于回溯
+          # hakureireimu123/v0.26.0 -> hakureireimu123-v0.26.0; 固定别名 latest; 短 sha 便于回溯
           tags: |
-            type=match,pattern=hakureireimu123/(v.*),group=1
+            type=ref,event=branch
             type=raw,value=latest
             type=sha,format=short
 
