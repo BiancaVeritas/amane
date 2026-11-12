@@ -19,6 +19,8 @@
 
 ---
 
+> **分发说明**: 本仓库是 [Amane](https://github.com/sqzw-x/amane) 的衍生分发. 当前分支 `hakureireimu123/v0.26.0` 收录第三方构建的 v0.26.0 修改版, 与 `custom/*` 分支相互独立; 对应的 Docker 镜像为 `ghcr.io/biancaveritas/hakureireimu123`, 同样独立于 `ghcr.io/biancaveritas/amane`. 代码来源、授权与署名见 [NOTICE.md](NOTICE.md).
+
 Amane 是一个影片**元数据服务**, 核心是数据库中以番号为单位的影片条目. 番号可以手工输入、按模板批量生成、从 RSS 订阅中发现, 也可以由智能体或媒体库扫描提交.
 
 Amane 不是 Emby / Jellyfin 的替代品, 而是它们的元数据补充: 媒体服务器负责媒体文件的管理、播放与串流, Amane 提供多源元数据, 并以 NFO 与图片的形式写到视频旁.
@@ -43,6 +45,8 @@ Amane 不是 Emby / Jellyfin 的替代品, 而是它们的元数据补充: 媒�
 ## 开始使用
 
 桌面版 (macOS / Windows) 与 Android 客户端见 [Releases](https://github.com/sqzw-x/amane/releases), Docker 镜像为 `ghcr.io/sqzw-x/amane`. 安装步骤、使用说明与常见问题见 [用户文档](https://sqzw-x.github.io/amane/).
+
+本分支的 Docker 镜像为 `ghcr.io/biancaveritas/hakureireimu123:latest`, 直接使用本仓库的 `compose.yaml` 部署.
 
 ## 社区生态
 

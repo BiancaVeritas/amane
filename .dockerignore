@@ -7,6 +7,7 @@
 .idea
 *.md
 !README.md
+!NOTICE.md
 
 # Local envs & secrets
 .env

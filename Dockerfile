@@ -27,6 +27,7 @@ FROM base
 RUN apt-get update && apt-get install -y --no-install-recommends libgomp1 postgresql-client \
     && rm -rf /var/lib/apt/lists/*
 COPY alembic.ini ./
+COPY NOTICE.md ./
 COPY --from=web-builder /app/web/dist ./web/dist
 
 EXPOSE 8000

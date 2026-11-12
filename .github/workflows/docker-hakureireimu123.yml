@@ -1,0 +1,60 @@
+name: Publish hakureireimu123 Docker image
+
+# 仅用于 hakureireimu123/* 分支: 构建第三方版本镜像并推到独立 GHCR 包.
+# 与 custom/* 分支的 ghcr.io/biancaveritas/amane 分开, 两个包互不覆盖.
+on:
+  push:
+    branches:
+      - "hakureireimu123/**"
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  publish:
+    name: build and push
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Image name
+        run: echo "IMAGE=${REGISTRY}/$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')/hakureireimu123" >> "$GITHUB_ENV"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ env.IMAGE }}
+          # hakureireimu123/v0.26.0 -> hakureireimu123-v0.26.0; 固定别名 latest; 短 sha 便于回溯
+          tags: |
+            type=ref,event=branch
+            type=raw,value=latest
+            type=sha,format=short,prefix=hakureireimu123-
+
+      - name: Build and push
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          # 只出 amd64: arm64 依赖 QEMU 模拟, Python 3.14 在模拟环境下需从源码编译,
+          # 构建时间从数分钟涨到半小时以上.
+          platforms: linux/amd64
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
