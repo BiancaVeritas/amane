@@ -273,7 +273,9 @@ def _extract_series_prefix(number: str) -> str:
     return match.group(1).lower() if match else ""
 
 
-_THUMB_SUFFIX = "-pl.jpg"
+#: 横版封面 → 竖版海报: 旧目录后缀 ``-pl`` / ``-ps``, 序号目录 ``_2`` / ``_1``.
+#: 同一作品的图片目录只用其中一套命名, 按封面的实际后缀推导即可, 不探测另一套.
+_COVER_POSTER_SUFFIXES: tuple[tuple[str, str], ...] = (("-pl.jpg", "-ps.jpg"), ("_2.jpg", "_1.jpg"))
 #: 「无」的占位写法: 部分厂牌把空导演写成 ``---``, 当成人名落库就是错的.
 _NO_VALUE = "---"
 
@@ -281,6 +283,16 @@ _NO_VALUE = "---"
 def _values_without_placeholder(values: list[str]) -> list[str]:
     """去掉空值占位: 占位不是字段值, 保留会变成名为 ``---`` 的导演."""
     return [value for value in values if value != _NO_VALUE]
+
+
+def _poster_urls(thumb_url: str | None) -> list[str]:
+    """详情页只引用横版封面, 竖版只能按命名推导; 哈希文件名的条目没有可推导地址."""
+    if not thumb_url:
+        return []
+    for cover_suffix, poster_suffix in _COVER_POSTER_SUFFIXES:
+        if thumb_url.endswith(cover_suffix):
+            return [f"{thumb_url.removesuffix(cover_suffix)}{poster_suffix}"]
+    return []
 
 
 class OfficialCrawler(Crawler):
@@ -386,8 +398,7 @@ class OfficialCrawler(Crawler):
             series=series or None,
             plot=plot or None,
             directors=directors,
-            # 海报一律由封面裁: 站点竖版图 (-ps.jpg) 构图不受控, 用了就绕过人脸检测.
-            poster_urls=[],
+            poster_urls=_poster_urls(thumb_url),
             thumb_urls=[thumb_url] if thumb_url else [],
             extrafanart=slides[1:],
             source_url=url,
