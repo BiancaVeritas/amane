@@ -16,8 +16,11 @@ RUN pnpm build
 FROM python:3.14.10-slim AS base
 WORKDIR /app
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
+# 解释器由基础镜像提供, 禁止 uv 另下托管版本. .python-version 一并拷入, 让"镜像该给哪个
+# 小版本"成为显式请求: 基础镜像被换成 3.15 时会立刻失败, 而不是静默换解释器后照常出包.
+ENV UV_PYTHON_DOWNLOADS=never
 
-COPY pyproject.toml uv.lock README.md ./
+COPY pyproject.toml uv.lock README.md .python-version ./
 COPY src ./src
 # --no-managed-python: 只用镜像自带的解释器. 否则 uv 会按 requires-python 自己去下载最新的
 # 3.15, 而 onnxruntime 只发 cp314 轮子, 装不上. --python 再显式钉一次, 双保险.
