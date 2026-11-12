@@ -12,7 +12,8 @@ COPY web/ .
 RUN pnpm build
 
 # --- Python 依赖阶段 ---
-FROM python:3.14-slim AS base
+# 精确到补丁版本: 裸 3.14 标签会在 3.15 发布后滚到 3.15, 而 onnxruntime 只发 cp314 轮子.
+FROM python:3.14.10-slim AS base
 WORKDIR /app
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
 

@@ -58,7 +58,13 @@ export const PosterCard = memo(function PosterCard({
       alt={item.number}
       loading="lazy"
       referrerPolicy="no-referrer"
-      style={{ display: "block", objectFit: imageFit }}
+      style={{
+        display: "block",
+        width: "100%",
+        height: "100%",
+        objectFit: imageFit,
+        background: imageFit === "contain" ? "var(--mantine-color-default-hover)" : undefined,
+      }}
       onLoad={(event) => {
         const { naturalWidth, naturalHeight } = event.currentTarget;
         if (rememberImageRatio(posterUrl, naturalWidth, naturalHeight)) onImageRatioChange?.();
@@ -77,9 +83,9 @@ export const PosterCard = memo(function PosterCard({
     <Link
       to="/meta/$metadataId"
       params={{ metadataId: String(item.id) }}
-      style={{ textDecoration: "none", color: "inherit", display: "block" }}
+      style={{ textDecoration: "none", color: "inherit", display: "block", height: "100%" }}
     >
-      <Card padding={0} radius="md" withBorder style={{ overflow: "hidden" }}>
+      <Card padding={0} radius="md" withBorder style={{ overflow: "hidden", height: "100%" }}>
         <Box pos="relative">
           <AspectRatio ratio={imageRatio}>{media}</AspectRatio>
           <FilePhaseOverlay
@@ -125,7 +131,14 @@ export const PosterCard = memo(function PosterCard({
             {item.number}
           </Text>
           {item.title && (
-            <Text size="xs" c="dimmed" lineClamp={2} title={item.title}>
+            <Text
+              size="xs"
+              c="dimmed"
+              lineClamp={2}
+              title={item.title}
+              // 固定两行高: 长短标题都占同样空间, 行内卡片才对得齐.
+              style={{ height: "2.4rem", lineHeight: "1.2rem" }}
+            >
               {item.title}
             </Text>
           )}
