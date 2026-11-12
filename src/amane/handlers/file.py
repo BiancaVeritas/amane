@@ -13,7 +13,7 @@ from ..db.repo_types import MediaFileUpdates
 from ..enums import ActorGender, DownloadableResource, LinkMode
 from ..library import MEDIA_EXTENSIONS, LibraryFileKind, LibraryScan, ancestor_dirs, prune_empty_dirs
 from ..library.rules import is_in_trash
-from ..media import ResourceStore, apply_cover_watermarks_from_info, crop_poster
+from ..media import ResourceStore, allows_poster_crop, apply_cover_watermarks_from_info, crop_poster
 from ..media import write_nfo as write_nfo_file
 from ..media.resource_store import internal_url_hash
 from ..net.http import WebClient
@@ -378,8 +378,13 @@ def _place_library_images(
         if poster_local is not None:
             paths.poster.parent.mkdir(parents=True, exist_ok=True)
             _write_into_library(poster_local, paths.poster)
-        # 本站不按条目类型限制自动裁切: FC2 / 欧美也照裁, 只要配置里开着.
-        elif thumb_local is not None and config is not None and config.scraping.crop_poster:
+        elif (
+            thumb_local is not None
+            and config is not None
+            and config.scraping.crop_poster
+            # 有码 / 无码 / FC2 才自动裁: 其它类型的封面不保证是横版夹页.
+            and allows_poster_crop(content_type)
+        ):
             paths.poster.parent.mkdir(parents=True, exist_ok=True)
             crop_poster(
                 paths.thumb,

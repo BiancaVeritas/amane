@@ -15,6 +15,7 @@ from ..sr import get_preset_meta, run_SR
 from .crop_rules import rule_window
 from .images import (
     CropRotation,
+    allows_poster_crop,
     crop_box,
     crop_poster,
     crop_poster_by_rule,
@@ -167,7 +168,7 @@ async def materialize_images(
         if thumb_local is None and thumb_urls:
             thumb_src, thumb_local = await _acquire_first(thumb_urls, store, client)
 
-        if config.scraping.crop_poster and thumb_local:
+        if config.scraping.crop_poster and thumb_local and allows_poster_crop(content_type):
             ratio = (
                 config.scraping.uncensored_poster_ratio
                 if content_type == ContentType.UNCENSORED

@@ -81,7 +81,7 @@ CASES: list[object] = [
     _Case("ABC-123-4K.mp4", definition="4k", number="ABC-123"),
     _Case("ABC-123.2160p.mp4", definition="4k", number="ABC-123"),
     _Case("ABC-123.2160P.mp4", definition="4k", number="ABC-123"),
-    _Case("ABC-123.1440p.mp4", definition="1440p", number="ABC-123"),
+    _Case("ABC-123.1440p.mp4", definition="2k", number="ABC-123"),
     _Case("ABC-123.1080p.mp4", definition="1080p", number="ABC-123"),
     _Case("ABC-123-720p.mp4", definition="720p", number="ABC-123"),
     _Case("ABC-123.480p.mp4", definition="480p", number="ABC-123"),
@@ -114,7 +114,7 @@ CASES: list[object] = [
     _Case("120115_318-mura-1080p.mp4", definition="1080p", number="120115_318"),
     _Case("120115_318-mura-720p.mp4", definition="720p", number="120115_318"),
     _Case("120115_318-mura-2160p.mp4", definition="4k", number="120115_318"),
-    _Case("120115_318-mura-1440p.mp4", definition="1440p", number="120115_318"),
+    _Case("120115_318-mura-1440p.mp4", definition="2k", number="120115_318"),
     _Case("120115_318-mura-480p.mp4", definition="480p", number="120115_318"),
     _Case("112912_776-mura-whole1_hd.wmv", definition="720p", number="112912_776"),
     # 分集 + 分辨率

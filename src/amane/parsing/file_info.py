@@ -274,7 +274,9 @@ _DEFINITION_MARKERS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("8k", re.compile(r"\b4320P(?:\d+)?\b")),
     ("4k", re.compile(r"\b4K(?:\d+)?\b")),
     ("4k", re.compile(r"\b2160P(?:\d+)?\b")),
-    ("1440p", re.compile(r"\b1440P(?:\d+)?\b")),
+    # 2K 是 1440p 的常见写法, 与 1440P 归同一档.
+    ("2k", re.compile(r"\b1440P(?:\d+)?\b")),
+    ("2k", re.compile(r"\b2K(?![0-9])")),
     ("1080p", re.compile(r"\b1080P(?:\d+)?\b")),
     # FHD 是 1080p 的常见别名, 归到同一档.
     ("1080p", re.compile(r"\bFHD\b(?![.-]\d)")),
@@ -296,7 +298,8 @@ LEGACY_DEFINITIONS: dict[str, str] = {
     "720P": "720p",
     "480P": "480p",
     "576P": "480p",
-    "1440P": "1440p",
+    "1440P": "2k",
+    "1440p": "2k",
     "HD": "720p",
     "SD": "480p",
 }

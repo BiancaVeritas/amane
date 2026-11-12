@@ -13,7 +13,7 @@ from amane.enums import DownloadableResource
 from amane.handlers.file import _write_into_library, execute_file_operations
 from amane.media import ResourceStore
 from amane.organize import MoveMode, PlaceOutcome, ResolvedPaths, resolve_paths
-from amane.parsing import parse_file_info
+from amane.parsing import ContentType, parse_file_info
 
 if TYPE_CHECKING:
     from amane.net.http import WebClient
@@ -241,6 +241,8 @@ async def test_missing_internal_resource_falls_back_to_crop(resource_store: Reso
     mf = MediaFile(path=str(src), library_id=1)
     meta = Metadata(
         number="MIDV-123",
+        # 自动裁切只对有码 / 无码 / FC2 启用; Metadata 默认是 WESTERN.
+        content_type=ContentType.CENSORED,
         thumb_urls=["https://s/t.jpg"],
         poster_urls=["/api/resources/deadbeefdeadbeef"],  # 不存在
     )

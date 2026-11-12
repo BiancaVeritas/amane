@@ -73,7 +73,15 @@ async def test_poster_cropped_when_candidate_small(resource_store: ResourceStore
     )
     cfg = HotSettings()  # sr.enabled 默认 False; poster_ratio 默认 0.7
     out = await materialize_images(
-        ["https://s/p.jpg"], ["https://s/t.jpg"], [], resource_store, cast("WebClient", client), cfg, tmp_path
+        ["https://s/p.jpg"],
+        ["https://s/t.jpg"],
+        [],
+        resource_store,
+        cast("WebClient", client),
+        cfg,
+        tmp_path,
+        # 自动裁切只对有码 / 无码 / FC2 启用, 其余类型不裁.
+        content_type=ContentType.CENSORED,
     )
     assert out.thumb_urls == ["https://s/t.jpg"]  # 外部列表原样
     assert len(out.poster_urls) == 1
@@ -132,7 +140,14 @@ async def test_poster_always_cropped_from_thumb(resource_store: ResourceStore, t
         }
     )
     out = await materialize_images(
-        ["https://s/p.jpg"], ["https://s/t.jpg"], [], resource_store, cast("WebClient", client), HotSettings(), tmp_path
+        ["https://s/p.jpg"],
+        ["https://s/t.jpg"],
+        [],
+        resource_store,
+        cast("WebClient", client),
+        HotSettings(),
+        tmp_path,
+        content_type=ContentType.CENSORED,
     )
     assert len(out.poster_urls) == 1
     assert out.poster_urls[0].startswith(RESOURCE_URL_PREFIX)  # 内部派生 (裁剪)
@@ -144,7 +159,14 @@ async def test_no_poster_source_crops_from_thumb(resource_store: ResourceStore, 
     """无 poster 候选 → 从 thumb 裁剪 (内部 URL)."""
     client = FakeClient({"https://s/t.jpg": (800, 538)})
     out = await materialize_images(
-        [], ["https://s/t.jpg"], [], resource_store, cast("WebClient", client), HotSettings(), tmp_path
+        [],
+        ["https://s/t.jpg"],
+        [],
+        resource_store,
+        cast("WebClient", client),
+        HotSettings(),
+        tmp_path,
+        content_type=ContentType.CENSORED,
     )
     assert len(out.poster_urls) == 1
     assert out.poster_urls[0].startswith(pipeline_mod.RESOURCE_URL_PREFIX)
