@@ -282,7 +282,10 @@ class TestBatchTasks:
             TaskType.SCRAPE, payload={"number": "ABC-123", "media_file_id": media.id}
         )
         assert task.id is not None
-        await repo.complete_task(task.id)
+        # complete_task 只做 RUNNING -> DONE; 先认领再完成.
+        claimed = await repo.claim_next_task()
+        assert claimed is not None and claimed.id == task.id
+        assert await repo.complete_task(task.id)
 
         resp = await client.post("tasks/batch", json={"action": "delete", "task_ids": [task.id]})
         assert resp.status_code == 200

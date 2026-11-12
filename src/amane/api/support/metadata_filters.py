@@ -21,6 +21,7 @@ class MetadataFilters:
     publisher_id: list[int] | None = None
     series_id: list[int] | None = None
     user_tag_id: list[int] | None = None
+    library_id: list[int] | None = None
     has_files: bool | None = None
     has_subtitle: bool | None = None
     vr: bool | None = None
@@ -42,6 +43,7 @@ class MetadataFilters:
                 self.publisher_id,
                 self.series_id,
                 self.user_tag_id,
+                self.library_id,
                 self.has_files is not None,
                 self.has_subtitle is not None,
                 self.vr is not None,

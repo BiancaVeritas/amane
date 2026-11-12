@@ -37,7 +37,7 @@ RESOURCE_URL_PREFIX = "/api/resources"
 
 # 上游把已下架资源重定向到 200 的占位图 (DMM 的 now_printing) 时不能算获取成功:
 # 否则该 URL 会被判为可用并前置, 前端最终显示占位图本身.
-_PLACEHOLDER_PATH_MARKERS: tuple[str, ...] = ("/now_printing/",)
+_PLACEHOLDER_PATH_MARKERS: tuple[str, ...] = ("/now_printing/", "/noimage.")
 
 
 def _is_placeholder_url(url: str) -> bool:
@@ -209,7 +209,8 @@ class ResourceStore:
         # 内部 URL 是对既有 Resource 的引用: 直接解析本地文件, 不下载也不写记录.
         internal = internal_url_hash(url)
         if internal is not None:
-            return await self.get_by_url_hash(internal)
+            found = await self.get_by_url_hash(internal)
+            return found[1] if found else None
         # 同 URL 串行, 保留就地超分覆盖时的写入顺序.
         async with self._serialized(url):
             return await self._acquire_locked(url, client, egress=egress, max_bytes=max_bytes, image_only=image_only)
@@ -229,7 +230,7 @@ class ResourceStore:
             return cached
 
         # 上游改派占位图时跳过, 不占用 dest 也不写记录.
-        final_url = await client.resolve_final_url(url)
+        final_url = await client.resolve_final_url(url, egress=egress)
         if _is_placeholder_url(final_url):
             logger.warning("resource is upstream placeholder", url=url, final_url=final_url)
             return None
@@ -245,7 +246,7 @@ class ResourceStore:
         # 临时文件保留原扩展名: download 的实现可能按扩展名决定写出的格式.
         tmp = dest.with_name(f"{dest.stem}.{uuid4().hex}.part{dest.suffix}")
         try:
-            if not await client.download(url, tmp):
+            if not await client.download(url, tmp, egress=egress, max_bytes=max_bytes):
                 logger.warning("resource download failed", url=url, host=urlsplit(url).hostname)
                 return None
             mime = detect_media_type(tmp)
@@ -271,7 +272,7 @@ class ResourceStore:
             session.add(record)
             await session.commit()
 
-        return record, dest
+        return dest
 
     async def resolve_source(self, url: str, client: WebClient) -> ResolvedSource | None:
         """处理入口的源解析: 内部 URL 定位既有 Resource, 外部仅接受 http(s), 其余返回 None."""
@@ -340,6 +341,19 @@ class ResourceStore:
             # 早期上传件按内容哈希命名 (``thumb_xxx`` / ``poster_xxx``), 与 url hash 不一致,
             # 上面两条模式都命中不了; 这里按内容哈希兜底, 让那批旧文件仍能显示.
             return await self._legacy_upload_by_content_hash(session, url_hash)
+
+    async def _legacy_upload_by_content_hash(
+        self, session: AsyncSession, url_hash: str
+    ) -> tuple[Resource, Path] | None:
+        """旧命名的上传件: 用 url 反查内容哈希, 再按内容哈希找文件."""
+        result = await session.exec(select(Resource).where(Resource.url.like("upload:%")))
+        for record in result.all():
+            if _url_hash(record.url) != url_hash:
+                continue
+            full_path = self._base_dir / record.file_path
+            if full_path.exists():
+                return record, full_path
+        return None
 
     @staticmethod
     def url_hash(url: str) -> str:

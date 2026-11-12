@@ -87,7 +87,9 @@ class _LinkFacetSpec:
     get_names: Callable[[Metadata], list[str]] | None = None
     set_names: Callable[[Metadata, list[str]], None] | None = None
     #: 关联行工厂, 批量重建投影时按下标写 position.
-    build: Callable[[int, int, int], MetadataActor | MetadataDirector | MetadataTag] | None = None
+    build: (
+        Callable[[int, int, int], MetadataActor | MetadataDirector | MetadataTag | MetadataSeries] | None
+    ) = None
     alias_model: type[ActorAlias] | None = None  # 仅 Actor 搜索一并命中别名行
 
 
@@ -191,9 +193,13 @@ LINK_FACETS: dict[FacetKind, _LinkFacetSpec] = {
         entity=Series,
         link=MetadataSeries,
         link_fk=MetadataSeries.series_id,
+        link_position=MetadataSeries.position,
         label="系列",
         get_names=_get_series,
         set_names=_set_series,
+        build=lambda metadata_id, series_id, position: MetadataSeries(
+            metadata_id=metadata_id, series_id=series_id, position=position
+        ),
     ),
 }
 
@@ -219,7 +225,8 @@ _FACET_COLUMNS: tuple[tuple[FacetKind, str, Callable[[FacetFieldValues], object]
     (FacetKind.TAG, "tags", lambda values: values.tags),
     (FacetKind.STUDIO, "studio", lambda values: values.studio),
     (FacetKind.PUBLISHER, "publisher", lambda values: values.publisher),
-    (FacetKind.SERIES, "series", lambda values: values.series),
+    # 系列是唯一的多值分类: 真值列是 series_names, 不是单值的 series.
+    (FacetKind.SERIES, "series_names", lambda values: values.series_names),
 )
 
 
@@ -472,26 +479,26 @@ async def _load_linked_facet_values(
                     col(Metadata.id),
                     col(Metadata.studio),
                     col(Metadata.publisher),
-                    col(Metadata.series),
+                    col(Metadata.series_names),
                 ).where(relevant)
             )
         ).all()
         scalar_rows = {
-            metadata_id: (studio, publisher, series)
-            for metadata_id, studio, publisher, series in scalars
+            metadata_id: (studio, publisher, series_names)
+            for metadata_id, studio, publisher, series_names in scalars
             if metadata_id is not None
         }
         for metadata_id, actors, directors, tags in list_rows:
             if metadata_id is None or metadata_id not in scalar_rows:
                 continue
-            studio, publisher, series = scalar_rows[metadata_id]
+            studio, publisher, series_names = scalar_rows[metadata_id]
             loaded[metadata_id] = FacetFieldValues(
                 actors=list(actors or []),
                 directors=list(directors or []),
                 tags=list(tags or []),
                 studio=studio,
                 publisher=publisher,
-                series=series,
+                series_names=list(series_names or []),
             )
     return list(loaded.items())
 

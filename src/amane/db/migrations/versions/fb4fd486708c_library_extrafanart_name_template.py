@@ -34,4 +34,9 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    # 同一列由两个 revision 各删一次; 第二条再 drop 时列已不在, 必须跳过.
+    conn = op.get_bind()
+    columns = {row[1] for row in conn.execute(sa.text("PRAGMA table_info(libraries)"))}
+    if "extrafanart_name_template" not in columns:
+        return
     op.drop_column("libraries", "extrafanart_name_template")

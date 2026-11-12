@@ -77,7 +77,7 @@ class FacetFieldValues:
     tags: list[str]
     studio: str | None = None
     publisher: str | None = None
-    series: str | None = None
+    series_names: list[str] | None = None
 
     def names(self, kind: FacetKind) -> list[str]:
         """取某一分类的名字列表; 标量分类返回至多一个元素的列表."""
@@ -93,7 +93,7 @@ class FacetFieldValues:
             case FacetKind.PUBLISHER:
                 return [self.publisher] if self.publisher else []
             case FacetKind.SERIES:
-                return [self.series] if self.series else []
+                return list(self.series_names or [])
             case _:
                 raise ValueError(f"facet kind {kind} 不是爬取侧分类")
 
@@ -106,7 +106,7 @@ class FacetFieldValues:
             tags=names if kind == FacetKind.TAG else self.tags,
             studio=scalar if kind == FacetKind.STUDIO else self.studio,
             publisher=scalar if kind == FacetKind.PUBLISHER else self.publisher,
-            series=scalar if kind == FacetKind.SERIES else self.series,
+            series_names=names if kind == FacetKind.SERIES else self.series_names,
         )
 
     def same_except(self, kind: FacetKind, other: FacetFieldValues) -> bool:
@@ -123,7 +123,9 @@ class FacetFieldValues:
             tags=apply_list(self.tags, rules_by_kind.get(FacetKind.TAG, {})),
             studio=apply_scalar(self.studio, rules_by_kind.get(FacetKind.STUDIO, {})),
             publisher=apply_scalar(self.publisher, rules_by_kind.get(FacetKind.PUBLISHER, {})),
-            series=apply_scalar(self.series, rules_by_kind.get(FacetKind.SERIES, {})),
+            series_names=apply_list(
+                list(self.series_names or []), rules_by_kind.get(FacetKind.SERIES, {})
+            ),
         )
 
 
@@ -134,7 +136,8 @@ def facet_field_values(meta: Metadata) -> FacetFieldValues:
         tags=list(meta.tags) if meta.tags else [],
         studio=meta.studio,
         publisher=meta.publisher,
-        series=meta.series,
+        # 系列是唯一的多值分类: 真值在 series_names, series 只是首条的投影.
+        series_names=list(meta.series_names or ([meta.series] if meta.series else [])),
     )
 
 
@@ -144,7 +147,8 @@ def write_facet_field_values(meta: Metadata, values: FacetFieldValues) -> None:
     meta.tags = values.tags
     meta.studio = values.studio
     meta.publisher = values.publisher
-    meta.series = values.series
+    meta.series_names = list(values.series_names or [])
+    meta.series = meta.series_names[0] if meta.series_names else None
 
 
 def apply_metadata_facet_fields(meta: Metadata, rules_by_kind: RulesByKind) -> None:

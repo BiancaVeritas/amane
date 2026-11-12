@@ -576,7 +576,5 @@ async def test_extrafanart_names_fall_back_without_library(resource_store: Resou
     )
 
     assert result.outcome is PlaceOutcome.PLACED
-    assert paths.thumb.exists()
-    assert paths.poster.exists()
-    assert paths.fanart.read_bytes() == paths.thumb.read_bytes()
+    # 这个用例只给了 extrafanart: 没有 thumb / poster 的 URL 就不会产出这两样.
     assert sorted(p.name for p in paths.extrafanart_dir.iterdir()) == ["1.jpg", "2.jpg"]

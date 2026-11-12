@@ -512,6 +512,7 @@ class MetadataRepoMixin(RepositoryMixinBase):
         **kwargs: Unpack[MetadataFields],
     ) -> tuple[Metadata, bool]:
         """在调用方事务中创建或更新 WESTERN Metadata; 返回 (Metadata, 图片字段是否变化)."""
+        rules_by_kind = await load_rules_by_kind(session)
         theporndb_uuid = theporndb_uuid.strip().casefold()
         if not theporndb_uuid:
             raise ValueError("WESTERN Metadata requires a ThePornDB UUID")
@@ -559,7 +560,7 @@ class MetadataRepoMixin(RepositoryMixinBase):
             session.add(existing)
             await session.flush()
             await clean_actor_names(session, existing, actor_genders)
-            await apply_facet_rules_to_metadata(session, existing)
+            await apply_facet_rules_to_metadata(session, existing, rules_by_kind)
             await sync_metadata_facets(session, existing)
             await session.flush()
             return existing, _image_signature(existing) != before
@@ -568,7 +569,7 @@ class MetadataRepoMixin(RepositoryMixinBase):
         session.add(meta)
         await session.flush()
         await clean_actor_names(session, meta, actor_genders)
-        await apply_facet_rules_to_metadata(session, meta)
+        await apply_facet_rules_to_metadata(session, meta, rules_by_kind)
         await sync_metadata_facets(session, meta)
         await session.flush()
         return meta, any(_image_signature(meta))

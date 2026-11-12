@@ -5,7 +5,7 @@ from fastapi import APIRouter, HTTPException, Query, Response
 from sqlalchemy.exc import IntegrityError
 
 from ...db import Feed, FeedItem, FeedItemReadState, FeedItemState, TaskType
-from ...handlers.models import CacheKind, ScrapePayload, build_feed_scrape_payload
+from ...handlers.models import ScrapePayload, build_feed_scrape_payload
 from ...parsing import ContentType
 from ...utils.model import to_resp
 from ..deps import RepoDep, RuntimeDep
