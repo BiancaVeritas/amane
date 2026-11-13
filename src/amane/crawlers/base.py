@@ -126,6 +126,15 @@ class Crawler(ABC):
     @abstractmethod
     async def _scrape(self, url: str, options: FetchOptions | None = None) -> MediaMetadata | None: ...
 
+    async def scrape_url(self, url: str) -> MediaMetadata | None:
+        """从一个来源页地址取元数据.
+
+        手动搜索粘整条地址时用它: 地址里往往只有站点内部 ID (javdb 的 ``/v/dgVq9``),
+        按番号搜不到, 得先打开页面读出番号. 基类按「地址里就有番号」处理 (``/movies/abp-123/``
+        这类), 站点结构不同时由子类覆盖.
+        """
+        return await self._scrape(url)
+
 
 if TYPE_CHECKING:
     # 结构性协议没有运行期检查: 在此静态断言实例满足聚合引擎与连通性编排声明的协议.

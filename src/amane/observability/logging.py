@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING
 import structlog
 
 from ..events import EventType
+from ..utils.path import to_forward_slash
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -35,6 +36,22 @@ def _timestamp(
     return event_dict
 
 
+#: 值一定是路径的日志字段. 库里库根存 `/`, 而索引与扫描产物在 Windows 上带 `\`,
+#: 同一份日志里两种写法并存看着像出错; 在这里统一, 免得每个调用点各转一次.
+_PATH_FIELDS = frozenset({"path", "scope", "watch_path", "source", "dest", "target", "library_path"})
+
+
+def _forward_slash_paths(
+    _logger: logging.Logger, _method_name: str, event_dict: structlog.typing.EventDict
+) -> structlog.typing.EventDict:
+    """把路径字段的分隔符统一成 ``/``."""
+    for field in _PATH_FIELDS:
+        value = event_dict.get(field)
+        if isinstance(value, str):
+            event_dict[field] = to_forward_slash(value) or value
+    return event_dict
+
+
 # 共享处理器链 (渲染前注入上下文). app.log / task.log 的 foreign_pre_chain 也复用这份,
 # 否则 stdlib 记录落盘时没有 level / logger / timestamp, 与 WS 事件不同形.
 SHARED_PROCESSORS: tuple[structlog.types.Processor, ...] = (
@@ -42,6 +59,7 @@ SHARED_PROCESSORS: tuple[structlog.types.Processor, ...] = (
     structlog.stdlib.add_logger_name,
     structlog.stdlib.add_log_level,
     _timestamp,
+    _forward_slash_paths,
     structlog.processors.StackInfoRenderer(),
     structlog.processors.ExceptionRenderer(),
     structlog.stdlib.ExtraAdder(),

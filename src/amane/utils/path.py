@@ -90,6 +90,25 @@ def nfc_path(path: str) -> str:
     return unicodedata.normalize("NFC", path)
 
 
+def to_forward_slash(value: str | None) -> str | None:
+    """路径统一用 ``/`` 分隔; 反斜杠 (含 UNC 前缀) 就地转换.
+
+    从 Windows 复制的路径带反斜杠, 直接存下来会让同一目录出现两种写法, 并排展示时也像写错;
+    比较与前缀判断一律走 ``path_key`` / ``is_descendant``, 它们不区分这两种分隔符.
+    """
+    if value is None:
+        return None
+    converted = value.strip().replace("\\", "/")
+    if not converted:
+        return None
+    # UNC 前缀 \\host 转完是 //host, 保留它; 其余重复斜杠收敛成一个.
+    prefix = "//" if converted.startswith("//") else ""
+    body = converted[len(prefix) :]
+    while "//" in body:
+        body = body.replace("//", "/")
+    return prefix + body
+
+
 def path_forms(path: str | Path) -> tuple[Path, ...]:
     """磁盘 I/O 候选: 传入形式, 再补规范等价的 NFC / NFD (去重, 保序)."""
     raw = os.fspath(path)

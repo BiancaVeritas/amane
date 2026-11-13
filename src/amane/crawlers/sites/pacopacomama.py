@@ -3,8 +3,7 @@
 from __future__ import annotations
 
 import re
-from html.parser import HTMLParser
-from urllib.parse import urljoin
+from typing import Any
 
 from ...enums import SiteName
 from ..base import Crawler, CrawlerProfile
@@ -12,6 +11,10 @@ from ..models import FetchOptions, MediaMetadata, SearchQuery, film_actors
 
 _BASE_URL = "https://www.pacopacomama.com"
 _DETAIL_PATH = "/dyn/phpauto/movie_details/movie_id/{}.json"
+_GALLERY_PATH = "/dyn/phpauto/movie_galleries/movie_id/{}.json"
+#: 剧照在站点的 sample 目录下按站点再分一层, paco 用 ``l`` (1pondo 用 ``popu``).
+_GALLERY_DIR = "l"
+_GALLERY_IMAGE_PATH = "/assets/sample/{}/{}/{}"
 _NUMBER_RE = re.compile(r"[0-9]{6}_[0-9]{3}")
 
 
@@ -26,29 +29,32 @@ def _strings(value: object) -> list[str]:
     return [item.strip() for item in value if isinstance(item, str) and item.strip()]
 
 
-class _PublicGalleryParser(HTMLParser):
-    """Collect only full-size images exposed as public gallery click targets."""
+def _public_gallery(data: Any, number: str, base_url: str, gallery_dir: str) -> list[str]:
+    """公开剧照地址: 站点页面不渲染这段, 只能由剧照接口的标记拼出.
 
-    def __init__(self) -> None:
-        super().__init__(convert_charrefs=True)
-        self.urls: list[str] = []
-
-    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        if tag.lower() != "img":
-            return
-        values = dict(attrs)
-        classes = set((values.get("class") or "").split())
-        src = values.get("data-vue-img-src")
-        if "gallery-image" not in classes or "pointer" not in classes or not src:
-            return
-        if src not in self.urls:
-            self.urls.append(src)
-
-
-def _public_gallery(html: str, page_url: str) -> list[str]:
-    parser = _PublicGalleryParser()
-    parser.feed(html)
-    return [urljoin(page_url, item) for item in parser.urls]
+    受保护的文件需要登录才能取, 直接拼地址会得到 404; 站点把两者混在同一列表里, 只能按标记筛.
+    """
+    if not isinstance(data, dict):
+        return []
+    rows = data.get("Rows")
+    if not isinstance(rows, list):
+        return []
+    urls: list[str] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        if row.get("Protected") is not False:
+            continue
+        # 列表可能混入别的条目, 只认本次番号.
+        if row.get("MovieID") != number:
+            continue
+        filename = row.get("Filename")
+        if not isinstance(filename, str) or not filename.strip():
+            continue
+        url = f"{base_url}{_GALLERY_IMAGE_PATH.format(number, gallery_dir, filename.strip())}"
+        if url not in urls:
+            urls.append(url)
+    return urls
 
 
 class PacopacomamaCrawler(Crawler):
@@ -59,6 +65,13 @@ class PacopacomamaCrawler(Crawler):
     def _detail_url(self, number: str) -> str | None:
         exact = _number(number)
         return f"{self.base_url}{_DETAIL_PATH.format(exact)}" if exact else None
+
+    async def scrape_url(self, url: str) -> MediaMetadata | None:
+        """页面地址换成本站详情 JSON 再解析: ``_scrape`` 只认 JSON URL."""
+        match = re.search(r"/movies/([^/]+)/?$", url)
+        number = _number(match.group(1)) if match else None
+        detail = self._detail_url(number) if number else None
+        return await self._scrape(detail) if detail else None
 
     async def _search(self, query: SearchQuery, options: FetchOptions | None = None) -> str | None:
         del options
@@ -93,8 +106,17 @@ class PacopacomamaCrawler(Crawler):
             None,
         )
         page_url = f"{self.base_url}/movies/{requested_number}/"
-        html = await self.client.get_html(page_url)
-        extrafanart = _public_gallery(html, page_url)
+        try:
+            gallery = await self.client.get_json(
+                f"{self.base_url}{_GALLERY_PATH.format(requested_number)}",
+                headers={"Accept": "application/json", "Referer": page_url},
+            )
+        except Exception as e:
+            # 剧照是补充信息: 接口不可用时不拖累其余字段.
+            self.logger.warning("剧照接口不可用", number=requested_number, error=str(e))
+            extrafanart: list[str] = []
+        else:
+            extrafanart = _public_gallery(gallery, requested_number, self.base_url, _GALLERY_DIR)
         tags = list(dict.fromkeys(_strings(data.get("UCNAME"))))
         series = data.get("Series")
         actors = _strings(data.get("ActressesJa"))

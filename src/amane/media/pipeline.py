@@ -132,6 +132,7 @@ async def materialize_images(
     data_dir: Path,
     *,
     content_type: ContentType | None = None,
+    image_content_type: ContentType | None = None,
     extrafanart_urls: dict[str, list[str]] | None = None,
     recrop: bool = False,
     crop_rule: PosterCropRule | None = None,
@@ -143,6 +144,10 @@ async def materialize_images(
     extrafanart 仅下载到 Resource, 站点分组结构不重排.
 
     ``crop_rule`` 命中时按规则给的固定窗口裁海报, 优先于人脸检测.
+
+    ``content_type`` 是条目类型, 决定是否自动裁切; ``image_content_type`` 是图片排布口径
+    (无码单图对齐后被改写为 ``WESTERN``), 只决定无码独立裁切比例, 缺省取 ``content_type``.
+    两者必须分开: 按排布口径判定放行会让全部单图无码停止裁切.
     """
     kinds = set(config.scraping.download_resources)
 
@@ -168,10 +173,14 @@ async def materialize_images(
         if thumb_local is None and thumb_urls:
             thumb_src, thumb_local = await _acquire_first(thumb_urls, store, client)
 
-        if config.scraping.crop_poster and thumb_local and allows_poster_crop(content_type):
+        if (
+            config.scraping.crop_poster
+            and thumb_local
+            and allows_poster_crop(content_type, config.scraping.poster_crop_types)
+        ):
             ratio = (
                 config.scraping.uncensored_poster_ratio
-                if content_type == ContentType.UNCENSORED
+                if (image_content_type or content_type) == ContentType.UNCENSORED
                 else config.scraping.poster_ratio
             )
             local_thumb = thumb_local

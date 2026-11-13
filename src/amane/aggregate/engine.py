@@ -154,6 +154,45 @@ async def aggregate(
     )
 
 
+def aggregate_single(
+    query: SearchQuery,
+    site: str,
+    data: MediaMetadata,
+    field_priority: FieldPriority,
+) -> AggregateResult:
+    """只用一家来源的结果装配成 AggregateResult.
+
+    「添加来源链接」用它: 用户贴了一条地址, 就只按这一条填, 不把其余来源重新问一遍.
+    拼装走与 ``aggregate`` 同一套函数, 保证单源与多源的取值口径一致.
+    """
+    graph = build_graph(field_priority, {})
+    state = ExecutionState(number=query.number)
+    state.fetched[site] = data
+    state.sites_queried.append(site)
+
+    for field in SCALAR_FIELDS:
+        for node in graph.field_chains[field]:
+            if node.cache_key != site:
+                continue
+            value = (data.series_names or data.series) if field == MetadataField.SERIES else getattr(data, field, None)
+            if value:
+                _fill_scalar(state.result, field, data, site)
+            break
+
+    _assemble_aggregate_fields(graph, state)
+    _fill_actor_genders(state.result, state.fetched)
+    _sanitize_aggregated_lists(state.result)
+
+    return AggregateResult(
+        metadata=state.result,
+        field_sources=state.result.field_sources,
+        failed_sites=[],
+        sites_queried=[site],
+        raw={site: data.model_dump()},
+        log="",
+    )
+
+
 def _resolved_scalar_count(result: AggregatedMetadata) -> int:
     return sum(1 for field in SCALAR_FIELDS if field in result.field_sources)
 

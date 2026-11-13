@@ -423,6 +423,13 @@ class ScrapingConfig(BaseModel):
     )
     crop_poster: bool = True
 
+    poster_crop_types: list[ContentType] = Field(
+        # 默认放行传统 JAV 与 FC2: 它们的封面是横版夹页, 右侧 height × poster_ratio 即竖版海报.
+        default_factory=lambda: [ContentType.CENSORED, ContentType.UNCENSORED, ContentType.FC2],
+        json_schema_extra={"x-hidden": True},
+    )
+    """自动裁切放行的内容类型; 与 crop_poster 是「与」关系. 列表为空则一律不裁."""
+
     poster_ratio: float = Field(default=0.7, ge=0.3, le=1.0)
     """日本有码等常规影片的海报裁剪宽高比 (w/h). 默认 0.7."""
 
@@ -514,6 +521,18 @@ class ScrapingConfig(BaseModel):
     @classmethod
     def _complete_field_language(cls, v: Any) -> Any:
         return _complete_frozen_dict(v, {f: Language.ZH_CN for f in MetadataField if f in LANG_METADATA_FIELD_SET})
+
+    @field_validator("poster_crop_types", mode="before")
+    @classmethod
+    def _drop_unknown_poster_crop_types(cls, v: Any) -> Any:
+        """丢弃已删除的类型取值.
+
+        配置里残留旧类型时按枚举校验会让**整份配置**加载失败, 服务随之起不来; 这里只丢那一项.
+        """
+        if not isinstance(v, list):
+            return v
+        known = {ct.value for ct in ContentType}
+        return [item for item in v if isinstance(item, ContentType) or (isinstance(item, str) and item in known)]
 
     @field_validator("site_config", mode="before")
     @classmethod

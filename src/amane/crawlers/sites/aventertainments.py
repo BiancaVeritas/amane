@@ -250,6 +250,13 @@ def _metadata_from_page(url: str, text: str) -> MediaMetadata | None:
     studio = _label_value(html, "スタジオ") or None
     series = _label_value(html, "シリーズ") or None
 
+    # 剧照在「サンプル画像」弹窗里, 是一串 screenshot 图; 详情页本身不展示它们.
+    extrafanart = [
+        urljoin(url, src)
+        for src in html.xpath("//div[contains(@class,'modal-body')]//img[contains(@src,'/screenshot/')]/@src").getall()
+        if _text(src)
+    ]
+
     # Confirmed mapping: Jacket = original poster; Bigcover = double-page cover.
     return MediaMetadata(
         number=number,
@@ -267,6 +274,7 @@ def _metadata_from_page(url: str, text: str) -> MediaMetadata | None:
         double_page_poster_urls=[jacket] if jacket and bigcover else [],
         double_page_original_poster_urls=[jacket] if jacket and bigcover else [],
         double_page_thumb_urls=[bigcover] if jacket and bigcover else [],
+        extrafanart=list(dict.fromkeys(extrafanart)),
         external_id=(parse_qs(urlparse(url).query).get("pro") or [None])[0],
         source_url=url,
     )

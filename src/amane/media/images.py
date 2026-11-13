@@ -1,6 +1,6 @@
 """海报裁剪与封面角标. 判定函数只依赖尺寸与阈值."""
 
-from collections.abc import Mapping
+from collections.abc import Collection, Mapping
 from pathlib import Path
 from typing import Literal
 
@@ -17,19 +17,15 @@ logger = structlog.get_logger()
 _DEFAULT_POSTER_RATIO = 0.7
 _DEFAULT_JPEG_QUALITY = 95
 
-# 自动裁切假定封面是横版夹页: 右侧 height × poster_ratio 为竖版海报. 传统 JAV 与 FC2 符合;
-# 欧美 / 国产 / 动漫 / 素人的封面不保证是夹页, 裁了会切掉人像.
-_AUTO_CROP_CONTENT_TYPES: frozenset[ContentType] = frozenset(
-    {ContentType.CENSORED, ContentType.UNCENSORED, ContentType.FC2}
-)
-
 # 与自动右侧比 `0.7000` 共存于 op=crop.
 CROP_BOX_ARGS_PREFIX = "box:"
 
 
-def allows_poster_crop(content_type: ContentType) -> bool:
-    """自动裁切只对封面为横版夹页的类型启用."""
-    return content_type in _AUTO_CROP_CONTENT_TYPES
+def allows_poster_crop(content_type: ContentType | None, allowed: Collection[ContentType]) -> bool:
+    """自动裁切只对放行集内的类型启用; 类型未知不裁."""
+    return content_type is not None and content_type in allowed
+
+
 # 派生键中附加的变换: 顺时针旋转.
 _CROP_ROTATION_TOKEN = "r"
 
