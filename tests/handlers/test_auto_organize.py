@@ -85,7 +85,8 @@ async def test_auto_organize_chains_single_file_scope(repo: Repository, tmp_path
     organize = _organize_followups(result)
     assert len(organize) == 1
     assert organize[0].key == f"organize:{media_id}"
-    assert organize[0].priority == -1
+    # 与影片任务同档: 排在最低时会被后续刮削一直压住, 文件长时间停在「已刮削未落盘」.
+    assert organize[0].priority == 0
     assert organize[0].payload["library_id"] == lib_id
     assert organize[0].payload["media_file_ids"] == [media_id]
 

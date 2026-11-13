@@ -756,7 +756,9 @@ class ScrapeHandler(TaskHandler[ScrapePayload, ScrapeResult]):
         范围只有该文件, 且后继只在父成功后创建, 因此整理必然发生在它刮削完成之后.
         按番号刮削没有可落盘的 `MediaFile` (库因此未知), 不在此列; `media_file_id` 非空但读不到
         文件或库说明索引与任务不一致, 记 debug 后不链.
-        ``priority=-1``: 不抢占交互提交的任务; 自动整理彼此仍按 FIFO.
+        ``priority=0``: 与影片任务同档. 早先排最低 (-1), 结果是只要还有刮削排队,
+        整理就一直轮不上 —— 每个刮削都派发一条整理, 而刮削一批要几十分钟,
+        文件长时间停在「已刮削未落盘」.
 
         整段 ``except`` 只为不让已写库的刮削任务转为 FAILED; 这一支不可达于任何预期输入, 出现即模型或
         数据库有问题, 按异常记日志. 此时整理不会发生, 该文件停在「已刮削未落盘」, 与完成事务失败同属不覆盖窗口.
@@ -772,7 +774,7 @@ class ScrapeHandler(TaskHandler[ScrapePayload, ScrapeResult]):
                 key=f"organize:{file.id}",
                 task_type=TaskType.ORGANIZE,
                 payload=organize.model_dump(mode="json"),
-                priority=-1,
+                priority=0,
             )
         ]
 
