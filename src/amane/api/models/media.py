@@ -1,11 +1,12 @@
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from ...db import MediaFile, MediaFileStatus
 from ...parsing import ContentType, Mosaic, MosaicNature, mosaic_nature, shows_uncensored
 from ...utils.model import create_partial_model, to_resp
+from ...utils.path import to_forward_slash
 
 
 class MediaFileResponse(BaseModel):
@@ -27,6 +28,16 @@ class MediaFileResponse(BaseModel):
     metadata_id: int | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
+
+    @field_validator("path", mode="after")
+    @classmethod
+    def _forward_slash(cls, v: str) -> str:
+        """路径一律按 ``/`` 下发.
+
+        索引入库时写的是扫描得到的真实路径 (Windows 上是反斜杠), 而库根统一存 ``/``;
+        两者在同一页面上并列显示会像写错了, 前端也只按 ``/`` 拼展示.
+        """
+        return to_forward_slash(v) or v
 
 
 def to_media_file_response(media: MediaFile, content_type: ContentType | None = None) -> MediaFileResponse:

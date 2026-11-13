@@ -49,10 +49,9 @@ async def list_libraries(repo: RepoDep) -> LibraryListResponse:
 
 @router.post("", status_code=201)
 async def create_library(req: LibraryCreateRequest, repo: RepoDep, runtime: RuntimeDep) -> LibraryResponse:
-    # 分隔符统一成 /: 从 Windows 复制的反斜杠路径就地转换, 免得库里出现两种写法.
-    watch_path = to_forward_slash_path(req.watch_path)
-    # 校验路径: 须存在、是目录、位于 safe_dirs 内
+    # 校验路径: 须存在、是目录、位于 safe_dirs 内. 分隔符与真实路径的归一在 repo 层写入时做.
     await validate_directory_path(req.path, runtime.safe_dirs)
+    watch_path = to_forward_slash_path(req.watch_path)
 
     name = req.name or Path(req.path).name
 

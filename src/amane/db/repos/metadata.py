@@ -91,15 +91,20 @@ def _facet_link_condition(
     link_metadata_id: Mapped[int],
     facet_column: Mapped[int],
     facet_ids: Sequence[int] | None,
+    *,
+    any_of: bool = False,
 ) -> ColumnElement[bool] | None:
-    """同一 kind 的多个 id 聚合成一条子查询: 条目必须挂满全部去重后的 id (AND).
+    """同一 kind 的多个 id 聚合成一条子查询.
 
-    逐 id 各生成一条子查询会线性增加表达式深度, 约 1000 个 id 时 SQLite 报表达式过大;
-    聚合写法的语义不变: 未知 id 使计数不足, 结果为空; 空入参不生成条件.
+    默认 AND: 条目必须挂满全部去重后的 id. ``any_of`` 时改为 OR (命中任一即可) ——
+    用于「按展示名合并的标签」: 那些 id 本就是同一个概念的不同写法, 取交集只会得到空集.
+    逐 id 各生成一条子查询会线性增加表达式深度, 约 1000 个 id 时 SQLite 报表达式过大.
     """
     id_list = list(unique_ids(facet_ids))
     if not id_list:
         return None
+    if any_of:
+        return col(Metadata.id).in_(select(link_metadata_id).where(facet_column.in_(id_list)).distinct())
     matched = (
         select(link_metadata_id)
         .where(facet_column.in_(id_list))
@@ -175,6 +180,7 @@ class MetadataRepoMixin(RepositoryMixinBase):
         actor_ids: Sequence[int] | None = None,
         director_ids: Sequence[int] | None = None,
         tag_ids: Sequence[int] | None = None,
+        tag_any_ids: Sequence[int] | None = None,
         studio_ids: Sequence[int] | None = None,
         publisher_ids: Sequence[int] | None = None,
         series_ids: Sequence[int] | None = None,
@@ -204,13 +210,15 @@ class MetadataRepoMixin(RepositoryMixinBase):
             conditions.append(
                 or_(col(Metadata.number).ilike(search_pattern), col(Metadata.title).ilike(search_pattern))
             )
-        for link_metadata_id, facet_column, facet_ids in (
-            (col(MetadataActor.metadata_id), col(MetadataActor.actor_id), actor_ids),
-            (col(MetadataDirector.metadata_id), col(MetadataDirector.director_id), director_ids),
-            (col(MetadataTag.metadata_id), col(MetadataTag.tag_id), tag_ids),
-            (col(MetadataUserTag.metadata_id), col(MetadataUserTag.user_tag_id), user_tag_ids),
+        for link_metadata_id, facet_column, facet_ids, any_of in (
+            (col(MetadataActor.metadata_id), col(MetadataActor.actor_id), actor_ids, False),
+            (col(MetadataDirector.metadata_id), col(MetadataDirector.director_id), director_ids, False),
+            (col(MetadataTag.metadata_id), col(MetadataTag.tag_id), tag_ids, False),
+            # 按展示名合并的标签: 同一概念的多个 id 取并集, 取交集必空.
+            (col(MetadataTag.metadata_id), col(MetadataTag.tag_id), tag_any_ids, True),
+            (col(MetadataUserTag.metadata_id), col(MetadataUserTag.user_tag_id), user_tag_ids, False),
         ):
-            condition = _facet_link_condition(link_metadata_id, facet_column, facet_ids)
+            condition = _facet_link_condition(link_metadata_id, facet_column, facet_ids, any_of=any_of)
             if condition is not None:
                 conditions.append(condition)
         studio_names = await resolve_scalar_facet_names(session, Studio, studio_ids)
@@ -270,6 +278,7 @@ class MetadataRepoMixin(RepositoryMixinBase):
         actor_ids: Sequence[int] | None = None,
         director_ids: Sequence[int] | None = None,
         tag_ids: Sequence[int] | None = None,
+        tag_any_ids: Sequence[int] | None = None,
         studio_ids: Sequence[int] | None = None,
         publisher_ids: Sequence[int] | None = None,
         series_ids: Sequence[int] | None = None,
@@ -295,6 +304,7 @@ class MetadataRepoMixin(RepositoryMixinBase):
                 actor_ids=actor_ids,
                 director_ids=director_ids,
                 tag_ids=tag_ids,
+            tag_any_ids=tag_any_ids,
                 studio_ids=studio_ids,
                 publisher_ids=publisher_ids,
                 series_ids=series_ids,
@@ -333,6 +343,7 @@ class MetadataRepoMixin(RepositoryMixinBase):
         actor_ids: Sequence[int] | None = None,
         director_ids: Sequence[int] | None = None,
         tag_ids: Sequence[int] | None = None,
+        tag_any_ids: Sequence[int] | None = None,
         studio_ids: Sequence[int] | None = None,
         publisher_ids: Sequence[int] | None = None,
         series_ids: Sequence[int] | None = None,
@@ -356,6 +367,7 @@ class MetadataRepoMixin(RepositoryMixinBase):
                 actor_ids=actor_ids,
                 director_ids=director_ids,
                 tag_ids=tag_ids,
+            tag_any_ids=tag_any_ids,
                 studio_ids=studio_ids,
                 publisher_ids=publisher_ids,
                 series_ids=series_ids,
