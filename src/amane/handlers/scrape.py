@@ -1,12 +1,23 @@
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, Protocol
+from unicodedata import category as unicode_category
+from urllib.parse import urlsplit
 
 from structlog.contextvars import bind_contextvars
 
-from ..aggregate import SCALAR_FIELDS, AggregatedMetadata, CrawlerLike, FieldLanguage, aggregate, compile_priority
-from ..crawlers.models import SearchQuery
-from ..crawlers.site_roles import builtin_descriptors
+from ..aggregate import (
+    SCALAR_FIELDS,
+    AggregatedMetadata,
+    CrawlerLike,
+    FieldLanguage,
+    aggregate,
+    aggregate_single,
+    compile_priority,
+)
+from ..crawlers.base import Crawler
+from ..crawlers.models import MediaMetadata, SearchQuery
+from ..crawlers.site_roles import FILM_METADATA_SITES, builtin_descriptors
 from ..db.models import MediaFileStatus, MediaIdentityType, TaskType
 from ..db.repo_types import WriteMode
 from ..enums import ActorGender, MetadataField, SiteName
@@ -67,23 +78,75 @@ class CrawlerFactoryLike(Protocol):
     async def get_crawlers(self, names: Iterable[str]) -> dict[str, CrawlerLike]: ...
 
 
+def _searchable_title(title: str | None) -> str | None:
+    """去掉标题里的标点, 留作搜索词.
+
+    站点标题常带 ``【】``、``！``、``・`` 这类装饰, 原样拿去搜别的站几乎搜不到;
+    去掉标点后主体词相同, 命中率高得多. 空白折叠成一个, 避免多段拼接出怪词.
+    """
+    if not title:
+        return None
+    cleaned = "".join(" " if ch.isspace() else ch for ch in title if not unicode_category(ch).startswith("P"))
+    collapsed = " ".join(cleaned.split())
+    return collapsed or None
+
+
+def _preview_item(site: str, meta: MediaMetadata) -> dict:
+    """预览项: 只带界面挑选用得上的字段."""
+    return {
+        "site": site,
+        "number": meta.number,
+        "title": meta.title,
+        "release": meta.release,
+        "studio": meta.studio,
+        "poster_url": meta.poster_urls[0] if meta.poster_urls else None,
+        "thumb_url": meta.thumb_urls[0] if meta.thumb_urls else None,
+        "source_url": meta.source_url,
+    }
+
+
+def _same_site(host: str, base_host: str) -> bool:
+    """两个主机是否属于同一站点: 相等, 或一方是另一方的子域.
+
+    站点的 base_url 常带 ``www.`` 而用户粘的地址不一定带; 反过来 my.tokyo-hot.com
+    这类子域也可能是唯一入口, 所以按后缀匹配而不要求逐字相等.
+    """
+    host = host.removeprefix("www.")
+    base_host = base_host.removeprefix("www.")
+    return host == base_host or host.endswith(f".{base_host}") or base_host.endswith(f".{host}")
+
+
 def _prioritize_source_urls(
     source_urls: dict[str, str],
     field_sources: dict[str, str],
     *,
     manual: bool,
     preferred_site: str | None = None,
+    route: Sequence[SiteName | str] | None = None,
 ) -> dict[str, str]:
-    """手动搜索时把用户选中的站点排到最前.
+    """按当前类型路由的顺序排列来源链接.
 
-    来源列表按 dict 插入顺序展示; 手动搜索里用户已经挑了具体一条, 那一条就该在最前.
-    没指定站点时退回「按贡献字段排序」, 非手动保持原顺序免得自动刮削结果抖动.
+    来源列表按 dict 插入顺序展示, 而聚合写入是「先到先得」—— 谁先返回结果谁排前面,
+    于是顺序取决于各站响应快慢, 改了路由顺序也不变. 给了 ``route`` 就按路由排,
+    路由里没有的站点接在末尾 (保持它们之间的相对顺序).
+
+    手动搜索仍优先把它选中的那一条提到最前: 用户已经挑了具体来源, 那条就该在最前.
     """
-    if not manual or not source_urls:
+    if not source_urls:
         return source_urls
-    if preferred_site and preferred_site in source_urls:
+    if manual and preferred_site and preferred_site in source_urls:
         first = {preferred_site: source_urls[preferred_site]}
         return {**first, **{k: v for k, v in source_urls.items() if k != preferred_site}}
+    if route:
+        order = {str(site): idx for idx, site in enumerate(route)}
+        known = sorted(
+            (site for site in source_urls if site in order),
+            key=lambda site: order[site],
+        )
+        unknown = [site for site in source_urls if site not in order]
+        return {site: source_urls[site] for site in [*known, *unknown]}
+    if not manual:
+        return source_urls
     used = {site for site in field_sources.values() if site}
     if not used:
         return source_urls
@@ -92,7 +155,16 @@ def _prioritize_source_urls(
     return {**first, **rest}
 
 
+def _append_new_sources(existing: dict[str, str], fresh: dict[str, str]) -> dict[str, str]:
+    """把 ``fresh`` 里既有列表没有的站点追加到 ``existing`` 末尾.
 
+    已有站点的地址保持原位 (哪怕 ``fresh`` 给了新地址): 「添加来源链接」只补链接,
+    不改既有顺序, 也不让这次抓到的地址顶掉已记录的来源.
+    """
+    merged = dict(existing)
+    for site, url in fresh.items():
+        merged.setdefault(site, url)
+    return merged
 
 
 class ScrapeHandler(TaskHandler[ScrapePayload, ScrapeResult]):
@@ -123,10 +195,22 @@ class ScrapeHandler(TaskHandler[ScrapePayload, ScrapeResult]):
         self._partial_sources = frozenset(d.id for d in catalog if SourceTrait.NEEDS_PARTIAL in d.traits)
         self._file_hash_sources = frozenset(d.id for d in catalog if SourceTrait.USES_FILE_HASH in d.traits)
 
-    async def preview(self, number: str, content_type: ContentType) -> list[dict]:
-        """只抓不写: 按番号问一遍各来源, 把命中项原样交回调用方.
+    async def preview(self, input_text: str, content_type: ContentType) -> list[dict]:
+        """只抓不写: 把命中项原样交回调用方.
 
         手动搜索要让用户先挑再落库, 所以这里不碰 DB / 文件; 数据交回 UI 由用户决定.
+        输入可以是番号, 也可以是来源页地址 —— 后者先打开页面读出番号, 再按番号问各来源:
+        地址里往往只有站点内部 ID (javdb 的 ``/v/dgVq9``), 拿它当番号哪个来源都搜不到.
+        """
+        url = input_text.strip()
+        if url.startswith(("http://", "https://")):
+            return await self._preview_url(url, content_type)
+        return await self._preview_number(url, content_type)
+
+    async def _preview_number(self, term: str, content_type: ContentType) -> list[dict]:
+        """拿一个搜索词问当前类型路由里的每个来源.
+
+        ``term`` 通常是番号; 番号对不上时也接受去标点的标题 —— 各站自己的搜索逻辑决定能否命中.
         """
         route = self._config.scraping.content_routes.get(content_type)
         if not route:
@@ -134,7 +218,7 @@ class ScrapeHandler(TaskHandler[ScrapePayload, ScrapeResult]):
         crawlers = await self._factory.get_crawlers(route)
         if not crawlers:
             return []
-        q = SearchQuery(number, None, None, content_type)
+        q = SearchQuery(term, None, None, content_type)
         out: list[dict] = []
         for name, crawler in crawlers.items():
             try:
@@ -143,19 +227,83 @@ class ScrapeHandler(TaskHandler[ScrapePayload, ScrapeResult]):
                 continue
             if meta is None:
                 continue
-            out.append(
-                {
-                    "site": name,
-                    "number": meta.number,
-                    "title": meta.title,
-                    "release": meta.release,
-                    "studio": meta.studio,
-                    "poster_url": meta.poster_urls[0] if meta.poster_urls else None,
-                    "thumb_url": meta.thumb_urls[0] if meta.thumb_urls else None,
-                    "source_url": meta.source_url,
-                }
-            )
+            out.append(_preview_item(name, meta))
         return out
+
+    async def _preview_url(self, url: str, content_type: ContentType) -> list[dict]:
+        """打开地址读出番号/标题, 再拿它们问当前类型路由里的其余来源.
+
+        找地址属于哪一家用与「添加来源链接」同一套三级查找; 之后按番号搜, 没有番号就用
+        去标点的标题搜 —— 贴进来的页面往往只有一个站认识, 用户要的却是各站的对照.
+        """
+        route = self._config.scraping.content_routes.get(content_type) or []
+        crawlers = await self._factory.get_crawlers(route)
+        found = await self._scrape_one_source(url, crawlers, content_type, any_site=True)
+        if found is None:
+            return []
+        name, meta = found
+        # 地址那一家的结果先放进去, 它是用户亲手贴的, 最可能是想要的.
+        out = [_preview_item(name, meta)]
+        seen = {name}
+        # 番号为主, 标题只兜底: 有番号时各站都能按番号精确命中, 再按标题搜一轮只会多出
+        # 一堆噪声命中 (标题里的通用词能匹配到别的片).
+        term = meta.number.strip() or _searchable_title(meta.title)
+        # 只有当前类型的路由: 拿别类型的站去搜会混进别的类型的结果.
+        if term:
+            for item in await self._preview_number(term, content_type):
+                if item["site"] not in seen:
+                    seen.add(item["site"])
+                    out.append(item)
+        return out
+
+    async def _scrape_one_source(
+        self,
+        url: str,
+        crawlers: Mapping[str, CrawlerLike],
+        content_type: ContentType,
+        *,
+        any_site: bool = False,
+    ) -> tuple[str, MediaMetadata] | None:
+        """按域名找到能解析这个地址的那一家.
+
+        查找顺序 (``any_site`` 时逐级退让):
+        1. 本次类型路由内的来源 —— 用户给的类型决定了哪些站可比;
+        2. 全部类型路由的并集 —— 别处配置过的站同样能解析这个域名;
+        3. 兜底解析器 —— 地址属于哪个站都不会被路由配置挡住.
+        """
+        host = (urlsplit(url).hostname or "").casefold()
+        if not host:
+            return None
+        found = await self._first_matching_crawler(url, host, crawlers)
+        if found is not None or not any_site:
+            return found
+        # 第二级: 所有路由里配置过的站. 只在当前类型里找不到时才查, 免得本该按当前类型判定
+        # 的地址被别的类型抢走.
+        configured = {str(site) for route in self._config.scraping.content_routes.values() for site in route}
+        if configured:
+            known = await self._factory.get_crawlers(sorted(configured))
+            found = await self._first_matching_crawler(url, host, known)
+            if found is not None:
+                return found
+        # 第三级: 兜底解析器, 与路由无关.
+        everything = await self._factory.get_crawlers([str(site) for site in FILM_METADATA_SITES])
+        return await self._first_matching_crawler(url, host, everything)
+
+    async def _first_matching_crawler(
+        self, url: str, host: str, crawlers: Mapping[str, CrawlerLike]
+    ) -> tuple[str, MediaMetadata] | None:
+        for name, crawler in crawlers.items():
+            if not isinstance(crawler, Crawler):
+                continue
+            if not _same_site(host, urlsplit(crawler.base_url).hostname or ""):
+                continue
+            try:
+                meta = await crawler.scrape_url(url)
+            except Exception:
+                continue
+            if meta is not None:
+                return name, meta
+        return None
 
     async def handle(self, payload: ScrapePayload) -> TaskResult[ScrapeResult]:
         bind_contextvars(number=payload.number)
@@ -264,7 +412,9 @@ class ScrapeHandler(TaskHandler[ScrapePayload, ScrapeResult]):
 
         # WESTERN raw 只能在番号一致且当前 OSHASH 已关联到目标 Metadata 时复用.
         # metadata_id / ThePornDB UUID 本身是作品身份, 但不能证明 raw 快照对应当前文件.
-        use_metadata_cache = CacheKind.metadata in payload.use_cache
+        # 手动刮削要覆盖元数据, 因此不复用 raw 快照: 缓存命中会让这次「刮」变成「读上次的旧值」,
+        # 用户点完看不出任何变化. 译文缓存仍按 use_cache 走, 它不影响字段真值.
+        use_metadata_cache = CacheKind.metadata in payload.use_cache and not payload.manual
         db_data = None
         if use_metadata_cache:
             if payload.content_type == ContentType.WESTERN:
@@ -318,16 +468,25 @@ class ScrapeHandler(TaskHandler[ScrapePayload, ScrapeResult]):
             await self.report_progress(current, progress_total, message)
 
         # 出站: 执行获取图 (execute_graph), 声明依赖的来源在第二段; 按 use_cache 复用 raw 快照.
-        result = await aggregate(
-            q,
-            crawlers,
-            field_priority,
-            field_language,
-            db_data.raw if db_data else None,
-            on_progress=_on_fetch_progress,
-            multi_lang_sites=self._multi_language_sources,
-            deferred_sites=frozenset(name for name in crawlers if name in self._partial_sources),
-        )
+        if payload.source_url:
+            # 「添加来源链接」只抓用户贴的那一条: 不走类型路由, 不把全部来源重新问一遍.
+            # any_site: 路由里没有这一家时也要去全部影片来源里找 —— 用户贴的链接就是权威.
+            single = await self._scrape_one_source(payload.source_url, crawlers, content_type, any_site=True)
+            if single is None:
+                return TaskResult(success=False, error=f"无法从该地址取到 {payload.number} 的元数据")
+            fetched_site, fetched_meta = single
+            result = aggregate_single(q, fetched_site, fetched_meta, field_priority)
+        else:
+            result = await aggregate(
+                q,
+                crawlers,
+                field_priority,
+                field_language,
+                db_data.raw if db_data else None,
+                on_progress=_on_fetch_progress,
+                multi_lang_sites=self._multi_language_sources,
+                deferred_sites=frozenset(name for name in crawlers if name in self._partial_sources),
+            )
 
         # 站点结果已由引擎 _fetch_one 逐条上报到 summary.outcomes; 这里只记录调度顺序.
         rec.update_summary(sites_queried=list(result.sites_queried))
@@ -394,7 +553,8 @@ class ScrapeHandler(TaskHandler[ScrapePayload, ScrapeResult]):
                     self._web_client,
                     self._config,
                     self._resource_store.data_dir,
-                    content_type=image_content_type,
+                    content_type=payload.content_type,
+                    image_content_type=image_content_type,
                     extrafanart_urls=result.metadata.extrafanart_urls,
                     # 强制刮削时把海报重裁一遍: 派生键只含「源 + 比例」, 裁切算法升级后
                     # 旧产物不会自动失效, 不重跑就一直留着旧构图.
@@ -411,6 +571,22 @@ class ScrapeHandler(TaskHandler[ScrapePayload, ScrapeResult]):
 
         # 写库并关联 MediaFile. Metadata.actors 仍是展示名; 性别写入 Actor 空位.
         cast = result.metadata.actors
+        source_out = _prioritize_source_urls(
+            result.metadata.source_urls,
+            result.field_sources,
+            manual=payload.manual and not payload.append_sources,
+            preferred_site=payload.preferred_site,
+            # 非手动也按路由顺序排: 用户改了类型路由的顺序, 来源链接应当跟着走.
+            route=route if not payload.append_sources else None,
+        )
+        if payload.append_sources:
+            # 只补来源链接: 既有链接保持原顺序, 新来源接在末尾.
+            # identity_metadata 只在传了 metadata_id 时有值; 按番号进来的调用方要靠番号查一次,
+            # 否则会拿空字典当既有链接, 把原有来源整段覆盖掉.
+            previous = identity_metadata or await self._repo.get_metadata_by_number(
+                payload.number, content_type=payload.content_type
+            )
+            source_out = _append_new_sources(dict(previous.source_urls or {}) if previous else {}, source_out)
         metadata_fields = dict(
             actor_genders={item.name: item.gender for item in cast if item.gender != ActorGender.UNKNOWN},
             title=result.metadata.title,
@@ -434,15 +610,27 @@ class ScrapeHandler(TaskHandler[ScrapePayload, ScrapeResult]):
             scores={s.site: s.score for s in result.metadata.scores},
             external_ids=result.metadata.external_ids,
             # 手动搜索把这次命中的站点提到最前: 来源列表按插入顺序展示, 用户最想看到刚抓的那一条.
-            source_urls=_prioritize_source_urls(
-                result.metadata.source_urls,
-                result.field_sources,
-                manual=payload.manual,
-                preferred_site=payload.preferred_site,
-            ),
+            # 「添加来源链接」已在上面合并成「旧顺序 + 新来源」.
+            source_urls=source_out,
             field_sources=result.field_sources,
             raw=result.raw,
         )
+        if payload.append_sources:
+            # 只补来源链接: 其余字段一个不写, 免得这次抓到的值顶掉用户已有的内容.
+            # 走到这里说明调用方要的是「加一条来源」, 不是让这次刮削接管整条记录.
+            previous = identity_metadata or await self._repo.get_metadata_by_number(
+                payload.number, content_type=payload.content_type
+            )
+            previous_raw = dict(previous.raw or {}) if previous is not None else {}
+            previous_sources = dict(previous.field_sources or {}) if previous is not None else {}
+            metadata_fields = {
+                "source_urls": source_out,
+                # raw 只并进去: 整片覆盖会让「对比来源」页只剩这一次抓的那家.
+                "raw": {**previous_raw, **result.raw},
+                # field_sources 反过来以旧的为准: 这次只补链接, 不接管任何字段的归属,
+                # 否则「字段来自哪家」会凭空变成新来源, 而字段值其实没动.
+                "field_sources": {**result.field_sources, **previous_sources},
+            }
         if payload.content_type == ContentType.WESTERN:
             returned_theporndb_uuid = result.metadata.external_ids.get("theporndb")
             if (
@@ -485,15 +673,15 @@ class ScrapeHandler(TaskHandler[ScrapePayload, ScrapeResult]):
         # 手动搜索: 用户点的那条来源排到第一位.
         # 走 repo 的专用方法直接回写 JSON 列; ORM 赋值在 identity map 命中时会拿回缓存顺序,
         # 看着像没写进去.
-        if payload.manual and payload.preferred_site:
+        if payload.manual and not payload.append_sources and payload.preferred_site:
             await self._repo.reorder_source_urls(meta.id, payload.preferred_site)
             refreshed = await self._repo.get_metadata(meta.id)
             if refreshed is not None:
                 meta = refreshed
 
-        # 为尚未刮削的演员扇出 ACTOR_SCRAPE.
+        # 为尚未刮削的演员扇出 ACTOR_SCRAPE; 与整理并行, 二者互不依赖:
+        # 整理需要的性别由 _genders_from_raw 从本次刮削快照里直接读, 不等演员刮削.
         actor_followups = await self._actor_scrape_followups(meta.actors)
-        # 库开启自动整理时为本次刮削的文件扇出 ORGANIZE.
         organize_followups = await self._auto_organize_followups(payload, file, meta.id)
 
         await self.report_progress(progress_total, progress_total, "done")
@@ -575,14 +763,36 @@ class ScrapeHandler(TaskHandler[ScrapePayload, ScrapeResult]):
         """
         if payload.media_file_id is None:
             return []
+        organize = await self._build_auto_organize(payload, file, metadata_id)
+        if organize is None:
+            return []
+        assert file is not None and file.id is not None
+        return [
+            FollowupTask(
+                key=f"organize:{file.id}",
+                task_type=TaskType.ORGANIZE,
+                payload=organize.model_dump(mode="json"),
+                priority=-1,
+            )
+        ]
+
+    async def _build_auto_organize(
+        self, payload: ScrapePayload, file: MediaFile | None, metadata_id: int
+    ) -> OrganizePayload | None:
+        """按库配置判断本次刮削该不该整理, 该则交出整理 payload.
+
+        判定与后继包装分开: 判定部分要被多处复用, 各自包装成不同的后继形状.
+        """
+        if payload.media_file_id is None:
+            return None
         if file is None or file.id is None:
             current().debug("auto organize skipped: media file missing", media_file_id=payload.media_file_id)
-            return []
+            return None
         try:
             library = await self._repo.get_library(file.library_id)
             if library is None:
                 current().debug("auto organize skipped: library missing", library_id=file.library_id)
-                return []
+                return None
             # 启用监控目录后整理不再由 auto_organize 决定 (界面那开关跟着置灰).
             # 下载目录进来的文件必须整理, 否则永远落不到库路径;
             # 目标目录内的文件是否整理, 取决于 watch_rename (只改名不搬动).
@@ -590,24 +800,16 @@ class ScrapeHandler(TaskHandler[ScrapePayload, ScrapeResult]):
             if library.watch_dir_enabled:
                 if not from_download and not library.watch_rename:
                     current().debug("auto organize skipped: in-place mode", library_id=library.id)
-                    return []
+                    return None
             elif not library.auto_organize:
-                return []
+                return None
             # 多盘片的后续张不发 SCRAPE, 靠首盘这次的元数据一起落盘. 同番号、同库、
             # 还没整理的行都并进来, 否则 CD2 会永远留在原处.
             siblings = await self._adopt_sibling_discs(file, metadata_id)
-            organize = OrganizePayload(library_id=file.library_id, media_file_ids=[file.id, *siblings])
-            return [
-                FollowupTask(
-                    key=f"organize:{file.id}",
-                    task_type=TaskType.ORGANIZE,
-                    payload=organize.model_dump(mode="json"),
-                    priority=-1,
-                )
-            ]
+            return OrganizePayload(library_id=file.library_id, media_file_ids=[file.id, *siblings])
         except Exception:
             current().exception("failed to build auto organize followup", media_file_id=file.id)
-            return []
+            return None
 
     async def _actor_scrape_followups(self, actor_names: list[str]) -> list[FollowupTask]:
         """为尚未刮削的影片演员描述 ACTOR_SCRAPE 后继; 失败不阻断主流程.

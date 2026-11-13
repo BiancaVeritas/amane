@@ -1,5 +1,5 @@
 import shutil
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -37,11 +37,12 @@ from ..organize import (
 from ..organize.link import create_video_link
 from ..parsing import ContentType, FileInfo, parse_file_info
 from ..utils.path import existing_disk_path as existing_disk_path_sync
-from ..utils.path import is_descendant, nfc_path, path_is_under
+from ..utils.path import is_descendant, path_is_under, path_key
 from ..utils.threads import existing_disk_path, in_thread, path_is_dir
 from ._common import LibraryTaskLocks, refresh_external_subtitle
 from .models import (
     ORGANIZE_CONFLICT_LIMIT,
+    ActorScrapePayload,
     CleanupPayload,
     CleanupResult,
     OrganizePayload,
@@ -55,8 +56,68 @@ if TYPE_CHECKING:
     from ..db.repository import Repository
     from ..media import ResourceStore
     from ..net.http import WebClient
+    from .actor_scrape import ActorScrapeHandler
 
 logger = structlog.get_logger()
+
+
+def _rebase_artifacts(paths: ResolvedPaths, video_dir: Path, video_stem: str) -> ResolvedPaths:
+    """把产物路径整体挪到视频所在目录, 文件名沿用模板算出的那套.
+
+    视频已经在库内时, 它的位置就是权威: 用户可能手动把它摆到了别处并建立了关联.
+    模板算出的另一条路径不该把产物写到那里去 —— 那样界面上看到的是旧图, 新图落在别处.
+    """
+    return ResolvedPaths(
+        video=video_dir / f"{video_stem}{paths.video.suffix}",
+        thumb=video_dir / paths.thumb.name,
+        poster=video_dir / paths.poster.name,
+        fanart=video_dir / paths.fanart.name,
+        extrafanart_dir=video_dir,
+        nfo=video_dir / paths.nfo.name,
+        trailer=video_dir / paths.trailer.name,
+        link=paths.link,
+        context=paths.context,
+    )
+
+
+def _from_download(source_path: Path, library: Library) -> bool:
+    """源文件是否来自下载目录 (该搬进目标目录), 而不是已经躺在目标目录里."""
+    if not library.watch_path:
+        return False
+    return path_is_under(source_path, Path(library.watch_path))
+
+
+def _genders_from_raw(raw: Mapping[str, object] | None) -> dict[str, ActorGender]:
+    """从刮削快照里收集演员性别; 多源取第一个明确值.
+
+    快照是站点原样返回的 per-site 记录, 演员项形如 ``{"name": ..., "gender": "female"}``.
+    格式不认识就跳过 —— 调用方还有现场刮兜底.
+    """
+    if not raw:
+        return {}
+    out: dict[str, ActorGender] = {}
+    for snapshot in raw.values():
+        if not isinstance(snapshot, Mapping):
+            continue
+        actors = snapshot.get("actors")
+        if not isinstance(actors, list):
+            continue
+        for item in actors:
+            if not isinstance(item, Mapping):
+                continue
+            name = item.get("name")
+            gender = item.get("gender")
+            if not isinstance(name, str) or not isinstance(gender, str):
+                continue
+            if out.get(name, ActorGender.UNKNOWN) is not ActorGender.UNKNOWN:
+                continue
+            try:
+                parsed = ActorGender(gender.casefold())
+            except ValueError:
+                continue
+            if parsed is not ActorGender.UNKNOWN:
+                out[name] = parsed
+    return out
 
 
 @dataclass
@@ -87,6 +148,7 @@ async def execute_file_operations(
     watermark_dir: Path | None = None,
     actor_genders: dict[str, ActorGender] | None = None,
     tag_mapping_path: Path | None = None,
+    actor_mapping_path: Path | None = None,
 ) -> FileOperationsResult:
     """``file_info`` 由渲染路径的那一次 ``parse_file_info`` 产出, 必须带上 ``has_external_subtitle``.
 
@@ -108,6 +170,13 @@ async def execute_file_operations(
     if check.state is TargetState.UNKNOWN:
         logger.warning("organize target state unknown", source=str(source_path), dest=str(dest), error=check.error)
         return FileOperationsResult(outcome=PlaceOutcome.FAILED, error=check.error)
+
+    # 产物 (图片 / NFO / 字幕) 跟着视频走: 视频在哪, 它们就写到哪.
+    # 模板只用来决定**从下载目录进来的新文件**该落到哪; 已经在库内的文件按它现有的位置算,
+    # 否则用户手动摆好的目录会被模板算出的另一条路径覆盖, 产物写到别处去.
+    # 必须在下载图片之前 rebase: 图片是按 paths 里的目标路径写的.
+    if library is not None and library.watch_dir_enabled and not _from_download(source_path, library):
+        paths = _rebase_artifacts(paths, source_path.parent, source_path.stem)
 
     # 下载图片; 水印打在库路径副本上, 不能修改 Resource 原图.
     if web_client and download_images:
@@ -131,15 +200,17 @@ async def execute_file_operations(
     if library is not None:
         subtitles = await discover_subtitles(source_path, library.subtitle_extensions, file_info)
 
-    # 原地模式 (开启独立监控、没配下载目录、但允许改名): 只换文件名, 不搬到库结构里.
-    # 目标目录取源文件所在目录 —— 沿用同一套落盘逻辑, 不必另写一条改路径.
-    # 这里恒用 MOVE: copy / hardlink / symlink 都会在原处留下旧文件, 那样不算「原地改名」.
-    in_place = library is not None and library.watch_dir_enabled and not library.watch_path
+    # 原地模式: 开启独立监控后, 目标目录里的文件「不移动也不改名」, 除非显式开了 watch_rename.
+    # 判据不能用「有没有配下载目录」: 配了下载目录只说明**下载目录里的**文件要搬进目标目录,
+    # 不等于目标目录里的文件也要搬. 用 watch_path 判断会把目标目录的文件一并搬走.
+    in_place = library is not None and library.watch_dir_enabled and not _from_download(source_path, library)
+    # 原地模式且没开 watch_rename 时名字也保持原样: 模板算出的名字只用于库内结构.
+    keep_name = in_place and library is not None and not library.watch_rename
 
     org_result = await execute_organize(
         source=source_path,
         target_dir=source_path.parent if in_place else paths.video.parent,
-        target_stem=paths.video.stem,
+        target_stem=source_path.stem if keep_name else paths.video.stem,
         mode=MoveMode.MOVE if in_place else move_mode,
     )
 
@@ -168,9 +239,14 @@ async def execute_file_operations(
         if link_result.outcome is not PlaceOutcome.PLACED:
             return FileOperationsResult(outcome=PlaceOutcome.FAILED, dest=org_result.dest, error=link_result.error)
 
-    # 写入 NFO.
+    # 写入 NFO. 演员名走中文映射: 没配映射的演员照原名写.
     if org_result.outcome is PlaceOutcome.PLACED and org_result.dest and write_nfo:
-        await write_nfo_file(metadata, paths.nfo, tag_mapping_path=tag_mapping_path)
+        await write_nfo_file(
+            metadata,
+            paths.nfo,
+            tag_mapping_path=tag_mapping_path,
+            actor_mapping_path=actor_mapping_path,
+        )
 
     # 字幕按模板落到 video_dest 侧.
     subtitle_conflicts: list[SubtitleConflict] = []
@@ -212,9 +288,12 @@ async def apply_file_operations(
     watermark_dir: Path | None = None,
     tag_mapping_path: Path | None = None,
     actor_mapping_path: Path | None = None,
+    actor_genders: Mapping[str, ActorGender] | None = None,
 ) -> FileOperationsResult | None:
     """缺少 media_file_id 或对应记录时返回 None (跳过, 不视为失败).
     Library 由 MediaFile.library_id 派生.
+
+    ``actor_genders`` 由调用方给定时按它渲染路径; 未给则按 Actor 表现查 (查不到就是未知).
     """
     if media_file_id is None:
         return None
@@ -228,7 +307,8 @@ async def apply_file_operations(
     # 渲染路径后执行落盘.
     ext = Path(media_file.path).suffix.lstrip(".")
     file_info = parse_file_info(media_file.path, has_external_subtitle=media_file.has_external_subtitle)
-    actor_genders = {a.name: a.gender for a in await repo.get_actors_by_names(metadata.actors)}
+    if actor_genders is None:
+        actor_genders = {a.name: a.gender for a in await repo.get_actors_by_names(metadata.actors)}
     paths = resolve_paths(
         library,
         metadata,
@@ -265,6 +345,7 @@ async def apply_file_operations(
         watermark_dir=watermark_dir,
         actor_genders=actor_genders,
         tag_mapping_path=tag_mapping_path,
+        actor_mapping_path=actor_mapping_path,
     )
 
 
@@ -288,9 +369,11 @@ async def commit_organized_media_file(
 
     occupant = await repo.get_media_file_by_path(str(placed))
     if occupant is None or occupant.id == media.id:
+        moved = path_key(str(placed)) != path_key(media.path)
         updated = await repo.update_media_file(media.id, path=str(placed))
-        if updated is not None:
-            # 记下改后的名字与目标路径: 文件记录界面要能并排看到「原始名 → 新名」.
+        if updated is not None and moved:
+            # 只有真的换了位置才登记: 文件本来就在目标路径上 (重复整理 / 原地模式无改名)
+            # 不该留下一条「原名 = 新名」的记录, 那会让文件记录变成整理次数的流水账.
             await repo.remember_scraped_renamed(
                 media.library_id,
                 media.filename,
@@ -382,8 +465,8 @@ def _place_library_images(
             thumb_local is not None
             and config is not None
             and config.scraping.crop_poster
-            # 有码 / 无码 / FC2 才自动裁: 其它类型的封面不保证是横版夹页.
-            and allows_poster_crop(content_type)
+            # 放行集按条目类型判定: 其它类型的封面不保证是横版夹页.
+            and allows_poster_crop(content_type, config.scraping.poster_crop_types)
         ):
             paths.poster.parent.mkdir(parents=True, exist_ok=True)
             crop_poster(
@@ -514,6 +597,7 @@ class OrganizeHandler(TaskHandler[OrganizePayload, OrganizeResult]):
         actor_mapping_path: Path | None = None,
         *,
         library_locks: LibraryTaskLocks | None = None,
+        actor_scraper: ActorScrapeHandler | None = None,
     ):
         super().__init__(payload_t=OrganizePayload, result_t=OrganizeResult)
         self._repo = repo
@@ -525,13 +609,52 @@ class OrganizeHandler(TaskHandler[OrganizePayload, OrganizeResult]):
         self._tag_mapping_path = tag_mapping_path
         self._actor_mapping_path = actor_mapping_path
         self._library_locks = library_locks if library_locks is not None else LibraryTaskLocks()
+        self._actor_scraper = actor_scraper
+
+    async def _actor_genders(self, metadata: Metadata) -> dict[str, ActorGender]:
+        """取演员性别; Actor 表缺的先用刮削快照补, 还缺才现场刮.
+
+        路径模板常按「女演员人数」分流, 而性别未知的演员会被当成女演员 —— 男女各一人的作品
+        就会误判成双女优, 落到本该放多女优的目录.
+
+        优先读 ``Metadata.raw``: 刮削那一刻就拿到了每个演员的性别, 但 ``clean_actor_names``
+        只给**已存在**的 Actor 行填空位, 演员没被建成行时性别就落不下来. 快照是同一份数据的
+        原始记录, 比再刮一轮更快也更准.
+        """
+        names = [name for name in metadata.actors if name]
+        if not names:
+            return {}
+        rows = await self._repo.get_actors_by_names(names)
+        found = {a.name: a.gender for a in rows}
+        for name, gender in _genders_from_raw(metadata.raw).items():
+            if found.get(name, ActorGender.UNKNOWN) is ActorGender.UNKNOWN and gender is not ActorGender.UNKNOWN:
+                found[name] = gender
+        # 快照也没有的才去刮, 且只刮建过 Actor 行的 (没有 id 无从刮起).
+        by_id = {a.name: a.id for a in rows if a.id is not None}
+        unknown = [name for name in names if found.get(name, ActorGender.UNKNOWN) is ActorGender.UNKNOWN]
+        if not unknown or self._actor_scraper is None:
+            return found
+        for name in unknown:
+            actor_id = by_id.get(name)
+            if actor_id is None:
+                continue
+            try:
+                await self._actor_scraper.handle(ActorScrapePayload(actor_id=actor_id))
+            except Exception:
+                logger.debug("actor scrape failed during organize", actor_name=name)
+                continue
+            refreshed = await self._repo.get_actor(actor_id)
+            if refreshed is not None:
+                found[name] = refreshed.gender
+        return found
 
     async def _load_scope(self, payload: OrganizePayload, library: Library) -> list[MediaFile]:
         assert library.id is not None
         if payload.media_file_ids is not None:
             return await self._repo.list_media_files(library_id=library.id, ids=payload.media_file_ids, limit=None)
         indexed = await self._repo.list_media_files(library_id=library.id, limit=None)
-        if nfc_path(payload.path) != nfc_path(library.path):
+        # 比较键含列分隔符归一: 库根统一存 `/`, 而范围路径来自文件选择器或旧任务, 可能带 `\`.
+        if path_key(payload.path) != path_key(library.path):
             return [mf for mf in indexed if path_is_under(mf.path, payload.path)]
         return indexed
 
@@ -545,7 +668,7 @@ class OrganizeHandler(TaskHandler[OrganizePayload, OrganizeResult]):
             return TaskResult(success=False, error=f"不是目录: {library.path}")
         if payload.media_file_ids is None:
             scope = Path(payload.path) if payload.path else library_root
-            if nfc_path(str(scope)) != nfc_path(library.path) and not await path_is_dir(scope):
+            if path_key(str(scope)) != path_key(library.path) and not await path_is_dir(scope):
                 return TaskResult(success=False, error=f"不是目录: {scope}")
 
         lock = await self._library_locks.get(library.id)
@@ -636,6 +759,7 @@ class OrganizeHandler(TaskHandler[OrganizePayload, OrganizeResult]):
                     watermark_dir=self._watermark_dir,
                     tag_mapping_path=self._tag_mapping_path,
                     actor_mapping_path=self._actor_mapping_path,
+                    actor_genders=await self._actor_genders(metadata),
                 )
                 if fop_result is None:
                     skipped += 1

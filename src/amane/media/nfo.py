@@ -20,6 +20,27 @@ if TYPE_CHECKING:
 logger = structlog.get_logger()
 
 
+def _load_actor_names(path: Path | None) -> dict[str, str]:
+    """读演员显示名映射; 文件缺失或损坏时返回空表, 调用方回退原名."""
+    if path is None or not path.is_file():
+        return {}
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except OSError, ValueError:
+        logger.warning("actor name mapping unreadable; falling back to original names", path=str(path))
+        return {}
+    entries = raw.get("entries")
+    if not isinstance(entries, dict):
+        return {}
+    names: dict[str, str] = {}
+    for original, value in entries.items():
+        if isinstance(original, str) and isinstance(value, dict):
+            translation = value.get("translation")
+            if isinstance(translation, str) and translation.strip():
+                names[original] = translation.strip()
+    return names
+
+
 _XML_ESCAPE_MAP: dict[str, str] = {
     "&": "&amp;",
     "<": "&lt;",
@@ -52,7 +73,13 @@ def _title_with_number(number: str, title: str) -> str:
     return f"{number} {text}".strip()
 
 
-async def write_nfo(metadata: Metadata, nfo_path: Path, *, tag_mapping_path: Path | None = None) -> bool:
+async def write_nfo(
+    metadata: Metadata,
+    nfo_path: Path,
+    *,
+    tag_mapping_path: Path | None = None,
+    actor_mapping_path: Path | None = None,
+) -> bool:
     try:
         nfo_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -90,10 +117,13 @@ async def write_nfo(metadata: Metadata, nfo_path: Path, *, tag_mapping_path: Pat
 
         code.write("  <mpaa>JP-18+</mpaa>\n")
 
+        # 演员名优先写中文映射: 媒体库里显示的就是熟名, 用原名会让人觉得认不出.
+        # 没配映射的演员照原名写, 与映射前完全一致.
+        actor_names = _load_actor_names(actor_mapping_path) if actor_mapping_path is not None else {}
         if metadata.actors:
             for actor in metadata.actors:
                 code.write("  <actor>\n")
-                code.write(f"    <name>{_escape_xml(actor)}</name>\n")
+                code.write(f"    <name>{_escape_xml(actor_names.get(actor) or actor)}</name>\n")
                 code.write("    <type>Actor</type>\n")
                 code.write("  </actor>\n")
 

@@ -13,12 +13,13 @@ from ..db.actor_person import (
     filter_locked_person_data,
     locked_fields_of,
 )
+from ..db.models import TaskType
 from ..enums import ActorGender, SiteName
 from ..net.errors import FailureReason, SourceError
 from ..observability import current, invoke_source
 from ..observability.models import SiteOutcomeKind
 from .models import ActorScrapePayload, ActorScrapeResult, CacheKind
-from .protocol import TaskHandler, TaskResult
+from .protocol import FollowupTask, TaskHandler, TaskResult
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping, Sequence

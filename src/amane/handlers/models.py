@@ -13,7 +13,7 @@ from ..db.models import TaskType
 from ..enums import DownloadableResource
 from ..observability.models import OrganizeConflict, SiteOutcomeRecord
 from ..parsing import ContentType, infer_content_type
-from ..utils.path import is_descendant, is_resolved_path, resolved_path
+from ..utils.path import is_descendant, is_resolved_path, resolved_path, to_forward_slash
 
 if TYPE_CHECKING:
     from ..db.models import Feed
@@ -46,6 +46,8 @@ class LibraryBase(BaseModel):
         if self.path and is_resolved_path(lib.path):
             self.path = str(resolved_path(self.path))
         self.path = self.path or lib.path
+        # 分隔符跟随库路径: 库根统一存 `/`, 范围路径带 `\` 就成了两种写法.
+        self.path = to_forward_slash(self.path) or self.path
         self._apply_library(lib)
 
     def _apply_library(self, lib: Library) -> None:
@@ -89,6 +91,13 @@ class RefreshPayload(LibraryScanBase):
     use_cache: set[CacheKind] = {CacheKind.metadata, CacheKind.trans}
     """空集 = 全部强制刷新. 原样转发给派生的 SCRAPE."""
 
+    organize: bool = True
+    """已刮削的文件顺带整理一轮: 只重命名/搬移与补关联文件, 不重新刮削.
+
+    扫描是「库和磁盘对齐」的时机: 改过路径模板或补充了元数据之后, 用户期望扫描一次就把
+    文件落到新位置, 而不是逐个点整理.
+    """
+
 
 class RefreshResult(BaseModel):
     type: Literal[TaskType.REFRESH] = TaskType.REFRESH
@@ -113,6 +122,18 @@ class ScrapePayload(BaseModel):
 
     preferred_site: str | None = None
     """手动搜索里用户选中的来源; 该站点的来源链接排到第一位."""
+
+    append_sources: bool = False
+    """只追加来源链接, 不改字段也不动既有链接的顺序.
+
+    「添加来源链接」用它: 用户要的是补一条来源, 不是让这次选中的来源接管整条记录的字段与链接顺序.
+    """
+
+    source_url: str | None = None
+    """只抓这一个来源页地址, 不走类型路由.
+
+    与 ``append_sources`` 配套: 用户贴哪条链接就只刮哪一条, 不是把全部来源重新问一遍.
+    """
 
 
 def build_feed_scrape_payload(feed: Feed, number: str) -> ScrapePayload:

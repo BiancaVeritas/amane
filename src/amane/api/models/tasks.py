@@ -160,6 +160,10 @@ class TaskWorkerResponse(BaseModel):
 class ScrapeRequest(BaseModel):
     number: str | None = Field(default=None)
     media_id: int | None = Field(default=None, description="MediaFile ID. 通常仅用于内部提交任务，手动提交无需指定")
+    metadata_id: int | None = Field(
+        default=None,
+        description="绑定的条目 ID; 片库详情页的手动刮削用它把范围钉在当前记录上",
+    )
     theporndb_uuid: str | None = Field(default=None, description="WESTERN 手动指定的 ThePornDB UUID")
     content_type: ContentType | None = Field(
         default=None, description="内容类型; 未给出时: 仅 media_id 按文件路径推断, 有 number 时按番号推断"
@@ -175,6 +179,14 @@ class ScrapeRequest(BaseModel):
     preferred_site: str | None = Field(
         default=None,
         description="手动搜索选中的来源; 该站点的来源链接排到第一位",
+    )
+    append_sources: bool = Field(
+        default=False,
+        description="只把选中的来源链接追加到末尾, 不改字段、也不动既有链接的顺序",
+    )
+    source_url: str | None = Field(
+        default=None,
+        description="只抓这一个来源页地址, 不走类型路由 (与 append_sources 配套)",
     )
 
     @field_validator("theporndb_uuid", mode="before")
@@ -217,10 +229,13 @@ class ScrapeRequest(BaseModel):
                     number=self.number,
                     content_type=self.content_type or infer_content_type(self.number),
                     media_file_id=self.media_id,
+                    metadata_id=self.metadata_id,
                     theporndb_uuid=self.theporndb_uuid,
                     use_cache=self.use_cache,
                     manual=self.manual,
                     preferred_site=self.preferred_site,
+                    append_sources=self.append_sources,
+                    source_url=self.source_url,
                 )
             parsed = parse_file_info(media.path)
             assert parsed.number is not None
@@ -228,19 +243,25 @@ class ScrapeRequest(BaseModel):
                 number=parsed.number,
                 content_type=self.content_type or parsed.content_type,
                 media_file_id=self.media_id,
+                metadata_id=self.metadata_id,
                 theporndb_uuid=self.theporndb_uuid,
                 use_cache=self.use_cache,
                 manual=self.manual,
                 preferred_site=self.preferred_site,
+                append_sources=self.append_sources,
+                source_url=self.source_url,
             )
         assert self.number is not None
         return ScrapePayload(
             number=self.number,
             content_type=self.content_type or infer_content_type(self.number),
+            metadata_id=self.metadata_id,
             theporndb_uuid=self.theporndb_uuid,
             use_cache=self.use_cache,
             manual=self.manual,
             preferred_site=self.preferred_site,
+            append_sources=self.append_sources,
+            source_url=self.source_url,
         )
 
 
