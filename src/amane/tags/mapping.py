@@ -131,6 +131,23 @@ class TagMappingStore:
             ]
             return list(dict.fromkeys(translated))
 
+    def originals_matching(self, needle: str) -> list[str]:
+        """按展示名找原名的那些词条.
+
+        列表里显示的是译文, 而库里存的是原名; 只按原名搜索会让「搜得到的字在列表里有、
+        却搜不出来」—— 用户照着界面上的名字输入, 必须能命中.
+        只按译文匹配, 原名自己的匹配交给数据库那侧.
+        """
+        if not needle:
+            return []
+        lowered = needle.casefold()
+        with self._lock:
+            return [
+                entry.original
+                for entry in self._entries.values()
+                if entry.translation and lowered in entry.translation.casefold()
+            ]
+
     def map_id_map(self, values: dict[str, int]) -> dict[str, int]:
         """将详情页标签名映射到同名展示标签，保留现有 FacetBadge 的 ID 筛选动作。"""
         mapped: dict[str, int] = {}

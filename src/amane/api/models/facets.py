@@ -13,6 +13,12 @@ class FacetResponse(BaseModel):
     count: int
     #: 不支持收藏的分类恒为假.
     is_favorite: bool
+    merged_ids: list[int] = Field(default_factory=list)
+    """译名相同而被并成一条的那些 facet id (含 ``id`` 自己).
+
+    不同站点会给出不同原名, 译文却是同一个词; 只按一个 id 筛选会漏掉另一批条目.
+    前端选中时把这些 id 一起带上.
+    """
 
 
 class FacetBatchAction(StrEnum):

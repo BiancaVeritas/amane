@@ -588,6 +588,10 @@ def build_handlers(
     # 不在面板读取的存放里, 删除任务只会得到「清单不存在」.
     if inventory_store is None:
         inventory_store = InventoryStore()
+    if inventory_store is None:
+        inventory_store = InventoryStore()
+    # 整理要按「女演员人数」分流路径模板, 性别未知时现场刮一次; 与独立的演员刮削任务共用实例.
+    actor_scraper = ActorScrapeHandler(repo, factory, resource_store, hot, web_client)
     handlers: dict[TaskType, TaskHandler[Any, Any]] = {
         TaskType.REFRESH: RefreshHandler(repo, hot.watcher.media_extensions, inventory_store),
         TaskType.SCRAPE: ScrapeHandler(
@@ -600,7 +604,7 @@ def build_handlers(
             plugin_manager.descriptors() if plugin_manager is not None else None,
             tag_mappings,
         ),
-        TaskType.ACTOR_SCRAPE: ActorScrapeHandler(repo, factory, resource_store, hot, web_client),
+        TaskType.ACTOR_SCRAPE: actor_scraper,
         TaskType.ACTOR_PUSH: ActorPushHandler(
             repo,
             resource_store,
@@ -617,6 +621,7 @@ def build_handlers(
             tag_mapping_path=(state_dir / "tag_mappings.json") if state_dir is not None else None,
             actor_mapping_path=(state_dir / "actor_name_mappings.json") if state_dir is not None else None,
             library_locks=library_locks,
+            actor_scraper=actor_scraper,
         ),
         TaskType.SCAN_INVALID: ScanInvalidHandler(repo, hot, inventory_store),
         TaskType.DELETE: DeleteHandler(repo, inventory_store, hot, library_locks=library_locks),

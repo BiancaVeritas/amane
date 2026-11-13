@@ -19,7 +19,11 @@ _METADATA_FIELD_VALUES = frozenset(str(field) for field in MetadataField)
 
 
 class FilePhaseSummary(BaseModel):
-    """条目相位聚合; 判定见 ``parsing/file_info.py::summarize_file_phases``, definition 取最高档."""
+    """条目相位聚合; 判定见 ``parsing/file_info.py::summarize_file_phases``, definition 取最高档.
+
+    ``tags`` 是条目自己的标签 (已做中文映射), 随相位一起下发: 前端判「无码」时标签优先于
+    文件标记 —— FC2 这类条目的类型本身不带无码标记, 只能靠「無碼」标签区分.
+    """
 
     has_subtitle: bool = False
     censored: bool = False
@@ -27,6 +31,7 @@ class FilePhaseSummary(BaseModel):
     mosaics: list[Mosaic] = []
     definition: str | None = None
     ltx: bool = False
+    tags: list[str] = []
 
 
 class MetadataListItem(BaseModel):

@@ -9,7 +9,7 @@ from pydantic import TypeAdapter
 
 from ...aggregate import compute_merge_updates
 from ...db.embeddings import EmbeddingKind
-from ...db.models import Metadata, MetadataSortField, SavedQueryEntity, SortOrder, TaskType
+from ...db.models import FacetKind, FacetSortField, Metadata, MetadataSortField, SavedQueryEntity, SortOrder, TaskType
 from ...db.repo_types import WriteMode
 from ...db.repos.media import file_phase_of
 from ...enums import MetadataField
@@ -73,21 +73,53 @@ async def build_metadata_responses(
     for m in items:
         summary = summaries.get(m.id) if m.id is not None else None
         # 列表项也要中文映射: 片库卡片直接显示这些标签.
-        response = to_resp(MetadataListItem, m).model_copy(
-            update={"tags": runtime.tag_mappings.map_tags(m.tags)}
-        )
+        response = to_resp(MetadataListItem, m).model_copy(update={"tags": runtime.tag_mappings.map_tags(m.tags)})
         if summary is not None:
             response = response.model_copy(
                 update={
                     "file_count": summary.file_count,
-                    "file_phase": _file_phase_resp(summary.phase),
+                    "file_phase": _file_phase_resp(summary.phase, response.tags),
                 }
             )
         responses.append(response)
     return responses
 
 
-def _file_phase_resp(summary: ParsedFilePhase) -> FilePhaseSummary:
+async def _split_merged_tag_ids(
+    repo: RepoDep, runtime: RuntimeDep, tag_ids: Sequence[int] | None
+) -> tuple[list[int] | None, list[int] | None]:
+    """把请求里的 tag_id 拆成「按 AND 的」与「按 OR 的」两批.
+
+    界面上按译名合并过的标签 (同一概念的多个原名) 必须取并集: 只取其中一个原名会漏掉
+    另一半条目, 而两个都按 AND 传则得到空集. 未被合并的标签仍保持 AND 语义.
+
+    合并依据是**展示名**: 有译文取译文, 没译文取原名. 所以一个本来就叫「二穴同入」的
+    中文标签, 会和译文同样为「二穴同入」的日文标签并成一组 —— 后者要按展示名反查,
+    光靠映射表够不到那些没配映射的标签, 因此这里遍历实际存在的标签名.
+    """
+    if not tag_ids:
+        return list(tag_ids or []), None
+    rows, _ = await repo.list_facets(
+        FacetKind.TAG, search=None, offset=0, limit=1000, sort_by=FacetSortField.NAME, order=SortOrder.ASC
+    )
+    display_by_id = {row.id: runtime.tag_mappings.map_tags([row.name])[0] for row in rows}
+    ids_by_display: dict[str, list[int]] = {}
+    for fid, display in display_by_id.items():
+        ids_by_display.setdefault(display, []).append(fid)
+
+    and_ids: list[int] = []
+    or_ids: list[int] = []
+    for tag_id in tag_ids:
+        siblings = ids_by_display.get(display_by_id.get(tag_id, ""), [])
+        if len(siblings) <= 1:
+            and_ids.append(tag_id)
+            continue
+        or_ids.extend(siblings)
+    return and_ids or None, or_ids or None
+
+
+def _file_phase_resp(summary: ParsedFilePhase, tags: Sequence[str] = ()) -> FilePhaseSummary:
+    """``tags`` 传条目已映射的标签: 前端据此点亮「无码」, 缺了它就只剩文件标记可看."""
     return FilePhaseSummary(
         has_subtitle=summary.has_subtitle,
         censored=summary.censored,
@@ -95,6 +127,7 @@ def _file_phase_resp(summary: ParsedFilePhase) -> FilePhaseSummary:
         mosaics=list(summary.mosaics),
         definition=summary.definition,
         ltx=summary.ltx,
+        tags=list(tags),
     )
 
 
@@ -120,6 +153,9 @@ async def list_metadata(
     semantic_kind: Annotated[Literal["all", "cover", "still"], Query(description="参与语义排序的图片来源")] = "all",
 ) -> MetadataListResponse:
     definition = require_known_definition(filters.definition)
+    # 标签在界面按译名合并显示: 「完全無修正」和「無碼」都译作「无修正」, 是同一个概念.
+    # 选中那一条时要按整组算 (并集), 否则只命中其中一个原名下的条目.
+    tag_ids, tag_any_ids = await _split_merged_tag_ids(repo, runtime, filters.tag_id)
     id_subquery_sql = None
     if filters.saved_query_id is not None:
         id_subquery_sql = await resolve_saved_query_id_subquery(repo, filters.saved_query_id, SavedQueryEntity.METADATA)
@@ -144,7 +180,8 @@ async def list_metadata(
         order=order,
         actor_ids=filters.actor_id,
         director_ids=filters.director_id,
-        tag_ids=filters.tag_id,
+        tag_ids=tag_ids,
+        tag_any_ids=tag_any_ids,
         studio_ids=filters.studio_id,
         publisher_ids=filters.publisher_id,
         series_ids=filters.series_id,
@@ -356,13 +393,15 @@ async def get_metadata(metadata_id: int, repo: RepoDep, runtime: RuntimeDep) -> 
     ) = await repo.resolve_metadata_facet_ids(metadata)
     series_ids = await repo.resolve_metadata_series_ids(metadata)
     tag_ids = runtime.tag_mappings.map_id_map(tag_ids)
+    mapped_tags = runtime.tag_mappings.map_tags(metadata.tags)
     return MetadataDetailResponse(
         metadata=to_resp(MetadataResponse, metadata).model_copy(
             update={
-                "tags": runtime.tag_mappings.map_tags(metadata.tags),
+                "tags": mapped_tags,
                 "file_count": len(files),
                 "file_phase": _file_phase_resp(
-                    summarize_file_phases((file_phase_of(f) for f in files), metadata.content_type)
+                    summarize_file_phases((file_phase_of(f) for f in files), metadata.content_type),
+                    mapped_tags,
                 ),
             }
         ),
