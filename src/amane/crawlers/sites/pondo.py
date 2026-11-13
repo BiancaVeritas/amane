@@ -156,7 +156,8 @@ class PondoCrawler(Crawler):
             extrafanart: list[str] = []
         else:
             extrafanart = _public_gallery(gallery, number, self.base_url, _GALLERY_DIR)
-        tags = list(dict.fromkeys(_strings(data.get("UCNAME")) + _strings(data.get("UCNAMEEn"))))
+        # 只取日文标签: UCNAMEEn 是同一批标签的英文写法, 并进来会让界面上日文夹英文.
+        tags = list(dict.fromkeys(_strings(data.get("UCNAME"))))
         series = data.get("Series") if isinstance(data.get("Series"), str) else None
         if not series and isinstance(data.get("SeriesEn"), str):
             series = data.get("SeriesEn")

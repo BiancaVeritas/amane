@@ -169,7 +169,8 @@ class TenmusumeCrawler(Crawler):
             runtime=runtime,
             series=(data.get("Series") if isinstance(data.get("Series"), str) else None)
             or (data.get("SeriesEn") if isinstance(data.get("SeriesEn"), str) else None),
-            tags=list(dict.fromkeys(_strings(data.get("UCNAME")) + _strings(data.get("UCNAMEEn")))),
+            # 只取日文标签: UCNAMEEn 是同一批标签的英文写法, 并进来会让界面上日文夹英文.
+            tags=list(dict.fromkeys(_strings(data.get("UCNAME")))),
             poster_urls=[poster] if poster else [],
             thumb_urls=[poster] if poster else [],
             extrafanart=extra,

@@ -81,7 +81,8 @@ async def test_scrape_maps_public_metadata_only() -> None:
     assert result.thumb_urls == ["main.jpg"]
     assert result.extrafanart == ["https://www.1pondo.tv/assets/sample/110526_001/popu/1.jpg"]
     assert result.trailer_urls == ["trailer.mp4"]
-    assert result.tags == ["Tag A", "Tag B"]
+    # 日文标签优先, 英文名只在日文为空时用: 两套并进来会让界面上一串日文夹一串英文.
+    assert result.tags == ["Tag A"]
     assert result.studio == "一本道"
     assert result.publisher == "1pondo"
 
@@ -102,3 +103,24 @@ async def test_gallery_failure_does_not_lose_metadata() -> None:
     assert result is not None
     assert result.title == "Title"
     assert result.extrafanart == []
+
+@pytest.mark.asyncio
+async def test_tags_never_include_english_names() -> None:
+    """英文标签一律不取.
+
+    UCNAMEEn 只是同一批标签的英文写法, 并进来会让界面上日文与英文各占一半.
+    即使日文为空也不拿英文补 —— 宁可没有标签.
+    """
+
+    class _EnglishOnlyClient(_FakeClient):
+        async def get_json(self, url: str, **kwargs: object) -> dict:
+            data = await super().get_json(url, **kwargs)  # type: ignore[misc]
+            if "movie_details" in url:
+                return {**data, "UCNAME": [], "UCNAMEEn": ["Amateur", "Big Tits"]}
+            return data
+
+    crawler = PondoCrawler(_EnglishOnlyClient())  # type: ignore[arg-type]
+    result = await crawler._scrape("https://www.1pondo.tv/dyn/phpauto/movie_details/movie_id/110526_001.json")
+
+    assert result is not None
+    assert result.tags == []
