@@ -85,7 +85,8 @@ export function ScrapedRecordsDialog({ opened, onClose }: ScrapedRecordsDialogPr
       opened={opened}
       onClose={onClose}
       title={t("scrapedRecords.title")}
-      size="lg"
+      // 文件名可能很长, 窄框会把它挤成两三行; 与精准裁切那种列表窗口同宽.
+      size="min(96vw, 72rem)"
       zIndex={Z_INDEX.ruleEditor}
     >
       <Stack gap="sm">
@@ -121,7 +122,8 @@ export function ScrapedRecordsDialog({ opened, onClose }: ScrapedRecordsDialogPr
         ) : (
           // 用 list 而不是 Stack: 每行做成独立可悬停的条目, 右侧删除按钮固定宽度,
           // 不会和 ScrollArea 的滚动条挤在一起.
-          <ScrollArea h={340} type="auto" offsetScrollbars scrollbarSize={8}>
+          // 高度随视口: 固定值在矮屏上会把窗口顶出可见区, 在高屏上又留一大片空白.
+          <ScrollArea h="min(60vh, 40rem)" type="auto" offsetScrollbars scrollbarSize={8}>
             <Box className={classes.list}>
               {items.map((item) => (
                 <Group key={item.filename} className={classes.row} wrap="nowrap" gap="xs">

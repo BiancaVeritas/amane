@@ -21,5 +21,6 @@ export type {
   SchemaFormInstance,
   TextEnumJSONSchema,
   TextJSONSchema,
+  TrailingNode,
 } from "./types";
 export { createSchemaValidator } from "./validation";

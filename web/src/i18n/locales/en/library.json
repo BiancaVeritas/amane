@@ -13,6 +13,10 @@
         "label": "Scan for new files",
         "desc": "Discover and register new media files, then scrape pending ones"
       },
+      "indexOnly": {
+        "label": "Scan without scraping",
+        "desc": "Only register new files; no scrape. Entries that already have metadata are linked without re-scraping"
+      },
       "remove": {
         "label": "Remove dead entries",
         "desc": "Delete records for files that no longer exist on disk"

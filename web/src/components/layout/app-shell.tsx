@@ -116,7 +116,12 @@ function NavItemLink({ item, onNavigate }: { item: NavItem; onNavigate?: () => v
   const { pathname } = useLocation();
   const navigate = useNavigate();
   const listDefaults = useUIStore((state) => state.listDefaults);
+  const lastMetaId = useUIStore((state) => state.lastMetaId);
+  const lastActorId = useUIStore((state) => state.lastActorId);
   const Icon = item.icon;
+  // 已经停在该列表页时不重置 URL: 用户可能滑到很下面或翻到第 N 页, 点侧栏只是想回到这页,
+  // 不该把分页与筛选清掉. 只有从别的页面 (含同模块的详情页) 进来才注入默认参数.
+  const atListPage = (to: string) => pathname === to || pathname === `${to}/`;
   const shell = {
     label: t(item.labelKey),
     leftSection: <Icon size={18} stroke={1.6} />,
@@ -132,11 +137,24 @@ function NavItemLink({ item, onNavigate }: { item: NavItem; onNavigate?: () => v
         component={Link}
         to="/meta"
         onClick={(event) =>
-          navItemClick(
-            event,
-            onNavigate,
-            () => void navigate({ to: "/meta", search: listDefaults.meta ?? {} }),
-          )
+          navItemClick(event, onNavigate, () => {
+            // 列表页: 已经在列表上, 只回顶.
+            if (atListPage("/meta")) {
+              window.scrollTo({ top: 0 });
+              return;
+            }
+            // 详情页: 点侧栏是「上一级」, 回列表(带页码/筛选), 不能又跳回详情页.
+            if (isNavActive(pathname, "/meta")) {
+              void navigate({ to: "/meta", search: listDefaults.meta ?? {} });
+              return;
+            }
+            // 从别的模块进来: 回到上次停留的详情页, 省得重新翻列表.
+            void navigate(
+              lastMetaId !== null
+                ? { to: "/meta/$metadataId", params: { metadataId: String(lastMetaId) } }
+                : { to: "/meta", search: listDefaults.meta ?? {} },
+            );
+          })
         }
         {...shell}
       />
@@ -148,11 +166,23 @@ function NavItemLink({ item, onNavigate }: { item: NavItem; onNavigate?: () => v
         component={Link}
         to="/actors"
         onClick={(event) =>
-          navItemClick(
-            event,
-            onNavigate,
-            () => void navigate({ to: "/actors", search: listDefaults.actors ?? {} }),
-          )
+          navItemClick(event, onNavigate, () => {
+            if (atListPage("/actors")) {
+              window.scrollTo({ top: 0 });
+              return;
+            }
+            // 详情页: 点侧栏是「上一级」, 回列表(带页码/筛选).
+            if (isNavActive(pathname, "/actors")) {
+              void navigate({ to: "/actors", search: listDefaults.actors ?? {} });
+              return;
+            }
+            // 从别的模块进来: 回到上次停留的详情页.
+            void navigate(
+              lastActorId !== null
+                ? { to: "/actors/$actorId", params: { actorId: String(lastActorId) } }
+                : { to: "/actors", search: listDefaults.actors ?? {} },
+            );
+          })
         }
         {...shell}
       />

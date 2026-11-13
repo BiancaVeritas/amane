@@ -7,3 +7,10 @@
     flex-direction: column;
   }
 }
+
+/* 窄屏堆叠时控件组靠左, 与标签同一起点. */
+@media (max-width: 47.99em) {
+  .controlRow {
+    justify-content: flex-start;
+  }
+}

@@ -47,6 +47,8 @@
   pointer-events: none;
   overflow: hidden;
   color: var(--mantine-color-text);
+  /* textarea 出现竖向滚动条时内容区会变窄; 让着色层让出同样的宽度, 折行才一致. */
+  scrollbar-gutter: stable;
 }
 
 .input {
@@ -61,6 +63,7 @@
   resize: vertical;
   overflow-x: hidden;
   overflow-y: auto;
+  scrollbar-gutter: stable;
 }
 
 /*
@@ -91,14 +94,18 @@
   color: var(--mantine-color-placeholder);
 }
 
-/* token 配色 */
+/* token 配色
+ *
+ * 只用颜色区分, 不改 font-weight / letter-spacing / font-size: 着色层必须与 textarea 的
+ * 每个字符等宽, 否则折行位置不同, 光标会落到与显示不符的地方 (按 Delete 删掉的是
+ * 别处的字符). 粗体字宽与常规不同, 是这条规则最容易踩的坑.
+ */
 .text {
   color: var(--mantine-color-text);
 }
 
 .delimiter {
   color: light-dark(var(--mantine-color-grape-7), var(--mantine-color-grape-4));
-  font-weight: 600;
 }
 
 .variable {
@@ -107,7 +114,6 @@
 
 .keyword {
   color: light-dark(var(--mantine-color-orange-7), var(--mantine-color-orange-4));
-  font-weight: 600;
 }
 
 .string {

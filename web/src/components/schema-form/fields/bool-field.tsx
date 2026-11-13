@@ -10,26 +10,35 @@ export function BoolField({
   description,
   form,
   variant,
+  trailing,
 }: FieldProps<BooleanJSONSchema>) {
   const id = useFieldDomId(name);
   return (
     <form.Field name={name}>
-      {(field: AnyFieldApi) => (
-        <FieldChrome
-          variant={variant}
-          layout="horizontal"
-          htmlFor={id}
-          label={label}
-          description={description}
-        >
-          <Switch
-            id={id}
-            checked={field.state.value === true}
-            onChange={(e) => field.handleChange(e.currentTarget.checked)}
-            aria-label={label}
-          />
-        </FieldChrome>
-      )}
+      {(field: AnyFieldApi) => {
+        const checked = field.state.value === true;
+        return (
+          <FieldChrome
+            variant={variant}
+            layout="horizontal"
+            htmlFor={id}
+            label={label}
+            description={description}
+            trailing={
+              trailing !== null && typeof trailing === "object" && "render" in trailing
+                ? trailing.render(checked)
+                : trailing
+            }
+          >
+            <Switch
+              id={id}
+              checked={checked}
+              onChange={(e) => field.handleChange(e.currentTarget.checked)}
+              aria-label={label}
+            />
+          </FieldChrome>
+        );
+      }}
     </form.Field>
   );
 }

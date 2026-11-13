@@ -12,7 +12,9 @@ import type { ContentType, FacetKind, Mosaic } from "@/client/types.gen";
 import { CONTENT_TYPES, FACET_KINDS, FILE_DEFINITIONS, MOSAICS } from "@/lib/exhaustive-maps";
 import { facetIdsOf, type FacetFilters } from "@/lib/facets";
 
-const PICKER_LIMIT = 40;
+// 下拉一次最多列出多少项. 标签动辄几百条, 全量塞进 Select 会明显卡顿;
+// 但太小又让人以为「标签只有这么点」, 所以取一个能覆盖多数库的档位, 超出部分靠搜索找.
+const PICKER_LIMIT = 200;
 
 /** URL / 控件用的三态; null = 不限. */
 export type HasFilesFilter = boolean | null;
@@ -222,6 +224,7 @@ export function FacetFilterControls({
             placeholder={t("search.any")}
             data={FILE_DEFINITIONS.map((definition) => ({
               value: definition,
+              // 值本身就是展示名: 库里存全小写, 界面也照原样列, 免得两套写法对不上.
               label: definition,
             }))}
             value={filePhase.definition}

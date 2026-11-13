@@ -55,6 +55,30 @@
         "label": "Crop Poster",
         "description": "Auto-crop poster from the cover image"
       },
+      "poster_crop_types": {
+        "label": "Crop types",
+        "description": "Only these types crop posters from the cover",
+        "options": {
+          "censored": "Censored",
+          "uncensored": "Uncensored",
+          "chinese": "Chinese",
+          "western": "Western",
+          "fc2": "FC2",
+          "amateur": "Amateur",
+          "hentai": "Hentai"
+        },
+        "$": {
+          "options": {
+            "censored": "Censored",
+            "uncensored": "Uncensored",
+            "chinese": "Chinese",
+            "western": "Western",
+            "fc2": "FC2",
+            "amateur": "Amateur",
+            "hentai": "Hentai"
+          }
+        }
+      },
       "poster_crop_skip_ratio": {
         "label": "Poster crop skip threshold",
         "description": "Skip cropping when the existing poster's height exceeds this fraction of the cover height"
@@ -1071,5 +1095,10 @@
     "resetRotation": "Reset",
     "search": "Search",
     "button": "Calibrate crop"
+  },
+  "cropTypes": {
+    "button": "Crop types",
+    "dialogTitle": "Types with automatic cropping",
+    "dialogHint": "Only enabled types crop posters from the cover. Decided by entry type, not by source site."
   }
 }

@@ -261,7 +261,12 @@ export interface FieldProps<S extends JSONSchemaObject = JSONSchemaObject> {
   i18nPrefix: string;
   /** Visual mode (see FieldVariant). Defaults to "default". */
   variant?: FieldVariant;
+  /** 与控件同排、位于其右侧的内容 (如打开弹窗的按钮). 横向布局才有位置放. */
+  trailing?: TrailingNode;
 }
+
+/** 行内附加内容: 静态节点, 或按控件当前值渲染 (`{ render }`). */
+export type TrailingNode = React.ReactNode | { render: (checked: boolean) => React.ReactNode };
 
 export interface ArrayFieldProps<IS extends JSONSchemaObject> extends FieldProps<ArrayJSONSchema> {
   itemSchema: IS;

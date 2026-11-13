@@ -55,6 +55,30 @@
         "label": "裁切海报",
         "description": "从封面自动裁切生成海报"
       },
+      "poster_crop_types": {
+        "label": "裁切类型",
+        "description": "只有这些类型从封面自动裁切海报",
+        "options": {
+          "censored": "有码",
+          "uncensored": "无码",
+          "chinese": "国产",
+          "western": "欧美",
+          "fc2": "FC2",
+          "amateur": "素人",
+          "hentai": "动漫"
+        },
+        "$": {
+          "options": {
+            "censored": "有码",
+            "uncensored": "无码",
+            "chinese": "国产",
+            "western": "欧美",
+            "fc2": "FC2",
+            "amateur": "素人",
+            "hentai": "动漫"
+          }
+        }
+      },
       "poster_crop_skip_ratio": {
         "label": "海报裁切跳过阈值比例",
         "description": "已有海报与封面高度之比超过此值则不裁切"
@@ -1071,5 +1095,10 @@
     "resetRotation": "复位",
     "search": "搜索",
     "button": "标定裁切"
+  },
+  "cropTypes": {
+    "button": "裁切类型",
+    "dialogTitle": "自动裁切的类型",
+    "dialogHint": "开启的类型才会从封面自动裁切海报。按条目类型判定, 与来源站点无关。"
   }
 }

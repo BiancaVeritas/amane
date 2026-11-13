@@ -453,6 +453,9 @@
   "actorNameMapping": {
     "button": "演员中文映射",
     "title": "演员中文映射",
+    "detailTitle": "中文映射",
+    "detailButton": "中文映射",
+    "detailHint": "只改页面显示：搜索、去重与刮削仍使用原始名。留空保存即删除这条映射。",
     "hint": "只改页面显示：搜索、去重与刮削仍使用原始名。",
     "search": "搜索演员",
     "stats": "已映射 {{mapped}} / {{all}}",

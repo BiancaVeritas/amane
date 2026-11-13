@@ -2,7 +2,7 @@ import { Alert, Box, Code, Text } from "@mantine/core";
 import { IconAlertTriangle } from "@tabler/icons-react";
 import { devLog } from "@/lib/dev-logger";
 import { useSchemaI18n } from "../hooks";
-import type { FieldVariant, JSONSchemaObject, SchemaFormInstance } from "../schema";
+import type { FieldVariant, JSONSchemaObject, SchemaFormInstance, TrailingNode } from "../schema";
 import {
   isArray,
   isBool,
@@ -52,6 +52,8 @@ interface FieldRouterProps {
    * be added when a use case appears.
    */
   variant?: FieldVariant;
+  /** 与控件同排、位于其右侧的内容; 只有横向布局的 bool 字段放得下. */
+  trailing?: TrailingNode;
 }
 
 export function FieldRouter({
@@ -61,6 +63,7 @@ export function FieldRouter({
   i18nPath,
   i18nPrefix = "settings:fields",
   variant,
+  trailing,
 }: FieldRouterProps) {
   const effectiveI18nPath = i18nPath ?? name;
   const { label, description } = useSchemaI18n(effectiveI18nPath, schema, i18nPrefix);
@@ -96,7 +99,7 @@ export function FieldRouter({
 
   if (isBool(schema)) {
     devLog.info(TAG, `→ BoolField: ${name}`);
-    return <BoolField schema={schema} {...basic} />;
+    return <BoolField schema={schema} {...basic} trailing={trailing} />;
   }
 
   if (isEnum(schema)) {

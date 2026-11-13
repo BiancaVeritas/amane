@@ -88,6 +88,15 @@ interface UIState {
    */
   listDefaults: Partial<NavListDefaults>;
   /**
+   * 上次打开的片库详情页 id.
+   *
+   * 用户可能在列表里翻了几页才点进某一条; 去别的模块处理完再点侧栏回来, 应当直接回到那一条,
+   * 而不是从头翻. 从侧栏进片库时读它, 明确回到列表 (点「全部」或搜索) 时清掉.
+   */
+  lastMetaId: number | null;
+  /** 上次打开的演员详情页 id; 与 ``lastMetaId`` 同理. */
+  lastActorId: number | null;
+  /**
    * 演员详情页出演作品的排序记忆.
    *
    * 演员详情页出演作品的排序记忆, 与片库列表排序分别保存.
@@ -110,6 +119,8 @@ interface UIState {
   setPlaybackSourceOrder: (order: string[]) => void;
   setListDefault: (update: NavListDefaultsUpdate) => void;
   clearListDefault: (key: NavListKey) => void;
+  setLastMetaId: (id: number | null) => void;
+  setLastActorId: (id: number | null) => void;
   setActorWorksSort: (sort: MetadataSortPreference) => void;
   setMetaSort: (sort: MetadataSortPreference) => void;
   setActorListSort: (sort: { sort_by: ActorSortField; order: "asc" | "desc" }) => void;
@@ -129,6 +140,8 @@ export const useUIStore = create<UIState>()(
       actorColumnWidths: {},
       playbackSourceOrder: [],
       listDefaults: {},
+      lastMetaId: null,
+      lastActorId: null,
       actorWorksSort: { ...DEFAULT_METADATA_SORT_PREFERENCE },
       metaSort: { ...DEFAULT_METADATA_SORT_PREFERENCE },
       actorListSort: { sort_by: "count", order: "desc" },
@@ -150,6 +163,8 @@ export const useUIStore = create<UIState>()(
         set((state) => ({ listDefaults: withListDefault(state.listDefaults, update) })),
       clearListDefault: (key) =>
         set((state) => ({ listDefaults: withoutListDefault(state.listDefaults, key) })),
+      setLastMetaId: (id) => set({ lastMetaId: id }),
+      setLastActorId: (id) => set({ lastActorId: id }),
       setActorWorksSort: (sort) => set({ actorWorksSort: sort }),
       setMetaSort: (sort) => set({ metaSort: sort }),
       setActorListSort: (sort) => set({ actorListSort: sort }),
@@ -178,6 +193,8 @@ export const useUIStore = create<UIState>()(
           metaColumnWidths: p?.metaColumnWidths ?? {},
           actorColumnWidths: p?.actorColumnWidths ?? {},
           playbackSourceOrder: p?.playbackSourceOrder ?? [],
+          lastMetaId: typeof p?.lastMetaId === "number" ? p.lastMetaId : null,
+          lastActorId: typeof p?.lastActorId === "number" ? p.lastActorId : null,
           // 持久化值未经校验: 逐项过 schema, 非法项丢弃.
           listDefaults: {
             meta: metaListDefaultsSchema.safeParse(p?.listDefaults?.meta).data,

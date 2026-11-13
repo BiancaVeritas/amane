@@ -262,6 +262,18 @@
         "label": "ThePornDB UUID",
         "description": "The ThePornDB UUID from ThePornDB"
       },
+      "metadata_id": {
+        "label": "Bound entry",
+        "description": "Pin the scrape scope to this record"
+      },
+      "append_sources": {
+        "label": "Append source only",
+        "description": "Only add a source link; fields and existing link order stay"
+      },
+      "source_url": {
+        "label": "Source URL",
+        "description": "Scrape only this URL instead of asking every source again"
+      },
       "content_type": {
         "label": "Content Type",
         "description": "Leave empty to detect automatically",
@@ -353,6 +365,10 @@
             "trans": "Translation Cache"
           }
         }
+      },
+      "organize": {
+        "label": "Also organize",
+        "description": "Rename/move already-scraped files by the current templates and add sidecar files; no re-scrape"
       }
     },
     "r18_import": {
@@ -495,6 +511,16 @@
   },
   "manualScrape": {
     "title": "Manual scrape",
+    "entry": "Manual scrape",
+    "forceMode": "Manual force scrape",
+    "forceModeDesc": "Re-scrape and overwrite fields from the picked source; that source goes first in source links",
+    "appendMode": "Add source link",
+    "appendModeDesc": "Append the picked source at the end; fields and existing link order stay",
+    "appendTitle": "Add source link",
+    "appendHint": "Paste one source page URL. Only that link is scraped; no search by number, and existing fields and link order stay untouched.",
+    "appendLabel": "Source URL",
+    "appendPlaceholder": "https://…",
+    "appendNeedsUrl": "Enter a full source page URL (starting with http:// or https://)",
     "hint": "Search first, then pick one result to write. Ignores existing records and field locks.",
     "label": "Number / URL / UUID",
     "placeholder": "e.g. ABC-123 or 00000000-0000-0000-0000-000000000000",
@@ -505,7 +531,7 @@
     "search": "Search",
     "noResult": "No results from any source",
     "pickOne": "{{count}} result(s) found — pick one to use",
-    "useThis": "Use this"
+    "useThis": "Select"
   },
   "scrape": {
     "manual": "Manual search"
@@ -513,7 +539,7 @@
   "scrapedRecords": {
     "toggle": "File records",
     "title": "File records",
-    "hint": "Names that have been scraped. A matching name is skipped next time; clearing only stops the skip, it does not touch running tasks.",
+    "hint": "Files that went through organize (moved or renamed), showing the original name and the placed path. Scraping does not move files and is therefore not recorded here.",
     "count": "{{count}} entries",
     "clear": "Clear records",
     "cleared": "Cleared {{count}} entries",

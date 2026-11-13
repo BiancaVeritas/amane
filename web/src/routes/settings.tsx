@@ -12,7 +12,7 @@ import {
   Text,
   Title,
 } from "@mantine/core";
-import { IconAlertCircle, IconCrop } from "@tabler/icons-react";
+import { IconAlertCircle, IconCrop, IconPhoto } from "@tabler/icons-react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -20,6 +20,7 @@ import { z } from "zod";
 import { isHidden, resolveSchema } from "@/components/schema-form/schema";
 import { SchemaForm } from "@/components/schema-form/schema-form";
 import { type CropRule, CropRulesDialog } from "@/components/settings/crop-rules-dialog";
+import { CropTypesDialog } from "@/components/settings/crop-types-dialog";
 import { useConfig, useConfigSchema, useUpdateConfig } from "@/hooks/use-config";
 import { useNarrowViewport } from "@/hooks/use-narrow-viewport";
 import { extractErrorMessage } from "@/lib/api-error";
@@ -33,6 +34,26 @@ export const Route = createFileRoute("/settings")({
   component: SettingsPage,
 });
 
+/**
+ * 总开关右侧的「裁切类型」按钮.
+ *
+ * `enabled` 取开关的当前值而不是已保存的配置: 关掉总开关时没有可放行的类型, 按钮立刻置灰.
+ */
+function CropTypesButton({ enabled, onClick }: { enabled: boolean; onClick: () => void }) {
+  const { t } = useTranslation("settings");
+  return (
+    <Button
+      size="xs"
+      variant="light"
+      leftSection={<IconPhoto size={14} />}
+      disabled={!enabled}
+      onClick={onClick}
+    >
+      {t("cropTypes.button")}
+    </Button>
+  );
+}
+
 function SettingsPage() {
   const { t } = useTranslation("settings");
   const { section } = Route.useSearch();
@@ -42,11 +63,26 @@ function SettingsPage() {
   const { data: values, isLoading: valuesLoading, error: valuesError } = useConfig();
   const saveMutation = useUpdateConfig();
   const [cropRulesOpen, setCropRulesOpen] = useState(false);
+  const [cropTypesOpen, setCropTypesOpen] = useState(false);
 
   const cropRules = useMemo<CropRule[]>(() => {
     const raw = (values as { scraping?: { poster_crop_rules?: CropRule[] } } | undefined)?.scraping
       ?.poster_crop_rules;
     return Array.isArray(raw) ? raw : [];
+  }, [values]);
+
+  const cropTypes = useMemo<string[]>(() => {
+    const raw = (values as { scraping?: { poster_crop_types?: string[] } } | undefined)?.scraping
+      ?.poster_crop_types;
+    return Array.isArray(raw) ? raw : [];
+  }, [values]);
+
+  // 可选类型取类型路由的键: 新增类型路由时列表自动跟上, 不在这里另写一份枚举.
+  const cropTypeOptions = useMemo<string[]>(() => {
+    const routes = (
+      values as { scraping?: { content_routes?: Record<string, unknown> } } | undefined
+    )?.scraping?.content_routes;
+    return routes ? Object.keys(routes) : [];
   }, [values]);
 
   const resolvedSchema = useMemo(() => (schema ? resolveSchema(schema, schema) : null), [schema]);
@@ -162,6 +198,21 @@ function SettingsPage() {
                           }
                         : undefined
                     }
+                    trailingField={
+                      key === "scraping"
+                        ? {
+                            // 类型开关贴着总开关: 它细化的正是「裁切海报」放行哪些类型.
+                            crop_poster: {
+                              render: (enabled: boolean) => (
+                                <CropTypesButton
+                                  enabled={enabled}
+                                  onClick={() => setCropTypesOpen(true)}
+                                />
+                              ),
+                            },
+                          }
+                        : undefined
+                    }
                   />
                 </Paper>
               );
@@ -176,6 +227,16 @@ function SettingsPage() {
         rules={cropRules}
         onChange={(next) =>
           saveMutation.mutate({ body: { scraping: { poster_crop_rules: next } } })
+        }
+      />
+
+      <CropTypesDialog
+        opened={cropTypesOpen}
+        onClose={() => setCropTypesOpen(false)}
+        selected={cropTypes}
+        options={cropTypeOptions}
+        onChange={(next) =>
+          saveMutation.mutate({ body: { scraping: { poster_crop_types: next } } })
         }
       />
     </Stack>

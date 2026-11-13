@@ -20,21 +20,20 @@ import { metaSearchSchema, type MetaSearch } from "@/lib/media/browse";
 /** 带列表参数的侧栏条目; 分类入口是种类索引页, 没有可承载的参数. */
 export type NavListKey = "meta" | "actors" | "feeds";
 
+// page / view 也一起记住: 用户翻到第 N 页或切了视图后, 去别的页面再点侧栏回来应当停在原处.
+// 只排除真正的临时态 —— 搜索词 (q)、agent 深链 (saved_query_id) 与 feeds 的那几个一次性的开关.
 export const metaListDefaultsSchema = metaSearchSchema.omit({
   q: true,
-  page: true,
   saved_query_id: true,
 });
 export const actorListDefaultsSchema = actorsBrowseSearchSchema.omit({
   q: true,
-  page: true,
   saved_query_id: true,
 });
 export const feedsListDefaultsSchema = feedsSearchSchema.omit({
   feed: true,
   group: true,
   q: true,
-  page: true,
   nodedupe: true,
 });
 

@@ -12,6 +12,8 @@ export const Z_INDEX = {
   base: 300,
   /** 精准裁切的规则列表. */
   ruleList: 310,
+  /** 自动裁切的类型开关. */
+  cropTypes: 320,
   /** 裁切海报的窗口. */
   cropDialog: 340,
   /** 编辑单条裁切规则. */

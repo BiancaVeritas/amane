@@ -1398,6 +1398,10 @@ export type FacetResponse = {
      * Is Favorite
      */
     is_favorite: boolean;
+    /**
+     * Merged Ids
+     */
+    merged_ids?: Array<number>;
 };
 
 /**
@@ -1807,6 +1811,9 @@ export type FileListResponse = {
  * FilePhaseSummary
  *
  * 条目相位聚合; 判定见 ``parsing/file_info.py::summarize_file_phases``, definition 取最高档.
+ *
+ * ``tags`` 是条目自己的标签 (已做中文映射), 随相位一起下发: 前端判「无码」时标签优先于
+ * 文件标记 —— FC2 这类条目的类型本身不带无码标记, 只能靠「無碼」标签区分.
  */
 export type FilePhaseSummary = {
     /**
@@ -1833,6 +1840,10 @@ export type FilePhaseSummary = {
      * Ltx
      */
     ltx?: boolean;
+    /**
+     * Tags
+     */
+    tags?: Array<string>;
 };
 
 /**
@@ -4258,6 +4269,10 @@ export type RefreshSubmission = {
      */
     use_cache?: Array<CacheKind>;
     /**
+     * Organize
+     */
+    organize?: boolean;
+    /**
      * Type
      */
     type: 'refresh';
@@ -4884,6 +4899,12 @@ export type ScrapeSubmission = {
      */
     media_id?: number | null;
     /**
+     * Metadata Id
+     *
+     * 绑定的条目 ID; 片库详情页的手动刮削用它把范围钉在当前记录上
+     */
+    metadata_id?: number | null;
+    /**
      * Theporndb Uuid
      *
      * WESTERN 手动指定的 ThePornDB UUID
@@ -4911,6 +4932,18 @@ export type ScrapeSubmission = {
      * 手动搜索选中的来源; 该站点的来源链接排到第一位
      */
     preferred_site?: string | null;
+    /**
+     * Append Sources
+     *
+     * 只把选中的来源链接追加到末尾, 不改字段、也不动既有链接的顺序
+     */
+    append_sources?: boolean;
+    /**
+     * Source Url
+     *
+     * 只抓这一个来源页地址, 不走类型路由 (与 append_sources 配套)
+     */
+    source_url?: string | null;
     /**
      * Type
      */
@@ -4961,6 +4994,10 @@ export type ScrapingConfig = {
      * Crop Poster
      */
     crop_poster?: boolean;
+    /**
+     * Poster Crop Types
+     */
+    poster_crop_types?: Array<ContentType>;
     /**
      * Poster Ratio
      */

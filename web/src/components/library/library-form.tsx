@@ -406,7 +406,7 @@ export function LibraryFormFields({ value, onChange, showCreateOnly }: LibraryFo
         label={value.watch_dir_enabled ? t("fieldTargetPath") : t("fieldPath")}
         placeholder={t("placeholder")}
         value={value.path}
-        onChange={(path) => onChange({ ...value, path })}
+        onChange={(path) => onChange({ ...value, path: toForwardSlashPath(path) })}
         pathType="directory"
       />
       <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">

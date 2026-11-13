@@ -6,7 +6,7 @@ import { UnsavedChangesBar } from "@/components/common/unsaved-changes-bar";
 import { isRecord } from "@/lib/utils";
 import { encodeFormBody } from "./encode";
 import { FieldRouter } from "./fields";
-import type { JSONSchemaObject } from "./schema";
+import type { JSONSchemaObject, TrailingNode } from "./schema";
 import {
   createSchemaValidator,
   isArray,
@@ -153,8 +153,14 @@ interface SchemaFormProps {
    * - `grid`: consecutive short scalars share a 2-col row on `sm+`.
    */
   fieldLayout?: "stack" | "grid";
-  /** 在指定字段之后插入自定义内容; 用于把「打开对话框」之类的控件挂到某个开关下面. */
+  /** 在指定字段的下方插入自定义内容; 用于把「打开对话框」之类的控件挂到某个开关下面. */
   afterField?: Record<string, ReactNode>;
+  /**
+   * 在指定字段的控件右侧插入内容; 只对单行控件 (如开关) 有意义.
+   *
+   * 按控件当前值渲染, 旁边按钮要跟着开关立即变灰时用; 只读已保存的配置会慢一拍.
+   */
+  trailingField?: Record<string, TrailingNode>;
 }
 
 export function SchemaForm({
@@ -170,6 +176,7 @@ export function SchemaForm({
   submitDisabled = false,
   fieldLayout = "stack",
   afterField,
+  trailingField,
 }: SchemaFormProps) {
   const { t } = useTranslation("common");
   const formId = useId();
@@ -297,6 +304,7 @@ export function SchemaForm({
         schema={fieldSchema}
         form={form}
         i18nPrefix={i18nPrefix}
+        trailing={trailingField?.[key]}
       />
     ));
     const rowStyle =

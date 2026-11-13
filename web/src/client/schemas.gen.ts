@@ -2314,6 +2314,13 @@ export const FacetResponseSchema = {
         is_favorite: {
             type: 'boolean',
             title: 'Is Favorite'
+        },
+        merged_ids: {
+            items: {
+                type: 'integer'
+            },
+            type: 'array',
+            title: 'Merged Ids'
         }
     },
     type: 'object',
@@ -3149,11 +3156,19 @@ export const FilePhaseSummarySchema = {
             type: 'boolean',
             title: 'Ltx',
             default: false
+        },
+        tags: {
+            items: {
+                type: 'string'
+            },
+            type: 'array',
+            title: 'Tags',
+            default: []
         }
     },
     type: 'object',
     title: 'FilePhaseSummary',
-    description: '条目相位聚合; 判定见 ``parsing/file_info.py::summarize_file_phases``, definition 取最高档.'
+    description: '条目相位聚合; 判定见 ``parsing/file_info.py::summarize_file_phases``, definition 取最高档.\n\n``tags`` 是条目自己的标签 (已做中文映射), 随相位一起下发: 前端判「无码」时标签优先于\n文件标记 —— FC2 这类条目的类型本身不带无码标记, 只能靠「無碼」标签区分.'
 } as const;
 
 export const FootprintNoticeKindSchema = {
@@ -3213,6 +3228,11 @@ export const HotSettingsSchema = {
                     'extrafanart'
                 ],
                 crop_poster: true,
+                poster_crop_types: [
+                    'censored',
+                    'uncensored',
+                    'fc2'
+                ],
                 poster_ratio: 0.7,
                 uncensored_poster_ratio: 0.7,
                 poster_crop_skip_ratio: 0.9,
@@ -8317,6 +8337,11 @@ export const RefreshSubmissionSchema = {
                 'trans'
             ]
         },
+        organize: {
+            type: 'boolean',
+            title: 'Organize',
+            default: true
+        },
         type: {
             type: 'string',
             const: 'refresh',
@@ -9403,6 +9428,18 @@ export const ScrapeSubmissionSchema = {
             title: 'Media Id',
             description: 'MediaFile ID. 通常仅用于内部提交任务，手动提交无需指定'
         },
+        metadata_id: {
+            anyOf: [
+                {
+                    type: 'integer'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Metadata Id',
+            description: '绑定的条目 ID; 片库详情页的手动刮削用它把范围钉在当前记录上'
+        },
         theporndb_uuid: {
             anyOf: [
                 {
@@ -9452,6 +9489,24 @@ export const ScrapeSubmissionSchema = {
             ],
             title: 'Preferred Site',
             description: '手动搜索选中的来源; 该站点的来源链接排到第一位'
+        },
+        append_sources: {
+            type: 'boolean',
+            title: 'Append Sources',
+            description: '只把选中的来源链接追加到末尾, 不改字段、也不动既有链接的顺序',
+            default: false
+        },
+        source_url: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Source Url',
+            description: '只抓这一个来源页地址, 不走类型路由 (与 append_sources 配套)'
         },
         type: {
             type: 'string',
@@ -9513,6 +9568,14 @@ export const ScrapingConfigSchema = {
             type: 'boolean',
             title: 'Crop Poster',
             default: true
+        },
+        poster_crop_types: {
+            items: {
+                $ref: '#/components/schemas/ContentType'
+            },
+            type: 'array',
+            title: 'Poster Crop Types',
+            'x-hidden': true
         },
         poster_ratio: {
             type: 'number',

@@ -32,6 +32,7 @@ import {
 } from "@/client/@tanstack/react-query.gen";
 import type { ActorGender, ActorSortField } from "@/client/types.gen";
 import { BrowsePageShell } from "@/components/common/browse-page-shell";
+import { useRestoreScroll } from "@/components/common/use-restore-scroll";
 import { ScrollToTop } from "@/components/common/scroll-to-top";
 import { HintedActionIcon } from "@/components/common/hinted-action-icon";
 import { ListPagination } from "@/components/common/list-pagination";
@@ -131,6 +132,21 @@ function ActorsIndexPage() {
   const cardSize = useUIStore((s) => s.cardSizes.actors);
   const actorListSort = useUIStore((s) => s.actorListSort);
   const setActorListSort = useUIStore((s) => s.setActorListSort);
+  const setListDefault = useUIStore((s) => s.setListDefault);
+
+  // 把当前的筛选/排序/页码/视图记下来: 去别的页面再点侧栏回来, 应当停在原处而不是从头开始.
+  // 依赖取序列化后的值: search 对象每次导航都是新引用, 直接放进依赖会每帧都写一次 store.
+  const actorDefaultsKey = JSON.stringify(actorListDefaults(search));
+  useEffect(() => {
+    setListDefault({ key: "actors", value: JSON.parse(actorDefaultsKey) });
+  }, [actorDefaultsKey, setListDefault]);
+
+  // 进到列表页就说明用户已经离开了详情页, 清掉「上次打开的那条」:
+  // 否则去别的模块再点侧栏回来, 会被送回一条早已退出的详情页.
+  const setLastActorId = useUIStore((s) => s.setLastActorId);
+  useEffect(() => {
+    setLastActorId(null);
+  }, [setLastActorId]);
 
   useEffect(() => {
     const currentBy = search.sort_by;
@@ -195,6 +211,8 @@ function ActorsIndexPage() {
   const gridItems = gridQuery.data?.items ?? [];
   const gridTotal = gridQuery.data?.total ?? 0;
   const total = isList ? listTotal : gridTotal;
+  // 切走再回来时回到原来滑到的位置: 列表视图是内部容器滚动, 路由自带的恢复管不到.
+  useRestoreScroll("actors");
 
   function handleSearchChange(v: string) {
     setSearchInput(v);

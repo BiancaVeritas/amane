@@ -28,6 +28,8 @@ interface FieldChromeProps {
   description?: string;
   /** The actual input control. */
   children: React.ReactNode;
+  /** 控件右侧的内容 (如打开弹窗的按钮); 横向布局时与控件同排. */
+  trailing?: React.ReactNode;
   /** 校验错误消息 (来自 field.state.meta.errors). 有值时在控件下方红字展示. */
   error?: string;
 }
@@ -46,6 +48,7 @@ export function FieldChrome({
   label,
   description,
   children,
+  trailing,
   error,
 }: FieldChromeProps) {
   const narrow = useNarrowViewport();
@@ -85,10 +88,11 @@ export function FieldChrome({
             </Text>
           )}
         </Stack>
-        <Stack gap={4} align={narrow ? "flex-start" : "flex-end"} className={classes.controlRow}>
+        <Group gap="xs" wrap="nowrap" className={classes.controlRow}>
           {children}
+          {trailing}
           {error && <Input.Error size="xs">{error}</Input.Error>}
-        </Stack>
+        </Group>
       </Group>
     );
   }

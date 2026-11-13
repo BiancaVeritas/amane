@@ -28,10 +28,11 @@ import {
   IconRefresh,
   IconStar,
   IconTrash,
+  IconUserEdit,
 } from "@tabler/icons-react";
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { type ReactNode, useMemo, useRef, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useMediaServerReady } from "@/hooks/use-media-server-ready";
 import {
@@ -52,6 +53,7 @@ import { InfiniteScrollSentinel } from "@/components/common/infinite-scroll-sent
 import { SortMenu } from "@/components/common/sort-menu";
 import { ActorAvatarCropDialog } from "@/components/media/actor-avatar-crop-dialog";
 import { ActorEditDialog } from "@/components/media/actor-edit-dialog";
+import { ActorNameMappingEditor } from "@/components/media/actor-name-mapping-editor";
 import { ActorUserTags } from "@/components/media/actor-user-tags";
 import { ClearPersonNotice } from "@/components/media/clear-person-notice";
 import { FanartLightbox } from "@/components/media/fanart-lightbox";
@@ -123,6 +125,11 @@ function ActorDetailPage() {
   const [cropOpen, setCropOpen] = useState(false);
   const actorWorksSort = useUIStore((state) => state.actorWorksSort);
   const setActorWorksSort = useUIStore((state) => state.setActorWorksSort);
+  // 记下当前这条: 去别的模块处理完再点侧栏回演员页时, 直接回到这里而不是从头翻列表.
+  const setLastActorId = useUIStore((state) => state.setLastActorId);
+  useEffect(() => {
+    if (validId) setLastActorId(id);
+  }, [validId, id, setLastActorId]);
 
   const { data: actor, isLoading: actorLoading } = useQuery({
     ...getActorOptions({ path: { actor_id: id } }),
@@ -488,6 +495,7 @@ function ActorHero({
 }) {
   const { t } = useTranslation(["metadata", "common"]);
   const mediaServer = useMediaServerReady();
+  const [mappingOpen, setMappingOpen] = useState(false);
   const [lightboxOpen, lightbox] = useDisclosure(false);
   const imageUrls = actor.image_urls ?? [];
   const primaryImage = imageUrls[0];
@@ -766,6 +774,15 @@ function ActorHero({
           <Button size="xs" variant="light" leftSection={<IconPencil size={14} />} onClick={onEdit}>
             {t("common:actions.edit")}
           </Button>
+          {/* 中文映射只改展示, 搜索与去重仍用原名; 放在「编辑」右边与它同级. */}
+          <Button
+            size="xs"
+            variant="light"
+            leftSection={<IconUserEdit size={14} />}
+            onClick={() => setMappingOpen(true)}
+          >
+            {t("metadata:actorNameMapping.detailButton")}
+          </Button>
           {/* 只同步这一个演员: 悬停给两种口径. 媒体服务器没配 API Key 时置灰并提示. */}
           <Tooltip label={mediaServer.reason} disabled={mediaServer.ready} withArrow>
             <Box>
@@ -851,6 +868,12 @@ function ActorHero({
       {lightboxOpen && imageUrls.length > 0 && (
         <FanartLightbox images={imageUrls} initialIndex={0} onClose={lightbox.close} />
       )}
+
+      <ActorNameMappingEditor
+        opened={mappingOpen}
+        onClose={() => setMappingOpen(false)}
+        name={actor.name}
+      />
     </Group>
   );
 }

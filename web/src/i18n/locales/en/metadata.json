@@ -476,6 +476,9 @@
   "actorNameMapping": {
     "button": "Actor name mapping",
     "title": "Actor name mapping",
+    "detailTitle": "Name mapping",
+    "detailButton": "Name mapping",
+    "detailHint": "Display only: search, dedup and scraping still use the original name. Saving an empty value removes the mapping.",
     "hint": "Display only: search, dedup and scraping still use the original name.",
     "search": "Search actors",
     "stats": "Mapped {{mapped}} / {{all}}",

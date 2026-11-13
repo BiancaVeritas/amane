@@ -35,6 +35,7 @@ import type {
   SemanticHitInfo,
 } from "@/client/types.gen";
 import { BrowsePageShell } from "@/components/common/browse-page-shell";
+import { useRestoreScroll } from "@/components/common/use-restore-scroll";
 import { ScrollToTop } from "@/components/common/scroll-to-top";
 import { HintedActionIcon } from "@/components/common/hinted-action-icon";
 import { ListPagination } from "@/components/common/list-pagination";
@@ -150,7 +151,22 @@ function MetaIndexPage() {
   const cardSize = useUIStore((s) => s.cardSizes.meta);
   const metaSort = useUIStore((s) => s.metaSort);
   const setMetaSort = useUIStore((s) => s.setMetaSort);
+  const setListDefault = useUIStore((s) => s.setListDefault);
   const narrowViewport = useNarrowViewport("md");
+
+  // 把当前的筛选/排序/页码/视图记下来: 去别的页面再点侧栏回来, 应当停在原处而不是从头开始.
+  // 依赖取序列化后的值: search 对象每次导航都是新引用, 直接放进依赖会每帧都写一次 store.
+  const metaDefaultsKey = JSON.stringify(metaListDefaults(search));
+  useEffect(() => {
+    setListDefault({ key: "meta", value: JSON.parse(metaDefaultsKey) });
+  }, [metaDefaultsKey, setListDefault]);
+
+  // 进到列表页就说明用户已经离开了详情页, 清掉「上次打开的那条」:
+  // 否则去别的模块再点侧栏回来, 会被送回一条早已退出的详情页.
+  const setLastMetaId = useUIStore((s) => s.setLastMetaId);
+  useEffect(() => {
+    setLastMetaId(null);
+  }, [setLastMetaId]);
 
   const hasFiles = parseHasFiles(search.has_files);
   const vr = parseHasFiles(search.vr);
@@ -216,19 +232,26 @@ function MetaIndexPage() {
     if (semanticMode) void refetchSemanticStatus();
   }, [semanticMode, refetchSemanticStatus]);
 
-  // URL 未携带有效的非默认排序时，恢复 UI 持久化的上次选择；
-  // URL 已明确使用非默认排序时，以当前 URL 为准并同步记忆。
+  // 只在 URL **完全没带**排序参数时恢复持久化的上次选择.
+  //
+  // 判据不能是「URL 是否等于默认值」: 用户主动点回「更新日期降序」时 URL 正好等于默认值,
+  // 那样会被判成「没指定」而立刻跳回持久化里的另一个排序 —— 表现就是点了没反应.
   useEffect(() => {
-    const currentBy = search.sort_by ?? "updated_at";
-    const currentOrder = search.order ?? "desc";
-    const isDefault = currentBy === "updated_at" && currentOrder === "desc";
-    const storedIsDefault = metaSort.sort_by === "updated_at" && metaSort.order === "desc";
-    if (isDefault && !storedIsDefault) {
+    if (search.sort_by !== undefined || search.order !== undefined) {
+      // URL 明确指定了排序: 以 URL 为准并同步记忆.
+      if (metaSort.sort_by !== search.sort_by || metaSort.order !== search.order) {
+        setMetaSort({
+          sort_by: search.sort_by ?? "updated_at",
+          order: search.order ?? "desc",
+        });
+      }
+      return;
+    }
+    // URL 没带排序: 用记住的那个.
+    if (!(metaSort.sort_by === "updated_at" && metaSort.order === "desc")) {
       void navigate({
         search: (prev) => ({ ...prev, sort_by: metaSort.sort_by, order: metaSort.order, page: 1 }),
       });
-    } else if (!isDefault && (metaSort.sort_by !== currentBy || metaSort.order !== currentOrder)) {
-      setMetaSort({ sort_by: currentBy, order: currentOrder });
     }
   }, [search.sort_by, search.order, metaSort, setMetaSort, navigate]);
 
@@ -273,6 +296,8 @@ function MetaIndexPage() {
 
   const gridItems = gridQuery.data?.items ?? [];
   const total = isList ? (listQuery.data?.total ?? 0) : (gridQuery.data?.total ?? 0);
+  // 切走再回来时回到原来滑到的位置: 列表视图是内部容器滚动, 路由自带的恢复管不到.
+  useRestoreScroll("meta");
   const semanticHits = useMemo(() => {
     const map = new Map<number, SemanticHitInfo>();
     if (!semanticActive) return map;

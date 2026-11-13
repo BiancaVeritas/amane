@@ -29,6 +29,7 @@ import {
   IconLock,
   IconLockOpen,
   IconPencil,
+  IconSearch,
   IconPhoto,
   IconPhotoOff,
   IconPlayerPlay,
@@ -62,6 +63,7 @@ import type { MetadataField, MetadataResponse } from "@/client/types.gen";
 import { FacetBadge } from "@/components/media/facet-badge";
 import { LockChip, LockToggle, type LockProps } from "@/components/media/field-lock";
 import { UserTagActions } from "@/components/media/user-tag-add";
+import { ManualScrapeDialog } from "@/components/task/manual-scrape-dialog";
 import { VrBadge } from "@/components/media/vr-badge";
 import { FanartLightbox, FanartStrip } from "@/components/media/fanart-lightbox";
 import { FilePhaseBadges, FilePhaseOverlay } from "@/components/media/file-phase-badges";
@@ -70,6 +72,7 @@ import { VrOverlayChip } from "@/components/media/vr-badge";
 import { type ImageInfoItem, ImagePickerDialog } from "@/components/media/image-picker-dialog";
 import { PosterCropDialog } from "@/components/media/poster-crop-dialog";
 import { useConfig, useUpdateConfig } from "@/hooks/use-config";
+import { useUIStore } from "@/stores/ui";
 import { type CropRule, CropRuleEditorDialog } from "@/components/settings/crop-rules-dialog";
 import { useUploadMetaImage } from "@/components/media/use-upload-meta-image";
 import { MergeDialog } from "@/components/metadata/merge-dialog";
@@ -168,10 +171,18 @@ function FieldBlock({
 
 function TitleDetailPage() {
   const { metadataId } = Route.useParams();
-  const { t } = useTranslation(["metadata", "library", "common"]);
+  const { t } = useTranslation(["metadata", "library", "tasks", "common"]);
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  // 记下当前这条: 去别的模块处理完再点侧栏回片库时, 直接回到这里而不是从头翻列表.
+  const setLastMetaId = useUIStore((s) => s.setLastMetaId);
+  useEffect(() => {
+    const id = Number(metadataId);
+    if (Number.isInteger(id) && id > 0) setLastMetaId(id);
+  }, [metadataId, setLastMetaId]);
   const [editOpen, setEditOpen] = useState(false);
+  // 手动刮削入口: null 表示未打开; 两个口径共用同一个弹窗, 只是落库方式不同.
+  const [manualScrapeMode, setManualScrapeMode] = useState<"force" | "append" | null>(null);
   const [mergeOpen, setMergeOpen] = useState(false);
   const [cropOpen, setCropOpen] = useState(false);
   // 「精准裁切」按钮带出来的规则草稿; 非空时打开规则编辑窗.
@@ -1121,6 +1132,34 @@ function TitleDetailPage() {
             >
               {t("common:actions.edit")}
             </Button>
+            {/* 悬停给两个口径: 强制手动刮削接管字段与来源顺序, 添加来源链接只补一条链接. */}
+            <Menu
+              shadow="md"
+              position="bottom-start"
+              trigger="hover"
+              openDelay={120}
+              closeDelay={200}
+            >
+              <Menu.Target>
+                <Button size="xs" variant="light" leftSection={<IconSearch size={14} />}>
+                  {t("tasks:manualScrape.entry")}
+                </Button>
+              </Menu.Target>
+              <Menu.Dropdown>
+                <Menu.Item onClick={() => setManualScrapeMode("force")}>
+                  <Text size="sm">{t("tasks:manualScrape.forceMode")}</Text>
+                  <Text size="xs" c="dimmed">
+                    {t("tasks:manualScrape.forceModeDesc")}
+                  </Text>
+                </Menu.Item>
+                <Menu.Item onClick={() => setManualScrapeMode("append")}>
+                  <Text size="sm">{t("tasks:manualScrape.appendMode")}</Text>
+                  <Text size="xs" c="dimmed">
+                    {t("tasks:manualScrape.appendModeDesc")}
+                  </Text>
+                </Menu.Item>
+              </Menu.Dropdown>
+            </Menu>
             <Menu shadow="md" position="bottom-start">
               <Menu.Target>
                 <Button
@@ -1241,6 +1280,18 @@ function TitleDetailPage() {
           onSeek={requestSeek}
         />
       </SimpleGrid>
+
+      {/* 片库详情页的手动刮削: 范围钉在当前条目上, 与任务页那个手动搜索同一套流程. */}
+      <ManualScrapeDialog
+        opened={manualScrapeMode !== null}
+        onClose={() => setManualScrapeMode(null)}
+        metadata={{
+          id: item.id,
+          number: item.number,
+          content_type: item.content_type,
+        }}
+        mode={manualScrapeMode ?? "force"}
+      />
 
       <Modal
         opened={editOpen}

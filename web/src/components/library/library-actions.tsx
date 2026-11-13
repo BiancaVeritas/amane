@@ -120,6 +120,24 @@ export function LibraryActionButtons({
               {t("scan.modes.add.desc")}
             </Text>
           </Menu.Item>
+          {/* 只对索引: 不勾刮削范围. 已有元数据的文件不会被重扫, 新文件留到下次再刮. */}
+          <Menu.Item
+            onClick={() =>
+              scanMutation.mutate({
+                body: {
+                  type: "refresh",
+                  library_id: library.id,
+                  scan: ["add"],
+                  scrape: [],
+                },
+              })
+            }
+          >
+            <Text size="sm">{t("scan.modes.indexOnly.label")}</Text>
+            <Text size="xs" c="dimmed">
+              {t("scan.modes.indexOnly.desc")}
+            </Text>
+          </Menu.Item>
           <Menu.Item
             onClick={() =>
               scanMutation.mutate({

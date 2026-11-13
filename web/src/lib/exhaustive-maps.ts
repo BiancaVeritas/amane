@@ -76,10 +76,19 @@ export const CONTENT_TYPES = exhaustiveTuple<ContentType>()(
 
 export const MOSAICS = exhaustiveTuple<Mosaic>()("uncensored", "cracked", "leaked");
 
-/** 顺序即优先级 (高→低). 与后端 DEFINITION_VALUES 对齐. */
-export const FILE_DEFINITIONS = exhaustiveTuple<
-  "8K" | "4K" | "1440p" | "1080p" | "720p" | "480p" | "HD" | "SD"
->()("8K", "4K", "1440p", "1080p", "720p", "480p", "HD", "SD");
+/** 顺序即优先级 (高→低). 与后端 `parsing/file_info.py::DEFINITION_VALUES` 逐项一致.
+ *
+ * 全小写、只保留数字档位: 后端写入时把 `HD`/`FHD`/`1440P` 这些写法都归并到数字档
+ * (`720p`/`1080p`/`2k`), 前端再列旧写法就永远选不中库里实际存的值.
+ */
+export const FILE_DEFINITIONS = exhaustiveTuple<"8k" | "4k" | "2k" | "1080p" | "720p" | "480p">()(
+  "8k",
+  "4k",
+  "2k",
+  "1080p",
+  "720p",
+  "480p",
+);
 
 export const TASK_STATUSES = exhaustiveTuple<TaskStatus>()("queued", "running", "done", "failed");
 

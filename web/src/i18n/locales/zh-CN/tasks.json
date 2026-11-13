@@ -230,6 +230,18 @@
         "label": "场景 ID",
         "description": "ThePornDB 中的场景 ID"
       },
+      "metadata_id": {
+        "label": "绑定条目",
+        "description": "把刮削范围钉在这条记录上"
+      },
+      "append_sources": {
+        "label": "只添加来源",
+        "description": "只补来源链接, 不改字段与既有链接顺序"
+      },
+      "source_url": {
+        "label": "来源地址",
+        "description": "只抓这一个地址, 不把全部来源重新问一遍"
+      },
       "content_type": {
         "label": "内容类型",
         "description": "留空则自动识别",
@@ -322,6 +334,10 @@
             "trans": "译文缓存"
           }
         }
+      },
+      "organize": {
+        "label": "顺带整理",
+        "description": "已刮削的文件按当前模板重命名/搬移并补关联文件, 不重新刮削"
       }
     },
     "r18_import": {
@@ -462,6 +478,16 @@
   },
   "manualScrape": {
     "title": "手动搜索刮削",
+    "entry": "手动刮削",
+    "forceMode": "手动强制刮削",
+    "forceModeDesc": "按选中的来源重新刮取并覆盖字段, 该来源排到来源链接第一位",
+    "appendMode": "添加来源链接",
+    "appendModeDesc": "只把选中的来源接在末尾, 不改字段与既有链接顺序",
+    "appendTitle": "添加来源链接",
+    "appendHint": "填一条来源页地址。只抓这一个链接, 不按番号去问其他来源, 也不改现有字段与链接顺序。",
+    "appendLabel": "来源链接",
+    "appendPlaceholder": "https://…",
+    "appendNeedsUrl": "请填写完整的来源页地址 (以 http:// 或 https:// 开头)",
     "hint": "先搜索, 再从结果里挑一条写入。不受已有记录与锁定影响。",
     "label": "标题番号 / 地址 / UUID",
     "placeholder": "例如 ABC-123 或 00000000-0000-0000-0000-000000000000",
@@ -472,7 +498,7 @@
     "search": "搜索",
     "noResult": "各来源都没有找到结果",
     "pickOne": "找到 {{count}} 条结果, 选一条作为主元数据",
-    "useThis": "使用这条"
+    "useThis": "选择"
   },
   "scrape": {
     "manual": "手动搜索"
@@ -480,7 +506,7 @@
   "scrapedRecords": {
     "toggle": "文件记录",
     "title": "文件记录",
-    "hint": "刮过的文件名登记在这里。有记录的同名文件不再进入刮削；清掉记录只是下次不再拦截，不影响正在运行的任务。",
+    "hint": "经过整理（移动或重命名）的文件登记在这里，显示原名与落盘后的路径。刮削本身不搬文件，因此不在此登记。",
     "count": "共 {{count}} 条",
     "clear": "清空记录",
     "cleared": "已清除 {{count}} 条记录",
