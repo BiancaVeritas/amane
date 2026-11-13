@@ -1,7 +1,9 @@
 from collections.abc import Sequence
+from pathlib import Path
 from typing import Unpack
 
 from sqlmodel import col, select
+from sqlmodel import delete as sqla_delete
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from ...enums import DownloadableResource, LibraryAutomation, LibraryIngest, LinkMode, MoveMode
@@ -24,10 +26,19 @@ from ...organize.path_templates import (
     validate_path_template,
 )
 from ...organize.strm_content import normalize_strm_content_template, validate_strm_content_template
-from ...utils.path import resolved_path
-from ..models import Library, MediaFile
+from ...utils.path import path_is_under, resolved_path, to_forward_slash
+from ..models import Library, MediaFile, ScrapedFilename
 from ..repo_types import LibraryUpdates
 from .base import RepositoryMixinBase
+
+
+def _resolved_forward_slash(path: str | Path) -> str:
+    """真实路径, 且分隔符统一成 ``/``.
+
+    库根与下载目录并排显示在同一张表单里, 一个是 ``\\`` 一个是 ``/`` 会让人以为写错了; 存下来
+    还会让同一目录出现两种写法. 真实路径解析不受影响: 两条写法在 Windows 上等价, 只改呈现.
+    """
+    return to_forward_slash(str(resolved_path(path))) or ""
 
 
 def _validated_or_default_jinja(value: str | None, watch_dir_enabled: bool) -> str | None:
@@ -36,6 +47,7 @@ def _validated_or_default_jinja(value: str | None, watch_dir_enabled: bool) -> s
     if template:
         return template
     return JINJA_VIDEO_TEMPLATE_DEFAULT if watch_dir_enabled else None
+
 
 def _blank_to_none(value: str | None) -> str | None:
     """空白串按「未设置」存, 免得库里留下空路径让监控去挂空目录."""
@@ -132,7 +144,7 @@ class LibrariesRepoMixin(RepositoryMixinBase):
                 await _reject_overlapping_cloud_path(session, cloud_path)
             lib = Library(
                 name=name,
-                path=str(resolved_path(path)),
+                path=_resolved_forward_slash(path),
                 automation=automation,
                 auto_organize=auto_organize,
                 ingest=ingest,
@@ -145,9 +157,7 @@ class LibrariesRepoMixin(RepositoryMixinBase):
                 watch_rename=watch_rename,
                 video_template=video_template,
                 use_jinja_template=use_jinja_template,
-                jinja_video_template=_validated_or_default_jinja(
-                    jinja_video_template, watch_dir_enabled
-                ),
+                jinja_video_template=_validated_or_default_jinja(jinja_video_template, watch_dir_enabled),
                 custom_placeholders=dict(custom_placeholders or {}),
                 link_template=normalize_link_template(link_template),
                 link_mode=link_mode,
@@ -198,25 +208,31 @@ class LibrariesRepoMixin(RepositoryMixinBase):
             return {int(i): str(n) for i, n in rows if i is not None}
 
     async def get_library_for_path(self, file_path: str) -> Library | None:
-        """最长前缀匹配. 仅迁移或无法解析归属时使用, 不是入库归属真值."""
+        """最长前缀匹配. 仅迁移或无法解析归属时使用, 不是入库归属真值.
+
+        比较经 ``path_is_under``: 库根统一存 ``/``, 而索引行与调用方传入的常是 ``\\``,
+        裸 ``startswith`` 会把同一个目录判成不归属.
+        """
         best: Library | None = None
         for lib in await self.list_libraries():
-            if file_path.startswith(lib.path) and (best is None or len(lib.path) > len(best.path)):
+            if path_is_under(file_path, lib.path) and (best is None or len(lib.path) > len(best.path)):
                 best = lib
         return best
 
     async def delete_library(self, library_id: int) -> int:
-        """须同时删除归属 MediaFile, 否则留下悬空非空 FK. 返回被级联删除的文件数."""
+        """须同时删除归属 MediaFile 与同名登记, 否则留下悬空非空 FK. 返回被级联删除的文件数."""
         async with self._session() as session:
             lib = await session.get(Library, library_id)
             if lib is None:
                 return 0
+            # 先清子表再删库行: 未声明 ORM relationship, UoW 不会替我们排序删除顺序,
+            # 任何漏掉的引用表都会让整条删除撞 FK 约束失败.
+            await session.exec(sqla_delete(ScrapedFilename).where(col(ScrapedFilename.library_id) == library_id))
             stmt = select(MediaFile).where(MediaFile.library_id == library_id)
             result = await session.exec(stmt)
             media_files = list(result.all())
             for mf in media_files:
                 await session.delete(mf)
-            # 未声明 ORM relationship, UoW 不会排序删除顺序; 须先 flush 子表.
             await session.flush()
             await session.delete(lib)
             await session.commit()
@@ -233,7 +249,7 @@ class LibrariesRepoMixin(RepositoryMixinBase):
             # 值未变时不改写形式: 老库的库路径可能还没解析为真实路径, 而索引行都是与它同一形式的写法,
             # 仅仅重新保存一次就把库根换成另一种写法, 会把同一个文件算成两条索引.
             if "path" in updates and updates["path"] != lib.path:
-                lib.path = str(resolved_path(updates["path"]))
+                lib.path = _resolved_forward_slash(updates["path"])
             if "automation" in updates:
                 lib.automation = updates["automation"]
             if "auto_organize" in updates:
@@ -264,9 +280,9 @@ class LibrariesRepoMixin(RepositoryMixinBase):
                 lib.use_jinja_template = updates["use_jinja_template"]
             if "jinja_video_template" in updates:
                 # 保存前就校验语法: 坏模板要等到整理文件时才炸, 那时表现是「文件全都不动」.
-                lib.jinja_video_template = validate_jinja_template(
-                    _blank_to_none(updates["jinja_video_template"]) or ""
-                ) or None
+                lib.jinja_video_template = (
+                    validate_jinja_template(_blank_to_none(updates["jinja_video_template"]) or "") or None
+                )
             # 打开监控目录即切到 Jinja2 语法; 模板没填时补默认, 免得渲染成空路径.
             if updates.get("watch_dir_enabled") and not lib.jinja_video_template:
                 lib.jinja_video_template = JINJA_VIDEO_TEMPLATE_DEFAULT

@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 
 from ..db import Library, MediaFileStatus
 from ..library import LibraryHit, LibraryScan, has_companion_subtitle
+from ..parsing import parse_file_info
 from ..utils.oshash import compute_oshash
 from ..utils.threads import existing_disk_path, in_thread
 
@@ -54,8 +55,13 @@ def scan_library(scan_dir: Path, *, recursive: bool, scan: LibraryScan) -> list[
 async def register_media_file(
     repo: Repository, library_id: int, path: Path, *, library: Library | None = None
 ) -> MediaFile:
-    """注册不读文件内容; oshash 留给刮削按需计算. 有库配置时立刻查一次同目录字幕."""
-    media = await repo.create_media_file(library_id=library_id, path=str(path))
+    """注册不读文件内容; oshash 留给刮削按需计算. 有库配置时立刻查一次同目录字幕.
+
+    顺手把番号落库: 它是路径的函数, 记下来后续「关联文件」之类按番号找行的读取方
+    才不用各自再解析一遍路径.
+    """
+    parsed = parse_file_info(str(path))
+    media = await repo.create_media_file(library_id=library_id, path=str(path), number=parsed.number)
     if library is not None:
         await refresh_external_subtitle(repo, media, library)
     return media
@@ -93,11 +99,10 @@ async def ensure_oshash(repo: Repository, media: MediaFile) -> str | None:
 async def finalize_media_file(repo: Repository, media_file_id: int | None, metadata_id: int | None) -> None:
     """media_file_id 为 None 时静默跳过.
 
-    刮完顺手把这个文件名登记进 ``scraped_filenames``: 之后同一份文件被整理到别处、
-    或者源文件还留在原目录, 都不会再刮第二遍.
+    只标状态与关联, **不登记文件记录**: 那张表记的是「整理过的文件」, 由整理落盘时写入
+    (见 ``Repository.remember_scraped_renamed``). 刮削本身不搬文件, 记进来只会让它变成
+    一份「刮过什么」的流水, 用户看到的却是「待整理」.
     """
     if media_file_id is None:
         return
-    media = await repo.update_media_file(media_file_id, status=MediaFileStatus.SCRAPED, metadata_id=metadata_id)
-    if media is not None and media.filename:
-        await repo.remember_scraped_filename(media.library_id, media.filename, path=media.path)
+    await repo.update_media_file(media_file_id, status=MediaFileStatus.SCRAPED, metadata_id=metadata_id)

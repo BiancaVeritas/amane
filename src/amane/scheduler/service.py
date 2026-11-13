@@ -17,6 +17,7 @@ from ..handlers.models import ScrapePayload
 from ..library import LibraryFileKind, LibraryScan
 from ..parsing import parse_file_info
 from ..utils.path import is_descendant, path_is_under
+from ..utils.threads import existing_disk_path
 from .clouddrive import CloudDriveChange, CloudDriveRoute, local_for, match_route
 from .watcher import FileWatcher
 
@@ -394,7 +395,7 @@ class WatcherService:
             if change.is_dir:
                 await self._delete_under(src_route.library_id, local)
             else:
-                await self._on_file_deleted(local)
+                await self._on_file_deleted(local, verify=False)
             return
 
         if change.action == "rename":
@@ -424,19 +425,19 @@ class WatcherService:
             dest = local_for(dest_route, change.destination_file)
             if not self._accept_cloud_file(dest_route, dest):
                 if src_route is not None:
-                    await self._on_file_deleted(local_for(src_route, change.source_file))
+                    await self._on_file_deleted(local_for(src_route, change.source_file), verify=False)
                 return
             if src_route is None:
                 await self._on_file_found(dest, dest_route.library_id)
                 return
             if src_route.library_id != dest_route.library_id:
-                await self._on_file_deleted(local_for(src_route, change.source_file))
+                await self._on_file_deleted(local_for(src_route, change.source_file), verify=False)
                 await self._on_file_found(dest, dest_route.library_id)
                 return
             await self._on_file_moved(local_for(src_route, change.source_file), dest, dest_route.library_id)
             return
         if src_route is not None:
-            await self._on_file_deleted(local_for(src_route, change.source_file))
+            await self._on_file_deleted(local_for(src_route, change.source_file), verify=False)
 
     async def _scan_cloud_dir(self, route: CloudDriveRoute, local: Path) -> None:
         nested = not _same_path(local, Path(route.local_path))
@@ -451,7 +452,7 @@ class WatcherService:
             if media.id is None:
                 continue
             if path_is_under(media.path, root):
-                await self._on_file_deleted(Path(media.path))
+                await self._on_file_deleted(Path(media.path), verify=False)
 
     def _accept_cloud_file(self, route: CloudDriveRoute, path: Path) -> bool:
         return _file_in_scope(path, route) and route.scan.classify(path) is LibraryFileKind.MEDIA
@@ -478,9 +479,9 @@ class WatcherService:
                     if updated is not None and library is not None:
                         await refresh_external_subtitle(self._repo, updated, library)
                 else:
-                    await self._on_file_deleted(Path(media.path))
+                    await self._on_file_deleted(Path(media.path), verify=False)
                 continue
-            await self._on_file_deleted(Path(media.path))
+            await self._on_file_deleted(Path(media.path), verify=False)
             if self._accept_cloud_file(dest_route, dest):
                 await self._on_file_found(dest, dest_route.library_id)
 
@@ -554,10 +555,20 @@ class WatcherService:
 
         await self._event_bus.emit(EventType.FILE_DISCOVERED, {"path": path_str, "media_file_id": media.id})
 
-    async def _on_file_deleted(self, path: Path) -> None:
+    async def _on_file_deleted(self, path: Path, *, verify: bool = True) -> None:
+        """``verify`` 为真时先确认文件真的不在了.
+
+        观察器重建 (改库配置会重挂) 时 watchdog 可能补发已消失路径的 deleted 事件, 而文件
+        其实还在; 照删会让一条正常记录静默消失, 随后按它发的整理任务只能 skipped=1.
+        云盘来的变更通知是权威的「这个文件没了」, 且虚拟路径不落到本地盘, 因此传 False.
+        """
         path_str = str(path)
         media = await self._repo.get_media_file_by_path(path_str)
         if media is None:
+            return
+
+        if verify and await existing_disk_path(Path(media.path), follow_symlinks=False) is not None:
+            logger.debug("file still on disk, ignore delete event", path=path_str)
             return
 
         assert media.id is not None

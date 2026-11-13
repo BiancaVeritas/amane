@@ -4,12 +4,15 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+import structlog
 from watchdog.events import FileSystemEventHandler
 from watchdog.observers.polling import PollingObserver
 
 from ..library import MEDIA_EXTENSIONS, LibraryFileKind, LibraryScan
 from ..library.rules import is_in_trash
 from ..utils.path import path_is_under, path_key
+
+logger = structlog.get_logger()
 
 if sys.platform == "win32":
     from .watcher_win import WindowsObserver as _NativeObserver
@@ -245,12 +248,25 @@ class FileWatcher:
     def unwatch(self, library_id: int) -> None:
         """取消该 library_id 的监控; 未在监控中则为无操作."""
         watch = self._watches.pop(library_id, None)
-        if watch is not None and self._observer is not None:
-            self._observer.unschedule(watch)
+        if watch is not None:
+            self._unschedule_quietly(watch)
         for extra in self._extra_watches.pop(library_id, []):
-            if self._observer is not None:
-                self._observer.unschedule(extra)
+            self._unschedule_quietly(extra)
         self._handlers = [h for h in self._handlers if h.library_id != library_id]
+
+    def _unschedule_quietly(self, watch: ObservedWatch) -> None:
+        """取消监控, 该 watch 已不在 observer 表里时忽略.
+
+        observer 重启或路径被替换后, 表里的对象与这里的引用会对不上; watchdog 的
+        ``unschedule`` 遇到这种就抛 ``KeyError``. 记录本来就该消失, 不能因为取消不掉
+        一个已经失效的 watch 就让调用方 (例如删库) 整条失败.
+        """
+        if self._observer is None:
+            return
+        try:
+            self._observer.unschedule(watch)
+        except KeyError:
+            logger.debug("watch already gone, skip unschedule", path=str(watch.path))
 
     def start(self) -> None:
         if self._observer:

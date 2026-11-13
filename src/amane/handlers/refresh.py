@@ -4,13 +4,13 @@ from typing import TYPE_CHECKING
 
 import structlog
 
-from ..db import TaskType
+from ..db import MediaFileStatus, TaskType
 from ..library import MEDIA_EXTENSIONS, InventoryStore, LibraryHit, LibraryScan, OrphanScan, scan_inventory
 from ..parsing import parse_file_info
 from ..utils.path import nfc_path
 from ..utils.threads import path_exists, path_is_dir
 from ._common import register_media_file
-from .models import RefreshPayload, RefreshResult, ScanMode, ScrapePayload
+from .models import OrganizePayload, RefreshPayload, RefreshResult, ScanMode, ScrapePayload
 from .protocol import FollowupTask, TaskHandler, TaskResult
 
 if TYPE_CHECKING:
@@ -52,6 +52,7 @@ class RefreshHandler(TaskHandler[RefreshPayload, RefreshResult]):
         )
 
         added = removed = scrape = subtitles = 0
+        adopted_count = 0
 
         existing = await self._repo.list_media_files(library_id=payload.library_id, limit=None)
         existing_by_path = {nfc_path(f.path): f for f in existing}
@@ -103,12 +104,18 @@ class RefreshHandler(TaskHandler[RefreshPayload, RefreshResult]):
                         logger.info("scan walking", path=payload.path, seen=walked, added=added)
                     if path_key not in existing_by_path:
                         media = await register_media_file(self._repo, payload.library_id, file_path, library=library)
+                        adopted = await self._adopt_existing_metadata(media)
                         existing_by_path[path_key] = media
                         added += 1
+                        if adopted:
+                            adopted_count += 1
                     else:
                         subtitles += await self._sync_external_subtitle(existing_by_path[path_key], hit)
                 if added:
                     logger.info("new files discovered", path=payload.path, count=added)
+                if adopted_count:
+                    # 元数据还在就直接挂上: 删库重加 / 换目录之后不该把已有条目重刮一遍.
+                    logger.info("existing metadata adopted", path=payload.path, count=adopted_count)
 
             # 删除索引中已不存在的记录.
             if want_remove:
@@ -151,11 +158,56 @@ class RefreshHandler(TaskHandler[RefreshPayload, RefreshResult]):
             )
             scrape += 1
 
+        # 已有元数据的文件只整理: 路径模板变了或补充过字段时, 扫描一次就该落到该去的位置,
+        # 不必逐个点整理, 也不该因此重新刮一遍.
+        organized = 0
+        if payload.organize:
+            scraped = await self._repo.list_media_files(
+                library_id=payload.library_id, status={MediaFileStatus.SCRAPED}, limit=None
+            )
+            if scraped:
+                organize_ids = [f.id for f in scraped if f.id is not None]
+                followups.append(
+                    FollowupTask(
+                        key=f"organize:{payload.library_id}",
+                        task_type=TaskType.ORGANIZE,
+                        payload=OrganizePayload(
+                            library_id=payload.library_id,
+                            media_file_ids=organize_ids,
+                        ).model_dump(mode="json"),
+                    )
+                )
+                organized = len(organize_ids)
+
         logger.info(
-            "scan completed", path=payload.path, added=added, removed=removed, scrape=scrape, subtitles=subtitles
+            "scan completed",
+            path=payload.path,
+            added=added,
+            removed=removed,
+            scrape=scrape,
+            organize=organized,
+            subtitles=subtitles,
         )
 
         return TaskResult(True, result=RefreshResult(added=added, removed=removed, scrape=scrape), followups=followups)
+
+    async def _adopt_existing_metadata(self, media: MediaFile) -> bool:
+        """新登记的行若已有同番号元数据, 直接挂上并标成已刮削.
+
+        删库重加、换监控目录之后, 番号条目本身还在库里; 让这些行重新进 PENDING 等于把
+        整库再刮一遍 —— 既慢又白打站点. 返回是否真的挂上了.
+        """
+        if media.id is None or not media.number:
+            return False
+        meta = await self._repo.get_metadata_by_number(
+            media.number, content_type=parse_file_info(media.path).content_type
+        )
+        if meta is None:
+            return False
+        await self._repo.update_media_file(media.id, status=MediaFileStatus.SCRAPED, metadata_id=meta.id)
+        media.status = MediaFileStatus.SCRAPED
+        media.metadata_id = meta.id
+        return True
 
     async def _sync_external_subtitle(self, media: MediaFile, hit: LibraryHit) -> int:
         """按本次遍历所见回写已登记行的外挂字幕标记; 未变化返回 0.

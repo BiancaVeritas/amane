@@ -235,11 +235,11 @@ def has_subtitle_predicate() -> ColumnElement[bool]:
 
 
 class ScrapedFilename(SQLModel, table=True):
-    """同名不重刮的登记表.
+    """整理记录: 哪个文件被搬到了哪里.
 
-    与 ``media_files`` 彻底解耦: 那张表会随整理、清理、覆盖而增删, 靠它判断「这个名字
-    刮过没有」会在文件被挪动两轮之后失效. 这里只记「这个库的这份文件名刮过了」,
-    要重刮必须显式清掉这一行.
+    只登记**经过整理**的文件 (移动 / 重命名). 与 ``media_files`` 彻底解耦: 那张表会随整理、
+    清理、覆盖而增删, 靠它判断「这个名字处理过没有」会在文件被挪动两轮之后失效.
+    界面按这里显示「原名 → 新路径」; 刮削本身不登记, 它不搬文件.
     """
 
     __tablename__ = "scraped_filenames"  # type: ignore[assignment]

@@ -70,6 +70,7 @@ async def execute_task_batch(
             log_dir=log_dir,
             found=found,
             missing=missing,
+            explicit_ids=True,
         )
 
     effective = _intersect_statuses(statuses, allowed)
@@ -106,6 +107,7 @@ async def _apply_found(
     log_dir: Path,
     found: Sequence[Task],
     missing: int,
+    explicit_ids: bool = False,
 ) -> TaskBatchResponse:
     allowed = _ACTION_STATUSES[action]
     eligible = [task for task in found if task.status in allowed]
@@ -123,7 +125,10 @@ async def _apply_found(
 
     if action == TaskBatchAction.DELETE:
         ids = [task.id for task in eligible if task.id is not None]
-        deleted = await repo.delete_tasks(ids)
+        # 显式指定要删的那几条: 子任务脱离父任务留着, 父任务照删. 用户点删除就是要这条记录
+        # 消失, 不该因为「它还有子任务」被静默跳过; 但删一条编排任务也不该抹掉它派生的全部
+        # 工作记录. 按状态批量清理不这样 —— 那里跳过的正是删了会让子任务失去链根的父任务.
+        deleted = await repo.delete_tasks(ids, detach_descendants=explicit_ids)
         leftover_ids: set[int] = set()
         if deleted and deleted < len(ids):
             leftover_ids = {task.id for task in await repo.find_tasks(task_ids=ids) if task.id is not None}

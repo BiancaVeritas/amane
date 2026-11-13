@@ -32,25 +32,17 @@ from ...organize.path_templates import (
 )
 from ...organize.strm_content import StrmContentTemplate
 from ...utils.model import create_partial_model, subset_of
+from ...utils.path import to_forward_slash
 
 
 def to_forward_slash_path(value: str | None) -> str | None:
     """路径统一用 ``/`` 分隔; 反斜杠（含 UNC 前缀）就地转换.
 
     与 ``normalize_cloud_path`` 同一取向: 从 Windows 复制的路径带反斜杠, 直接存下来会让同一
-    目录出现两种写法, 比较与前缀判断都要额外兼容.
+    目录出现两种写法, 比较与前缀判断都要额外兼容. 实现见
+    ``src/amane/utils/path.py::to_forward_slash``.
     """
-    if value is None:
-        return None
-    converted = value.strip().replace("\\", "/")
-    if not converted:
-        return None
-    # UNC 前缀 \\host 转完是 //host, 保留它; 其余重复斜杠收敛成一个.
-    prefix = "//" if converted.startswith("//") else ""
-    body = converted[len(prefix) :]
-    while "//" in body:
-        body = body.replace("//", "/")
-    return prefix + body
+    return to_forward_slash(value)
 
 
 class LibraryCreateRequest(BaseModel):

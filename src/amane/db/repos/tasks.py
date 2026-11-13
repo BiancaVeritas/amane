@@ -203,6 +203,50 @@ async def _descendants_of(session: AsyncSession, ids: Sequence[int]) -> set[int]
     return descendants
 
 
+async def _collect_descendants(session: AsyncSession, ids: Sequence[int]) -> set[int]:
+    """从这些 id 出发可达的全部节点 (含自身, 含菱形多父)."""
+    visited = set(ids)
+    frontier = list(visited)
+    while frontier:
+        next_frontier: list[int] = []
+        # 每层可达上千个节点, 整批放进一条 IN 会超过绑定变量上限.
+        for chunk in chunks(frontier):
+            rows = await session.exec(
+                select(TaskLink.parent_task_id, TaskLink.child_task_id).where(col(TaskLink.parent_task_id).in_(chunk))
+            )
+            for _parent, child in rows.all():
+                if child is None or child in visited:
+                    continue
+                visited.add(child)
+                next_frontier.append(child)
+        frontier = next_frontier
+    return visited
+
+
+async def _detach_external_descendants(session: AsyncSession, ids: Sequence[int]) -> None:
+    """让集合外的后裔脱离父任务, 各自成为独立链根.
+
+    只动 ``root_task_id`` 与父子边: 子任务自己以及它派生的行都留着, 执行历史不因删掉
+    一条上层编排任务而消失. 子任务若要再挂回某条链, 由它自己的后继关系重建.
+    """
+    id_set = set(ids)
+    if not id_set:
+        return
+    outside = await _collect_descendants(session, ids) - id_set
+    if not outside:
+        return
+    # 逐批处理: 每层可达上千个节点, 整批放进一条 IN 会超过绑定变量上限.
+    for chunk in chunks(sorted(outside)):
+        await session.exec(
+            sqla_delete(TaskLink).where(
+                col(TaskLink.parent_task_id).in_(chunk) | col(TaskLink.child_task_id).in_(chunk)
+            )
+        )
+        # 链根改指自身: 列表按 (root_task_id IS NULL OR root_task_id = id) 判链根,
+        # 留着指向已删父任务的 id 会让这些行彻底不显示.
+        await session.exec(update(Task).where(col(Task.id).in_(chunk)).values(root_task_id=col(Task.id)))
+
+
 async def _ids_with_external_descendants(session: AsyncSession, ids: Sequence[int]) -> set[int]:
     """待删集合里存在集合外后裔的那些 id (含菱形多父).
     有未纳入本次删除的后裔时祖先须跳过, 否则剩余子任务失去链根后无法在列表中显示.
@@ -617,13 +661,21 @@ class TasksRepoMixin(RepositoryMixinBase):
             await session.commit()
             return True
 
-    async def delete_tasks(self, task_ids: Iterable[int | None]) -> int:
-        """含相关后继边. 存在集合外后裔的行跳过."""
+    async def delete_tasks(self, task_ids: Iterable[int | None], *, detach_descendants: bool = False) -> int:
+        """含相关后继边. 默认跳过存在集合外后裔的行.
+
+        ``detach_descendants`` 为真时, 集合外的后裔脱离父任务成为独立链根, 父任务照删:
+        用户显式指定要删的那条应当真的消失, 而不该因为「它还有子任务」被静默跳过.
+        子任务连同执行历史保留 —— 删一条编排任务不该抹掉它派生的所有工作记录.
+        按状态批量清理仍用默认值: 那里跳过的正是删了会让子任务失去链根的父任务.
+        """
 
         ids = [i for i in task_ids if i is not None]
         if not ids:
             return 0
         async with self._session() as session:
+            if detach_descendants:
+                await _detach_external_descendants(session, ids)
             protected = await _ids_with_external_descendants(session, ids)
             deletable = [i for i in ids if i not in protected]
             if not deletable:
