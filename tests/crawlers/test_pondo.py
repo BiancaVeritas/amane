@@ -20,27 +20,55 @@ def test_number_accepts_only_pondo_format_without_normalization() -> None:
     assert _number("110526_001 ") is None
 
 
-def test_public_gallery_uses_only_clickable_public_nodes() -> None:
-    html = '''<div class="gallery-image-wrap"><img class="gallery-image pointer" data-vue-img-src="/open/a.jpg"></div>
-    <div class="gallery-image-wrap is-disabled"><img class="gallery-image" src="/locked/b.jpg"></div>
-    <img class="gallery-image pointer" src="/not-original.jpg">'''
-    assert _public_gallery(html, "https://www.1pondo.tv/movies/110526_001/") == [
-        "https://www.1pondo.tv/open/a.jpg"
+def test_public_gallery_builds_sample_urls_for_unprotected_rows() -> None:
+    """剧照地址按站点的 sample 目录拼: 站点自己的页面不渲染这段 HTML.
+
+    1pondo 的公开剧照在 ``assets/sample/{番号}/popu/{序号}.jpg``; 只有 ``Protected`` 为假的
+    那几张能直接取, 其余需要登录.
+    """
+    data = {
+        "Rows": [
+            {"MovieID": "110526_001", "Filename": "1.jpg", "Protected": False},
+            {"MovieID": "110526_001", "Filename": "2.jpg", "Protected": False},
+            {"MovieID": "110526_001", "Filename": "3.jpg", "Protected": True},
+            {"MovieID": "999999_99", "Filename": "other.jpg", "Protected": False},
+        ]
+    }
+    assert _public_gallery(data, "110526_001", "https://www.1pondo.tv", "popu") == [
+        "https://www.1pondo.tv/assets/sample/110526_001/popu/1.jpg",
+        "https://www.1pondo.tv/assets/sample/110526_001/popu/2.jpg",
     ]
+
+
+def test_public_gallery_empty_when_nothing_is_public() -> None:
+    data = {"Rows": [{"MovieID": "110526_001", "Filename": "1.jpg", "Protected": True}]}
+    assert _public_gallery(data, "110526_001", "https://www.1pondo.tv", "popu") == []
 
 
 class _FakeClient:
     async def get_json(self, url: str, **kwargs: object) -> dict:
+        # 剧照接口与详情接口是两条路径, 按 URL 分流.
+        if "movie_galleries" in url:
+            return {
+                "Rows": [
+                    {"MovieID": "110526_001", "Filename": "1.jpg", "Protected": False},
+                    {"MovieID": "110526_001", "Filename": "2.jpg", "Protected": True},
+                ]
+            }
         return {
-            "MovieID": "110526_001", "Title": "Title", "Desc": "Plot",
-            "Actor": "Actress", "Release": "2026-11-05", "Duration": 3672,
-            "Series": "Series", "UCNAME": ["Tag A"], "UCNAMEEn": ["Tag B"],
-            "ThumbUltra": "main.jpg", "SampleFiles": ["trailer.mp4"],
+            "MovieID": "110526_001",
+            "Title": "Title",
+            "Desc": "Plot",
+            "Actor": "Actress",
+            "Release": "2026-11-05",
+            "Duration": 3672,
+            "Series": "Series",
+            "UCNAME": ["Tag A"],
+            "UCNAMEEn": ["Tag B"],
+            "ThumbUltra": "main.jpg",
+            "SampleFiles": ["trailer.mp4"],
             "MemberFiles": ["restricted.mp4"],
         }
-
-    async def get_html(self, url: str, **kwargs: object) -> str:
-        return '<img class="gallery-image pointer" data-vue-img-src="/gallery/open.jpg"><div class="gallery-image-wrap is-disabled"><img class="gallery-image"></div>'
 
 
 @pytest.mark.asyncio
@@ -51,8 +79,26 @@ async def test_scrape_maps_public_metadata_only() -> None:
     assert result.runtime == 61
     assert result.poster_urls == ["main.jpg"]
     assert result.thumb_urls == ["main.jpg"]
-    assert result.extrafanart == ["https://www.1pondo.tv/gallery/open.jpg"]
+    assert result.extrafanart == ["https://www.1pondo.tv/assets/sample/110526_001/popu/1.jpg"]
     assert result.trailer_urls == ["trailer.mp4"]
     assert result.tags == ["Tag A", "Tag B"]
     assert result.studio == "一本道"
     assert result.publisher == "1pondo"
+
+
+@pytest.mark.asyncio
+async def test_gallery_failure_does_not_lose_metadata() -> None:
+    """剧照接口挂了不影响其余字段: 它是补充信息, 不是必得项."""
+
+    class _GalleryDownClient(_FakeClient):
+        async def get_json(self, url: str, **kwargs: object) -> dict:
+            if "movie_galleries" in url:
+                raise RuntimeError("boom")
+            return await super().get_json(url, **kwargs)  # type: ignore[misc]
+
+    crawler = PondoCrawler(_GalleryDownClient())  # type: ignore[arg-type]
+    result = await crawler._scrape("https://www.1pondo.tv/dyn/phpauto/movie_details/movie_id/110526_001.json")
+
+    assert result is not None
+    assert result.title == "Title"
+    assert result.extrafanart == []

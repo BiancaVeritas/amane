@@ -9,8 +9,8 @@ from amane.crawlers.http import HttpClient
 from amane.crawlers.models import SearchQuery
 from amane.crawlers.sites.aventertainments import (
     _detail_links,
-    _is_bd_number,
     _image_bytes_valid,
+    _is_bd_number,
     _metadata_from_page,
     _number_key,
     _search_terms,
@@ -18,7 +18,6 @@ from amane.crawlers.sites.aventertainments import (
     lookup_pro,
 )
 from amane.enums import SiteName
-
 
 DETAIL_URL = "https://www.aventertainments.com/dvd/detail?pro=87393&lang=2&cat=29"
 
@@ -78,6 +77,25 @@ def test_parser_maps_jacket_to_poster_and_bigcover_to_thumb() -> None:
     assert metadata.release == "2015-04-24"
     assert metadata.runtime == 130
     assert metadata.actors[0].name == "Example Actress"
+
+
+def test_parser_extracts_sample_screenshots_as_extrafanart() -> None:
+    """剧照在「サンプル画像」弹窗里, 是一串 screenshot 图.
+
+    详情页本身只展示封面, 不解析这个弹窗就一张剧照也拿不到.
+    """
+    shots = [
+        f"https://imgs02.aventertainments.com/vodimages/screenshot/large/S2MBD-046/{n:03d}.webp" for n in (1, 2, 3)
+    ]
+    modal = (
+        '<div class="modal-body" id="sscontainerppv1">'
+        + "".join(f"<img class='img-fluid' src='{src}' />" for src in shots)
+        + "</div>"
+    )
+    metadata = _metadata_from_page(DETAIL_URL, _detail_html() + modal)
+
+    assert metadata is not None
+    assert metadata.extrafanart == shots
 
 
 def test_parser_extracts_bigcover_from_product_image_area_without_video_poster() -> None:

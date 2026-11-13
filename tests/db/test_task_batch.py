@@ -179,6 +179,61 @@ async def test_batch_delete_mixed_tree_keeps_failed_under_root(repo: Repository,
 
 
 @pytest.mark.asyncio(loop_scope="function")
+async def test_batch_delete_explicit_ids_detaches_descendants(repo: Repository, tmp_path: Path) -> None:
+    """显式指定要删的那条照删, 子任务脱离父任务保留.
+
+    用户点单条任务的删除就是要这条记录消失. 父任务带着子任务时若照「有集合外后裔就跳过」处理,
+    删除会被静默跳过 (affected=0 且 skipped=1), 界面上表现为点了没反应; 反过来连同子树一起删
+    又会抹掉一条编排任务派生的全部工作记录. 折中是断链: 父消失, 子变成独立链根.
+    """
+    parent = await repo.create_task(task_type=TaskType.REFRESH, payload={"library_id": 1})
+    assert parent.id is not None
+    claimed = await repo.claim_next_task()
+    assert claimed is not None and claimed.id == parent.id
+    assert claimed.id is not None
+    children = await repo.complete_task_with_followups(
+        claimed.id,
+        result={},
+        followups=[
+            ("scrape:ok", TaskType.SCRAPE, {"number": "OK"}, 0),
+            ("scrape:bad", TaskType.SCRAPE, {"number": "BAD"}, 0),
+        ],
+    )
+    done_child, failed_child = children
+    assert done_child.id is not None and failed_child.id is not None
+    await finish_task(repo, done_child.id)
+    await repo.fail_task(failed_child.id, error="boom")
+
+    parent_dir = task_dir_for(tmp_path, parent.id)
+    parent_dir.mkdir(parents=True)
+    (parent_dir / "task.log").write_text('{"event": "parent"}\n', encoding="utf-8")
+
+    body = await execute_task_batch(
+        action=TaskBatchAction.DELETE,
+        repo=repo,
+        cancel_task=_cancel(),
+        log_dir=tmp_path,
+        task_ids=[parent.id],
+        statuses=None,
+        task_types=None,
+    )
+
+    assert body.affected == 1
+    assert body.skipped == 0
+    assert await repo.get_task(parent.id) is None
+    assert not parent_dir.exists()
+
+    # 子任务留着, 且各自成为独立链根 —— 仍指向已删父任务会让它们从列表里消失.
+    kept_done = await repo.get_task(done_child.id)
+    kept_failed = await repo.get_task(failed_child.id)
+    assert kept_done is not None and kept_failed is not None
+    assert kept_done.root_task_id == done_child.id
+    assert kept_failed.root_task_id == failed_child.id
+    listed = await repo.list_tasks(roots_only=True)
+    assert {done_child.id, failed_child.id} & {t.id for t in listed}
+
+
+@pytest.mark.asyncio(loop_scope="function")
 async def test_batch_cancel_queued_running_and_filter(repo: Repository, tmp_path: Path) -> None:
     queued = await repo.create_task(task_type=TaskType.CLEANUP, payload={})
     assert queued.id is not None

@@ -371,9 +371,9 @@ class TestScrapingPriorityMigration:
         assert ScrapingConfig().uncensored_poster_ratio == 0.7
 
     def test_legacy_uncensored_default_route_adds_aventertainments(self):
-        cfg = ScrapingConfig.model_validate({
-            "content_routes": {"uncensored": ["javdb", "javbus", "avsox", "freejavbt"]}
-        })
+        cfg = ScrapingConfig.model_validate(
+            {"content_routes": {"uncensored": ["javdb", "javbus", "avsox", "freejavbt"]}}
+        )
         assert cfg.content_routes[ContentType.UNCENSORED] == [
             SiteName.JAVDB,
             SiteName.JAVBUS,
@@ -537,6 +537,29 @@ class TestConfigManagerUpdate:
         mgr.update({"worker": {"concurrency": "5"}})
         assert mgr.hot.worker.concurrency == 5
         assert isinstance(mgr.hot.worker.concurrency, int)
+
+    def test_poster_crop_types_default_and_round_trip(self, mgr: ConfigManager):
+        """自动裁切默认放行有码 / 无码 / FC2; 改动可持久化."""
+        from amane.parsing import ContentType
+
+        assert set(mgr.hot.scraping.poster_crop_types) == {
+            ContentType.CENSORED,
+            ContentType.UNCENSORED,
+            ContentType.FC2,
+        }
+        mgr.update({"scraping": {"poster_crop_types": ["censored", "chinese"]}})
+        assert mgr.hot.scraping.poster_crop_types == [ContentType.CENSORED, ContentType.CHINESE]
+
+    def test_poster_crop_types_empty_is_kept(self, mgr: ConfigManager):
+        """全部关掉是有效配置, 不退回默认值."""
+        mgr.update({"scraping": {"poster_crop_types": []}})
+        assert mgr.hot.scraping.poster_crop_types == []
+
+    def test_entry_parses_with_blank_poster_crop_types(self, mgr: ConfigManager):
+        """全部关掉时配置整体仍能解析."""
+        mgr.update({"scraping": {"poster_crop_types": []}})
+        assert mgr.hot.scraping.crop_poster is True
+        assert mgr.hot.scraping.poster_ratio == 0.7
 
     def test_null_clears_optional(self, mgr: ConfigManager):
         """设置 None 可清除 optional 字段"""

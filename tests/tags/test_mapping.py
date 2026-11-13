@@ -32,3 +32,21 @@ def test_mapped_label_keeps_a_clickable_facet_id(tmp_path) -> None:
     store.seed([("Creampie", 3)])
     store.upsert("Creampie", "内射")
     assert store.map_id_map({"Creampie": 42}) == {"内射": 42}
+
+
+def test_originals_matching_finds_entries_by_translation(tmp_path) -> None:
+    """按展示的译文能找到原名.
+
+    列表里显示译文、库里存原名; 只按原名搜索会让用户照着屏幕上的字输入却搜不到.
+    """
+    store = TagMappingStore(tmp_path)
+    store.seed([("完全無修正", 5), ("無碼", 3), ("中出し", 9)])
+    store.upsert("完全無修正", "无修正")
+    store.upsert("無碼", "无修正")
+    store.upsert("中出し", "内射")
+
+    assert sorted(store.originals_matching("无修正")) == ["完全無修正", "無碼"]
+    assert store.originals_matching("内射") == ["中出し"]
+    # 没有译文的词条不该被这个方法命中, 原名匹配交给数据库.
+    assert store.originals_matching("中出し") == []
+    assert store.originals_matching("") == []

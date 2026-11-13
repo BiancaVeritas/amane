@@ -125,7 +125,7 @@ handler 之间复用的阶段逻辑, 不是一条可跳步的总管线:
 
 - **`scraping.download_resources`** 控制本步下载哪些类型 (thumb / poster / extrafanart / trailer).
 - **候选按序尝试, 命中即停**: 候选是同一张图的回退链, 首选成功后再下载后续地址只会把它在 Resource 里存成多份. 命中的那个置首位, 其余候选 (下载失败与未尝试) 保序留在尾部, 来源恢复后下次物化可重新尝试; 全部失败时列表保持原序. 未选中下载的类型无成败信息, 保持聚合优先级原序; extrafanart 为站点分组 dict, 不重排. `raw` 快照保持站点原始数据.
-- 裁剪海报 → 有码与无码按 `scraping.poster_ratio` 从 thumb 右侧裁切; 超分就地覆盖. 失败不阻断刮削.
+- 裁剪海报 → 放行集由 `scraping.poster_crop_types` 给出 (与 `crop_poster` 是「与」关系), 从 thumb 裁切; 超分就地覆盖. 失败不阻断刮削. 放行按**条目类型**判定, 与图片排布口径无关: 无码单图若按排布口径会被改写为 `WESTERN`, 两者混用会让全部单图无码停止裁切.
 
 手动裁切复用同一派生通道 (`op=crop`, `args=box:…`), 见 [data-model.md](data-model.md).
 

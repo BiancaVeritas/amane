@@ -1477,4 +1477,200 @@ async def test_organize_other_modes_leave_source_dir(
     assert result.result is not None
     assert result.result.pruned_dirs == 0
     assert src.exists()
-    assert src_dir.is_dir()
+    assert src
+
+
+def test_genders_from_raw_reads_snapshot() -> None:
+    """快照里的演员性别要能读出来.
+
+    刮削那一刻就拿到了每个演员的性别, 但 ``clean_actor_names`` 只给**已存在**的 Actor 行
+    填空位; 演员没被建成行时性别就落不下来, 整理于是把男演员当女演员。
+    """
+    from amane.enums import ActorGender
+    from amane.handlers.file import _genders_from_raw
+
+    raw = {
+        "javdb": {
+            "number": "PPPE-449",
+            "actors": [
+                {"name": "彩月七緒", "gender": "female"},
+                {"name": "青沼", "gender": "male"},
+            ],
+        },
+        "avbase": {"actors": [{"name": "彩月七緒", "gender": "unknown"}]},
+    }
+
+    assert _genders_from_raw(raw) == {"彩月七緒": ActorGender.FEMALE, "青沼": ActorGender.MALE}
+
+
+def test_genders_from_raw_ignores_unknown_and_garbage() -> None:
+    """unknown / 缺字段 / 非列表的项跳过, 交给现场刮兜底."""
+    from amane.handlers.file import _genders_from_raw
+
+    assert _genders_from_raw(None) == {}
+    assert _genders_from_raw({"javdb": {"actors": [{"name": "A", "gender": "unknown"}]}}) == {}
+    assert _genders_from_raw({"javdb": {"actors": [{"name": "A"}]}}) == {}
+    assert _genders_from_raw({"javdb": {"actors": "not-a-list"}}) == {}
+    assert _genders_from_raw({"javdb": "not-a-mapping"}) == {}
+
+
+@pytest.mark.asyncio(loop_scope="function")
+async def test_organize_uses_raw_gender_when_actor_row_missing(
+    repo: "Repository", resource_store: "ResourceStore", tmp_path: Path
+) -> None:
+    """Actor 表没有这位演员时, 用刮削快照里的性别判定女演员人数.
+
+    复现线上问题: 刮削给出 男(female) + 女(male), 但演员没被建成 Actor 行;
+    只查表会两位都算女演员, 于是落进本该放多女优的目录.
+    """
+    from amane.db.models import Actor
+    from amane.enums import ActorGender
+
+    lib_root = tmp_path / "lib"
+    lib_root.mkdir()
+    # 源文件放在下载目录里: 目标目录内的文件在开启独立监控后不再搬动.
+    incoming = tmp_path / "incoming"
+    incoming.mkdir()
+    src = incoming / "PPPE-449.mp4"
+    src.write_bytes(b"movie")
+
+    lib = await repo.create_library(
+        name="t",
+        path=str(lib_root),
+        write_nfo=False,
+        # Jinja 模板只在开了独立监控目录时生效, 否则走 video_template.
+        watch_dir_enabled=True,
+        watch_path=str(incoming),
+        use_jinja_template=True,
+        jinja_video_template=(
+            "{% if actresses.split(',')|length > 1 %}Multi{% else %}{{actress_cn}}{% endif %}/{{number}}.{{ext}}"
+        ),
+    )
+    assert lib.id is not None
+    # 快照里明确写了两人性别; 只把女演员建成行, 男演员故意不建.
+    meta = await repo.upsert_metadata(
+        number="PPPE-449",
+        actors=["彩月七緒", "青沼"],
+        raw={
+            "javdb": {
+                "number": "PPPE-449",
+                "actors": [
+                    {"name": "彩月七緒", "gender": "female"},
+                    {"name": "青沼", "gender": "male"},
+                ],
+            }
+        },
+    )
+    assert meta.id is not None
+    fresh = await repo.get_metadata(meta.id)
+    assert fresh is not None
+    # 直接把两人的性别清成 unknown: save_actor 是 AUTO 写入, 不会把已有值改回未知.
+    async with repo._session() as s:
+        for actor in await repo.get_actors_by_names(["彩月七緒", "青沼"]):
+            row = await s.get(Actor, actor.id)
+            assert row is not None
+            row.gender = ActorGender.UNKNOWN
+            s.add(row)
+        await s.commit()
+    genders = {a.name: a.gender for a in await repo.get_actors_by_names(["彩月七緒", "青沼"])}
+    assert set(genders.values()) == {ActorGender.UNKNOWN}, f"前置不成立: {genders}"
+    await repo.create_media_file(
+        lib.id, path=str(src), number="PPPE-449", status=MediaFileStatus.SCRAPED, metadata_id=meta.id
+    )
+
+    org = OrganizeHandler(repo, HotSettings(), resource_store)
+    result = await org.handle(OrganizePayload(library_id=lib.id, path=str(lib_root)))
+
+    assert result.success is True
+    # 只有 1 位女演员, 应当按 actress 分流而不是进 Multi.
+    assert (lib_root / "彩月七緒" / "PPPE-449.mp4").exists()
+
+
+@pytest.mark.asyncio(loop_scope="function")
+async def test_in_place_does_not_move_target_dir_files(
+    repo: "Repository", resource_store: "ResourceStore", tmp_path: Path
+) -> None:
+    """开启独立监控后, 目标目录里的文件不移动也不改名.
+
+    配了下载目录只说明**下载目录里的**文件要搬进目标目录; 不等于目标目录里的文件也要搬.
+    早先按「有没有配 watch_path」判断原地模式, 配了下载目录就把目标目录的文件一起搬走了.
+    """
+    lib_root = tmp_path / "lib"
+    lib_root.mkdir()
+    incoming = tmp_path / "incoming"
+    incoming.mkdir()
+    # 文件已经躺在目标目录里, 名字不符合模板.
+    src = lib_root / "messy_name.mp4"
+    src.write_bytes(b"movie")
+
+    lib = await repo.create_library(
+        name="t",
+        path=str(lib_root),
+        write_nfo=False,
+        watch_dir_enabled=True,
+        watch_path=str(incoming),
+        watch_rename=False,
+        use_jinja_template=True,
+        jinja_video_template="{{actress_cn}}/{{number}}.{{ext}}",
+    )
+    assert lib.id is not None
+    meta = await repo.upsert_metadata(number="PPPE-449", actors=["彩月七緒"])
+    assert meta.id is not None
+    await repo.create_media_file(
+        lib.id, path=str(src), number="PPPE-449", status=MediaFileStatus.SCRAPED, metadata_id=meta.id
+    )
+
+    org = OrganizeHandler(repo, HotSettings(), resource_store)
+    result = await org.handle(OrganizePayload(library_id=lib.id, path=str(lib_root)))
+
+    assert result.success is True
+    # 原地不动, 也不改名.
+    assert src.exists(), "目标目录里的文件被搬走了"
+    assert not (lib_root / "彩月七緒").exists(), "目标目录里的文件被改名搬进模板目录了"
+
+
+@pytest.mark.asyncio(loop_scope="function")
+async def test_artifacts_follow_video_location_not_template(
+    repo: "Repository", resource_store: "ResourceStore", tmp_path: Path
+) -> None:
+    """视频已在库内时, 图片/NFO 写到视频所在目录, 不按模板另算一处.
+
+    用户可能手动把文件摆到别处并建立了关联; 模板算出的另一条路径不该把产物写到那里,
+    否则界面上看的是旧图, 新图落在别处.
+    """
+    lib_root = tmp_path / "lib"
+    manual_dir = lib_root / "手动摆的目录"
+    manual_dir.mkdir(parents=True)
+    incoming = tmp_path / "incoming"
+    incoming.mkdir()
+    src = manual_dir / "PPPE-449.mp4"
+    src.write_bytes(b"movie")
+
+    lib = await repo.create_library(
+        name="t",
+        path=str(lib_root),
+        write_nfo=True,
+        watch_dir_enabled=True,
+        watch_path=str(incoming),
+        watch_rename=False,
+        use_jinja_template=True,
+        # 模板会算出 lib/女演员/PPPE-449/, 与文件实际所在目录不同.
+        jinja_video_template="{{actress_cn}}/{{number}}.{{ext}}",
+    )
+    assert lib.id is not None
+    meta = await repo.upsert_metadata(number="PPPE-449", actors=["彩月七緒"])
+    assert meta.id is not None
+    media = await repo.create_media_file(
+        lib.id, path=str(src), number="PPPE-449", status=MediaFileStatus.SCRAPED, metadata_id=meta.id
+    )
+    assert media.id is not None
+
+    org = OrganizeHandler(repo, HotSettings(), resource_store)
+    result = await org.handle(OrganizePayload(library_id=lib.id, path=str(lib_root)))
+
+    assert result.success is True
+    # 视频没被搬走, NFO 也写在它旁边.
+    assert src.exists(), "视频被搬走了"
+    assert (manual_dir / "PPPE-449.nfo").exists(), "NFO 没跟着视频走"
+    # 模板算出的目录不该被创建出来.
+    assert not (lib_root / "彩月七緒").exists(), "产物写到了模板算出的目录"

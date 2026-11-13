@@ -376,6 +376,24 @@ class TestFileWatcher:
         watcher.unwatch(999)  # 不应抛出
         assert len(watcher._handlers) == 1
 
+    def test_unwatch_survives_stale_watch(self, tmp_path: Path):
+        """watch 已不在 observer 表里时也要能取消.
+
+        observer 重启或路径被替换后, 表里的对象与 ``_watches`` 中的引用会对不上; watchdog
+        的 ``unschedule`` 遇到这种直接抛 ``KeyError``. 删库路径先调 unwatch, 抛出去会让
+        整个删除失败 —— 记录本来就该消失, 不能因为取消不掉一个失效 watch 就卡住.
+        """
+        watcher = FileWatcher(observer_timeout=0.1, on_file_found=lambda p, _lib: None)
+        watcher.watch(str(tmp_path), library_id=1)
+        # 模拟对不上: 把 observer 内部的 watch 表清掉, 引用还在 _watches 里.
+        assert watcher._observer is not None
+        watcher._observer._watches.clear()
+
+        watcher.unwatch(1)  # 不应抛出
+
+        assert watcher._handlers == []
+        assert 1 not in watcher._watches
+
     def test_unwatch_while_running(self, tmp_path: Path):
         watcher = FileWatcher(observer_timeout=0.1, on_file_found=lambda p, _lib: None)
         watcher.watch(str(tmp_path), library_id=1)
@@ -516,7 +534,7 @@ class TestWatcherService:
 
     @pytest.mark.asyncio(loop_scope="function")
     async def test_on_file_deleted_removes_from_db(self, service, repo: Repository, tmp_path: Path):
-        """文件删除时从 DB 移除 MediaFile"""
+        """文件真的不在了才移除 MediaFile"""
         test_file = tmp_path / "video.mp4"
         test_file.write_bytes(b"\x00" * 100)
 
@@ -524,11 +542,28 @@ class TestWatcherService:
         media = await repo.create_media_file(library_id=1, path=str(test_file))
         assert media.id is not None
 
-        # 调用删除处理器
+        # 文件真的删掉之后再发事件.
+        test_file.unlink()
         await service._on_file_deleted(test_file)
 
         # 验证已从 DB 移除
         assert await repo.get_media_file(media.id) is None
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_on_file_deleted_keeps_row_when_file_still_exists(self, service, repo: Repository, tmp_path: Path):
+        """文件还在时忽略删除事件.
+
+        观察器重建 (改库配置会重挂) 时 watchdog 可能补发已消失路径的 deleted 事件, 而文件
+        其实还在. 照删会让一条正常记录静默消失, 随后按它发的整理任务只能 skipped=1.
+        """
+        test_file = tmp_path / "video.mp4"
+        test_file.write_bytes(b"\x00" * 100)
+        media = await repo.create_media_file(library_id=1, path=str(test_file))
+        assert media.id is not None
+
+        await service._on_file_deleted(test_file)
+
+        assert await repo.get_media_file(media.id) is not None
 
     @pytest.mark.asyncio(loop_scope="function")
     async def test_on_file_deleted_ignores_untracked(self, service, repo: Repository, tmp_path: Path):

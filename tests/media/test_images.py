@@ -8,6 +8,7 @@ from PIL import Image
 from amane.enums import WatermarkCorner, WatermarkKind
 from amane.media import (
     CropRotation,
+    allows_poster_crop,
     apply_cover_watermarks,
     crop_box,
     crop_poster,
@@ -19,7 +20,7 @@ from amane.media import (
     should_crop_poster,
     validate_crop_box,
 )
-from amane.parsing import DEFINITION_VALUES, Mosaic
+from amane.parsing import DEFINITION_VALUES, ContentType, Mosaic
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -531,3 +532,17 @@ class TestCoverWatermarks:
             assert isinstance(top, tuple) and isinstance(bottom, tuple)
             assert top[2] > 180 and top[0] < 80
             assert bottom[0] > 180 and bottom[2] < 80
+
+
+class TestAllowsPosterCrop:
+    @pytest.mark.parametrize(
+        ("content_type", "allowed", "expected", "desc"),
+        [
+            (ContentType.CENSORED, [ContentType.CENSORED], True, "在放行集内"),
+            (ContentType.CHINESE, [ContentType.CENSORED], False, "不在放行集内"),
+            (ContentType.CHINESE, [], False, "放行集为空一律不裁"),
+            (None, [ContentType.CENSORED], False, "类型未知不裁"),
+        ],
+    )
+    def test_decision(self, content_type, allowed, expected, desc):
+        assert allows_poster_crop(content_type, allowed) is expected, desc

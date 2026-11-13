@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import sqlite3
 from pathlib import Path
 from typing import TYPE_CHECKING, get_args
 
@@ -46,7 +47,7 @@ class TestSubmitTask:
         refresh = await client.post("tasks", json={"type": "refresh", "library_id": lib.id})
         assert refresh.status_code == 202
         payload = refresh.json()["payload"]
-        assert payload["path"] == str(safe_path)
+        assert payload["path"] == str(safe_path).replace("\\", "/")
         assert payload["recursive"] is False
         assert payload["patterns"] == ["*.mp4"]
         assert payload["library_id"] == lib.id
@@ -259,6 +260,32 @@ class TestBatchTasks:
         cancelled = await client.post("tasks/batch", json={"action": "cancel", "task_ids": [queued.id]})
         assert cancelled.status_code == 200
         assert cancelled.json()["affected"] == 1
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_delete_accepts_status_stored_as_enum_name(
+        self, client: AsyncClient, repo: Repository, stop_worker: None, tmp_path: Path
+    ):
+        """库里的 status 存的是枚举名 (``DONE``), 与 ``TaskStatus.DONE`` 的值 (``done``) 不同.
+
+        按值做成员判定会把这些行全部判成「不可删」, 而它们恰恰是库里的绝大多数存量行.
+        """
+        task = await repo.create_task(task_type=TaskType.REFRESH, payload={})
+        assert task.id is not None
+        await finish_task(repo, task.id)
+
+        # 还原真实库里读到的形态: 枚举名大写.
+        db = tmp_path / "data" / "amane.db"
+        assert db.exists()
+        with sqlite3.connect(db) as conn:
+            conn.execute("UPDATE tasks SET status = 'DONE' WHERE id = ?", (task.id,))
+            stored = conn.execute("SELECT status FROM tasks WHERE id = ?", (task.id,)).fetchone()
+        assert stored is not None and stored[0] == "DONE"
+
+        resp = await client.post("tasks/batch", json={"action": "delete", "task_ids": [task.id]})
+
+        assert resp.status_code == 200
+        assert resp.json()["affected"] == 1
+        assert await repo.get_task(task.id) is None
 
     @pytest.mark.asyncio(loop_scope="function")
     async def test_delete_task_keeps_media_files(
@@ -605,7 +632,7 @@ class TestTaskRecord:
         )
 
         assert submitted.status_code == 202
-        assert submitted.json()["payload"]["path"] == str(real / "sub")
+        assert submitted.json()["payload"]["path"] == str(real / "sub").replace("\\", "/")
 
 
 class TestTaskLog:

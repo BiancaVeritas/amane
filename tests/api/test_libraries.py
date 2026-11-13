@@ -21,6 +21,11 @@ def _set_library_path(db_path: Path, library_id: int, path: str) -> None:
         conn.execute("UPDATE libraries SET path = ? WHERE id = ?", (path, library_id))
 
 
+def _slash(path: Path) -> str:
+    """期望值取写入侧的写法: 分隔符统一成 ``/``, 其余与 ``str(path)`` 相同."""
+    return str(path).replace("\\", "/")
+
+
 class TestLibraries:
     @pytest.mark.asyncio(loop_scope="function")
     async def test_crud_and_defaults(self, client: AsyncClient, repo: Repository, safe_path: Path):
@@ -35,7 +40,7 @@ class TestLibraries:
         )
         assert created.status_code == 201
         body = created.json()
-        assert body["path"] == str(target)
+        assert body["path"] == _slash(target)
         assert body["automation"] == "scrape"
         assert body["ingest"] == "native"
         assert body["cloud_path"] is None
@@ -140,6 +145,26 @@ class TestLibraries:
         assert (await client.delete("libraries/9999")).status_code == 404
 
     @pytest.mark.asyncio(loop_scope="function")
+    async def test_delete_works_with_scraped_filename_rows(
+        self, client: AsyncClient, repo: Repository, safe_path: Path
+    ):
+        """库里有同名登记行时也必须能删.
+
+        ``scraped_filenames`` 也引用 ``libraries``: 只删 ``media_files`` 会让整条删除撞
+        FK 约束, 界面上表现为「删不掉」并弹 Internal Server Error.
+        """
+        target = safe_path / "with-records"
+        target.mkdir()
+        created = await client.post("libraries", json={"path": str(target), "scan": False})
+        lib_id = created.json()["id"]
+        await repo.remember_scraped_filename(lib_id, "MIDV-123")
+
+        deleted = await client.delete(f"libraries/{lib_id}")
+
+        assert deleted.status_code == 204
+        assert await repo.get_library(lib_id) is None
+
+    @pytest.mark.asyncio(loop_scope="function")
     async def test_create_rejects_illegal_payloads(self, client: AsyncClient, safe_path: Path):
         missing = await client.post("libraries", json={"path": str(safe_path / "does-not-exist")})
         assert missing.status_code == 404
@@ -228,7 +253,7 @@ class TestLibraries:
         assert len(scan_tasks) == 1
         assert scan_tasks[0].payload["scan"] == ["add"]
         assert scan_tasks[0].payload["scrape"] == []
-        assert scan_tasks[0].payload["path"] == str(scanned)
+        assert scan_tasks[0].payload["path"] == _slash(scanned)
 
         quiet = safe_path / "no-scan"
         quiet.mkdir()
@@ -252,12 +277,12 @@ class TestLibraries:
 
         assert created.status_code == 201
         library_id = created.json()["id"]
-        assert created.json()["path"] == str(real)
+        assert created.json()["path"] == _slash(real)
 
         updated = await client.patch(f"libraries/{library_id}", json={"path": str(alias)})
 
         assert updated.status_code == 200
-        assert updated.json()["path"] == str(real)
+        assert updated.json()["path"] == _slash(real)
 
     @pytest.mark.asyncio(loop_scope="function")
     async def test_unchanged_library_path_keeps_its_form(self, client: AsyncClient, safe_path: Path, tmp_path: Path):
@@ -273,6 +298,7 @@ class TestLibraries:
 
         created = await client.post("libraries", json={"path": str(kept_alias), "scan": False})
         library_id = created.json()["id"]
+        # 直接改成未解析的写法, 模拟老库: 这个形式没有别的入口能造出来.
         _set_library_path(tmp_path / "data" / "amane.db", library_id, str(kept_alias))
 
         unchanged = await client.patch(f"libraries/{library_id}", json={"path": str(kept_alias)})
@@ -288,7 +314,71 @@ class TestLibraries:
         changed = await client.patch(f"libraries/{library_id}", json={"path": str(moved_alias)})
 
         assert changed.status_code == 200
-        assert changed.json()["path"] == str(moved_real)
+        assert changed.json()["path"] == _slash(moved_real)
+
+
+class TestPathSeparators:
+    """库路径与下载目录统一用 ``/``.
+
+    两条路径在同一张表单里并排, 一个落 ``/`` 一个落 ``\\`` 会让人以为写错了; 存下来还会让同一
+    目录出现两种写法, 前缀比较与展示都要额外兼容.
+    """
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_both_paths_stored_with_forward_slash(
+        self, client: AsyncClient, repo: Repository, safe_path: Path
+    ) -> None:
+        target = safe_path / "target"
+        target.mkdir()
+        incoming = safe_path / "incoming"
+        incoming.mkdir()
+
+        created = await client.post(
+            "libraries",
+            json={
+                "path": str(target).replace("/", "\\"),
+                "watch_dir_enabled": True,
+                "watch_path": str(incoming).replace("/", "\\"),
+                "scan": False,
+            },
+        )
+
+        assert created.status_code == 201
+        body = created.json()
+        assert "\\" not in body["path"]
+        assert "\\" not in body["watch_path"]
+        # 入库存同一写法, 不只是响应.
+        stored = await repo.get_library(body["id"])
+        assert stored is not None
+        assert "\\" not in stored.path
+        assert stored.watch_path is not None and "\\" not in stored.watch_path
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_update_path_normalized(self, client: AsyncClient, repo: Repository, safe_path: Path) -> None:
+        first = safe_path / "first"
+        first.mkdir()
+        second = safe_path / "second"
+        second.mkdir()
+        created = await client.post("libraries", json={"path": str(first), "scan": False})
+        library_id = created.json()["id"]
+
+        patched = await client.patch(f"libraries/{library_id}", json={"path": str(second).replace("/", "\\")})
+
+        assert patched.status_code == 200
+        assert "\\" not in patched.json()["path"]
+        stored = await repo.get_library(library_id)
+        assert stored is not None and "\\" not in stored.path
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_forward_slash_input_still_resolves(self, client: AsyncClient, safe_path: Path) -> None:
+        """已经是 ``/`` 的写法照常校验并保存, 不因转换而多绕一层."""
+        target = safe_path / "plain"
+        target.mkdir()
+
+        created = await client.post("libraries", json={"path": str(target).replace("\\", "/"), "scan": False})
+
+        assert created.status_code == 201
+        assert created.json()["path"] == str(target).replace("\\", "/")
 
 
 class TestAutoOrganize:

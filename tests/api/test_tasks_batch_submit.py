@@ -120,7 +120,7 @@ class TestTaskBatchSubmit:
         task = await seed_library.get_task(body["task_ids"][0])
         assert task is not None
         assert task.type == TaskType.REFRESH
-        assert task.payload["path"] == str(safe_path)
+        assert task.payload["path"] == str(safe_path).replace("\\", "/")
 
     @pytest.mark.asyncio(loop_scope="function")
     async def test_parameter_error_aborts_whole_batch(

@@ -220,3 +220,23 @@ async def test_write_nfo_original_title_follows_same_rule(
     root = ET.fromstring(nfo_path.read_text(encoding="utf-8"))
     assert root.findtext("originaltitle") == expected
     assert root.findtext("sorttitle") == expected
+
+
+@pytest.mark.asyncio
+async def test_write_nfo_uses_actor_display_name(tmp_path: Path) -> None:
+    """演员名写中文映射; 没配映射的照原名写.
+
+    媒体库显示的是熟名, NFO 里用原名会让人觉得认不出是谁.
+    """
+    mapping = tmp_path / "actor_name_mappings.json"
+    mapping.write_text(
+        '{"version": 1, "entries": {"彩月七緒": {"translation": "彩月七绪"}, "青沼": {"translation": null}}}',
+        encoding="utf-8",
+    )
+    meta = Metadata(number="PPPE-449", actors=["彩月七緒", "青沼"])
+    nfo = tmp_path / "out.nfo"
+
+    assert await write_nfo(meta, nfo, actor_mapping_path=mapping) is True
+
+    names = [e.text for e in ET.parse(nfo).getroot().findall("actor/name")]
+    assert names == ["彩月七绪", "青沼"]

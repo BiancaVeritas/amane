@@ -152,3 +152,40 @@ class TestTaskIdFilter:
             for line in lines:
                 record = json.loads(line)
                 assert record["task_id"] == tid
+
+
+class TestPathSeparators:
+    """日志里的路径统一用 ``/``.
+
+    库根存 ``/``, 而扫描与索引产物在 Windows 上带 ``\\``; 同一份日志里两种写法并存
+    看着像出错, 读者也无从判断它们是不是同一个目录.
+    """
+
+    def test_path_fields_use_forward_slash(self, tmp_path: Path):
+        setup_logging(level="DEBUG", log_dir=tmp_path)
+        logger = structlog.get_logger("amane.test")
+
+        logger.info("scan walking started", path="\\\\192.168.31.100\\NAS\\Downloads\\AV")
+        logger.info("inventory scanned", scope="C:\\Users\\a\\lib")
+        logger.info("watching library", path="//192.168.31.100/NAS/x", watch_path="C:\\a\\b")
+
+        log_file = tmp_path / "app.log"
+        records = [json.loads(line) for line in log_file.read_text(encoding="utf-8").splitlines()]
+        by_event = {r["event"]: r for r in records}
+
+        assert by_event["scan walking started"]["path"] == "//192.168.31.100/NAS/Downloads/AV"
+        assert by_event["inventory scanned"]["scope"] == "C:/Users/a/lib"
+        assert by_event["watching library"]["path"] == "//192.168.31.100/NAS/x"
+        assert by_event["watching library"]["watch_path"] == "C:/a/b"
+
+    def test_non_path_fields_untouched(self, tmp_path: Path):
+        """字段名不在路径清单里就不动: 正则与摘要里的反斜杠是内容的一部分."""
+        setup_logging(level="DEBUG", log_dir=tmp_path)
+        structlog.get_logger("amane.test").info("regex failed", pattern="\\\\d+\\w")
+
+        records = [
+            json.loads(line)
+            for line in (tmp_path / "app.log").read_text(encoding="utf-8").splitlines()
+        ]
+
+        assert records[0]["pattern"] == "\\\\d+\\w"

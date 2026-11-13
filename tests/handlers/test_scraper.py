@@ -3,18 +3,26 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 import pytest
 from pydantic import ValidationError
 
 from amane.aggregate import AggregatedMetadata
 from amane.config import HotSettings, ScrapingConfig
+from amane.crawlers.base import Crawler, CrawlerProfile
 from amane.crawlers.models import MediaMetadata
 from amane.db.models import MediaFileStatus, Task, TaskStatus, TaskType
 from amane.enums import MetadataField, SiteName
-from amane.handlers import RefreshHandler, RefreshPayload, ScanMode, ScrapeHandler, ScrapePayload
-from amane.handlers.scrape import _prepare_image_content_type
+from amane.handlers import (
+    CacheKind,
+    RefreshHandler,
+    RefreshPayload,
+    ScanMode,
+    ScrapeHandler,
+    ScrapePayload,
+)
+from amane.handlers.scrape import _prepare_image_content_type, _searchable_title
 from amane.library import CleanupInventory, InventorySource, InventoryStore, LibraryFileKind, LibraryHit, scan_inventory
 from amane.observability import Recorder
 from amane.parsing import ContentType
@@ -104,6 +112,476 @@ def handler(repo, factory, resource_store):
 
 
 # --- ScrapeHandler 测试 ---
+
+
+class TestSearchableTitle:
+    """标题拿去搜别的站之前去掉标点: 站点装饰符会让搜索词一个都匹配不上."""
+
+    @pytest.mark.parametrize(
+        ("title", "expected"),
+        [
+            ("ABC-123: Test Title (Uncensored)", "ABC123 Test Title Uncensored"),
+            ("【完全素人65】マリナVSヒカリ 史上最大の決戦！！", "完全素人65マリナVSヒカリ 史上最大の決戦"),
+            ("タイトル・テスト／続編", "タイトルテスト続編"),
+            ("  多  空格  ", "多 空格"),
+            ("！！！", None),
+            ("", None),
+            (None, None),
+        ],
+    )
+    def test_strips_punctuation(self, title, expected):
+        assert _searchable_title(title) == expected
+
+
+class TestPreviewByUrl:
+    """手动搜索粘整条地址: 打开页面读出番号, 再按番号问各来源.
+
+    地址里往往只有站点内部 ID (javdb 的 ``/v/dgVq9``), 当番号去搜哪个来源都搜不到.
+    """
+
+    class _UrlCrawler(Crawler):
+        """能按地址解析的来源; 记录被打开过的地址与被问过的番号."""
+
+        scraped_urls: ClassVar[list[str]] = []
+        fetched_numbers: ClassVar[list[str]] = []
+
+        @classmethod
+        def profile(cls) -> CrawlerProfile:
+            return CrawlerProfile(name="javdb", base_url="https://javdb580.com")
+
+        async def _search(self, query, options=None) -> str | None:
+            self.fetched_numbers.append(query.number)
+            return "https://javdb580.com/v/by-search"
+
+        async def _scrape(self, url, options=None) -> MediaMetadata | None:
+            self.scraped_urls.append(url)
+            return MediaMetadata.model_validate({"number": "MIDV-123", "title": "From page"})
+
+    @pytest.fixture(autouse=True)
+    def _reset(self):
+        self._UrlCrawler.scraped_urls = []
+        self._UrlCrawler.fetched_numbers = []
+        yield
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_url_is_opened_and_number_reused(self, repo: Repository, resource_store):
+        h = ScrapeHandler(
+            repo=repo,
+            factory=FakeFactory({"javdb": self._UrlCrawler(client=None)}),
+            resource_store=resource_store,
+            pipeline_config=HotSettings(),
+        )
+
+        items = await h.preview("https://javdb580.com/v/dgVq9", ContentType.CENSORED)
+
+        # 地址被真正打开过, 而且是原样打开 —— 不是截末段当番号.
+        assert self._UrlCrawler.scraped_urls[0] == "https://javdb580.com/v/dgVq9"
+        # 读出番号后按番号走正常流程.
+        assert "MIDV-123" in self._UrlCrawler.fetched_numbers
+        assert items[0]["site"] == "javdb"
+        assert items[0]["number"] == "MIDV-123"
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_url_host_mismatch_is_not_scraped(self, repo: Repository, resource_store):
+        """地址不属于任何已配置来源时不乱抓: 免得拿别站页面套自家解析."""
+        h = ScrapeHandler(
+            repo=repo,
+            factory=FakeFactory({"javdb": self._UrlCrawler(client=None)}),
+            resource_store=resource_store,
+            pipeline_config=HotSettings(),
+        )
+
+        items = await h.preview("https://example.com/v/xyz", ContentType.CENSORED)
+
+        assert items == []
+        assert self._UrlCrawler.scraped_urls == []
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_plain_number_still_searches(self, repo: Repository, resource_store):
+        h = ScrapeHandler(
+            repo=repo,
+            factory=FakeFactory({"javdb": self._UrlCrawler(client=None)}),
+            resource_store=resource_store,
+            pipeline_config=HotSettings(),
+        )
+
+        await h.preview("MIDV-123", ContentType.CENSORED)
+
+        # 纯番号走搜索: fetch 内部会先 _search 再 _scrape 那个搜索结果页.
+        assert self._UrlCrawler.fetched_numbers == ["MIDV-123"]
+        assert self._UrlCrawler.scraped_urls != ["https://javdb580.com/v/dgVq9"]
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_url_falls_back_to_cleaned_title_search(self, repo: Repository, resource_store):
+        """地址解析出的条目没有番号时, 用去标点的标题继续搜当前类型的其余来源."""
+
+        class TitleOnlyCrawler(Crawler):
+            @classmethod
+            def profile(cls) -> CrawlerProfile:
+                return CrawlerProfile(name="javdb", base_url="https://javdb580.com")
+
+            async def _search(self, query, options=None) -> str | None:
+                return "https://javdb580.com/v/x"
+
+            async def _scrape(self, url, options=None) -> MediaMetadata | None:
+                # 有标题但没番号: 站点页面只给了标题.
+                return MediaMetadata.model_validate(
+                    {"number": "", "title": "【完全素人65】マリナVSヒカリ 史上最大の決戦！！"}
+                )
+
+        asked: list[str] = []
+
+        class Searcher(Crawler):
+            @classmethod
+            def profile(cls) -> CrawlerProfile:
+                return CrawlerProfile(name="javbus", base_url="https://www.javbus.com")
+
+            async def _search(self, query, options=None) -> str | None:
+                asked.append(query.number)
+                return None
+
+            async def _scrape(self, url, options=None) -> MediaMetadata | None:
+                return None
+
+        h = ScrapeHandler(
+            repo=repo,
+            factory=FakeFactory({"javdb": TitleOnlyCrawler(client=None), "javbus": Searcher(client=None)}),
+            resource_store=resource_store,
+            pipeline_config=_config_with({ContentType.CENSORED: [SiteName.JAVDB, SiteName.JAVBUS]}),
+        )
+
+        await h.preview("https://javdb580.com/v/abc", ContentType.CENSORED)
+
+        # 用去标点后的标题去问过别家.
+        assert "完全素人65マリナVSヒカリ 史上最大の決戦" in asked
+
+
+class TestAppendSingleSource:
+    """「添加来源链接」只刮用户贴的那一条, 不把全部来源重新问一遍."""
+
+    class _OneSourceCrawler(Crawler):
+        """只在这一家里能解析地址; 记下被问过的站点, 用来证明没有全量重刮."""
+
+        asked: ClassVar[list[str]] = []
+
+        @classmethod
+        def profile(cls) -> CrawlerProfile:
+            return CrawlerProfile(name="javdb", base_url="https://javdb580.com")
+
+        async def _search(self, query, options=None) -> str | None:
+            self.asked.append("search")
+            return "https://javdb580.com/v/other"
+
+        async def _scrape(self, url, options=None) -> MediaMetadata | None:
+            self.asked.append(f"scrape:{url}")
+            return MediaMetadata.model_validate({"number": "MIDV-123", "title": "From pasted url", "source_url": url})
+
+    class _OtherCrawler(Crawler):
+        """路由里的另一家: 单源模式下不该被问到."""
+
+        touched: ClassVar[list[str]] = []
+
+        @classmethod
+        def profile(cls) -> CrawlerProfile:
+            return CrawlerProfile(name="javbus", base_url="https://www.javbus.com")
+
+        async def _search(self, query, options=None) -> str | None:
+            self.touched.append("search")
+            return None
+
+        async def _scrape(self, url, options=None) -> MediaMetadata | None:
+            self.touched.append("scrape")
+            return None
+
+    @pytest.fixture(autouse=True)
+    def _reset(self):
+        self._OneSourceCrawler.asked = []
+        self._OtherCrawler.touched = []
+        yield
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_only_pasted_url_is_scraped(self, repo: Repository, resource_store):
+        seeded = await repo.upsert_metadata(
+            number="MIDV-123",
+            title="Keep me",
+            source_urls={"javbus": "https://www.javbus.com/MIDV-123"},
+        )
+        assert seeded.id is not None
+
+        h = ScrapeHandler(
+            repo=repo,
+            factory=FakeFactory(
+                {"javdb": self._OneSourceCrawler(client=None), "javbus": self._OtherCrawler(client=None)}
+            ),
+            resource_store=resource_store,
+            pipeline_config=_config_with({ContentType.CENSORED: [SiteName.JAVDB, SiteName.JAVBUS]}),
+        )
+
+        result = await h.handle(
+            ScrapePayload(
+                number="MIDV-123",
+                content_type=ContentType.CENSORED,
+                metadata_id=seeded.id,
+                manual=True,
+                append_sources=True,
+                source_url="https://javdb580.com/v/dgVq9",
+                use_cache=[],
+            )
+        )
+
+        assert result.success is True
+        # 只打开了那一个地址, 没有按番号去搜, 另一家完全没动.
+        assert self._OneSourceCrawler.asked == ["scrape:https://javdb580.com/v/dgVq9"]
+        assert self._OtherCrawler.touched == []
+
+        updated = await repo.get_metadata_by_number("MIDV-123")
+        assert updated is not None
+        # 字段保持原样, 只多了一条来源.
+        assert updated.title == "Keep me"
+        assert next(iter(updated.source_urls)) == "javbus"
+        assert updated.source_urls["javdb"] == "https://javdb580.com/v/dgVq9"
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_unreachable_url_leaves_record_untouched(self, repo: Repository, resource_store):
+        seeded = await repo.upsert_metadata(
+            number="MIDV-123",
+            title="Keep me",
+            source_urls={"javbus": "https://www.javbus.com/MIDV-123"},
+        )
+        assert seeded.id is not None
+
+        h = ScrapeHandler(
+            repo=repo,
+            factory=FakeFactory({"javdb": self._OneSourceCrawler(client=None)}),
+            resource_store=resource_store,
+            pipeline_config=_config_with({ContentType.CENSORED: [SiteName.JAVDB]}),
+        )
+
+        result = await h.handle(
+            ScrapePayload(
+                number="MIDV-123",
+                content_type=ContentType.CENSORED,
+                metadata_id=seeded.id,
+                manual=True,
+                append_sources=True,
+                source_url="https://example.com/not-my-site",
+                use_cache=[],
+            )
+        )
+
+        assert result.success is False
+        updated = await repo.get_metadata_by_number("MIDV-123")
+        assert updated is not None
+        assert updated.title == "Keep me"
+        assert next(iter(updated.source_urls)) == "javbus"
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_append_keeps_other_sources_snapshots(self, repo: Repository, resource_store):
+        """补链接不能清掉别家的 raw 快照.
+
+        「对比来源」页读的就是 raw: 整片覆盖会让它只剩这一次抓的那家, 其余来源与字段归属一起消失.
+        """
+        seeded = await repo.upsert_metadata(
+            number="MIDV-123",
+            title="Keep me",
+            source_urls={"javbus": "https://www.javbus.com/MIDV-123"},
+            raw={
+                "javbus": {"number": "MIDV-123", "title": "Keep me"},
+                "dmm": {"number": "MIDV-123", "title": "From DMM"},
+            },
+            field_sources={"title": "javbus"},
+        )
+        assert seeded.id is not None
+
+        h = ScrapeHandler(
+            repo=repo,
+            factory=FakeFactory({"javdb": self._OneSourceCrawler(client=None)}),
+            resource_store=resource_store,
+            pipeline_config=_config_with({ContentType.CENSORED: [SiteName.JAVDB]}),
+        )
+
+        await h.handle(
+            ScrapePayload(
+                number="MIDV-123",
+                content_type=ContentType.CENSORED,
+                metadata_id=seeded.id,
+                manual=True,
+                append_sources=True,
+                source_url="https://javdb580.com/v/dgVq9",
+                use_cache=[],
+            )
+        )
+
+        updated = await repo.get_metadata_by_number("MIDV-123")
+        assert updated is not None
+        # 旧快照还在, 新的那家并进去.
+        assert set(updated.raw) == {"javbus", "dmm", "javdb"}
+        assert updated.raw["dmm"]["title"] == "From DMM"
+        # 字段归属不被这次刮削改写.
+        assert updated.field_sources["title"] == "javbus"
+        assert updated.title == "Keep me"
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_append_works_for_source_outside_route(self, repo: Repository, resource_store):
+        """路由里没有那一家时也要能解析: 用户贴的链接就是权威.
+
+        FC2 的类型路由里没有 javdb, 但用户贴的正是 javdb 地址 —— 被路由挡住只会报
+        「无法从该地址取到元数据」, 而 javdb 明明能解析这条链接.
+        """
+        seeded = await repo.upsert_metadata(
+            number="FC2-1229755",
+            title="Keep me",
+            source_urls={"freejavbt": "https://freejavbt.com/x"},
+        )
+        assert seeded.id is not None
+
+        h = ScrapeHandler(
+            repo=repo,
+            factory=FakeFactory(
+                {
+                    # 路由里只有 freejavbt; javdb 在路由外.
+                    "freejavbt": self._OtherCrawler(client=None),
+                    "javdb": self._OneSourceCrawler(client=None),
+                }
+            ),
+            resource_store=resource_store,
+            # FC2 路由不含 javdb.
+            pipeline_config=HotSettings(
+                scraping=ScrapingConfig(
+                    content_routes={ContentType.FC2: [SiteName.FREEJAVBT]},
+                    field_priority={},
+                    field_blacklist={},
+                )
+            ),
+        )
+
+        result = await h.handle(
+            ScrapePayload(
+                number="FC2-1229755",
+                content_type=ContentType.FC2,
+                metadata_id=seeded.id,
+                manual=True,
+                append_sources=True,
+                source_url="https://javdb580.com/v/dgVq9",
+                use_cache=[],
+            )
+        )
+
+        assert result.success is True
+        # 确实由路由外的那一家打开了地址.
+        assert self._OneSourceCrawler.asked == ["scrape:https://javdb580.com/v/dgVq9"]
+        updated = await repo.get_metadata_by_number("FC2-1229755")
+        assert updated is not None
+        assert updated.source_urls["javdb"] == "https://javdb580.com/v/dgVq9"
+        assert updated.title == "Keep me"
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_route_union_finds_site_configured_elsewhere(self, repo: Repository, resource_store):
+        """第二级: 别的类型路由里配置过的站也能解析.
+
+        javdb 配在有码路由里, FC2 路由没有它; 添加来源链接贴的是 javdb 地址时,
+        应当按「全部路由并集」找到它, 而不是靠最后的兜底.
+        """
+        seeded = await repo.upsert_metadata(
+            number="FC2-1229755",
+            title="Keep me",
+            source_urls={"freejavbt": "https://freejavbt.com/x"},
+        )
+        assert seeded.id is not None
+
+        h = ScrapeHandler(
+            repo=repo,
+            factory=FakeFactory(
+                {
+                    "freejavbt": self._OtherCrawler(client=None),
+                    "javdb": self._OneSourceCrawler(client=None),
+                }
+            ),
+            resource_store=resource_store,
+            # javdb 只在有码路由里; FC2 路由没有它.
+            pipeline_config=HotSettings(
+                scraping=ScrapingConfig(
+                    content_routes={
+                        ContentType.FC2: [SiteName.FREEJAVBT],
+                        ContentType.CENSORED: [SiteName.JAVDB],
+                    },
+                    field_priority={},
+                    field_blacklist={},
+                )
+            ),
+        )
+
+        result = await h.handle(
+            ScrapePayload(
+                number="FC2-1229755",
+                content_type=ContentType.FC2,
+                metadata_id=seeded.id,
+                manual=True,
+                append_sources=True,
+                source_url="https://javdb580.com/v/dgVq9",
+                use_cache=[],
+            )
+        )
+
+        assert result.success is True
+        assert self._OneSourceCrawler.asked == ["scrape:https://javdb580.com/v/dgVq9"]
+        updated = await repo.get_metadata_by_number("FC2-1229755")
+        assert updated is not None
+        assert updated.source_urls["javdb"] == "https://javdb580.com/v/dgVq9"
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_lookup_stops_before_fallback_pool(self, repo: Repository, resource_store):
+        """命中后不再拉「全部影片来源」那批.
+
+        最后一层会把所有内置影片站都建起来; 只有前面几级都找不到域名时才会走到那里.
+        """
+        requested: list[list[str]] = []
+
+        class RecordingFactory(FakeFactory):
+            async def get_crawlers(self, names):
+                requested.append(sorted(str(n) for n in names))
+                return await super().get_crawlers([str(n) for n in names])
+
+        seeded = await repo.upsert_metadata(number="FC2-1229755", title="Keep me")
+        assert seeded.id is not None
+
+        h = ScrapeHandler(
+            repo=repo,
+            factory=RecordingFactory(
+                {
+                    "freejavbt": self._OtherCrawler(client=None),
+                    "javdb": self._OneSourceCrawler(client=None),
+                }
+            ),
+            resource_store=resource_store,
+            pipeline_config=HotSettings(
+                scraping=ScrapingConfig(
+                    content_routes={
+                        ContentType.FC2: [SiteName.FREEJAVBT],
+                        ContentType.CENSORED: [SiteName.JAVDB],
+                    },
+                    field_priority={},
+                    field_blacklist={},
+                )
+            ),
+        )
+
+        await h.handle(
+            ScrapePayload(
+                number="FC2-1229755",
+                content_type=ContentType.FC2,
+                metadata_id=seeded.id,
+                manual=True,
+                append_sources=True,
+                source_url="https://javdb580.com/v/dgVq9",
+                use_cache=[],
+            )
+        )
+
+        # 第一级是当前类型路由, 之后在路由并集里命中; 没有再拉全部内置影片来源那一批.
+        assert requested[0] == [str(SiteName.FREEJAVBT)]
+        assert str(SiteName.JAVDB) in requested[-1]
+        assert len(requested) == 2
 
 
 def test_uncensored_double_page_keeps_japanese_crop_flow() -> None:
@@ -381,6 +859,135 @@ class TestScrapeHandler:
         assert media.metadata_id == legacy.id
 
     @pytest.mark.asyncio(loop_scope="function")
+    async def test_append_sources_keeps_existing_order_and_skips_fields(self, repo: Repository, handler):
+        """「添加来源链接」只补链接: 既有顺序不动, 新来源接在末尾, 其余字段不写.
+
+        它跟手动搜索的区别正在这里: 手动搜索让选中的来源接管字段与来源顺序, 补链接不该动
+        用户已经定好的内容.
+        """
+        seeded = await repo.upsert_metadata(
+            number="MIDV-123",
+            title="Manual",
+            thumb_urls=["https://kept/t.jpg"],
+            poster_urls=["https://kept/p.jpg"],
+            source_urls={"javbus": "https://javbus/1", "javdb": "https://javdb/1"},
+        )
+        assert seeded.id is not None
+
+        media = await repo.create_media_file(library_id=1, path="/media/MIDV-123.mp4")
+        result = await handler.handle(
+            ScrapePayload(
+                media_file_id=media.id,
+                number="MIDV-123",
+                content_type=ContentType.CENSORED,
+                manual=True,
+                preferred_site="javdb",
+                append_sources=True,
+            )
+        )
+
+        assert result.success is True
+        updated = await repo.get_metadata_by_number("MIDV-123")
+        assert updated is not None
+        # 字段保持原样.
+        assert updated.title == "Manual"
+        assert updated.thumb_urls == ["https://kept/t.jpg"]
+        assert updated.poster_urls == ["https://kept/p.jpg"]
+        # 既有两条链接顺序不变; 本次命中的站已在列表里, 不重复插入. 列表里仍是这两条.
+        assert list(updated.source_urls) == ["javbus", "javdb"]
+        assert updated.source_urls["javbus"] == "https://javbus/1"
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_append_sources_adds_new_site_at_end(self, repo: Repository, handler):
+        """列表里没有的站点追加到末尾."""
+        seeded = await repo.upsert_metadata(
+            number="MIDV-123",
+            title="Manual",
+            source_urls={"javbus": "https://javbus/1"},
+        )
+        assert seeded.id is not None
+
+        media = await repo.create_media_file(library_id=1, path="/media/MIDV-123.mp4")
+        await handler.handle(
+            ScrapePayload(
+                media_file_id=media.id,
+                number="MIDV-123",
+                content_type=ContentType.CENSORED,
+                manual=True,
+                append_sources=True,
+            )
+        )
+
+        updated = await repo.get_metadata_by_number("MIDV-123")
+        assert updated is not None
+        assert updated.source_urls["javbus"] == "https://javbus/1"
+        assert next(iter(updated.source_urls)) == "javbus"
+        assert updated.title == "Manual"
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_manual_scrape_overwrites_metadata(self, repo: Repository, resource_store):
+        """手动刮削覆盖字段: 手动模式即使 use_cache 里带 metadata 也重新抓取.
+
+        复用 raw 快照会让「手动强制刮削」变成「读上次的旧值」, 用户点完看不出任何变化.
+        来源侧换成新标题才能区分「重新抓了」与「读了缓存」.
+        """
+        fetched: list[str] = []
+
+        class ShiftingCrawler(MockCrawler):
+            async def fetch(self, query, options=None) -> MediaMetadata | None:
+                fetched.append(query.number)
+                # 每次返回不同标题: 读了缓存就还是旧值, 重新抓才会变.
+                title = f"Fetched {len(fetched)}"
+                return MediaMetadata.model_validate({"number": "MIDV-123", "title": title, "tags": ["Fresh"]})
+
+        h = ScrapeHandler(
+            repo=repo,
+            factory=FakeFactory({"javdb": ShiftingCrawler()}),
+            resource_store=resource_store,
+            pipeline_config=HotSettings(),
+        )
+        # raw 快照是缓存复用的载体: 没有它就根本走不到「读旧值」那条路, 也就测不出差别.
+        seeded = await repo.upsert_metadata(
+            number="MIDV-123",
+            title="Old Title",
+            raw={"javdb": {"number": "MIDV-123", "title": "Cached Title", "tags": ["Stale"]}},
+        )
+        assert seeded.id is not None
+
+        media = await repo.create_media_file(library_id=1, path="/media/MIDV-123.mp4")
+        result = await h.handle(
+            ScrapePayload(
+                media_file_id=media.id,
+                number="MIDV-123",
+                content_type=ContentType.CENSORED,
+                manual=True,
+                # 手动模式要无视这个缓存开关, 否则等于什么都没刮.
+                use_cache={CacheKind.metadata, CacheKind.trans},
+            )
+        )
+
+        assert result.success is True
+        updated = await repo.get_metadata_by_number("MIDV-123")
+        assert updated is not None
+        assert updated.title == "Fetched 1"
+        assert updated.tags == ["Fresh"]
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_scrape_does_not_register_file_record(self, repo: Repository, handler):
+        """刮削成功后不写文件记录.
+
+        那张表记的是「整理过的文件」, 由整理落盘时写入; 刮削不搬文件, 记进来只会让它变成
+        一份流水账, 而界面显示的是「待整理」.
+        """
+        media = await repo.create_media_file(library_id=1, path="/media/MIDV-123.mp4")
+        result = await handler.handle(
+            ScrapePayload(media_file_id=media.id, number="MIDV-123", content_type=ContentType.CENSORED)
+        )
+
+        assert result.success is True
+        assert await repo.list_scraped_filenames(library_id=1) == []
+
+    @pytest.mark.asyncio(loop_scope="function")
     async def test_skips_locked_fields_end_to_end(self, repo: Repository, handler):
         """自动刮削跳过锁定字段, 未锁定字段正常更新, 锁定字段的来源标注保留."""
         seeded = await repo.upsert_metadata(
@@ -618,7 +1225,7 @@ class TestScrapeHandler:
     @pytest.mark.asyncio(loop_scope="function")
     async def test_materializes_cropped_poster(self, repo: Repository, resource_store):
         """有 web_client 时, scrape 物化: poster 候选偏矮 → 裁剪 → metadata 记内部 URL."""
-        from typing import ClassVar, cast
+        from typing import cast
 
         from PIL import Image
 
@@ -678,7 +1285,7 @@ class TestScrapeHandler:
         站点没给独立竖版海报时会拿横版大图两处都用, 尺寸比是 1.0, 按「候选够高」的规则会被
         跳过, 片库里于是长期显示那张横版图.
         """
-        from typing import ClassVar, cast
+        from typing import cast
 
         from PIL import Image
 
@@ -733,6 +1340,64 @@ class TestScrapeHandler:
         # 裁成内部派生件, 不再是原横版大图.
         assert metadata.poster_urls[0].startswith(RESOURCE_URL_PREFIX)
         assert metadata.poster_urls[0] != shared
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_materializes_cropped_poster_for_single_image_uncensored(self, repo: Repository, resource_store):
+        """单图无码 (同源给同一张海报与封面) 仍按无码自动裁切.
+
+        这类条目在图片排布上走「单图对齐」, 但条目的类型是无码, 裁切放行按条目类型判定;
+        按图片排布口径判定会让全部单图无码停止裁切.
+        """
+        from typing import cast
+
+        from PIL import Image
+
+        from amane.media.pipeline import RESOURCE_URL_PREFIX
+        from amane.net.http import WebClient
+
+        cover = "https://s/HEYZO-0474.jpg"
+
+        class ImgCrawler:
+            name = SiteName.JAVBUS
+
+            def __init__(self, client=None):
+                pass
+
+            async def fetch(self, query, options=None) -> MediaMetadata | None:
+                # 无码站只给一张播放器静态图, 海报与封面同源, 不声明双页.
+                return MediaMetadata(number="HEYZO-0474", title="T", thumb_urls=[cover], poster_urls=[cover])
+
+        class FakeWebClient:
+            sizes: ClassVar = {cover: (800, 538)}
+
+            async def download(self, url, dest, **kwargs) -> bool:
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                Image.new("RGB", self.sizes[url], "blue").save(dest)
+                return True
+
+            async def get_filesize(self, url, **kwargs):
+                return None
+
+            async def resolve_final_url(self, url, **kwargs) -> str:
+                return url
+
+        h = ScrapeHandler(
+            repo=repo,
+            factory=FakeFactory({"javbus": ImgCrawler()}),
+            resource_store=resource_store,
+            pipeline_config=_config_with({ContentType.UNCENSORED: [SiteName.JAVBUS]}),
+            web_client=cast("WebClient", FakeWebClient()),
+        )
+        media = await repo.create_media_file(library_id=1, path="/media/HEYZO-0474.mp4")
+        result = await h.handle(
+            ScrapePayload(media_file_id=media.id, number="HEYZO-0474", content_type=ContentType.UNCENSORED)
+        )
+        assert result.success is True
+        metadata = await repo.get_metadata_by_number("HEYZO-0474")
+        assert metadata is not None
+        assert metadata.poster_urls is not None
+        assert metadata.poster_urls[0].startswith(RESOURCE_URL_PREFIX)
+        assert metadata.poster_urls[0] != cover
 
 
 # --- content_routes 资格真值 + 有序路由 ---
@@ -1131,6 +1796,85 @@ class TestRefreshHandler:
             assert await repo.get_media_file(row.id) is not None
 
     @pytest.mark.asyncio(loop_scope="function")
+    async def test_scan_organizes_scraped_without_rescraping(self, repo: Repository, tmp_path):
+        """已有元数据的文件扫描时只整理, 不重新刮削.
+
+        路径模板改过或补充了字段之后, 扫描一次就该把文件落到该去的位置; 但同时不该为此
+        再打一遍刮削站点.
+        """
+        done = await repo.create_media_file(
+            library_id=1, path=str(tmp_path / "MIDV-123.mp4"), status=MediaFileStatus.SCRAPED
+        )
+        (tmp_path / "MIDV-123.mp4").write_bytes(b"\x00" * 100)
+
+        result = await RefreshHandler(repo=repo).handle(
+            RefreshPayload(library_id=1, path=str(tmp_path), scan={ScanMode.add}, scrape={MediaFileStatus.PENDING})
+        )
+
+        assert result.success is True
+        kinds = [(f.task_type, f.key) for f in result.followups]
+        # 没有刮削后继: 已刮削的行不在 PENDING 集合里.
+        assert not any(k is TaskType.SCRAPE for k, _ in kinds)
+        # 有一个整理后继, 且把这条已刮削的行包了进去.
+        organize = [f for f in result.followups if f.task_type is TaskType.ORGANIZE]
+        assert len(organize) == 1
+        payload = organize[0].payload
+        assert done.id in payload["media_file_ids"]
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_scan_organize_can_be_disabled(self, repo: Repository, tmp_path):
+        """整理后继可关闭: 只想对齐索引时不该顺手搬文件."""
+        await repo.create_media_file(library_id=1, path=str(tmp_path / "MIDV-123.mp4"), status=MediaFileStatus.SCRAPED)
+        (tmp_path / "MIDV-123.mp4").write_bytes(b"\x00" * 100)
+
+        result = await RefreshHandler(repo=repo).handle(
+            RefreshPayload(library_id=1, path=str(tmp_path), scan={ScanMode.add}, organize=False)
+        )
+
+        assert result.success is True
+        assert not any(f.task_type is TaskType.ORGANIZE for f in result.followups)
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_scan_records_number_on_new_rows(self, repo: Repository, tmp_path):
+        """扫描登记新文件时把番号一并落库.
+
+        番号是路径的函数; 不记下来, 后续按番号找行的读取方 (关联文件等) 就得各自重新解析.
+        """
+        path = tmp_path / "MIDV-123.mp4"
+        path.write_bytes(b"\x00" * 100)
+
+        await RefreshHandler(repo=repo).handle(
+            RefreshPayload(library_id=1, path=str(tmp_path), scan={ScanMode.add}, scrape=set())
+        )
+
+        row = await repo.get_media_file_by_path(str(path))
+        assert row is not None
+        assert row.number == "MIDV-123"
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_scan_adopts_existing_metadata_instead_of_rescraping(self, repo: Repository, tmp_path):
+        """删库重加/换目录后重新登记的文件, 若已有同番号元数据就直接挂上.
+
+        否则这些行以 PENDING 进库, 下一次扫描会把整库当新文件再刮一遍 —— 既慢又白打站点.
+        """
+        meta = await repo.upsert_metadata(number="MIDV-123", title="Existing")
+        assert meta.id is not None
+        path = tmp_path / "MIDV-123.mp4"
+        path.write_bytes(b"\x00" * 100)
+
+        result = await RefreshHandler(repo=repo).handle(
+            RefreshPayload(library_id=1, path=str(tmp_path), scan={ScanMode.add}, scrape={MediaFileStatus.PENDING})
+        )
+
+        assert result.success is True
+        row = await repo.get_media_file_by_path(str(path))
+        assert row is not None
+        assert row.metadata_id == meta.id
+        assert row.status is MediaFileStatus.SCRAPED
+        # 已经挂上元数据, 不该再排刮削.
+        assert not any(f.task_type is TaskType.SCRAPE for f in result.followups)
+
+    @pytest.mark.asyncio(loop_scope="function")
     async def test_handle_files(self, repo: Repository, tmp_path):
         """新文件被注册; PENDING 状态的文件被刮削; SKIP 状态的文件不被刮削."""
 
@@ -1431,3 +2175,30 @@ class TestRefreshHandler:
         assert result.result.scrape == n
         scrapes = [f for f in (result.followups or []) if f.task_type == TaskType.SCRAPE]
         assert len(scrapes) == n
+
+
+def test_prioritize_source_urls_follows_route_order() -> None:
+    """非手动刮削也按类型路由顺序排来源链接.
+
+    聚合写入是「先到先得」, 顺序取决于各站响应快慢; 用户改了路由顺序时不跟着变,
+    界面看起来就像没生效.
+    """
+    from amane.handlers.scrape import _prioritize_source_urls
+
+    src = {"javdb": "u1", "avbase": "u2", "javbus": "u3"}
+
+    out = _prioritize_source_urls(src, {}, manual=False, route=["avbase", "javbus", "javdb"])
+    assert list(out) == ["avbase", "javbus", "javdb"]
+
+    # 路由里没有的站点接在末尾, 彼此保持原相对顺序.
+    partial = _prioritize_source_urls(src, {}, manual=False, route=["avbase"])
+    assert list(partial) == ["avbase", "javdb", "javbus"]
+
+
+def test_prioritize_source_urls_manual_preferred_wins() -> None:
+    """手动搜索仍把选中的那一条提到最前, 哪怕路由把它排在后面."""
+    from amane.handlers.scrape import _prioritize_source_urls
+
+    src = {"javdb": "u1", "avbase": "u2"}
+    out = _prioritize_source_urls(src, {}, manual=True, preferred_site="javdb", route=["avbase", "javdb"])
+    assert list(out) == ["javdb", "avbase"]

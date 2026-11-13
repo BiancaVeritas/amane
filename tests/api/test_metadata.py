@@ -66,6 +66,21 @@ class TestMetadataHttp:
         assert detail["field_sources"] == {"title": "javdb"}
 
     @pytest.mark.asyncio(loop_scope="function")
+    async def test_phase_carries_tags_for_tag_driven_uncensored(self, client: AsyncClient, repo: Repository):
+        """相位里要带条目标签, 前端才能按「無碼」点亮无码.
+
+        FC2 这类条目的类型本身不带无码标记, 只能靠标签区分; 少了 tags 就永远不亮.
+        """
+        meta = await repo.upsert_metadata(number="FC2-1229755", tags=["無碼", "素人"])
+        assert meta.id is not None
+
+        listed = (await client.get("metadata?search=FC2-1229755")).json()["items"][0]
+        assert "無碼" in listed["file_phase"]["tags"]
+
+        detail = (await client.get(f"metadata/{meta.id}")).json()["metadata"]
+        assert "無碼" in detail["file_phase"]["tags"]
+
+    @pytest.mark.asyncio(loop_scope="function")
     async def test_list_phase_comes_from_number_without_files(self, client: AsyncClient, repo: Repository):
         """有码 / 无码取番号类别: 没有挂载文件也亮, 无码再并上文件的无码标记."""
         uncensored = await repo.upsert_metadata(number="HEYZO-1234")
@@ -85,6 +100,7 @@ class TestMetadataHttp:
             "mosaics": [],
             "definition": None,
             "ltx": False,
+            "tags": [],
         }
         assert items["MIDV-002"]["file_phase"]["censored"] is True
         assert items["MIDV-002"]["file_phase"]["uncensored"] is True
@@ -479,7 +495,6 @@ class TestImageSelection:
         data = resp.json()
         assert data["thumb_candidates"] == [first]
 
-
     async def test_remove_deletes_extra_fanart(self, client, repo, app):
         """剧照在按站点分组的 extrafanart_urls 里, 删掉要落到那一层.
 
@@ -493,9 +508,7 @@ class TestImageSelection:
             extrafanart_urls={"javdb": [still, keep]},
         )
 
-        resp = await client.request(
-            "DELETE", f"metadata/{meta.id}/images", params={"url": still, "target": "thumb"}
-        )
+        resp = await client.request("DELETE", f"metadata/{meta.id}/images", params={"url": still, "target": "thumb"})
 
         assert resp.status_code == 200
         updated = await repo.get_metadata(meta.id)
@@ -507,9 +520,7 @@ class TestImageSelection:
         only = "https://example.com/only-still.jpg"
         meta = await repo.upsert_metadata(number="SEL-006", extrafanart_urls={"javdb": [only]})
 
-        resp = await client.request(
-            "DELETE", f"metadata/{meta.id}/images", params={"url": only, "target": "thumb"}
-        )
+        resp = await client.request("DELETE", f"metadata/{meta.id}/images", params={"url": only, "target": "thumb"})
 
         assert resp.status_code == 200
         updated = await repo.get_metadata(meta.id)
@@ -575,6 +586,7 @@ class TestImageInfo:
         assert items[0]["source"] == "Caribbeancom"
         assert (items[0]["width"], items[0]["height"]) == (640, 360)
 
+
 class TestMetadataPatch:
     """PATCH 只写显式提供的字段: 省略键不改, 可空列给 null 即清空."""
 
@@ -609,3 +621,49 @@ class TestMetadataPatch:
             assert resp.status_code == 422, payload
         detail = (await client.get(f"metadata/{meta.id}")).json()["metadata"]
         assert detail["title"] == "原标题"
+
+
+@pytest.mark.asyncio
+async def test_split_merged_tag_ids_merges_by_display_name(tmp_path) -> None:
+    """按展示名分组: 没配映射的中文标签也要与译文同名的外文标签并成一组.
+
+    例: 「二穴同入」(本来就是中文) 与「二穴同時挿入」(译作二穴同入) 界面上是同一条.
+    """
+    from types import SimpleNamespace
+
+    from amane.api.routes.metadata import _split_merged_tag_ids
+    from amane.db.repo_types import FacetItem
+    from amane.tags.mapping import TagMappingStore
+
+    store = TagMappingStore(tmp_path)
+    store.seed([("二穴同入", 3), ("二穴同時挿入", 9), ("中出し", 5)])
+    store.upsert("二穴同時挿入", "二穴同入")
+    store.upsert("中出し", "中出")
+
+    facets = [
+        FacetItem(id=1, name="二穴同入", count=3, is_favorite=False),
+        FacetItem(id=2, name="二穴同時挿入", count=9, is_favorite=False),
+        FacetItem(id=3, name="中出し", count=5, is_favorite=False),
+    ]
+
+    class FakeRepo:
+        async def list_facets(self, *args, **kwargs):
+            return facets, len(facets)
+
+    repo = FakeRepo()
+    runtime = SimpleNamespace(tag_mappings=store)
+
+    # 没有映射的中文标签: 与译文同名的日文标签并成一组, 走 OR.
+    and_ids, or_ids = await _split_merged_tag_ids(repo, runtime, [1])
+    assert and_ids is None
+    assert sorted(or_ids or []) == [1, 2]
+
+    # 有映射的那一方拿到同样的组.
+    and_ids, or_ids = await _split_merged_tag_ids(repo, runtime, [2])
+    assert and_ids is None
+    assert sorted(or_ids or []) == [1, 2]
+
+    # 没有同名兄弟的标签保持 AND.
+    and_ids, or_ids = await _split_merged_tag_ids(repo, runtime, [3])
+    assert and_ids == [3]
+    assert or_ids is None

@@ -128,6 +128,55 @@ async def test_uncensored_uses_its_own_poster_ratio(resource_store: ResourceStor
 
 
 @pytest.mark.asyncio
+async def test_image_content_type_does_not_gate_crop(resource_store: ResourceStore, tmp_path: Path):
+    """无码单图对齐后图片排布口径被改写为 WESTERN, 裁切仍按条目类型放行.
+
+    放行若按图片排布口径判定, 全部单图无码都会停止裁切.
+    """
+    client = FakeClient({"https://s/t.jpg": (800, 538)})
+    cfg = HotSettings()
+    cfg.scraping.poster_ratio = 0.7
+    cfg.scraping.uncensored_poster_ratio = 0.5
+    out = await materialize_images(
+        [],
+        ["https://s/t.jpg"],
+        [],
+        resource_store,
+        cast("WebClient", client),
+        cfg,
+        tmp_path,
+        content_type=ContentType.UNCENSORED,
+        image_content_type=ContentType.WESTERN,
+    )
+    assert len(out.poster_urls) == 1
+    assert out.poster_urls[0].startswith(RESOURCE_URL_PREFIX)
+    got = await resource_store.get_by_url_hash(out.poster_urls[0].rsplit("/", 1)[-1])
+    assert got is not None
+    crop_res, crop_path = got
+    # 宽高比按排布口径取值: 无码单图已改写为 WESTERN, 用常规比例.
+    assert crop_res.meta is not None
+    assert crop_res.meta.get("args") == "0.7000"
+    assert Image.open(crop_path).size == (376, 538)
+
+
+@pytest.mark.asyncio
+async def test_poster_crop_skipped_for_type_outside_allowlist(resource_store: ResourceStore, tmp_path: Path):
+    """放行集之外的类型不裁: 排布口径对它们也是同一结论."""
+    client = FakeClient({"https://s/t.jpg": (800, 538)})
+    out = await materialize_images(
+        [],
+        ["https://s/t.jpg"],
+        [],
+        resource_store,
+        cast("WebClient", client),
+        HotSettings(),
+        tmp_path,
+        content_type=ContentType.AMATEUR,
+    )
+    assert out.poster_urls == []
+
+
+@pytest.mark.asyncio
 async def test_poster_always_cropped_from_thumb(resource_store: ResourceStore, tmp_path: Path):
     """海报一律从封面裁, 不看站点原图尺寸.
 
