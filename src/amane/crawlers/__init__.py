@@ -38,6 +38,7 @@ from .sites import (
     JavLibraryCrawler,
     Kin8Crawler,
     MGStageCrawler,
+    MuramuraCrawler,
     OfficialCrawler,
     PacopacomamaCrawler,
     PondoCrawler,
@@ -81,6 +82,7 @@ registry.register(TenmusumeCrawler)
 registry.register(ThePornDBCrawler)
 registry.register(OfficialCrawler)
 registry.register(TokyoHotCrawler)
+registry.register(MuramuraCrawler)
 
 # 演员站在 amane.crawlers.actor 导入时注册.
 
@@ -121,6 +123,7 @@ __all__ = [
     "MediaMetadata",
     "MetadataField",
     "MinnanoActorCrawler",
+    "MuramuraCrawler",
     "OfficialCrawler",
     "PacopacomamaCrawler",
     "PondoCrawler",

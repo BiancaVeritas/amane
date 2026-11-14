@@ -27,6 +27,7 @@ class SiteName(StrEnum):
     KIN8 = "kin8"
     MGSTAGE = "mgstage"
     MINNANO = "minnano"
+    MURAMURA = "muramura"
     OFFICIAL = "official"
     PONDO = "1pondo"
     PACOPACOMAMA = "pacopacomama"

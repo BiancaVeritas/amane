@@ -16,6 +16,10 @@ from .actor import ActorFetcher, GFriendsActorCrawler, actor_registry
 from .base import Crawler
 from .registry import registry
 from .sites import R18DevCrawler
+from .sites.generic_page import GenericPageCrawler
+
+#: 通用解析器在实例缓存里的键; 它不是 ``SiteName``, 因此不会出现在任何路由或来源目录里.
+_GENERIC_NAME = "generic"
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -94,6 +98,19 @@ class CrawlerFactory:
         self._plugin_configs = plugin_configs or {}
         self._instances: dict[str, Crawler | FilmSourceProvider] = {}
         self._actor_instances: dict[str, ActorCrawler] = {}
+
+    async def get_generic(self) -> Crawler:
+        """通用页面解析器: 不注册进任何站点, 也不进类型路由.
+
+        只在「用户贴的地址没有专属爬虫认识」时兜底 —— 它靠页面特征猜番号与标题,
+        不像站点爬虫那样知道字段在哪, 因此永远排在所有专属来源之后.
+        """
+        cached = self._instances.get(_GENERIC_NAME)
+        if isinstance(cached, Crawler):
+            return cached
+        instance = GenericPageCrawler(client=self._http.for_source(_GENERIC_NAME, None))
+        self._instances[_GENERIC_NAME] = instance
+        return instance
 
     async def get(self, name: str) -> Crawler | FilmSourceProvider | None:
         """内置来源与插件来源共用一份实例缓存; 分派只在此处, 下游只依赖结构性协议."""
