@@ -4,7 +4,7 @@ from typing import Annotated
 import structlog
 from fastapi import APIRouter, Body, HTTPException, Query
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, TypeAdapter
+from pydantic import BaseModel, Field, TypeAdapter
 
 from ...db import MediaFile, Repository
 from ...db.models import SortOrder, Task, TaskSortField, TaskStatus, TaskType
@@ -48,6 +48,13 @@ class ScrapePreviewItem(BaseModel):
 class ScrapePreviewRequest(BaseModel):
     number: str
     content_type: ContentType | None = None
+    only_that_url: bool = Field(
+        default=False,
+        description=(
+            "只解析给定的这一个地址, 不再拿它的番号去问其他来源."
+            "「添加来源链接」用: 用户要的就是这一条, 多带回来的并列结果没有意义."
+        ),
+    )
 
 
 class ScrapePreviewResponse(BaseModel):
@@ -211,7 +218,7 @@ async def preview_scrape(req: ScrapePreviewRequest, runtime: RuntimeDep) -> Scra
         runtime.resource_store,
         runtime.config.hot,
     )
-    items = await handler.preview(req.number, content_type)
+    items = await handler.preview(req.number, content_type, only_that_url=req.only_that_url)
     return ScrapePreviewResponse(items=[ScrapePreviewItem(**item) for item in items])
 
 

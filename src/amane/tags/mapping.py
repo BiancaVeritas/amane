@@ -37,6 +37,10 @@ class TagEntry:
     language: LanguageCode = "other"
     usage_count: int = 0
     sources: list[str] | None = None
+    #: 归档标记. 归档的词条仍然参与映射与计数, 只是不出现在主列表里.
+    #: 删除做成归档而不是真删, 是为了不让「刮削后又回来」: 真正删掉的词条会在下一次
+    #: seed 时凭标签表重建出来, 归档则会被 seed 跳过.
+    archived: bool = False
 
 
 class TagMappingStore:
@@ -60,6 +64,7 @@ class TagMappingStore:
                         language=value.get("language") or detect_language(key),
                         usage_count=max(0, int(value.get("usage_count", 0))),
                         sources=list(value.get("sources") or []),
+                        archived=bool(value.get("archived", False)),
                     )
         except OSError, ValueError, TypeError:
             # 不覆盖损坏文件；让服务保持可用，后续保存时使用当前可解析数据。
@@ -165,11 +170,26 @@ class TagMappingStore:
         language: str = "all",
         frequency: str = "all",
         search: str = "",
+        archived: bool = False,
+        include_archived: bool = False,
         offset: int = 0,
         limit: int = 50,
     ) -> tuple[list[TagEntry], int]:
+        """按归档状态与筛选条件取一页词条.
+
+        - ``archived=True``: 只看归档区
+        - ``include_archived=True``: 主列表与归档区一起看 (「全部词条」那档)
+        - 都不给: 只看未归档的
+
+        归档的词条仍参与映射与计数, 这里只决定它们出现在哪一档, 不改变是否生效.
+        """
         with self._lock:
-            values = list(self._entries.values())
+            if archived:
+                values = [v for v in self._entries.values() if v.archived]
+            elif include_archived:
+                values = list(self._entries.values())
+            else:
+                values = [v for v in self._entries.values() if not v.archived]
             if status == "pending":
                 values = [v for v in values if not v.translation]
             elif status == "mapped":
@@ -187,10 +207,20 @@ class TagMappingStore:
             return values[offset : offset + limit], len(values)
 
     def counts(self) -> dict[str, int]:
+        """``all`` 含归档 (与「全部词条」那一档一致); 其余各项只算未归档的.
+
+        ``archived`` 单独给出, 因此两组数字仍能对上, 不会出现「全部」小于另两项之和的怪象.
+        """
         with self._lock:
-            total = len(self._entries)
-            mapped = sum(1 for entry in self._entries.values() if entry.translation)
-            return {"all": total, "mapped": mapped, "pending": total - mapped}
+            active = [entry for entry in self._entries.values() if not entry.archived]
+            mapped = sum(1 for entry in active if entry.translation)
+            archived = sum(1 for entry in self._entries.values() if entry.archived)
+            return {
+                "all": len(self._entries),
+                "mapped": mapped,
+                "pending": len(active) - mapped,
+                "archived": archived,
+            }
 
     def upsert(self, original: str, translation: str | None) -> TagEntry:
         original = original.strip()
@@ -203,17 +233,59 @@ class TagMappingStore:
             self._save()
             return entry
 
-    def delete(self, original: str) -> bool:
+    def get(self, original: str) -> TagEntry | None:
+        """按原名取一条; 调用方据此区分「不存在」与「有译名不能归档」."""
         with self._lock:
-            if original not in self._entries:
+            return self._entries.get(original)
+
+    def delete(self, original: str) -> bool:
+        """归档词条 (不真删).
+
+        真删会让它在下次 seed 时按标签表重建出来 —— 用户看到的就是「删了又回来」.
+        归档后 seed 仍会更新它的引用数, 映射也照旧生效, 只是不在主列表里显示.
+
+        已映射的不许归档: 归档区表示「本来就是中文, 不需要译名」, 带着译名进去自相矛盾,
+        而且一键误点就丢了一个人工决定. 要归档先清空译名.
+        """
+        with self._lock:
+            entry = self._entries.get(original)
+            if entry is None or entry.archived or entry.translation:
                 return False
-            del self._entries[original]
+            entry.archived = True
+            self._save()
+            return True
+
+    def restore(self, original: str) -> bool:
+        """把归档的词条放回主列表."""
+        with self._lock:
+            entry = self._entries.get(original)
+            if entry is None or not entry.archived:
+                return False
+            entry.archived = False
             self._save()
             return True
 
     def export(self) -> dict:
+        """导出「动过的」词条: 已映射的与已归档的.
+
+        待映射的多是从标签表自动同步进来的原始词条, 既没译名也没归档决定, 导出它们只是
+        把噪声一起带走; 更糟的是导回别处会重建出一堆空条目.
+
+        只带「决定」: 译文、语言、归档. ``usage_count`` 与本机 ``sources`` 是这台机器上的
+        统计, 给别人导入会把对方的计数覆盖成本机的数字 —— 那是它自己的数据, 不该被带过去.
+        """
         with self._lock:
-            return {"version": 1, "entries": {k: asdict(v) for k, v in sorted(self._entries.items())}}
+            kept = {
+                key: {
+                    "original": entry.original,
+                    "translation": entry.translation,
+                    "language": entry.language,
+                    "archived": entry.archived,
+                }
+                for key, entry in sorted(self._entries.items())
+                if entry.archived or entry.translation
+            }
+            return {"version": 1, "entries": kept}
 
     def import_data(self, payload: dict) -> int:
         entries = payload.get("entries", {})
@@ -235,10 +307,12 @@ class TagMappingStore:
                 language = value.get("language")
                 if language in {"ja", "en", "zh", "other"}:
                     current.language = language
-                if isinstance(value.get("usage_count"), int):
-                    current.usage_count = max(0, value["usage_count"])
-                if isinstance(value.get("sources"), list):
-                    current.sources = [str(source) for source in value["sources"]]
+                # 计数与来源是本机统计, 只由本地观察/seed 维护. 旧版导出文件里带着这两项,
+                # 但导入别人的词典不该把本机的数字改掉, 因此有就跳过.
+                # 归档状态要一起带过来, 否则导回后这些词条又回到主列表,
+                # 等于把「不显示但仍在用」这个决定丢了.
+                if isinstance(value.get("archived"), bool):
+                    current.archived = value["archived"]
                 count += 1
             self._save()
         return count

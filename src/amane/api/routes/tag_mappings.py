@@ -29,6 +29,7 @@ async def list_mappings(
     language: Literal["all", "ja", "en", "zh", "other"] = "all",
     frequency: Literal["all", "high"] = "all",
     search: str = "",
+    archived: bool = False,
     offset: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=200),
 ):
@@ -46,7 +47,16 @@ async def list_mappings(
                 break
         runtime.tag_mappings.seed(seeded)
     items, total = runtime.tag_mappings.list(
-        status=status, language=language, frequency=frequency, search=search, offset=offset, limit=limit
+        status=status,
+        language=language,
+        frequency=frequency,
+        search=search,
+        archived=archived,
+        # 「全部词条」要把归档区也算进来: 那一档的字面意思就是全部, 少一块会让人以为
+        # 词条凭空消失了.
+        include_archived=status == "all" and not archived,
+        offset=offset,
+        limit=limit,
     )
     return {"items": [item.__dict__ for item in items], "total": total, "stats": runtime.tag_mappings.counts()}
 
@@ -62,8 +72,20 @@ async def save_mapping(req: MappingUpdate, runtime: RuntimeDep):
 
 @router.delete("/{original:path}", status_code=204)
 async def delete_mapping(original: str, runtime: RuntimeDep):
+    """归档词条: 不真删, 否则它会在下次 seed 时按标签表重建出来."""
     if not runtime.tag_mappings.delete(original):
-        raise HTTPException(404, "标签不存在")
+        entry = runtime.tag_mappings.get(original)
+        if entry is not None and entry.translation:
+            raise HTTPException(409, "已映射的词条不能归档, 请先清空中文译名")
+        raise HTTPException(404, "标签不存在或已归档")
+
+
+@router.post("/restore/{original:path}")
+async def restore_mapping(original: str, runtime: RuntimeDep):
+    """把归档的词条放回主列表."""
+    if not runtime.tag_mappings.restore(original):
+        raise HTTPException(404, "标签不存在或未归档")
+    return {"restored": original}
 
 
 @router.get("/export")

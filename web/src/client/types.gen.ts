@@ -4844,6 +4844,12 @@ export type ScrapePreviewRequest = {
      */
     number: string;
     content_type?: ContentType | null;
+    /**
+     * Only That Url
+     *
+     * 只解析给定的这一个地址, 不再拿它的番号去问其他来源.「添加来源链接」用: 用户要的就是这一条, 多带回来的并列结果没有意义.
+     */
+    only_that_url?: boolean;
 };
 
 /**
@@ -5026,19 +5032,19 @@ export type ScrapingConfig = {
      * Content Routes
      */
     content_routes?: {
-        [key in ContentType]?: Array<'airav' | 'avbase' | 'aventertainments' | 'avsox' | 'dahlia' | 'd2pass' | 'dmm' | 'faleno' | 'fc2' | 'fc2club' | 'fc2ppvdb' | 'freejavbt' | 'getchu' | 'giga' | 'iqqtv' | 'jav321' | 'javbus' | 'javdb' | 'javlibrary' | 'kin8' | 'mgstage' | 'official' | '1pondo' | 'pacopacomama' | 'caribbeancom' | 'caribbeancompr' | 'prestige' | 'r18dev' | '10musume' | 'tokyo_hot' | 'theporndb' | 'xcity'>;
+        [key in ContentType]?: Array<'airav' | 'avbase' | 'aventertainments' | 'avsox' | 'dahlia' | 'd2pass' | 'dmm' | 'faleno' | 'fc2' | 'fc2club' | 'fc2ppvdb' | 'freejavbt' | 'getchu' | 'giga' | 'iqqtv' | 'jav321' | 'javbus' | 'javdb' | 'javlibrary' | 'kin8' | 'mgstage' | 'muramura' | 'official' | '1pondo' | 'pacopacomama' | 'caribbeancom' | 'caribbeancompr' | 'prestige' | 'r18dev' | '10musume' | 'tokyo_hot' | 'theporndb' | 'xcity'>;
     };
     /**
      * Field Priority
      */
     field_priority?: {
-        [key in MetadataField]?: Array<'airav' | 'avbase' | 'aventertainments' | 'avsox' | 'dahlia' | 'd2pass' | 'dmm' | 'faleno' | 'fc2' | 'fc2club' | 'fc2ppvdb' | 'freejavbt' | 'getchu' | 'giga' | 'iqqtv' | 'jav321' | 'javbus' | 'javdb' | 'javlibrary' | 'kin8' | 'mgstage' | 'official' | '1pondo' | 'pacopacomama' | 'caribbeancom' | 'caribbeancompr' | 'prestige' | 'r18dev' | '10musume' | 'tokyo_hot' | 'theporndb' | 'xcity'>;
+        [key in MetadataField]?: Array<'airav' | 'avbase' | 'aventertainments' | 'avsox' | 'dahlia' | 'd2pass' | 'dmm' | 'faleno' | 'fc2' | 'fc2club' | 'fc2ppvdb' | 'freejavbt' | 'getchu' | 'giga' | 'iqqtv' | 'jav321' | 'javbus' | 'javdb' | 'javlibrary' | 'kin8' | 'mgstage' | 'muramura' | 'official' | '1pondo' | 'pacopacomama' | 'caribbeancom' | 'caribbeancompr' | 'prestige' | 'r18dev' | '10musume' | 'tokyo_hot' | 'theporndb' | 'xcity'>;
     };
     /**
      * Field Blacklist
      */
     field_blacklist?: {
-        [key in MetadataField]?: Array<'airav' | 'avbase' | 'aventertainments' | 'avsox' | 'dahlia' | 'd2pass' | 'dmm' | 'faleno' | 'fc2' | 'fc2club' | 'fc2ppvdb' | 'freejavbt' | 'getchu' | 'giga' | 'iqqtv' | 'jav321' | 'javbus' | 'javdb' | 'javlibrary' | 'kin8' | 'mgstage' | 'official' | '1pondo' | 'pacopacomama' | 'caribbeancom' | 'caribbeancompr' | 'prestige' | 'r18dev' | '10musume' | 'tokyo_hot' | 'theporndb' | 'xcity'>;
+        [key in MetadataField]?: Array<'airav' | 'avbase' | 'aventertainments' | 'avsox' | 'dahlia' | 'd2pass' | 'dmm' | 'faleno' | 'fc2' | 'fc2club' | 'fc2ppvdb' | 'freejavbt' | 'getchu' | 'giga' | 'iqqtv' | 'jav321' | 'javbus' | 'javdb' | 'javlibrary' | 'kin8' | 'mgstage' | 'muramura' | 'official' | '1pondo' | 'pacopacomama' | 'caribbeancom' | 'caribbeancompr' | 'prestige' | 'r18dev' | '10musume' | 'tokyo_hot' | 'theporndb' | 'xcity'>;
     };
     /**
      * Field Language
@@ -5451,7 +5457,7 @@ export type SiteConfig = {
  *
  * 爬虫站点名称 (影片与演员源共用).
  */
-export type SiteName = 'airav' | 'avbase' | 'aventertainments' | 'avsox' | 'dahlia' | 'd2pass' | 'dmm' | 'faleno' | 'fc2' | 'fc2club' | 'fc2ppvdb' | 'freejavbt' | 'getchu' | 'gfriends' | 'giga' | 'iqqtv' | 'jav321' | 'javbus' | 'javdb' | 'javlibrary' | 'kin8' | 'mgstage' | 'minnano' | 'official' | '1pondo' | 'pacopacomama' | 'caribbeancom' | 'caribbeancompr' | 'prestige' | 'r18dev' | '10musume' | 'tokyo_hot' | 'theporndb' | 'tushy' | 'tushy_raw' | 'wikipedia' | 'xcity';
+export type SiteName = 'airav' | 'avbase' | 'aventertainments' | 'avsox' | 'dahlia' | 'd2pass' | 'dmm' | 'faleno' | 'fc2' | 'fc2club' | 'fc2ppvdb' | 'freejavbt' | 'getchu' | 'gfriends' | 'giga' | 'iqqtv' | 'jav321' | 'javbus' | 'javdb' | 'javlibrary' | 'kin8' | 'mgstage' | 'minnano' | 'muramura' | 'official' | '1pondo' | 'pacopacomama' | 'caribbeancom' | 'caribbeancompr' | 'prestige' | 'r18dev' | '10musume' | 'tokyo_hot' | 'theporndb' | 'tushy' | 'tushy_raw' | 'wikipedia' | 'xcity';
 
 /**
  * SiteOutcomeKind

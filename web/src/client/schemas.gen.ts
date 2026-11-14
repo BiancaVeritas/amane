@@ -3650,6 +3650,19 @@ export const HotSettingsSchema = {
                         use_browser: 'auto',
                         use_proxy: true
                     },
+                    muramura: {
+                        cookie: {},
+                        languages: [
+                            'zh',
+                            'ja',
+                            'en'
+                        ],
+                        official_routes: {},
+                        rate_limit: 2,
+                        tls_impersonate: true,
+                        use_browser: 'auto',
+                        use_proxy: true
+                    },
                     official: {
                         cookie: {},
                         languages: [
@@ -9328,6 +9341,12 @@ export const ScrapePreviewRequestSchema = {
                     type: 'null'
                 }
             ]
+        },
+        only_that_url: {
+            type: 'boolean',
+            title: 'Only That Url',
+            description: '只解析给定的这一个地址, 不再拿它的番号去问其他来源.「添加来源链接」用: 用户要的就是这一条, 多带回来的并列结果没有意义.',
+            default: false
         }
     },
     type: 'object',
@@ -9645,6 +9664,7 @@ export const ScrapingConfigSchema = {
                         'javlibrary',
                         'kin8',
                         'mgstage',
+                        'muramura',
                         'official',
                         '1pondo',
                         'pacopacomama',
@@ -9694,6 +9714,7 @@ export const ScrapingConfigSchema = {
                         'javlibrary',
                         'kin8',
                         'mgstage',
+                        'muramura',
                         'official',
                         '1pondo',
                         'pacopacomama',
@@ -9743,6 +9764,7 @@ export const ScrapingConfigSchema = {
                         'javlibrary',
                         'kin8',
                         'mgstage',
+                        'muramura',
                         'official',
                         '1pondo',
                         'pacopacomama',
@@ -10436,6 +10458,7 @@ export const SiteNameSchema = {
         'kin8',
         'mgstage',
         'minnano',
+        'muramura',
         'official',
         '1pondo',
         'pacopacomama',
