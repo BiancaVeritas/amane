@@ -389,9 +389,10 @@ class TestScrapingPriorityMigration:
         assert routes[ContentType.HENTAI][0] == SiteName.GETCHU
         assert routes[ContentType.WESTERN][0] == SiteName.THEPORNDB
         assert routes[ContentType.UNCENSORED][0] == SiteName.AVENTERTAINMENTS
-        # 无码路由按线上命中率排: caribbeancompr 提前, pacopacomama 收尾.
+        # 无码路由按线上命中率排: caribbeancompr 提前, muramura 收尾.
         assert routes[ContentType.UNCENSORED][1] == SiteName.CARIBBEANCOMPR
-        assert routes[ContentType.UNCENSORED][-1] == SiteName.PACOPACOMAMA
+        assert routes[ContentType.UNCENSORED][-2] == SiteName.PACOPACOMAMA
+        assert routes[ContentType.UNCENSORED][-1] == SiteName.MURAMURA
         assert SiteName.FC2PPVDB in routes[ContentType.FC2]
         # 官方电子市场下架的作品只剩索引站在线看站收录, airav 排在 fc2 路线的链尾
         assert routes[ContentType.FC2][-1] == SiteName.AIRAV

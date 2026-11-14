@@ -93,6 +93,7 @@ _DEFAULT_CONTENT_ROUTES: dict[ContentType, list[SiteName]] = {
         SiteName.PONDO,
         SiteName.CARIBBEANCOM,
         SiteName.PACOPACOMAMA,
+        SiteName.MURAMURA,
     ],
     ContentType.FC2: [
         SiteName.JAVDB,
