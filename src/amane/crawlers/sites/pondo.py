@@ -164,7 +164,7 @@ class PondoCrawler(Crawler):
         return MediaMetadata(
             number=number,
             studio="一本道",
-            publisher="1pondo",
+            publisher="一本道",
             title=title if isinstance(title, str) and title.strip() else None,
             plot=plot if isinstance(plot, str) and plot.strip() else None,
             actors=film_actors(actors),

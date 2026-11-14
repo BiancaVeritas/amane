@@ -84,7 +84,7 @@ async def test_scrape_maps_public_metadata_only() -> None:
     # 日文标签优先, 英文名只在日文为空时用: 两套并进来会让界面上一串日文夹一串英文.
     assert result.tags == ["Tag A"]
     assert result.studio == "一本道"
-    assert result.publisher == "1pondo"
+    assert result.publisher == "一本道"
 
 
 @pytest.mark.asyncio

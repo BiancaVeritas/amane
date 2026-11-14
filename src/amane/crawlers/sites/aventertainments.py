@@ -231,7 +231,10 @@ def _metadata_from_page(url: str, text: str) -> MediaMetadata | None:
     synopsis_parts = html.xpath(
         '//*[contains(concat(" ", normalize-space(@class), " "), " product-description ")]//text()'
     ).getall()
-    description = re.sub(r"\s+", " ", " ".join(part.strip() for part in synopsis_parts if part.strip())).strip()
+    # 保留段落换行: 站点正文靠 <br> 分段, 全折成空格会让整篇连成一坨.
+    description = "\n".join(
+        line for line in (re.sub(r"\s+", " ", part).strip() for part in synopsis_parts) if line
+    )
     if not description:
         description = _text(video.get("description"))
         if description:
@@ -267,6 +270,8 @@ def _metadata_from_page(url: str, text: str) -> MediaMetadata | None:
         release=release,
         runtime=runtime,
         studio=studio,
+        # 发行商与制作商同源: 该站只在「スタジオ」一栏给出厂牌, 没有独立的发行商字段.
+        publisher=studio,
         series=series,
         poster_urls=[jacket] if jacket else [],
         original_poster_urls=[jacket] if jacket else [],

@@ -5,13 +5,13 @@ import pytest
 from amane.crawlers import registry
 from amane.crawlers.models import SearchQuery
 from amane.crawlers.sites.tokyo_hot import (
+    _DETAIL_PATH_RE,
     TokyoHotCrawler,
     _normalize_number,
     _parse_runtime,
     _search_result,
 )
 from amane.enums import SiteName
-
 
 SEARCH_HTML = '''
 <ul class="list slider cf">
@@ -100,9 +100,9 @@ async def test_scrape_maps_multi_series_and_full_size_assets() -> None:
     assert result.number == "N0956"
     assert result.external_id is None
     assert result.title == "問答無用カン 吉永小夜"
-    assert result.plot == "日本語の作品紹介 続きの説明"
+    assert result.plot == "日本語の作品紹介\n続きの説明"  # 段落换行保留
     assert [actor.name for actor in result.actors] == ["吉永小夜"]
-    assert result.studio == "東京熱"
+    assert result.studio == "Tokyo-Hot"
     assert result.publisher == "Tokyo-Hot"
     assert result.release == "2014-06-06"
     assert result.runtime == 109
@@ -154,3 +154,26 @@ def test_search_result_returns_listing_thumb() -> None:
 
 def test_search_result_has_no_thumb_for_other_number() -> None:
     assert _search_result(SEARCH_HTML, "K9999", "https://my.tokyo-hot.com/product/") == (None, None)
+
+
+@pytest.mark.parametrize(
+    ("url", "accepted"),
+    [
+        # 站点自己给出的详情链接末段是番号本身 (字母+数字), 不是内部数字 id.
+        ("https://my.tokyo-hot.com/product/n1199/?lang=ja", True),
+        ("https://my.tokyo-hot.com/product/n1199/", True),
+        ("https://my.tokyo-hot.com/product/k0794/", True),
+        ("https://my.tokyo-hot.com/product/1199/", True),
+        # 搜索页与目录页不是详情页.
+        ("https://my.tokyo-hot.com/product/?q=n1199&lang=ja", False),
+        ("https://my.tokyo-hot.com/product/", False),
+        ("https://my.tokyo-hot.com/", False),
+    ],
+)
+def test_detail_path_matches_number_style_urls(url: str, accepted: bool) -> None:
+    """详情页判定要认字母番号.
+
+    只认 ``\\d+`` 时, 站点自己返回的 ``/product/n1199/`` 会被拒, 表现为
+    「搜索命中了但 scrape failed」, 且详情页根本不会被请求.
+    """
+    assert (_DETAIL_PATH_RE.search(url) is not None) is accepted

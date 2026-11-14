@@ -70,7 +70,7 @@ async def test_scrape_maps_metadata_and_filters_protected_images() -> None:
     # 日文标签优先, 英文名只在日文为空时用.
     assert result.tags == ["素人", "美脚"]
     assert result.studio == "天然むすめ"
-    assert result.publisher == "10musume"
+    assert result.publisher == "天然むすめ"
     assert result.source_url == "https://www.10musume.com/movies/110426_01/"
 
 

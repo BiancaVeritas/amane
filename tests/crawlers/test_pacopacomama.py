@@ -135,7 +135,7 @@ async def test_scrape_maps_only_requested_japanese_metadata() -> None:
     assert result.plot == "日本語の原剧情"
     assert [actor.name for actor in result.actors] == ["工藤れいか", "戸田さやか"]
     assert result.studio == "パコパコママ"
-    assert result.publisher == "Pacopacomama"
+    assert result.publisher == "パコパコママ"
     assert result.release == "2026-11-05"
     assert result.runtime == 180
     assert result.series == "ベスト"

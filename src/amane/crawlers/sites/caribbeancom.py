@@ -48,6 +48,10 @@ class _DetailParser(HTMLParser):
         self._actor_links: list[str] = []
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        # 剧情正文用 <br> 分段. 不把它记成换行, 收尾的 "".join 会把整篇压成一坨.
+        if self._capture and tag == "br":
+            self._capture_text.append("\n")
+            return
         a = dict(attrs)
         classes = set((a.get("class") or "").split())
         if tag == "a" and "gallery-item" in classes:
@@ -85,7 +89,7 @@ class _DetailParser(HTMLParser):
         if self._capture:
             self._capture_depth -= 1
             if self._capture_depth <= 0 and tag == self._capture_tag:
-                value = "".join(self._capture_text).strip()
+                value = _clean_captured("".join(self._capture_text))
                 if self._capture == "title":
                     self.title = value
                 elif self._capture == "plot":
@@ -125,6 +129,25 @@ class _DetailParser(HTMLParser):
             self._capture_text.append(data)
         if self._in_spec_content:
             self._spec_text.append(data)
+
+
+def _clean_captured(raw: str) -> str:
+    """收拢抓到的正文: 保留段落与空行, 去掉每行首尾空白与行尾多余空行.
+
+    HTML 里的缩进与源码换行不算段落, 只有 ``<br>`` 才是. 站点用连续 ``<br>`` 表示分段,
+    全删空行会让段落连成一片, 全留又会带进大段空白 —— 连续空行压成一个.
+    """
+    lines = [line.strip() for line in raw.splitlines()]
+    out: list[str] = []
+    for line in lines:
+        if line:
+            out.append(line)
+        elif out and out[-1] != "":
+            # 连续空行只保留一个, 且不在开头留空行.
+            out.append("")
+    while out and out[-1] == "":
+        out.pop()
+    return "\n".join(out)
 
 
 def _trailer_urls(html: str) -> list[str]:
@@ -224,7 +247,7 @@ class CaribbeancomCrawler(Crawler):
         return MediaMetadata(
             number=requested,
             studio="カリビアンコム",
-            publisher="Caribbeancom",
+            publisher="カリビアンコム",
             title=metadata["title"] if isinstance(metadata["title"], str) else None,
             plot=metadata["plot"] if isinstance(metadata["plot"], str) else None,
             actors=film_actors(metadata["actors"] if isinstance(metadata["actors"], list) else []),

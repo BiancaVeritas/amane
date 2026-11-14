@@ -124,7 +124,7 @@ class PacopacomamaCrawler(Crawler):
         return MediaMetadata(
             number=requested_number,
             studio="パコパコママ",
-            publisher="Pacopacomama",
+            publisher="パコパコママ",
             title=title.strip() if isinstance(title, str) and title.strip() else None,
             plot=plot.strip() if isinstance(plot, str) and plot.strip() else None,
             actors=film_actors(actors),

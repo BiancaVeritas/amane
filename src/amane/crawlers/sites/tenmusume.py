@@ -161,7 +161,7 @@ class TenmusumeCrawler(Crawler):
         return MediaMetadata(
             number=number,
             studio="天然むすめ",
-            publisher="10musume",
+            publisher="天然むすめ",
             title=title if isinstance(title, str) and title.strip() else None,
             plot=plot if isinstance(plot, str) and plot.strip() else None,
             actors=film_actors(actors),

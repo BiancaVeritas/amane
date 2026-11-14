@@ -147,7 +147,7 @@ def test_parser_prefers_real_product_description_over_jsonld_boilerplate() -> No
     )
     metadata = _metadata_from_page(DETAIL_URL, html)
     assert metadata is not None
-    assert metadata.plot == "First synopsis paragraph Second synopsis paragraph"
+    assert metadata.plot == "First synopsis paragraph\nSecond synopsis paragraph"  # 段落换行保留
 
 
 def test_parser_does_not_use_jsonld_title_or_site_tagline_as_plot() -> None:
@@ -340,3 +340,11 @@ def test_parser_extracts_title_from_h3_when_jsonld_and_h1_are_absent() -> None:
 )
 def test_lookup_pro_matches_exactly_without_normalizing(number: str, expected: int | None) -> None:
     assert lookup_pro(number) == expected
+
+
+def test_publisher_follows_studio() -> None:
+    """发行商与制作商同源: 该站只有「スタジオ」一栏, 没有独立的发行商字段."""
+    metadata = _metadata_from_page(DETAIL_URL, _detail_html())
+    assert metadata is not None
+    assert metadata.studio, "夹具里应当有制作商"
+    assert metadata.publisher == metadata.studio

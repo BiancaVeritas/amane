@@ -17,7 +17,9 @@ _CDN_URL = "https://my.cdn.tokyo-hot.com"
 # Tokyo-Hot 的番号只有 k / n 两个系列, 字母必须在第一位. 只按 N 判会把 k0794 这类
 # 全部拒在搜索之前, 日志里只留一条 search miss, 看不出是被本地正则拦下的.
 _NUMBER_RE = re.compile(r"^[KN]\d+$", re.IGNORECASE)
-_DETAIL_PATH_RE = re.compile(r"/product/(\d+)/?(?:\?.*)?$")
+# 详情页 URL 的末段是「字母+数字」的番号本身 (``/product/n1199/?lang=ja``), 不是站点内部数字 id;
+# 只认 \d+ 会把站点自己给出的链接拒掉, 表现为搜索命中了却「scrape failed」.
+_DETAIL_PATH_RE = re.compile(r"/product/[A-Za-z]*\d+/?(?:\?.*)?$", re.IGNORECASE)
 _NUMBER_LABEL_RE = re.compile(r"作品番号\s*[:：]\s*([A-Z]\d+)", re.IGNORECASE)
 
 
@@ -48,6 +50,17 @@ def _label_values(html: Selector, label: str) -> list[str]:
         f'/dt[normalize-space()="{label}"]/following-sibling::dd[1]/text()'
     ).getall()
     return _dedupe(text)
+
+
+def _paragraphs(parts: list[str]) -> str | None:
+    """把逐个文本片段收成带段落换行的正文.
+
+    站点用 ``<br>`` 分段, xpath 取回的是片段序列: 折成单行会让整篇连成一坨,
+    因此只在片段自己的空白里折叠, 片段之间保留换行.
+    """
+    lines = [re.sub(r"\s+", " ", part).strip() for part in parts]
+    kept = [line for line in lines if line]
+    return "\n".join(kept) or None
 
 
 def _label_text(html: Selector, label: str) -> str | None:
@@ -152,7 +165,8 @@ class TokyoHotCrawler(Crawler):
         plot_parts = html.xpath(
             '//div[contains(concat(" ", normalize-space(@class), " "), " sentence ")]//text()'
         ).getall()
-        plot = re.sub(r"\s+", " ", " ".join(part.strip() for part in plot_parts if part.strip())).strip() or None
+        # 保留段落换行: 站点正文靠 <br> 分段, 全折成空格会让整篇连成一坨.
+        plot = _paragraphs(plot_parts)
 
         actors = _label_values(html, "出演者")
         play_tags = _label_values(html, "プレイ内容")
@@ -194,7 +208,7 @@ class TokyoHotCrawler(Crawler):
             title=title or None,
             plot=plot,
             actors=film_actors(actors),
-            studio="東京熱",
+            studio="Tokyo-Hot",
             publisher="Tokyo-Hot",
             release=release,
             runtime=runtime,

@@ -98,7 +98,7 @@ async def test_scrape_uses_dedicated_player_poster_and_metadata() -> None:
     assert result.thumb_urls == [poster]
     assert result.number == "103126-001"
     assert result.studio == "カリビアンコム"
-    assert result.publisher == "Caribbeancom"
+    assert result.publisher == "カリビアンコム"
     assert result.actors[0].name == "Actor A"
     assert result.runtime == 30
     assert result.extrafanart == ["https://www.caribbeancom.com/moviepages/103126-001/images/l/001.jpg"]
@@ -150,3 +150,29 @@ def test_release_falls_back_to_number_date() -> None:
 )
 def test_release_from_number_rejects_bad_input(number: str) -> None:
     assert _release_from_number(number) is None
+
+
+def test_plot_keeps_paragraph_breaks() -> None:
+    """剧情正文按 <br> 分段, 且连续 <br> 的空行要保留一个.
+
+    收尾用 "".join 拼接时若不把 <br> 记成换行, 整篇会连成一行, 站点原本的段落全丢;
+    若再把空行一并删掉, 段落之间就没了视觉分隔. 连续空行压成一个, 首尾不留空行.
+    """
+    from amane.crawlers.sites.caribbeancom import _DetailParser
+
+    html = (
+        '<h1 itemprop="name">タイトル</h1>'
+        '<p itemprop="description">第一段の説明。<br>第二段の説明。<br><br>第三段の説明。</p>'
+    )
+    parser = _DetailParser()
+    parser.feed(html)
+
+    lines = parser.plot.splitlines()
+    assert lines[0] == "第一段の説明。"
+    assert "第二段の説明。" in lines
+    # 连续 <br> 产生一个空行, 作为段落分隔.
+    assert "" in lines, f"段落空行丢了: {parser.plot!r}"
+    # 空行不会连续出现, 也不在开头结尾.
+    assert lines[0] != ""
+    assert lines[-1] != ""
+    assert not any(lines[i] == "" and lines[i + 1] == "" for i in range(len(lines) - 1))
