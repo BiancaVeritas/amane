@@ -233,17 +233,19 @@ async def _fetch_site(
 
     async def _by_lookup_name() -> ActorMetadata | None:
         last_error: SourceError | None = None
-        for name in names:
-            try:
-                meta = await crawler.fetch(name)
-            except SourceError as exc:
-                if exc.reason not in _LOOKUP_MISS_REASONS:
-                    raise
-                last_error = exc
-                continue
-            if meta is not None:
-                rec.info("actor site hit", site=site, lookup_name=name)
-                return meta
+        try:
+            # 一次把整行名字交下去: 需要区分主名与别名的站点要看到全部名字才能定位候选
+            # (minnano 的主名撞人时要靠别名收窄, 收到多个候选还得比资料完整度).
+            # 基类默认实现是逐个试, 所以不支持区分的站点行为不变.
+            meta = await crawler.fetch_names(list(names))
+        except SourceError as exc:
+            if exc.reason not in _LOOKUP_MISS_REASONS:
+                raise
+            last_error = exc
+            meta = None
+        if meta is not None:
+            rec.info("actor site hit", site=site, lookup_names=list(names))
+            return meta
         if last_error is not None:
             raise last_error
         return None

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 import asyncio
 from collections.abc import Iterable
 from pathlib import Path
@@ -37,6 +39,13 @@ class _FakeActorCrawler:
         self.calls.append(name)
         return self._hits.get(name)
 
+    async def fetch_names(self, names: Sequence[str]) -> ActorMetadata | None:
+        for name in names:
+            meta = await self.fetch(name)
+            if meta is not None:
+                return meta
+        return None
+
 
 class _FakeFactory:
     def __init__(self, crawlers: dict[str, ActorFetcher]):
@@ -54,6 +63,9 @@ class _LoggedActorCrawler:
         self._log = log
         self._meta = meta
 
+    async def fetch_names(self, names: Sequence[str]) -> ActorMetadata | None:
+        return await self.fetch(names[0] if names else "")
+
     async def fetch(self, name: str) -> ActorMetadata | None:
         self._log.append(f"start:{self._site}")
         await asyncio.sleep(0)
@@ -69,6 +81,24 @@ class _ScriptedActorCrawler:
         self._meta = meta
         self._reason = reason
         self.calls: list[str] = []
+
+    async def fetch_names(self, names: Sequence[str]) -> ActorMetadata | None:
+        """逐个试; 「查不到」继续, 其余原因 (ip_banned 等) 立即中止."""
+        miss = {FailureReason.NOT_FOUND, FailureReason.NO_USABLE_METADATA}
+        last: SourceError | None = None
+        for name in names:
+            try:
+                meta = await self.fetch(name)
+            except SourceError as exc:
+                if exc.reason not in miss:
+                    raise
+                last = exc
+                continue
+            if meta is not None:
+                return meta
+        if last is not None:
+            raise last
+        return None
 
     async def fetch(self, name: str) -> ActorMetadata | None:
         self.calls.append(name)
@@ -529,6 +559,12 @@ class _RaisingActorCrawler:
     async def fetch(self, name: str) -> ActorMetadata | None:
         self.calls.append(name)
         raise self._exc
+
+    async def fetch_names(self, names: Sequence[str]) -> ActorMetadata | None:
+        for name in names:
+            self.calls.append(name)
+            raise self._exc
+        return None
 
 
 @pytest.mark.asyncio(loop_scope="function")

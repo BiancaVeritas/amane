@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from collections.abc import Sequence
 from typing import TYPE_CHECKING, Protocol
 
 import structlog
@@ -17,6 +18,8 @@ if TYPE_CHECKING:
 
 class ActorFetcher(Protocol):
     async def fetch(self, name: str) -> ActorMetadata | None: ...
+
+    async def fetch_names(self, names: Sequence[str]) -> ActorMetadata | None: ...
 
 
 class ActorCrawler(ABC):
@@ -58,6 +61,17 @@ class ActorCrawler(ABC):
         if not url:
             return None
         return await self._scrape(url)
+
+    async def fetch_names(self, names: Sequence[str]) -> ActorMetadata | None:
+        """按「主名在前」的完整名字行查找; 默认逐个试, 不支持区分的站点不必覆写.
+
+        需要区分主名与别名的站点 (例如能一次定位到多个候选再比较资料) 覆写本方法.
+        """
+        for name in names:
+            meta = await self.fetch(name)
+            if meta is not None:
+                return meta
+        return None
 
     async def check_connectivity(self) -> ConnectivityOutcome:
         """连通性自检: 缺省 GET ``base_url``, 用与刮削相同的视图 (渲染来源经浏览器)."""
