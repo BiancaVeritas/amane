@@ -55,8 +55,10 @@ async def test_write_nfo_has_required_fields(tmp_path: Path, metadata: Metadata)
     assert "<outline>" not in content
     assert "<javbusid>" not in content
     assert "<dmmid>" not in content
-    assert content.index("<genre>Drama</genre>") < content.index("<tag>Drama</tag>")
-    assert content.index("<genre>Romance</genre>") < content.index("<tag>Drama</tag>")
+    # genre 只放标签 (Emby 的「类型」), tag 放发行商与系列 (Emby 的「标签」), 两套不混.
+    assert "<genre>Drama</genre>" in content
+    assert "<genre>Romance</genre>" in content
+    assert "<tag>Drama</tag>" not in content
     assert "<rating>85.0</rating>" in content
     # 系列使用规范嵌套: <set><name>…</name></set>
     assert "<series>Series Y</series>" in content
@@ -240,3 +242,45 @@ async def test_write_nfo_uses_actor_display_name(tmp_path: Path) -> None:
 
     names = [e.text for e in ET.parse(nfo).getroot().findall("actor/name")]
     assert names == ["彩月七绪", "青沼"]
+
+
+@pytest.mark.asyncio
+async def test_publisher_and_series_go_to_tags_not_genres(tmp_path: Path) -> None:
+    """发行商与系列写进 ``tag``, 标签写进 ``genre``, 两者不混.
+
+    Emby 把 genre 当「类型」、tag 当「标签」两套独立筛选口径: 标签混进 tag 会让
+    「标签」里出现一堆本该在「类型」里的词, 反过来也一样.
+    """
+    meta = Metadata(
+        number="ABC-001",
+        tags=["中出し"],
+        publisher="カリビアンコム",
+        series="僕の彼女が○○だったら",
+    )
+    nfo = tmp_path / "out.nfo"
+
+    assert await write_nfo(meta, nfo) is True
+
+    root = ET.parse(nfo).getroot()
+    genres = [e.text for e in root.findall("genre")]
+    tags = [e.text for e in root.findall("tag")]
+
+    assert genres == ["中出し"]
+    assert "カリビアンコム" in tags
+    assert "僕の彼女が○○だったら" in tags
+    # 标签不进 tag, 厂商系列不进 genre.
+    assert "中出し" not in tags
+    assert "カリビアンコム" not in genres
+    assert len(tags) == len(set(tags))
+
+
+@pytest.mark.asyncio
+async def test_vendor_tags_dedupe_when_publisher_equals_series(tmp_path: Path) -> None:
+    """发行商与系列同值时只写一次."""
+    meta = Metadata(number="ABC-002", publisher="HEYZO", series="HEYZO")
+    nfo = tmp_path / "out.nfo"
+
+    assert await write_nfo(meta, nfo) is True
+
+    tags = [e.text for e in ET.parse(nfo).getroot().findall("tag")]
+    assert tags.count("HEYZO") == 1

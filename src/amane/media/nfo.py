@@ -20,6 +20,36 @@ if TYPE_CHECKING:
 logger = structlog.get_logger()
 
 
+def _display_tags(metadata: Metadata, tag_mapping_path: Path | None) -> list[str]:
+    """标签的显示名 (有译文取译文); NFO 的 ``genre`` 用它.
+
+    Emby 把 ``genre`` 当「类型」、``tag`` 当「标签」两个独立维度, 因此标签只进 genre,
+    厂商与系列只进 tag, 两边不混.
+    """
+    tags = [tag for tag in metadata.tags if tag]
+    if tag_mapping_path is not None and tag_mapping_path.is_file():
+        try:
+            mapping_data = json.loads(tag_mapping_path.read_text(encoding="utf-8"))
+            entries = mapping_data.get("entries", {})
+            tags = [entries.get(tag, {}).get("translation") or tag for tag in tags]
+        except OSError, ValueError, TypeError:
+            logger.warning(
+                "tag mapping dictionary could not be read; writing original tags", path=str(tag_mapping_path)
+            )
+    return list(dict.fromkeys(tags))
+
+
+def _vendor_tags(metadata: Metadata) -> list[str]:
+    """NFO 的 ``tag`` 取值: 发行商 + 系列.
+
+    只放厂商与系列, 不与标签混: Emby 里「类型」与「标签」是两套筛选口径.
+    """
+    values = [metadata.publisher, metadata.series]
+    # 系列可能是多个; 单个字段与列表字段都要收.
+    values.extend(metadata.series_names or [])
+    return list(dict.fromkeys(value for value in values if value))
+
+
 def _load_actor_names(path: Path | None) -> dict[str, str]:
     """读演员显示名映射; 文件缺失或损坏时返回空表, 调用方回退原名."""
     if path is None or not path.is_file():
@@ -151,21 +181,11 @@ async def write_nfo(
             code.write(f"  <publisher>{_escape_xml(metadata.publisher)}</publisher>\n")
             code.write(f"  <label>{_escape_xml(metadata.publisher)}</label>\n")
 
-        if metadata.tags:
-            tags = [tag for tag in metadata.tags if tag]
-            if tag_mapping_path is not None and tag_mapping_path.is_file():
-                try:
-                    mapping_data = json.loads(tag_mapping_path.read_text(encoding="utf-8"))
-                    entries = mapping_data.get("entries", {})
-                    tags = list(dict.fromkeys(entries.get(tag, {}).get("translation") or tag for tag in tags))
-                except OSError, ValueError, TypeError:
-                    logger.warning(
-                        "tag mapping dictionary could not be read; writing original tags", path=str(tag_mapping_path)
-                    )
-            for tag in tags:
-                code.write(f"  <genre>{_escape_xml(tag)}</genre>\n")
-            for tag in tags:
-                code.write(f"  <tag>{_escape_xml(tag)}</tag>\n")
+        # genre = 类型 (标签), tag = 标签 (发行商与系列): Emby 把这两者当独立维度.
+        for value in _display_tags(metadata, tag_mapping_path):
+            code.write(f"  <genre>{_escape_xml(value)}</genre>\n")
+        for value in _vendor_tags(metadata):
+            code.write(f"  <tag>{_escape_xml(value)}</tag>\n")
 
         if metadata.original_poster_urls:
             code.write(f"  <poster>{_escape_xml(metadata.original_poster_urls[0])}</poster>\n")

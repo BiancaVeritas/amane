@@ -319,6 +319,20 @@ def canonical_definition(value: str) -> str | None:
 # ---------------------------------------------------------------------------
 
 
+def canonical_number(number: str | None) -> str | None:
+    """番号入库前的统一写法.
+
+    东京热 (K/N + 4 位数字) 一律小写: 站点详情页把番号写成 ``N1199``, 而落盘与用户预期
+    都是 ``n1199``; 两套写法并存会让同一部作品在库里与文件名上看起来不是一个.
+    其余番号保持原样 —— 大小写是站点标识的一部分, 改了会与别的来源对不上.
+    """
+    if not number:
+        return number
+    if len(number) == 5 and number[0].upper() in {"K", "N"} and number[1:].isdigit():
+        return number.lower()
+    return number
+
+
 def parse_file_info(
     path: str | Path | None = None,
     *,
@@ -360,9 +374,9 @@ def parse_file_info(
         cd = _detect_cd(basename)
         mosaic = _detect_mosaic(basename)
     return FileInfo(
-        number=number,
+        number=canonical_number(number),
         content_type=content_type,
-        prefix=_prefix(number) if number else "",
+        prefix=_prefix(canonical_number(number)) if number else "",
         cd=cd,
         has_subtitle_in_name=_detect_subtitle(basename),
         has_external_subtitle=has_external_subtitle,

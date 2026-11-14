@@ -6,6 +6,7 @@ import pytest
 
 from amane.parsing import (
     ContentType,
+    canonical_number,
     detect_cd,
     extract_number,
     infer_content_type,
@@ -278,17 +279,18 @@ CASES: list[object] = [
     _Case("/media/DISC01/video.mp4", number="VIDEO", content_type=ContentType.WESTERN),
     _Case("/media/Vol.12/video.mp4", number="VIDEO", content_type=ContentType.WESTERN),
     _Case("/media/FC2-1111111/MIDV-123/video.mp4", number="MIDV-123"),
-    _Case("/media/n1234/clip.mp4", number="N1234", content_type=ContentType.UNCENSORED),
-    _Case("/media/k1363/clip.mp4", number="K1363", content_type=ContentType.UNCENSORED),
+    _Case("/media/n1234/clip.mp4", number="n1234", content_type=ContentType.UNCENSORED),
+    _Case("/media/k1363/clip.mp4", number="k1363", content_type=ContentType.UNCENSORED),
     # Tokyo-Hot: k/n + 恰好 4 位数字, 后面跟任何词都不影响 (不依赖噪声词表).
-    _Case("/media/k0794 some text.mp4", number="K0794", content_type=ContentType.UNCENSORED),
+    _Case("/media/k0794 some text.mp4", number="k0794", content_type=ContentType.UNCENSORED),
     _Case(
         "/media/k0794-uncensored.mp4",
-        number="K0794",
+        number="k0794",
         content_type=ContentType.UNCENSORED,
         mosaic="uncensored",
     ),
-    _Case("/media/Tokyo-Hot k0794.mp4", number="K0794", content_type=ContentType.UNCENSORED),
+    # 东京热的 K/N 番号统一小写: 站点页面写大写, 但库与文件名用同一套写法.
+    _Case("/media/Tokyo-Hot k0794.mp4", number="k0794", content_type=ContentType.UNCENSORED),
     # 位数不符一律不算 k/n 番号
     _Case("/media/k999.mp4"),
     _Case("/media/k07941.mp4"),
@@ -702,3 +704,26 @@ def test_uncensored_bd_series_allow_variable_digit_width(number: str, expected_p
 def test_uncensored_bd_series_do_not_match_longer_unrelated_prefixes() -> None:
     assert parse_file_info(text="SPBDXYZ-03").content_type != ContentType.UNCENSORED
     assert parse_file_info(text="BD-MXYZ22").content_type != ContentType.UNCENSORED
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        # 东京热的 K/N + 4 位数字统一小写.
+        ("K0794", "k0794"),
+        ("N1199", "n1199"),
+        ("n0687", "n0687"),
+        # 其余番号保持原样: 大小写是站点标识的一部分.
+        ("ABP-123", "ABP-123"),
+        ("FC2-1229755", "FC2-1229755"),
+        ("SKYHD-084", "SKYHD-084"),
+        # 位数不符不算东京热番号.
+        ("K07941", "K07941"),
+        ("N068", "N068"),
+        ("X0794", "X0794"),
+        (None, None),
+    ],
+)
+def test_canonical_number(raw: str | None, expected: str | None) -> None:
+    """番号入库前的统一写法."""
+    assert canonical_number(raw) == expected
