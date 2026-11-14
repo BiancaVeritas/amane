@@ -363,11 +363,16 @@ export function ImageCropDialog({
   const [completedCrop, setCompletedCrop] = useState<PixelCrop>();
   const [lockAspect, setLockAspect] = useState(defaultLockAspect);
   const [aspectRatio, setAspectRatio] = useState(defaultAspect);
+  //: 输入框自己的文本. 与 aspectRatio 分开 —— 清空时它要能是 "".
+  const [aspectDraft, setAspectDraft] = useState(String(defaultAspect));
   const [box, setBox] = useState<BoxState>(EMPTY_BOX);
   const [loadError, setLoadError] = useState(false);
   // 放大镜要从画布取像素; 渲染期不能读 ref, 因此另存一份到 state.
   const [canvasEl, setCanvasEl] = useState<HTMLCanvasElement | null>(null);
   const aspectRef = useRef(aspectRatio);
+  //: 用户是否亲手改过比例. 改过之后拖动不再用选区实际比例覆盖它 ——
+  //: 否则刚填的值一拖就被打回去, 输入框表现为「填了不起作用」.
+  const aspectTouched = useRef(false);
   const naturalSize = useMemo(
     () => (source ? rotatedSize(source, rotation) : null),
     [source, rotation],
@@ -392,6 +397,7 @@ export function ImageCropDialog({
     setPrevSession(sessionKey);
     setLockAspect(defaultLockAspect);
     setAspectRatio(defaultAspect);
+    setAspectDraft(String(defaultAspect));
     if (!opened) {
       // 关闭时只记下状态, 位图与选区留着: 重新打开同一张图要能立刻用上.
       setCompletedCrop(undefined);
@@ -419,7 +425,16 @@ export function ImageCropDialog({
   }
 
   useEffect(() => {
+    // 换图或重开: 用户上一张填的比例不该继续压着新图的拖动随动.
+    // 依赖 sessionKey 是为了在它变化时重跑, 因此显式读一下避免被判成多余依赖.
+    void sessionKey;
+    aspectTouched.current = false;
+  }, [sessionKey]);
+
+  useEffect(() => {
     aspectRef.current = aspectRatio;
+    // 输入框跟着生效值走; 用户正在编辑 (aspectTouched) 时不打断他打字.
+    if (!aspectTouched.current) setAspectDraft(String(aspectRatio));
   }, [aspectRatio]);
 
   // 裁切必须与后端 acquire 的同一份字节对齐: 绕过 HTTP 磁盘缓存强制拉取, 并且只解码一次.
@@ -573,10 +588,12 @@ export function ImageCropDialog({
 
   const reshapeWithAspect = (nextAspect: number) => {
     const aspect = clampAspect(nextAspect, defaultAspect);
+    // 用户亲手填过就锁定他的值, 后续拖动不再用选区比例覆盖.
+    aspectTouched.current = true;
     setAspectRatio(aspect);
     if (!naturalSize) return;
-    // 未锁定时只更新比例值, 不强制修改选区; 锁定时按新比例重塑
-    if (!lockAspect) return;
+    // 改了比例就把选区按新比例重塑: 只记下数值不动选区, 用户看到的仍是旧形状,
+    // 会以为「填了不起作用」. 锁定开关只决定之后拖动是否也守住这个比例.
     const height = box.height > 0 ? box.height : naturalSize.height;
     const top = box.height > 0 ? box.top : 0;
     const preferRight = box.width === 0 || box.left + box.width >= naturalSize.width - 1;
@@ -664,13 +681,16 @@ export function ImageCropDialog({
                 onChange={(c) => {
                   const snapped = snapCrop(c, canvasRef.current);
                   setCrop(snapped);
-                  // 拖动过程中就跟着更新比例, 不必等松手.
-                  if (!lockAspect && canvasRef.current && snapped.width > 0 && snapped.height > 0) {
-                    setAspectRatio(
-                      Number(
-                        clampAspect(snapped.width / snapped.height, aspectRef.current).toFixed(3),
-                      ),
-                    );
+                  // 拖动时让比例随选区走 —— 但只在用户没动过比例输入框时.
+                  // 用户亲手填过就以他的值为准, 否则刚填完一拖就被改回去, 表现为「填了没用」.
+                  if (
+                    !aspectTouched.current &&
+                    !lockAspect &&
+                    canvasRef.current &&
+                    snapped.width > 0 &&
+                    snapped.height > 0
+                  ) {
+                    setAspectRatio(clampAspect(snapped.width / snapped.height, aspectRef.current));
                   }
                 }}
                 onComplete={(c) => {
@@ -681,12 +701,14 @@ export function ImageCropDialog({
                   if (canvasRef.current && c.width > 0 && c.height > 0) {
                     const snapped = snapCrop(c, canvasRef.current);
                     syncBoxFromCrop(snapped, canvasRef.current);
-                    // 自由拖动时把宽高比跟着选区走: 左上角那个数值要能读到刚拖出来的实际比例.
-                    if (!lockAspect && snapped.height > 0) {
+                    if (
+                      !aspectTouched.current &&
+                      !lockAspect &&
+                      snapped.width > 0 &&
+                      snapped.height > 0
+                    ) {
                       setAspectRatio(
-                        Number(
-                          clampAspect(snapped.width / snapped.height, aspectRef.current).toFixed(3),
-                        ),
+                        clampAspect(snapped.width / snapped.height, aspectRef.current),
                       );
                     }
                   }
@@ -767,14 +789,23 @@ export function ImageCropDialog({
           <Stack gap={6} style={{ width: 120 }}>
             <NumberInput
               label={labels.aspect}
-              value={aspectRatio}
+              // 清空后不回塞旧值: 用 "" 表示「还没填」, 让用户能删掉重打.
+              value={aspectDraft}
               min={MIN_ASPECT}
               max={MAX_ASPECT}
               step={0.01}
               decimalScale={3}
               onChange={(v) => {
-                if (typeof v !== "number") return;
-                reshapeWithAspect(v);
+                // 中间态 (空串 / "0.") 原样留住, 否则受控值立刻弹回旧数字,
+                // 表现为「删不掉、被硬塞回原值」.
+                setAspectDraft(typeof v === "number" ? String(v) : v);
+                const parsed = typeof v === "number" ? v : Number.parseFloat(v);
+                if (!Number.isFinite(parsed)) return;
+                reshapeWithAspect(parsed);
+              }}
+              onBlur={() => {
+                // 离开输入框时若仍是空态, 回到当前生效的比例, 不留一个空框.
+                if (aspectDraft.trim() === "") setAspectDraft(String(aspectRatio));
               }}
             />
             <Switch

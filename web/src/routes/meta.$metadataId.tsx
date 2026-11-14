@@ -1073,7 +1073,7 @@ function TitleDetailPage() {
             <Stack gap="sm">
               {item.plot && (
                 <FieldBlock label={t("detail.fields.plot")} lock={lockProps("plot")}>
-                  <Text size="sm" style={{ whiteSpace: "pre-line" }}>
+                  <Text size="sm" style={{ whiteSpace: "pre-wrap" }}>
                     {item.plot}
                   </Text>
                 </FieldBlock>
@@ -1083,7 +1083,7 @@ function TitleDetailPage() {
                   label={t("detail.fields.originalPlot")}
                   lock={!item.plot ? lockProps("plot") : undefined}
                 >
-                  <Text size="sm" style={{ whiteSpace: "pre-line" }}>
+                  <Text size="sm" style={{ whiteSpace: "pre-wrap" }}>
                     {item.original_plot}
                   </Text>
                 </FieldBlock>
