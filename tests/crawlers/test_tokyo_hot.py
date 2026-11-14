@@ -177,3 +177,28 @@ def test_detail_path_matches_number_style_urls(url: str, accepted: bool) -> None
     「搜索命中了但 scrape failed」, 且详情页根本不会被请求.
     """
     assert (_DETAIL_PATH_RE.search(url) is not None) is accepted
+
+
+def test_paragraphs_keeps_blank_line_between_paragraphs() -> None:
+    """站点用连续 ``<br><br>`` 分段, 收成文本后段落之间要留空行.
+
+    不能靠 ``//text()`` 的片段判断分段: 两个 ``<br>`` 之间没有文本节点, 不会产出空片段.
+    因此按 ``<br>`` 切 HTML, 空块代表一个段落间隔.
+    """
+    from amane.crawlers.sites.tokyo_hot import _paragraphs
+
+    html = '<div class="sentence">第一段的内容<br><br>第二段的内容<br><br>第三段的内容</div>'
+
+    assert _paragraphs(html) == "第一段的内容\n\n第二段的内容\n\n第三段的内容"
+
+
+def test_paragraphs_collapses_extra_breaks_and_drops_edges() -> None:
+    """多余空行压成一个, 首尾不留空行; 源码缩进不算正文."""
+    from amane.crawlers.sites.tokyo_hot import _paragraphs
+
+    html = (
+        '<div class="sentence">\n   \n  第一段<br><br><br><br>  第二段  \n'
+        "<br><br>\n  </div>"
+    )
+
+    assert _paragraphs(html) == "第一段\n\n第二段"

@@ -52,15 +52,33 @@ def _label_values(html: Selector, label: str) -> list[str]:
     return _dedupe(text)
 
 
-def _paragraphs(parts: list[str]) -> str | None:
-    """把逐个文本片段收成带段落换行的正文.
+_BR_RE = re.compile(r"<br\s*/?>", re.IGNORECASE)
+_BLOCK_END_RE = re.compile(r"</(?:div|p)>", re.IGNORECASE)
 
-    站点用 ``<br>`` 分段, xpath 取回的是片段序列: 折成单行会让整篇连成一坨,
-    因此只在片段自己的空白里折叠, 片段之间保留换行.
+
+def _paragraphs(sentence_html: str) -> str | None:
+    """把正文 HTML 收成带段落的纯文本.
+
+    站点用连续 ``<br><br>`` 分段. 不能靠 ``//text()`` 的片段序列判断分段 ——
+    两个 ``<br>`` 之间没有文本节点, lxml 不会为它产出空片段, 于是「连续 ``<br>``
+    之间的空白片段」这类判据根本不会出现, 整篇就只剩单换行.
+    因此直接按 ``<br>`` 切 HTML, 再按空行归并.
     """
-    lines = [re.sub(r"\s+", " ", part).strip() for part in parts]
-    kept = [line for line in lines if line]
-    return "\n".join(kept) or None
+    body = _BLOCK_END_RE.sub("", sentence_html)
+    chunks = _BR_RE.split(body)
+    out: list[str] = []
+    for chunk in chunks:
+        # 片段里残留的标签与源码缩进都不算正文; 空白片段代表一个段落间隔.
+        text = re.sub(r"<[^>]+>", "", chunk)
+        text = re.sub(r"\s+", " ", text).strip()
+        if text:
+            out.append(text)
+        elif out and out[-1] != "":
+            # 连续空片段只留一个, 且不在开头留空行.
+            out.append("")
+    while out and out[-1] == "":
+        out.pop()
+    return "\n".join(out) or None
 
 
 def _label_text(html: Selector, label: str) -> str | None:
@@ -162,11 +180,12 @@ class TokyoHotCrawler(Crawler):
         title = html.xpath('normalize-space((//div[contains(@class,"sentence")]/preceding-sibling::h2)[1])').get()
         if not title:
             title = html.xpath("normalize-space((//h2)[1])").get()
-        plot_parts = html.xpath(
-            '//div[contains(concat(" ", normalize-space(@class), " "), " sentence ")]//text()'
-        ).getall()
-        # 保留段落换行: 站点正文靠 <br> 分段, 全折成空格会让整篇连成一坨.
-        plot = _paragraphs(plot_parts)
+        # 取整段 HTML 而不是 //text(): 分段靠连续 <br>, 而 <br> 之间没有文本节点,
+        # 只取文本节点会丢掉分段信息, 整篇只剩单换行.
+        sentence_html = html.xpath(
+            '//div[contains(concat(" ", normalize-space(@class), " "), " sentence ")]'
+        ).get()
+        plot = _paragraphs(sentence_html or "")
 
         actors = _label_values(html, "出演者")
         play_tags = _label_values(html, "プレイ内容")
