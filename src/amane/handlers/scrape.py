@@ -25,7 +25,7 @@ from ..media import materialize_images
 from ..media.crop_rules import find_rule
 from ..observability import current
 from ..observability.models import SiteOutcomeKind
-from ..parsing import ContentType, parse_file_info
+from ..parsing import ContentType, canonical_number, parse_file_info
 from ..plugins.models import SourceDescriptor, SourceTrait
 from ..utils.litepan_strm import read_litepan_115_file_id
 from ..utils.path import path_is_under
@@ -44,6 +44,14 @@ if TYPE_CHECKING:
 
 # 进度: 聚合按已满足标量字段计数; 其后固定两步 (物化图片 / 持久化).
 _PROGRESS_POST_STEPS = 2
+
+#: 刮削派生出的后继 (演员、整理) 的优先级: 比普通刮削高一级.
+#: 同档时调度按创建时间先到先执行, 刚派生的后继会排到几十个待刮任务之后 ——
+#: 一部片刮完却不能立刻补演员、落盘. 提高一级让链条紧接着走.
+_FOLLOWUP_PRIORITY = 1
+
+#: 通用解析命中时用的来源名. 不是真实站点, 只在预览列表里标明「这条来自通用解析」.
+_GENERIC_SITE = "generic"
 
 
 def _prepare_image_content_type(content_type: ContentType, metadata: AggregatedMetadata) -> ContentType:
@@ -76,6 +84,10 @@ def _prepare_image_content_type(content_type: ContentType, metadata: AggregatedM
 
 class CrawlerFactoryLike(Protocol):
     async def get_crawlers(self, names: Iterable[str]) -> dict[str, CrawlerLike]: ...
+
+    async def get_generic(self) -> CrawlerLike:
+        """通用页面解析器; 站点没有专属爬虫时用它兜底."""
+        ...
 
 
 def _searchable_title(title: str | None) -> str | None:
@@ -195,16 +207,21 @@ class ScrapeHandler(TaskHandler[ScrapePayload, ScrapeResult]):
         self._partial_sources = frozenset(d.id for d in catalog if SourceTrait.NEEDS_PARTIAL in d.traits)
         self._file_hash_sources = frozenset(d.id for d in catalog if SourceTrait.USES_FILE_HASH in d.traits)
 
-    async def preview(self, input_text: str, content_type: ContentType) -> list[dict]:
+    async def preview(
+        self, input_text: str, content_type: ContentType, *, only_that_url: bool = False
+    ) -> list[dict]:
         """只抓不写: 把命中项原样交回调用方.
 
         手动搜索要让用户先挑再落库, 所以这里不碰 DB / 文件; 数据交回 UI 由用户决定.
         输入可以是番号, 也可以是来源页地址 —— 后者先打开页面读出番号, 再按番号问各来源:
         地址里往往只有站点内部 ID (javdb 的 ``/v/dgVq9``), 拿它当番号哪个来源都搜不到.
+
+        ``only_that_url`` 为真时只抓这一条, 不再拿番号去问其他来源 —— 「添加来源链接」
+        要的就是这一个地址, 多带回来的结果不是用户要的.
         """
         url = input_text.strip()
         if url.startswith(("http://", "https://")):
-            return await self._preview_url(url, content_type)
+            return await self._preview_url(url, content_type, only_that_url=only_that_url)
         return await self._preview_number(url, content_type)
 
     async def _preview_number(self, term: str, content_type: ContentType) -> list[dict]:
@@ -230,11 +247,14 @@ class ScrapeHandler(TaskHandler[ScrapePayload, ScrapeResult]):
             out.append(_preview_item(name, meta))
         return out
 
-    async def _preview_url(self, url: str, content_type: ContentType) -> list[dict]:
+    async def _preview_url(
+        self, url: str, content_type: ContentType, *, only_that_url: bool = False
+    ) -> list[dict]:
         """打开地址读出番号/标题, 再拿它们问当前类型路由里的其余来源.
 
         找地址属于哪一家用与「添加来源链接」同一套三级查找; 之后按番号搜, 没有番号就用
         去标点的标题搜 —— 贴进来的页面往往只有一个站认识, 用户要的却是各站的对照.
+        ``only_that_url`` 时到此为止: 只返回这个地址本身解析出来的那一条.
         """
         route = self._config.scraping.content_routes.get(content_type) or []
         crawlers = await self._factory.get_crawlers(route)
@@ -244,6 +264,8 @@ class ScrapeHandler(TaskHandler[ScrapePayload, ScrapeResult]):
         name, meta = found
         # 地址那一家的结果先放进去, 它是用户亲手贴的, 最可能是想要的.
         out = [_preview_item(name, meta)]
+        if only_that_url:
+            return out
         seen = {name}
         # 番号为主, 标题只兜底: 有番号时各站都能按番号精确命中, 再按标题搜一轮只会多出
         # 一堆噪声命中 (标题里的通用词能匹配到别的片).
@@ -269,7 +291,8 @@ class ScrapeHandler(TaskHandler[ScrapePayload, ScrapeResult]):
         查找顺序 (``any_site`` 时逐级退让):
         1. 本次类型路由内的来源 —— 用户给的类型决定了哪些站可比;
         2. 全部类型路由的并集 —— 别处配置过的站同样能解析这个域名;
-        3. 兜底解析器 —— 地址属于哪个站都不会被路由配置挡住.
+        3. 内置来源全集 —— 没配进任何路由、但确实认识的站;
+        4. 通用页面解析 —— 站点根本没有专属爬虫时, 直接把页面读一遍认出番号.
         """
         host = (urlsplit(url).hostname or "").casefold()
         if not host:
@@ -285,9 +308,27 @@ class ScrapeHandler(TaskHandler[ScrapePayload, ScrapeResult]):
             found = await self._first_matching_crawler(url, host, known)
             if found is not None:
                 return found
-        # 第三级: 兜底解析器, 与路由无关.
+        # 第三级: 内置来源全集, 与路由无关.
         everything = await self._factory.get_crawlers([str(site) for site in FILM_METADATA_SITES])
-        return await self._first_matching_crawler(url, host, everything)
+        found = await self._first_matching_crawler(url, host, everything)
+        if found is not None:
+            return found
+        # 第四级: 没有任何专属爬虫认识这个域名, 用通用解析.
+        return await self._generic_source(url)
+
+    @staticmethod
+    def _owns_host(crawler: Crawler, host: str) -> bool:
+        """这个爬虫是否认得该主机.
+
+        同时认当前 base_url 与 profile 里的内置域名: 用户在站点配置里填了自定义域名后,
+        base_url 就被覆盖, 只比它会让原本属于这个站的官方域名认不出来 —— 表现为「配了自定义
+        域名之后, 贴官方域名的链接就没人认领, 落到通用解析里读出一堆无意义的标题」.
+        """
+        current = urlsplit(crawler.base_url).hostname or ""
+        if current and _same_site(host, current):
+            return True
+        builtin = urlsplit(crawler.profile().base_url).hostname or ""
+        return bool(builtin) and _same_site(host, builtin)
 
     async def _first_matching_crawler(
         self, url: str, host: str, crawlers: Mapping[str, CrawlerLike]
@@ -295,7 +336,7 @@ class ScrapeHandler(TaskHandler[ScrapePayload, ScrapeResult]):
         for name, crawler in crawlers.items():
             if not isinstance(crawler, Crawler):
                 continue
-            if not _same_site(host, urlsplit(crawler.base_url).hostname or ""):
+            if not self._owns_host(crawler, host):
                 continue
             try:
                 meta = await crawler.scrape_url(url)
@@ -304,6 +345,15 @@ class ScrapeHandler(TaskHandler[ScrapePayload, ScrapeResult]):
             if meta is not None:
                 return name, meta
         return None
+
+    async def _generic_source(self, url: str) -> tuple[str, MediaMetadata] | None:
+        """用通用解析器把页面读一遍; 站点没有专属爬虫时走这一支."""
+        try:
+            crawler = await self._factory.get_generic()
+            meta = await crawler.scrape_url(url)
+        except Exception:
+            return None
+        return (_GENERIC_SITE, meta) if meta is not None else None
 
     async def handle(self, payload: ScrapePayload) -> TaskResult[ScrapeResult]:
         bind_contextvars(number=payload.number)
@@ -449,7 +499,9 @@ class ScrapeHandler(TaskHandler[ScrapePayload, ScrapeResult]):
                 success=False, error="当前文件 OSHASH 已关联到另一条 WESTERN 作品, 拒绝跨 ThePornDB UUID 绑定"
             )
         q = SearchQuery(
-            payload.number,
+            # 入库前统一番号写法: 东京热在页面与用户输入里常是大写 N1199, 库里统一小写,
+            # 免得同一部作品在列表里与文件名上看起来不是一个.
+            canonical_number(payload.number) or payload.number,
             file.path if file else None,
             file_hash,
             payload.content_type,
@@ -679,8 +731,9 @@ class ScrapeHandler(TaskHandler[ScrapePayload, ScrapeResult]):
             if refreshed is not None:
                 meta = refreshed
 
-        # 为尚未刮削的演员扇出 ACTOR_SCRAPE; 与整理并行, 二者互不依赖:
-        # 整理需要的性别由 _genders_from_raw 从本次刮削快照里直接读, 不等演员刮削.
+        # 串成一条链: 刮削 → 演员 → 整理. 整理要等演员, 否则别名还没合并就按当前名字落盘,
+        # 同一演员会被写成两个目录. 整理本身仍是独立任务 (演员失败也照跑), 它自己在执行前
+        # 检查同链的演员任务是否还在排队.
         actor_followups = await self._actor_scrape_followups(meta.actors)
         organize_followups = await self._auto_organize_followups(payload, file, meta.id)
 
@@ -774,7 +827,9 @@ class ScrapeHandler(TaskHandler[ScrapePayload, ScrapeResult]):
                 key=f"organize:{file.id}",
                 task_type=TaskType.ORGANIZE,
                 payload=organize.model_dump(mode="json"),
-                priority=0,
+                # 比刮削高一级: 同档时按创建时间排序, 刚派生的后继会排在几十个待刮任务之后,
+                # 一部片刮完要等整批刮完才落盘.
+                priority=_FOLLOWUP_PRIORITY,
             )
         ]
 
@@ -816,9 +871,10 @@ class ScrapeHandler(TaskHandler[ScrapePayload, ScrapeResult]):
     async def _actor_scrape_followups(self, actor_names: list[str]) -> list[FollowupTask]:
         """为尚未刮削的影片演员描述 ACTOR_SCRAPE 后继; 失败不阻断主流程.
 
-        ``meta.actors`` 已是 FacetRule 后的规范名, 与 sync_metadata_facets 创建的 Actor 对应, 缺失名静默跳过.
+        ``meta.actors`` 已是 FacetRule 后的规范名, 与 sync_facets 创建的 Actor 对应, 缺失名静默跳过.
         跳过 ``Actor.raw`` 非空者 (站点快照可复用).
-        ``priority=-1``: 批量产生的演员任务不能抢占影片任务.
+        ``priority=0``: 与影片任务同档. 早先排最低 (-1), 结果是只要还有影片刮削排队,
+        演员就永远轮不上 —— 一部片刮完, 它的演员信息要等整批跑完才补上.
         """
         if not self._config.actor_scraping.auto_scrape or not actor_names:
             return []
@@ -829,7 +885,9 @@ class ScrapeHandler(TaskHandler[ScrapePayload, ScrapeResult]):
                     key=f"actor-scrape:{actor.id}",
                     task_type=TaskType.ACTOR_SCRAPE,
                     payload=ActorScrapePayload(actor_id=actor.id).model_dump(mode="json"),
-                    priority=-1,
+                    # 与整理同档, 都高于普通刮削: 刚刮完的片应当紧接着补演员,
+                    # 而不是等后面几十个待刮任务都跑完.
+                    priority=_FOLLOWUP_PRIORITY,
                 )
                 for actor in actors
                 if actor.id is not None and not actor.raw

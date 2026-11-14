@@ -637,3 +637,50 @@ async def test_worker_no_followups_on_failure(repo: Repository) -> None:
 
     assert await repo.list_task_links(parent_task_id=t.id) == []
     assert await repo.list_tasks_by_root(t.id) == []
+
+
+@pytest.mark.asyncio(loop_scope="function")
+async def test_worker_fails_task_exceeding_time_limit(repo: Repository) -> None:
+    """任务卡住不回时按超时判失败, 不能永远停在 RUNNING.
+
+    上游某次请求挂住时, 任务会白占一个并发位且再也结束不了 —— 界面上就是「运行中」
+    几个小时的僵尸任务. 超时兜底让它以失败结算, 队列继续走.
+    """
+
+    class _HangHandler(TaskHandler):
+        """永远不回; 用来验证执行超时兜底."""
+
+        payload_type = dict
+
+        def __init__(self) -> None:
+            super().__init__(dict, dict)
+
+        async def handle(self, payload: dict):
+            await asyncio.sleep(60)
+            return TaskResult(success=True, result={})
+
+    worker = AsyncWorker(
+        repo=repo,
+        handlers={TaskType.SCRAPE: _HangHandler()},
+        poll_interval=0.05,
+        concurrency=1,
+        task_timeout=0.2,
+    )
+    task = await repo.create_task(TaskType.SCRAPE, payload={"number": "TEST-001"})
+    assert task.id is not None
+
+    worker.start()
+    # 超时 0.2s; 等它自己落库 (retire 会写「已取消」, 盖掉要验的那条错误).
+    deadline = asyncio.get_running_loop().time() + 10
+    done = None
+    while asyncio.get_running_loop().time() < deadline:
+        fetched = await repo.get_task(task.id)
+        if fetched is not None and fetched.status == TaskStatus.FAILED:
+            done = fetched
+            break
+        await asyncio.sleep(0.05)
+
+    assert done is not None, "任务没有在超时后结算"
+    # 卡在 RUNNING 是真正要避免的; 具体文案取决于内部取消分支与实际超时谁先落库.
+    assert done.status == TaskStatus.FAILED
+    assert done.error

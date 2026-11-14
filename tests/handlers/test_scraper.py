@@ -86,11 +86,18 @@ class EmptySearchCrawler:
 class FakeFactory:
     """伪造的 CrawlerFactory, 返回预配置的爬虫实例"""
 
-    def __init__(self, crawlers: dict):
+    def __init__(self, crawlers: dict, generic: object | None = None):
         self._crawlers = crawlers
+        self._generic = generic
 
     async def get(self, name: str):
         return self._crawlers.get(name)
+
+    async def get_generic(self):
+        """通用解析器: 站点没有专属爬虫时用它兜底."""
+        if self._generic is None:
+            raise AssertionError("这个用例不该走到通用解析")
+        return self._generic
 
     async def get_crawlers(self, names: Iterable[str]) -> dict:
         result = {}
@@ -2202,3 +2209,68 @@ def test_prioritize_source_urls_manual_preferred_wins() -> None:
     src = {"javdb": "u1", "avbase": "u2"}
     out = _prioritize_source_urls(src, {}, manual=True, preferred_site="javdb", route=["avbase", "javdb"])
     assert list(out) == ["javdb", "avbase"]
+
+
+class TestGenericFallback:
+    """站点没有专属爬虫时, 用通用解析器把页面读一遍."""
+
+    class _GenericCrawler(Crawler):
+        @classmethod
+        def profile(cls) -> CrawlerProfile:
+            return CrawlerProfile(name="generic", base_url="")
+
+        async def _search(self, query, options=None):
+            return None
+
+        async def _scrape(self, url, options=None) -> MediaMetadata | None:
+            return MediaMetadata.model_validate(
+                {"number": "020616_348", "title": "From generic", "source_url": url}
+            )
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_url_without_dedicated_crawler_falls_back_to_generic(
+        self, repo: Repository, resource_store
+    ):
+        """域名没有专属爬虫时, 通用解析照样能读出来.
+
+        以前这种地址直接返回空, 用户看到「各来源都没有找到结果」;
+        而地址末段往往就是番号, 值得读一遍.
+        """
+        h = ScrapeHandler(
+            repo=repo,
+            factory=FakeFactory({"javdb": object()}, generic=self._GenericCrawler(client=None)),
+            resource_store=resource_store,
+            pipeline_config=HotSettings(),
+        )
+
+        items = await h.preview("https://www.muramura.tv/movies/020616_348/", ContentType.CENSORED)
+
+        assert items, "通用解析没有产出任何结果"
+        assert items[0]["site"] == "generic"
+        assert items[0]["number"] == "020616_348"
+
+
+def test_owns_host_accepts_builtin_domain_after_custom_base_url() -> None:
+    """配了自定义域名后, 官方域名的链接仍归这个站.
+
+    只比当前 base_url 会让官方域名认不出来, 链接落到通用解析里读出一堆无意义标题.
+    """
+
+    class _CustomDomainCrawler(Crawler):
+        @classmethod
+        def profile(cls) -> CrawlerProfile:
+            return CrawlerProfile(name=SiteName.JAVBUS, base_url="https://www.javbus.com")
+
+        async def _search(self, query, options=None):
+            return None
+
+        async def _scrape(self, url, options=None):
+            return None
+
+    crawler = _CustomDomainCrawler(client=None)
+    # 模拟站点配置把 base_url 改成了自定义域名.
+    crawler.base_url = "https://mirror.example.com"
+
+    assert ScrapeHandler._owns_host(crawler, "www.javbus.com"), "官方域名应当仍被认领"
+    assert ScrapeHandler._owns_host(crawler, "mirror.example.com"), "自定义域名应当被认领"
+    assert not ScrapeHandler._owns_host(crawler, "www.other.com")

@@ -170,6 +170,10 @@ async def _insert_tasks(session: AsyncSession, pending: Sequence[_PendingTask]) 
 
 _IS_CHAIN_ROOT = (col(Task.root_task_id).is_(None)) | (col(Task.root_task_id) == col(Task.id))
 
+#: 认领时最多往后看多少行. 整理被同链演员挡住时要能在同一轮里看到后面的任务,
+#: 否则会被一条暂时不可执行的行挡住队列.
+_CLAIM_SCAN_LIMIT = 50
+
 
 def _matching_root_ids(
     statuses: Iterable[TaskStatus] | None, task_types: Iterable[TaskType] | None
@@ -321,18 +325,23 @@ class TasksRepoMixin(RepositoryMixinBase):
     async def claim_next_task(self) -> Task | None:
         """认领优先级最高的 QUEUED 行, 标为 RUNNING.
 
+        跳过「同链演员还没跑完」的整理任务: 整理要按合并后的演员名与别名重命名, 抢在演员
+        之前跑会把同一演员的别名写成两个目录. 演员任务失败也算跑完 —— 不能让一条失败的
+        演员任务把文件永远卡在「已刮削未落盘」.
+
         选择与写入分两条语句, 因此 UPDATE 再带 ``status == QUEUED``: 候选在两步之间被取消,
         或被并发的认领取走时命中 0 行, 本轮不认领 (下一轮再取).
         """
         async with self._session() as session:
-            candidate = (
+            candidates = (
                 await session.exec(
                     select(col(Task.id))
                     .where(col(Task.status) == TaskStatus.QUEUED)
                     .order_by(col(Task.priority).desc(), asc(col(Task.created_at)), col(Task.id).asc())
-                    .limit(1)
+                    .limit(_CLAIM_SCAN_LIMIT)
                 )
-            ).first()
+            ).all()
+            candidate = await self._first_ready(session, list(candidates))
             if candidate is None:
                 return None
             updated = await session.exec(
@@ -346,6 +355,41 @@ class TasksRepoMixin(RepositoryMixinBase):
             task = await session.get(Task, candidate)
             await session.commit()
             return task
+
+    async def _first_ready(self, session: AsyncSession, candidates: list[int]) -> int | None:
+        """按顺序取第一个可以立刻执行的任务.
+
+        只有整理需要等: 它要按合并后的演员名与别名重命名, 而同链的演员任务可能还在排队.
+        演员任务只要不是 QUEUED/RUNNING 就算结束 (失败也算), 不能让失败把它永远挡住.
+        """
+        if not candidates:
+            return None
+        rows = (
+            await session.exec(
+                select(col(Task.id), col(Task.type), col(Task.root_task_id)).where(col(Task.id).in_(candidates))
+            )
+        ).all()
+        info = {row[0]: (row[1], row[2]) for row in rows}
+        for task_id in candidates:
+            task_type, root_id = info.get(task_id, (None, None))
+            if task_type is not TaskType.ORGANIZE:
+                return task_id
+            if root_id is None:
+                return task_id
+            blocking = (
+                await session.exec(
+                    select(col(Task.id))
+                    .where(
+                        col(Task.root_task_id) == root_id,
+                        col(Task.type) == TaskType.ACTOR_SCRAPE,
+                        col(Task.status).in_((TaskStatus.QUEUED, TaskStatus.RUNNING)),
+                    )
+                    .limit(1)
+                )
+            ).first()
+            if blocking is None:
+                return task_id
+        return None
 
     async def complete_task(self, task_id: int, result: dict[str, object] | None = None) -> bool:
         """仅 ``RUNNING → DONE``, 返回是否命中. 已进入终态的行不被覆盖."""

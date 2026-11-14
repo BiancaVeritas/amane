@@ -25,8 +25,12 @@ if TYPE_CHECKING:
 logger = structlog.get_logger()
 
 CANCEL_ERROR = "已由用户取消"
+TIMEOUT_ERROR = "执行超时已中止: 上游请求可能挂住未返回"
 
 _DEFAULT_SHUTDOWN_TIMEOUT = 0
+#: 单个任务的执行上限. 刮削一部片要跑十来个站点, 正常也就几分钟; 卡到一小时说明上游某次
+#: 请求没回来. 没有这道闸, 任务会永远停在 RUNNING, 白占一个并发位且再也结束不了.
+_DEFAULT_TASK_TIMEOUT = 3600.0
 # 关闭时等待主循环 (含尚未结算的认领) 退出的兜底阈值; 正常路径只等它自己退出.
 MAIN_LOOP_STOP_TIMEOUT = 5.0
 # 主循环崩溃后的退避重启: 首次等待与单次上限, 每次崩溃翻倍直到上限.
@@ -49,6 +53,7 @@ class AsyncWorker:
         concurrency: int = 3,
         poll_interval: float = 2.0,
         shutdown_timeout: float = _DEFAULT_SHUTDOWN_TIMEOUT,
+        task_timeout: float = _DEFAULT_TASK_TIMEOUT,
         event_bus: EventBus | None = None,
         log_dir: Path | None = None,
         get_hot: Callable[[], HotSettings] | None = None,
@@ -58,6 +63,7 @@ class AsyncWorker:
         self._concurrency = concurrency
         self._poll_interval = poll_interval
         self._shutdown_timeout = shutdown_timeout
+        self._task_timeout = task_timeout
         self._semaphore = asyncio.Semaphore(concurrency)
         self._is_main = True
         # retire() 唤醒轮询中的主循环; 主循环自行退出, 不取消.
@@ -217,7 +223,21 @@ class AsyncWorker:
         structlog.contextvars.bind_contextvars(task_id=task_id, task_type=task_type_str)
 
         try:
-            await self._execute_claimed(task)
+            # 执行超时兜底: 上游某次请求若挂住不回, 任务会永远停在 RUNNING, 白占一个并发位
+            # 且再也结束不了. 超时按失败结算, 让队列继续走.
+            #
+            # wait_for 超时会给内部协程注入 CancelledError, 内部那条取消分支可能先写入终态,
+            # 因此这里的 fail_running_task 未必命中 —— 状态已经是终态, 不会卡住, 这就够了.
+            await asyncio.wait_for(self._execute_claimed(task), timeout=self._task_timeout)
+        except TimeoutError:
+            logger.error(
+                "task exceeded time limit",
+                task_id=task_id,
+                timeout_s=self._task_timeout,
+                hint="可能上游请求挂住未返回",
+            )
+            with suppress(Exception):
+                await asyncio.shield(self._repo.fail_running_task(task_id, error=TIMEOUT_ERROR))
         except asyncio.CancelledError:
             # 取消落在信号量等待 / recorder 初始化 / 完成事务等无终态窗口: 条件补写后传播.
             current = asyncio.current_task()

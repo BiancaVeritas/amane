@@ -27,6 +27,21 @@ from amane.parsing import ContentType
 from amane.plugins.models import SourceDescriptor, SourceTrait
 from amane.scheduler.watcher import DEBOUNCE_SECONDS, FileWatcher
 
+
+async def _drain_until_idle(runner: AsyncTaskRunner, repo: Repository) -> None:
+    """跑到队列里没有 QUEUED 任务为止.
+
+    不能写死跑几次: 一个刮削会派生演员与整理, 各任务同优先级后执行顺序取决于入队时间,
+    按次数推进会漏掉后面的任务.
+    """
+    for _ in range(50):
+        queued = [t for t in await repo.list_tasks() if t.status == TaskStatus.QUEUED]
+        if not queued:
+            return
+        if not await runner.process_one():
+            return
+
+
 if TYPE_CHECKING:
     from pathlib import Path
 
@@ -499,12 +514,11 @@ class TestEndToEndPipeline:
 
         # 第一次扫描
         await repo.create_task(task_type=TaskType.REFRESH, payload=RefreshPayload(library_id=1, path=str(tmp_path)))
-        await runner.process_one()  # REFRESH
-        await runner.process_one()  # SCRAPE
+        await _drain_until_idle(runner, repo)
 
         # 第二次扫描 - 文件已存在且已刮削, 不会重复添加或派生刮削任务
         await repo.create_task(task_type=TaskType.REFRESH, payload=RefreshPayload(library_id=1, path=str(tmp_path)))
-        await runner.process_one()  # REFRESH
+        await _drain_until_idle(runner, repo)
 
         # 验证第二次 REFRESH 的 result: 无新增, 无刮削派生
         tasks = await repo.list_tasks(task_types=[TaskType.REFRESH])

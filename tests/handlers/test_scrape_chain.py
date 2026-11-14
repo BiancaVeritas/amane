@@ -72,7 +72,8 @@ async def test_scrape_enqueues_actor_tasks_for_unscraped_actors(repo: Repository
     actors = {a.name: a for a in await repo.get_actors_by_names(["Actor A", "Actor B"])}
     payload_ids = {f.payload["actor_id"] for f in actor_scrapes}
     assert payload_ids == {a.id for a in actors.values()}
-    assert all(f.priority == -1 for f in actor_scrapes)
+    # 与影片任务同档: 排在最低时会被后续刮削一直压住, 演员信息要等整批跑完才补上.
+    assert all(f.priority == 1 for f in actor_scrapes)
     assert {f.key for f in actor_scrapes} == {f"actor-scrape:{a.id}" for a in actors.values()}
 
 
