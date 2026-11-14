@@ -7,7 +7,12 @@ from unittest.mock import AsyncMock
 import pytest
 
 from amane.media import ResourceStore, UpscaleOutcome, derived_locator
-from amane.media.resource_store import RESOURCE_URL_PREFIX, _is_placeholder_url, internal_url_hash
+from amane.media.resource_store import (
+    _EXTRAFANART_CONCURRENCY,
+    RESOURCE_URL_PREFIX,
+    _is_placeholder_url,
+    internal_url_hash,
+)
 from amane.net.egress import EgressPolicy
 from amane.net.http import RateLimiters, WebClient
 
@@ -707,3 +712,33 @@ class TestAcquireConcurrency:
         finally:
             released.set()
             await asyncio.gather(first, second, return_exceptions=True)
+
+
+@pytest.mark.asyncio
+async def test_extrafanart_limits_parallel_downloads(resource_store: ResourceStore) -> None:
+    """剧照下载须守住并发上限.
+
+    一部片常有几十张剧照, 全部并发会把连接池打满: 请求排队到超时, 逐个重试下来
+    整条任务能卡十几分钟. 这里用「同时在飞的请求峰值」验证闸门确实生效.
+    """
+    peak = 0
+    in_flight = 0
+    client = AsyncMock()
+
+    async def fake_acquire(url: str, _client: Any) -> Path:
+        nonlocal peak, in_flight
+        in_flight += 1
+        peak = max(peak, in_flight)
+        await asyncio.sleep(0.01)
+        in_flight -= 1
+        from pathlib import Path as _Path
+
+        return _Path(f"/tmp/{url.rsplit('/', 1)[-1]}")
+
+    resource_store.acquire = fake_acquire  # type: ignore[method-assign]
+    urls = {f"site{i}": [f"https://example.com/{i}-{n}.jpg" for n in range(20)] for i in range(1)}
+
+    paths = await resource_store.acquire_extrafanart(urls, ["site0"], client)
+
+    assert len(paths) == 20
+    assert peak <= _EXTRAFANART_CONCURRENCY, f"并发峰值 {peak} 超过上限 {_EXTRAFANART_CONCURRENCY}"

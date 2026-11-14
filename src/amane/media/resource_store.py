@@ -39,6 +39,10 @@ RESOURCE_URL_PREFIX = "/api/resources"
 # 否则该 URL 会被判为可用并前置, 前端最终显示占位图本身.
 _PLACEHOLDER_PATH_MARKERS: tuple[str, ...] = ("/now_printing/", "/noimage.")
 
+#: 剧照同时下载数. 一部片常有几十张, 不限并发会把连接池打满: 请求排队到超时,
+#: 逐个重试下来整条任务能卡十几分钟.
+_EXTRAFANART_CONCURRENCY = 5
+
 
 def _is_placeholder_url(url: str) -> bool:
     path = urlsplit(url).path.lower()
@@ -494,7 +498,15 @@ class ResourceStore:
         for site in priority:
             if site not in urls_by_site:
                 continue
-            results = await asyncio.gather(*[self.acquire(u, client) for u in urls_by_site[site]])
+            # 剧照动辄几十张, 全部并发会把连接池打满: 每个请求排队到超时, 再逐个重试,
+            # 整条任务因此卡十几分钟. 限住同时在跑的请求数.
+            gate = asyncio.Semaphore(_EXTRAFANART_CONCURRENCY)
+
+            async def one(url: str, _gate: asyncio.Semaphore = gate) -> Path | None:
+                async with _gate:
+                    return await self.acquire(url, client)
+
+            results = await asyncio.gather(*(one(u) for u in urls_by_site[site]))
             paths = [p for p in results if p is not None]
             if paths:
                 return paths
