@@ -70,15 +70,24 @@ function findScroller(): HTMLElement | null {
  * 路由自带的 ``scrollRestoration`` 只在前后路由不同时恢复, 而「切到设置再切回来」的前后
  * 地址完全相同, 因此它不会做任何事. 这里按 key 自己记.
  *
- * 用捕获阶段监听: scroll 事件不冒泡, 但捕获阶段能拿到任意元素的滚动, 于是无需事先知道
- * 真正的容器是谁. 恢复时再找到当前可滚的那个元素写回去, 并在内容异步撑高后重试几轮.
+ * 恢复分两段, 不能混:
+ * - 进入页面后的一小段时间内, 自己的写入会产生 scroll 事件; 这些事件**不是**用户操作,
+ *   必须忽略, 否则「位置差过大」会被误判成用户接手, 恢复就此作废.
+ * - 用户一旦真的滚动 (在恢复窗口之外, 或偏离目标后位置仍持续变化), 立刻停手并开始记录,
+ *   否则后续补偿会把他往上滚的动作拽回去, 表现为「阻力」与「回弹」.
  */
 export function useRestoreScroll(key: string): void {
   useEffect(() => {
     const saved = storageGet(key);
+    const target = saved !== undefined && saved > 0 ? saved : null;
+    // 恢复阶段: 自己写 scrollTop 也触发 scroll 事件, 期间不记录也不判用户接手.
+    let restoring = target !== null;
+    let userTookOver = false;
 
     const onScroll = (event: Event) => {
       const value = readScroll(event.target);
+      if (restoring) return;
+      userTookOver = true;
       if (value > 0) storageSet(key, value);
     };
     document.addEventListener("scroll", onScroll, { capture: true, passive: true });
@@ -86,16 +95,26 @@ export function useRestoreScroll(key: string): void {
     // 内容异步到达, 高度会陆续变大; 写一次可能被截断, 因此多点重试.
     const timers: number[] = [];
     const restore = () => {
-      if (saved === undefined || saved <= 0) return;
+      if (!restoring || target === null) return;
       const el = findScroller();
       if (el === null) return;
-      // 只在还没到目标位置时补写, 免得把用户这期间的主动滚动拽回去.
-      if (el.scrollTop < saved) el.scrollTop = saved;
-      else if (window.scrollY < saved) window.scrollTo({ top: saved, behavior: "instant" });
+      if (el.scrollTop < target) el.scrollTop = target;
+      else if (window.scrollY < target) window.scrollTo({ top: target, behavior: "instant" });
     };
-    for (const delay of [0, 16, 50, 120, 250, 500, 900, 1500]) {
+    for (const delay of [0, 16, 50, 120, 250]) {
       timers.push(window.setTimeout(restore, delay));
     }
+    // 恢复窗口结束: 之后的位置变化才算用户操作.
+    timers.push(
+      window.setTimeout(() => {
+        restoring = false;
+        if (!userTookOver) {
+          const el = findScroller();
+          const value = el?.scrollTop ?? window.scrollY;
+          if (value > 0) storageSet(key, value);
+        }
+      }, 400),
+    );
 
     return () => {
       for (const id of timers) window.clearTimeout(id);

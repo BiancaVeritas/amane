@@ -83,7 +83,9 @@ export function ManualScrapeDialog({
       // 原样交给后端: 地址由后端打开页面读番号. 前端截末段当番号是错的 ——
       // javdb 的 /v/dgVq9 里根本没有番号, 那样哪个来源都搜不到.
       const response = await previewScrape({
-        body: { number: value, content_type: boundType },
+        // append 模式只抓用户贴的这一个地址: 它要的是「把这条来源加进去」,
+        // 再多问其他来源只会列出并列结果, 与「只抓这一个链接」的语义相悖.
+        body: { number: value, content_type: boundType, only_that_url: mode === "append" },
         throwOnError: true,
       });
       return response.data?.items ?? [];

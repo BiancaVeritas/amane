@@ -158,13 +158,26 @@ function FieldBlock({
 }) {
   return (
     <div>
-      <Group gap={4} wrap="nowrap" align="center">
+      {/* 标签与徽章内的文字左对齐: 徽章自身有水平内边距, 标签若贴着块边线, 看起来就比
+          徽章里的字靠左一截. 补上同等的左内边距, 两者文字起点才齐. */}
+      <Group gap={4} wrap="nowrap" align="center" style={{ paddingLeft: "0.3125rem" }}>
         <Text size="xs" c="dimmed">
           {label}
         </Text>
         {lock && <LockToggle {...lock} />}
       </Group>
-      <div>{children}</div>
+      {/* 标签行自身行高已带出一段空隙, 这里只做微调: 负值贴紧, 正值拉开.
+          不要用 minHeight 或 padding —— 那会把距离推得更开, 也会影响长文本.
+          剧情这类长文本靠 flex 自然撑高. */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "flex-start",
+        }}
+      >
+        {children}
+      </div>
     </div>
   );
 }
@@ -912,7 +925,7 @@ function TitleDetailPage() {
             )}
           </div>
 
-          <Group gap="lg" wrap="wrap">
+          <Group gap={12} wrap="wrap">
             {item.studio && (
               <FieldBlock label={t("detail.fields.studio")} lock={lockProps("studio")}>
                 <FacetBadge kind="studio" id={data.studio_id} name={item.studio} />
@@ -944,12 +957,18 @@ function TitleDetailPage() {
             )}
             {item.release && (
               <FieldBlock label={t("detail.fields.release")} lock={lockProps("release")}>
-                <Text size="sm">{item.release}</Text>
+                {/* 与制作商/系列等一致套上徽章: 同一行里只有纯文本没有底框时,
+                    视觉上会比两侧的徽章矮一截, 看着就不齐. */}
+                <Badge variant="light" size="sm" tt="none">
+                  {item.release}
+                </Badge>
               </FieldBlock>
             )}
             {runtime && (
               <FieldBlock label={t("detail.fields.runtime")} lock={lockProps("runtime")}>
-                <Text size="sm">{runtime}</Text>
+                <Badge variant="light" size="sm" tt="none">
+                  {runtime}
+                </Badge>
               </FieldBlock>
             )}
             {item.score != null && (

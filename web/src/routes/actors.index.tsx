@@ -148,24 +148,29 @@ function ActorsIndexPage() {
     setLastActorId(null);
   }, [setLastActorId]);
 
+  // 只在首次进入时恢复上次排序: 挂载后就不再插手, 否则用户主动点回「数量」会被
+  // 立刻推回 store 里的旧值 —— 表现就是「切到别的排序后切不回数量」.
+  const sortRestored = useRef(false);
   useEffect(() => {
     const currentBy = search.sort_by;
     const currentOrder = search.order;
     const isDefault = currentBy === "count" && currentOrder === "desc";
     const storedIsDefault = actorListSort.sort_by === "count" && actorListSort.order === "desc";
-    if (isDefault && !storedIsDefault) {
-      void navigate({
-        search: (prev) => ({
-          ...prev,
-          sort_by: actorListSort.sort_by,
-          order: actorListSort.order,
-          page: 1,
-        }),
-      });
-    } else if (
-      !isDefault &&
-      (actorListSort.sort_by !== currentBy || actorListSort.order !== currentOrder)
-    ) {
+    if (!sortRestored.current) {
+      sortRestored.current = true;
+      if (isDefault && !storedIsDefault) {
+        void navigate({
+          search: (prev) => ({
+            ...prev,
+            sort_by: actorListSort.sort_by,
+            order: actorListSort.order,
+            page: 1,
+          }),
+        });
+      }
+      return;
+    }
+    if (actorListSort.sort_by !== currentBy || actorListSort.order !== currentOrder) {
       setActorListSort({ sort_by: currentBy, order: currentOrder });
     }
   }, [search.sort_by, search.order, actorListSort, setActorListSort, navigate]);
