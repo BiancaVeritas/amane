@@ -38,9 +38,8 @@ _ACTRESS_HREF_RE = re.compile(r"actress\d+\.html", re.IGNORECASE)
 
 #: 名字 → actress id 的离线表. 搜索页 ``search_result.php`` 处于 Cloudflare 挑战之后
 #: (403), 而列表页与详情页不设防, 所以整表枚举一次, 运行时查表直达详情页.
+#: 表里只有「名字与别名 → id」这一件事; 生日三围等资料一律现抓网页, 不在本地留快照.
 _NAMES_PATH = Path(__file__).with_name("minnano_actress_names.json")
-#: id → 资料 (生日/三围/事务所/标签). 从这份表直接读, 省掉详情页请求.
-_DETAIL_PATH = Path(__file__).with_name("minnano_actress_detail.json")
 
 
 @lru_cache(maxsize=1)
@@ -67,78 +66,6 @@ def lookup_actress_id(name: str) -> str | None:
     hits = {value for candidate, value in index.items() if re.sub(r"\s+", "", candidate).casefold() == folded}
     return hits.pop() if len(hits) == 1 else None
 
-
-@lru_cache(maxsize=1)
-def _detail_index() -> dict[str, dict[str, object]]:
-    """id → 资料; 缺失时返回空表, 退回抓详情页."""
-    try:
-        raw = json.loads(_DETAIL_PATH.read_text(encoding="utf-8"))
-    except OSError, json.JSONDecodeError:
-        return {}
-    return {str(k): v for k, v in raw.items() if isinstance(v, dict)}
-
-
-def _merge_online_over_index(local: ActorMetadata, online: ActorMetadata) -> ActorMetadata:
-    """网站数据优先, 索引补齐网站缺失的字段.
-
-    网站是当前事实, 所以每个非空字段都以它为准; 索引里多出来的 (例如网站改版后丢掉别名)
-    则保留, 不因为一次抓取失败就丢数据.
-    """
-    merged = online.model_copy()
-    for field in (
-        "birthday",
-        "birthplace",
-        "height",
-        "bust",
-        "waist",
-        "hip",
-        "cup",
-        "overview",
-        "tagline",
-    ):
-        if getattr(merged, field) is None:
-            setattr(merged, field, getattr(local, field))
-    # 别名取并集: 两边可能各有对方没有的写法.
-    merged.aliases = list(dict.fromkeys([*merged.aliases, *local.aliases]))
-    if not merged.image_urls:
-        merged.image_urls = list(local.image_urls)
-    return merged
-
-
-def metadata_from_index(actress_id: str, *, base_url: str) -> ActorMetadata | None:
-    """离线表 → ActorMetadata; 表里没这条返回 None (交给详情页抓取)."""
-    record = _detail_index().get(actress_id)
-    if record is None:
-        return None
-    name = record.get("name")
-    if not isinstance(name, str) or not name:
-        return None
-
-    def as_int(key: str) -> int | None:
-        value = record.get(key)
-        return value if isinstance(value, int) else None
-
-    def as_str(key: str) -> str | None:
-        value = record.get(key)
-        return value if isinstance(value, str) and value else None
-
-    aliases_raw = record.get("aliases")
-    aliases = [a for a in aliases_raw if isinstance(a, str)] if isinstance(aliases_raw, list) else []
-
-    return ActorMetadata(
-        name=name,
-        # 别名照原样带出 (假名 + 罗马字), 演员自动合并要靠它.
-        aliases=[alias for alias in aliases if alias != name],
-        gender=ActorGender.FEMALE,
-        birthday=as_str("birthday"),
-        height=as_int("height"),
-        bust=as_int("bust"),
-        waist=as_int("waist"),
-        hip=as_int("hip"),
-        cup=as_str("cup"),
-        provider_ids={"minnano": actress_id},
-        source_url=f"{base_url}/actress{actress_id}.html",
-    )
 
 
 class MinnanoActorCrawler(ActorCrawler):
@@ -203,27 +130,13 @@ class MinnanoActorCrawler(ActorCrawler):
         return None
 
     async def _scrape(self, url: str) -> ActorMetadata | None:
-        """总是问网站, 索引只在网站失败时兜底.
+        """资料一律现抓网页, 本地只留「名字 → id」那张检索表.
 
-        索引是抓取当时的快照, 字段集也未必覆盖网站的全部项 (例如「出身地」就没收进去).
-        以快照为准会把网站后来更正的值、快照当时漏掉的格子都一起丢掉, 所以顺序是:
-        网站 → 合并索引补齐 → 网站解析失败才整份退回索引.
-
-        索引与「是否复用上次刮削结果」无关, 缓存开关不参与这里的判断.
+        快照会过期, 也会漏收字段 (例如「出身地」当初就没收进去); 以快照为准等于把网站
+        后来更正的值一起丢掉. 索引只负责把名字换成 id, 换取详情页地址.
         """
-        local: ActorMetadata | None = None
-        if match := _ACTRESS_HREF_RE.search(url):
-            actress_id = re.sub(r"\D", "", match.group(0))
-            local = metadata_from_index(actress_id, base_url=self.base_url)
-
         text = await self.client.get_html(url, cookies=self.cookies)
-        online = parse_minnano_detail(text, page_url=url, base_url=self.base_url)
-        if local is None:
-            return online
-        if online is None:
-            # 网站这次没解析出来 (改版/临时故障), 退回索引, 别把已有资料丢了.
-            return local
-        return _merge_online_over_index(local, online)
+        return parse_minnano_detail(text, page_url=url, base_url=self.base_url)
 
 
 def parse_minnano_detail(html_text: str, *, page_url: str, base_url: str) -> ActorMetadata | None:

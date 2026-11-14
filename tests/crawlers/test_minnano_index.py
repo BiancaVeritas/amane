@@ -2,6 +2,9 @@
 
 站点的 ``search_result.php`` 处于 Cloudflare 挑战之后 (403), 而演员列表页与详情页不设防,
 所以索引靠整表枚举生成. 这里验证查表本身: 命中时不应该发起任何网络请求.
+
+表里只有「名字与别名 → id」这一件事. 生日三围等资料一律现抓网页, 不在本地留快照 ——
+快照会过期, 也会漏收字段. 站点附在名字后面的读音括号与厂牌标注在建表时已剥掉.
 """
 
 from __future__ import annotations
@@ -12,13 +15,15 @@ import pytest
 
 from amane.crawlers.actor.sites.minnano import (
     MinnanoActorCrawler,
-    _detail_index,
     _name_index,
     lookup_actress_id,
-    metadata_from_index,
 )
 
 BASE = "https://www.minnano-av.com"
+#: 橘めぐみ: 主名之外还有真别名 (不同时期的艺名), 两者都要能查到同一个 id.
+ID = "100025"
+NAME = "橘めぐみ"
+ALIAS = "宮嶋のどか"
 
 
 def test_index_is_embedded() -> None:
@@ -27,117 +32,61 @@ def test_index_is_embedded() -> None:
 
 
 @pytest.mark.parametrize(
-    ("name", "expected"),
+    ("value", "expected"),
     [
-        # 主名 / 假名 / 罗马字都指向同一个 id.
-        ("竹内咲奈", "551014"),
-        ("たけうちさな", "551014"),
-        ("Takeuchi Sana", "551014"),
-        ("綾野カヲル", "471698"),
+        # 主名与真别名指向同一个 id.
+        (NAME, ID),
+        (ALIAS, ID),
         # 查不到就是 None, 不瞎猜.
         ("完全不存在的名字", None),
         ("", None),
     ],
 )
-def test_lookup_actress_id(name: str, expected: str | None) -> None:
-    assert lookup_actress_id(name) == expected
+def test_lookup_actress_id(value: str, expected: str | None) -> None:
+    assert lookup_actress_id(value) == expected
 
 
 def test_lookup_ignores_case_and_spaces() -> None:
     """站点名字有全角空格与大小写差异, 宽松匹配仍应唯一命中."""
-    assert lookup_actress_id("takeuchisana") == lookup_actress_id("Takeuchi Sana")
+    assert lookup_actress_id(f" {NAME} ") == lookup_actress_id(NAME)
+
+
+def test_reading_brackets_are_not_searchable() -> None:
+    """读音括号与厂牌标注在建表时剥掉, 不该留下带括号的键."""
+    assert lookup_actress_id(f"{NAME} （たちばなめぐみ / Tachibana Megumi）") is None
+    for key in _name_index():
+        assert "（" not in key and "(" not in key
 
 
 @pytest.mark.asyncio
 async def test_search_uses_local_index_without_touching_search_page() -> None:
     """命中索引时不应请求搜索页 —— 那个入口必然被挑战拦下."""
     crawler = MinnanoActorCrawler(client=AsyncMock(), config=None)
-    url = await crawler._search("竹内咲奈")
+    url = await crawler._search(NAME)
 
-    assert url == "https://www.minnano-av.com/actress551014.html"
+    assert url == f"{BASE}/actress{ID}.html"
     crawler.client.get_html.assert_not_called()  # type: ignore[attr-defined]
 
 
-def test_detail_index_is_embedded() -> None:
-    assert len(_detail_index()) > 10_000
-
-
-def test_metadata_from_index_keeps_aliases_and_body() -> None:
-    """别名 (假名/罗马字) 与三围都要带出: 演员自动合并依赖别名, 三围是展示字段."""
-    meta = metadata_from_index("551014", base_url=BASE)
-    assert meta is not None
-    assert meta.name == "竹内咲奈"
-    assert "たけうちさな" in meta.aliases
-    assert "Takeuchi Sana" in meta.aliases
-    assert meta.birthday == "2007-11-30"
-    assert (meta.height, meta.bust, meta.waist, meta.hip, meta.cup) == (158, 86, 58, 85, "C")
-
-
-def test_metadata_from_index_missing_id_returns_none() -> None:
-    assert metadata_from_index("999999999", base_url=BASE) is None
-
-
 @pytest.mark.asyncio
-async def test_scrape_falls_back_to_index_when_site_unparseable() -> None:
-    """网站解析不出来时退回索引, 不把已有资料丢掉.
-
-    索引是抓取当时的快照, 字段集也未必覆盖网站全部项; 以快照为准会丢掉网站后来更正的
-    值和快照漏掉的格子, 所以只做兜底.
-    """
-    client = AsyncMock()
-    client.get_html = AsyncMock(return_value="<html>改版了, 没有 act-profile</html>")
-    crawler = MinnanoActorCrawler(client=client, config=None)
-
-    meta = await crawler._scrape(f"{BASE}/actress551014.html")
-
-    assert meta is not None
-    assert meta.name == "竹内咲奈"
-    client.get_html.assert_called_once()
-
-
-@pytest.mark.asyncio
-async def test_scrape_fetches_when_index_missing_fields() -> None:
-    """索引缺生日时应抓一次详情页, 并让网站数据覆盖索引."""
-    online_html = """
+async def test_scrape_always_reads_the_web_page() -> None:
+    """资料必须现抓: 本地只留检索表, 不再有可用于兜底的资料快照."""
+    html = """
     <div class="act-profile"><table>
-      <tr><td><h2>綾野カヲル （あやのかをる / Ayano Kaworu）</h2></td></tr>
-      <tr><td><span>生年月日</span><p>1990年1月2日</p></td></tr>
+      <tr><td><h2>橘めぐみ （たちばなめぐみ / Tachibana Megumi）</h2></td></tr>
+      <tr><td><span>別名</span><p>宮嶋のどか</p></td></tr>
+      <tr><td><span>生年月日</span><p>2000年06月30日</p></td></tr>
+      <tr><td><span>サイズ</span><p>T165 / B112(Jカップ) / W64 / H99</p></td></tr>
     </table></div>
     """
     client = AsyncMock()
-    client.get_html = AsyncMock(return_value=online_html)
+    client.get_html.return_value = html
     crawler = MinnanoActorCrawler(client=client, config=None)
 
-    meta = await crawler._scrape(f"{BASE}/actress471698.html")
+    meta = await crawler._scrape(f"{BASE}/actress{ID}.html")
 
     assert meta is not None
-    assert meta.birthday == "1990-01-02"  # 网站补上了
-    assert meta.height == 155  # 索引仍在的字段保留
-    assert "あやのかをる" in meta.aliases  # 别名不因网站缺失而丢
-    client.get_html.assert_called_once()
-
-
-@pytest.mark.asyncio
-async def test_complete_index_still_asks_site() -> None:
-    """索引齐全也照样问一次网站: 网站是当前事实, 索引只是快照.
-
-    索引不参与「是否复用上次刮削结果」的判断, 缓存开关也不该把它伸进这里.
-    """
-    online_html = """
-    <div class="act-profile"><table>
-      <tr><td><h2>竹内咲奈 （たけうちさな / Takeuchi Sana）</h2></td></tr>
-      <tr><td><span>生年月日</span><p>2007年11月30日</p></td></tr>
-      <tr><td><span>出身地</span><p>東京都</p></td></tr>
-    </table></div>
-    """
-    client = AsyncMock()
-    client.get_html = AsyncMock(return_value=online_html)
-    crawler = MinnanoActorCrawler(client=client, config=None)
-
-    meta = await crawler._scrape(f"{BASE}/actress551014.html")
-
-    assert meta is not None
-    assert meta.birthday == "2007-11-30"
-    # 网站提供的出生地拿得到; 索引里没有这一项.
-    assert meta.birthplace == "東京都"
-    client.get_html.assert_called_once()
+    assert meta.name == NAME
+    assert ALIAS in meta.aliases
+    assert (meta.height, meta.bust, meta.waist, meta.hip, meta.cup) == (165, 112, 64, 99, "J")
+    client.get_html.assert_awaited_once()
