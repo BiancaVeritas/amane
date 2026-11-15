@@ -55,15 +55,19 @@ async def create_async_engine_from_path(db_path: Path | str, *, policy: DbLogPol
         # 这些设置都是连接级的: 每个新连接都必须重设, 漏设即退回驱动默认.
         cursor = dbapi_conn.cursor()
         cursor.execute(f"PRAGMA busy_timeout={BUSY_TIMEOUT_MS}")
-        # journal_mode 是库级持久设置, 一旦切到 WAL 就记在库文件头里, 后续连接无需再设.
-        # 而这条 PRAGMA 要求短暂排他锁并会打开 -shm 共享内存文件: 多个 worker 并发新建
-        # 连接时它会与正在写的事务抢锁, 底层抛 SQLITE_IOERR, 表现为建连接那一刻的
-        # "disk I/O error". 因此切换失败时不能让连接建立失败 —— 库停在原 journal 模式
-        # 仍可用, 只是少了 WAL 的并发读.
+        # journal_mode 是库级持久设置, 写在库文件头里. 但这条 PRAGMA 会打开 -shm 共享内存
+        # 文件并短暂取排他锁: 库的 WAL 状态本身损坏时 (例如 -shm 被外部删掉或残留不一致),
+        # 每次新建连接都会失败. 这类错误无法靠重试恢复 —— 重试只会把任务拖在原地空转,
+        # 所以明确报错并说明怎么修, 不要吞掉.
         try:
             cursor.execute("PRAGMA journal_mode=WAL")
-        except Exception:
-            logger.warning("switch to WAL journal mode failed", exc_info=True)
+        except Exception as exc:
+            raise RuntimeError(
+                f"无法把 {dbapi_conn} 切到 WAL 日志模式: {exc}. "
+                "这通常说明库的 WAL 状态已损坏 (缺 -shm 或 WAL 与主库不一致). "
+                "请停服务后在数据目录执行: "
+                'sqlite3 amane.db "PRAGMA wal_checkpoint(TRUNCATE); PRAGMA integrity_check;"'
+            ) from exc
         # WAL 下掉电最多丢最近若干已提交事务且不损坏库, 换来提交不再逐笔 fsync.
         cursor.execute("PRAGMA synchronous=NORMAL")
         cursor.execute("PRAGMA foreign_keys=ON")
