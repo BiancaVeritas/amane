@@ -41,7 +41,7 @@ _PLACEHOLDER_PATH_MARKERS: tuple[str, ...] = ("/now_printing/", "/noimage.")
 
 #: 剧照同时下载数. 一部片常有几十张, 不限并发会把连接池打满: 请求排队到超时,
 #: 逐个重试下来整条任务能卡十几分钟.
-_EXTRAFANART_CONCURRENCY = 5
+_EXTRAFANART_CONCURRENCY = 10
 
 
 def _is_placeholder_url(url: str) -> bool:

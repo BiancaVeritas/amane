@@ -1,3 +1,4 @@
+import time
 from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, Protocol
@@ -709,18 +710,22 @@ class ScrapeHandler(TaskHandler[ScrapePayload, ScrapeResult]):
                 **metadata_fields,
             )
         else:
+            t0 = time.monotonic()
             meta = await self._repo.upsert_metadata(
                 number=payload.number,
                 content_type=payload.content_type,
                 mode=WriteMode.MANUAL if payload.manual else WriteMode.AUTO,
                 **metadata_fields,
             )
+            current().info("scrape step", step="upsert_metadata", duration_s=round(time.monotonic() - t0, 2))
 
         if self._tag_mappings is not None:
             self._tag_mappings.observe(meta.tags, source=meta.field_sources.get("tags"))
 
         if payload.content_type != ContentType.WESTERN:
+            t0 = time.monotonic()
             await finalize_media_file(self._repo, payload.media_file_id, meta.id)
+            current().info("scrape step", step="finalize_media_file", duration_s=round(time.monotonic() - t0, 2))
 
         # 手动搜索: 用户点的那条来源排到第一位.
         # 走 repo 的专用方法直接回写 JSON 列; ORM 赋值在 identity map 命中时会拿回缓存顺序,
@@ -734,8 +739,16 @@ class ScrapeHandler(TaskHandler[ScrapePayload, ScrapeResult]):
         # 串成一条链: 刮削 → 演员 → 整理. 整理要等演员, 否则别名还没合并就按当前名字落盘,
         # 同一演员会被写成两个目录. 整理本身仍是独立任务 (演员失败也照跑), 它自己在执行前
         # 检查同链的演员任务是否还在排队.
+        t0 = time.monotonic()
         actor_followups = await self._actor_scrape_followups(meta.actors)
         organize_followups = await self._auto_organize_followups(payload, file, meta.id)
+        current().info(
+            "scrape step",
+            step="followups",
+            actors=len(actor_followups),
+            organizers=len(organize_followups),
+            duration_s=round(time.monotonic() - t0, 2),
+        )
 
         await self.report_progress(progress_total, progress_total, "done")
 
