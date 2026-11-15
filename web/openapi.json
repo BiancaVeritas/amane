@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Amane API",
-    "version": "0.26.0"
+    "version": "0.27.5"
   },
   "paths": {
     "/api/health": {
@@ -6206,6 +6206,16 @@
             }
           },
           {
+            "name": "archived",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Archived"
+            }
+          },
+          {
             "name": "offset",
             "in": "query",
             "required": false,
@@ -6294,6 +6304,7 @@
           "tag-mappings"
         ],
         "summary": "Delete Mapping",
+        "description": "归档词条: 不真删, 否则它会在下次 seed 时按标签表重建出来.",
         "operationId": "delete_mapping",
         "parameters": [
           {
@@ -6309,6 +6320,47 @@
         "responses": {
           "204": {
             "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/tag-mappings/restore/{original}": {
+      "post": {
+        "tags": [
+          "tag-mappings"
+        ],
+        "summary": "Restore Mapping",
+        "description": "把归档的词条放回主列表.",
+        "operationId": "restore_mapping",
+        "parameters": [
+          {
+            "name": "original",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Original"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
           },
           "422": {
             "description": "Validation Error",
@@ -10981,7 +11033,8 @@
                   "10musume",
                   "1pondo",
                   "caribbeancom",
-                  "pacopacomama"
+                  "pacopacomama",
+                  "muramura"
                 ],
                 "western": [
                   "theporndb"
@@ -17124,6 +17177,14 @@
             ],
             "title": "Source Url",
             "description": "只抓这一个来源页地址, 不走类型路由 (与 append_sources 配套)"
+          },
+          "search_sites": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Search Sites",
+            "description": "手动搜索命中的站点, 选中项排第一; 给定时只抓这些站, 不走类型路由"
           },
           "type": {
             "type": "string",

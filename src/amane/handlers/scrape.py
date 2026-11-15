@@ -17,7 +17,7 @@ from ..aggregate import (
     compile_priority,
 )
 from ..crawlers.base import Crawler
-from ..crawlers.models import MediaMetadata, SearchQuery
+from ..crawlers.models import FetchOptions, MediaMetadata, SearchQuery
 from ..crawlers.site_roles import FILM_METADATA_SITES, builtin_descriptors
 from ..db.models import MediaFileStatus, MediaIdentityType, TaskType
 from ..db.repo_types import WriteMode
@@ -45,6 +45,10 @@ if TYPE_CHECKING:
 
 # 进度: 聚合按已满足标量字段计数; 其后固定两步 (物化图片 / 持久化).
 _PROGRESS_POST_STEPS = 2
+
+#: ``SiteName`` 的成员名集合. 手动搜索传来的站点是字符串, 属于内置站时换成枚举,
+#: 未知字符串原样保留 (插件来源就是这么标识的).
+_SITE_NAMES = frozenset(site.value for site in SiteName)
 
 #: 刮削派生出的后继 (演员、整理) 的优先级: 比普通刮削高一级.
 #: 同档时调度按创建时间先到先执行, 刚派生的后继会排到几十个待刮任务之后 ——
@@ -127,6 +131,31 @@ def _same_site(host: str, base_host: str) -> bool:
     host = host.removeprefix("www.")
     base_host = base_host.removeprefix("www.")
     return host == base_host or host.endswith(f".{base_host}") or base_host.endswith(f".{host}")
+
+
+def _promote_site(route: Sequence[SiteName | str], site: str) -> list[SiteName | str]:
+    """把 ``site`` 提到站点集合最前, 不在其中时补进去.
+
+    获取图按站点顺序取值, 用户亲手指定的那一站该排第一; 而它可能根本不在当前类型路由里
+    (番号判断出的类型未必适用于用户选中的站), 所以需要补进集合, 否则它的结果进不了图.
+    """
+    return [site, *(item for item in route if str(item) != site)]
+
+
+class _FrozenCrawler:
+    """只回放既定结果的来源桩.
+
+    手动搜索已经把用户选中的页面抓过一次了. 让获取图再抓一遍等于重复打一次网络, 还会因为
+    站点限流/验证导致这次反而失败. 这个桩让「抓过的结果」出现在获取图里, 参与字段优先级.
+    """
+
+    def __init__(self, meta: MediaMetadata) -> None:
+        self._meta = meta
+
+    async def fetch(
+        self, query: SearchQuery, options: FetchOptions | None = None
+    ) -> MediaMetadata | None:
+        return self._meta
 
 
 def _prioritize_source_urls(
@@ -413,17 +442,22 @@ class ScrapeHandler(TaskHandler[ScrapePayload, ScrapeResult]):
 
         # 校验 content_type 路由; 无资格站点则失败.
         route = self._config.scraping.content_routes.get(content_type)
+
+        # 手动搜索命中的站点就是这次的全部范围: 用户已经看过搜索结果并挑了一条, 只抓命中的那几站.
+        #
+        # 不能再把当前类型的路由接回来 —— 搜索阶段已经按番号问过它们并确认没有资料, 再问一遍
+        # 既重复请求, 也会让任务日志里堆满一堆与结果无关的失败来源, 看不出哪几站真正参与了.
+        if payload.search_sites:
+            ordered = list(dict.fromkeys(payload.search_sites))
+            if payload.preferred_site:
+                ordered = [payload.preferred_site, *(s for s in ordered if s != payload.preferred_site)]
+            route = [SiteName(site) if site in _SITE_NAMES else site for site in ordered]
+            rec.info("route pinned to search hits", sites=ordered)
+
         if not route:
             rec.warning("no eligible crawlers for content type", content_type=content_type)
             return TaskResult(success=False, error=f"内容类型 {content_type} 没有可用来源")
 
-        # 手动搜索选中了某个来源时, 它比番号判断出的类型更权威: 用户是在搜索结果里亲手挑的
-        # 那一家, 而类型是程序从番号猜的 (东京热的 n 系列被判成无码, 它在 javbus 这类有码站
-        # 也有条目). 选中的站不在当前路由时把它补进来, 否则就是「搜得到、选了却抓不到」.
-        preferred = payload.preferred_site
-        if preferred and preferred not in {str(site) for site in route}:
-            route = [*route, SiteName(preferred)]
-            rec.info("preferred site outside route, added", site=preferred, content_type=str(content_type))
         if content_type == ContentType.WESTERN and str(SiteName.THEPORNDB) not in {str(site) for site in route}:
             return TaskResult(
                 success=False, error="WESTERN 作品身份依赖 ThePornDB UUID，请在欧美来源路由中启用 ThePornDB"
@@ -435,7 +469,13 @@ class ScrapeHandler(TaskHandler[ScrapePayload, ScrapeResult]):
             and payload.metadata_id is None
         ):
             return TaskResult(success=False, error="WESTERN 刮削需要媒体文件 OSHASH 或手动指定 ThePornDB UUID")
-        rec.info("scraping started", content_type=str(content_type), crawlers=route)
+        rec.info(
+            "scraping started",
+            content_type=str(content_type),
+            crawlers=route,
+            source_url=payload.source_url,
+            preferred=payload.preferred_site,
+        )
         rec.update_summary(eligible_sites=[str(s) for s in route])
 
         crawlers = await self._factory.get_crawlers(route)
@@ -556,13 +596,47 @@ class ScrapeHandler(TaskHandler[ScrapePayload, ScrapeResult]):
 
         # 出站: 执行获取图 (execute_graph), 声明依赖的来源在第二段; 按 use_cache 复用 raw 快照.
         if payload.source_url:
-            # 「添加来源链接」只抓用户贴的那一条: 不走类型路由, 不把全部来源重新问一遍.
-            # any_site: 路由里没有这一家时也要去全部影片来源里找 —— 用户贴的链接就是权威.
+            # 钉住的那一条先单独抓: 它可能挂在别的类型路由上 (javbus 属有码, 而番号被判成
+            # 无码), 按路由去找根本找不到这一家. 给了地址就照它抓 —— 与用户手贴链接同口径.
             single = await self._scrape_one_source(payload.source_url, crawlers, content_type, any_site=True)
             if single is None:
                 return TaskResult(success=False, error=f"无法从该地址取到 {payload.number} 的元数据")
             fetched_site, fetched_meta = single
-            result = aggregate_single(q, fetched_site, fetched_meta, field_priority)
+            rec.info("pinned source fetched", site=fetched_site, number=fetched_meta.number)
+            if payload.append_sources:
+                # 「添加来源链接」只要这一条: 不把其余来源重新问一遍. aggregate_single 按单源
+                # 拼装, 不需要这一站出现在获取图里.
+                result = aggregate_single(q, fetched_site, fetched_meta, field_priority)
+            else:
+                # 手动刮削: 这一条 + 用番号问一遍当前类型路由里的其余来源.
+                #
+                # 关键: 抓到的这一站必须并进获取图的站点集合. 获取图只认 field_priority 里列出的
+                # 站, 抓到的站不在其中时, 它的结果即使塞进快照也不会被取用 —— 表现就是「地址抓
+                # 到了, 但字段全是空的」.
+                pinned = _promote_site(route, fetched_site)
+                pinned_priority = compile_priority(
+                    pinned, self._config.scraping.field_priority, self._config.scraping.field_blacklist
+                )
+                # crawlers 里也必须含有这一站: 获取图只执行「图里有、且 crawlers 里也有」的节点,
+                # 缺一样就整站跳过. 这里补一个只返回既定结果的桩 —— 数据已经抓过了, 不再打一次
+                # 网络, 同时顺序仍由上面的字段链决定.
+                pinned_crawlers = {
+                    **crawlers,
+                    fetched_site: _FrozenCrawler(fetched_meta),
+                }
+                snapshots = {fetched_site: fetched_meta.model_dump(mode="json")}
+                if db_data is not None:
+                    snapshots = {**(db_data.raw or {}), **snapshots}
+                result = await aggregate(
+                    q,
+                    pinned_crawlers,
+                    pinned_priority,
+                    field_language,
+                    snapshots,
+                    on_progress=_on_fetch_progress,
+                    multi_lang_sites=self._multi_language_sources,
+                    deferred_sites=frozenset(name for name in crawlers if name in self._partial_sources),
+                )
         else:
             result = await aggregate(
                 q,

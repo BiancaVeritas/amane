@@ -272,6 +272,10 @@
       "preferred_site": {
         "label": "优先来源",
         "description": "手动搜索选中的站点; 其来源链接排到第一位"
+      },
+      "search_sites": {
+        "label": "搜索命中站点",
+        "description": "手动搜索命中的站点, 选中项排第一; 给定时只抓这些站"
       }
     },
     "upscale": {

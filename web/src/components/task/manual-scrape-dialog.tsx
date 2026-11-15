@@ -83,13 +83,12 @@ export function ManualScrapeDialog({
       // 原样交给后端: 地址由后端打开页面读番号. 前端截末段当番号是错的 ——
       // javdb 的 /v/dgVq9 里根本没有番号, 那样哪个来源都搜不到.
       const response = await previewScrape({
-        // 贴了地址就只解析这一个地址: 「添加来源链接」要的是补一条来源, 手动刮削贴地址
-        // 也是同一个意思 —— 用户已经指明了页面, 再拿番号去问一圈只会多出并列结果.
-        // 只输入番号时反过来问各来源, 并由后端在当前路由无命中时扩大到全部路由.
+        // 只有「添加来源链接」才只解析这一个地址 (它要的是补一条来源, 多问一圈只会多出
+        // 并列结果). 手动刮削贴地址与贴番号同义: 地址先读出番号, 再拿番号问各来源.
         body: {
           number: value,
           content_type: boundType,
-          only_that_url: mode === "append" || /^https?:\/\//i.test(value),
+          only_that_url: mode === "append",
         },
         throwOnError: true,
       });
@@ -111,7 +110,12 @@ export function ManualScrapeDialog({
 
   const apply = useMutation({
     mutationFn: async (item: ScrapePreviewItem) => {
-      // 带上选中的站点: 后端据此把该来源排到第一位 (append 模式则只追加到末尾).
+      // 把这次搜索命中的站点全部带上, 选中的排第一.
+      //
+      // 搜索阶段已经按番号问过全部路由了, 刮削阶段再回类型路由问一遍纯属重复; 而且番号
+      // 判断出的类型对选中的站未必成立 (javbus 属有码, 而东京热的 n 系列被判成无码).
+      // 用户的搜索结果就是这次的范围: 命中几个站就抓几个.
+      const hits = Array.from(new Set([item.site, ...(results ?? []).map((hit) => hit.site)]));
       return submitTask({
         body: {
           type: "scrape",
@@ -121,10 +125,12 @@ export function ManualScrapeDialog({
           content_type: boundType,
           manual: true,
           preferred_site: item.site,
+          search_sites: hits,
           append_sources: mode === "append",
-          // 贴了地址就钉在这一个地址上: 用户既然给出了那条来源页, 就按它抓, 别再拿番号
-          // 去问一遍其他来源. 「添加来源链接」一直如此; 手动刮削贴地址时同理.
-          source_url: mode === "append" || looksLikeUrl ? input.trim() : null,
+          // 钉住选中那一条的页面地址: 它可能属于别的类型路由, 按路由去找根本找不到这一家.
+          // 给了地址就照它抓 —— 与用户手贴链接同一个口径.
+          // 「添加来源链接」用输入框里的地址, 手动刮削用选中项自己的地址.
+          source_url: mode === "append" ? input.trim() : item.source_url,
           // 手动刮削要覆盖元数据: 留空集才会重新抓取, 否则命中 raw 快照等于什么都没改.
           use_cache: [],
         },

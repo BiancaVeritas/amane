@@ -3280,7 +3280,8 @@ export const HotSettingsSchema = {
                         '10musume',
                         '1pondo',
                         'caribbeancom',
-                        'pacopacomama'
+                        'pacopacomama',
+                        'muramura'
                     ],
                     western: [
                         'theporndb'
@@ -9526,6 +9527,14 @@ export const ScrapeSubmissionSchema = {
             ],
             title: 'Source Url',
             description: '只抓这一个来源页地址, 不走类型路由 (与 append_sources 配套)'
+        },
+        search_sites: {
+            items: {
+                type: 'string'
+            },
+            type: 'array',
+            title: 'Search Sites',
+            description: '手动搜索命中的站点, 选中项排第一; 给定时只抓这些站, 不走类型路由'
         },
         type: {
             type: 'string',

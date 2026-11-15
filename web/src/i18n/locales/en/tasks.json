@@ -304,6 +304,10 @@
       "preferred_site": {
         "label": "Preferred source",
         "description": "Site picked in manual search; its link goes first"
+      },
+      "search_sites": {
+        "label": "Search hit sites",
+        "description": "Sites hit by the manual search, selected one first; only these are scraped"
       }
     },
     "upscale": {

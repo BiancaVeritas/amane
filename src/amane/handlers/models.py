@@ -135,6 +135,14 @@ class ScrapePayload(BaseModel):
     与 ``append_sources`` 配套: 用户贴哪条链接就只刮哪一条, 不是把全部来源重新问一遍.
     """
 
+    search_sites: list[str] = Field(default_factory=list)
+    """手动搜索命中的站点, 选中项排第一.
+
+    非空时**只抓这些站**, 不再走类型路由. 搜索阶段已经问过全部路由并按番号命中了,
+    再让刮削回到当前类型路由去问一遍, 问的还是同一批站 —— 既重复, 又会漏掉选中项所在的
+    那个类型 (番号判断出的类型对它未必成立). 用户的搜索结果就是这次的范围.
+    """
+
 
 def build_feed_scrape_payload(feed: Feed, number: str) -> ScrapePayload:
     content_type = feed.content_type or infer_content_type(number)

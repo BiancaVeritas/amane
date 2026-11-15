@@ -4951,6 +4951,12 @@ export type ScrapeSubmission = {
      */
     source_url?: string | null;
     /**
+     * Search Sites
+     *
+     * 手动搜索命中的站点, 选中项排第一; 给定时只抓这些站, 不走类型路由
+     */
+    search_sites?: Array<string>;
+    /**
      * Type
      */
     type: 'scrape';
@@ -10044,6 +10050,10 @@ export type ListMappingsData = {
          */
         search?: string;
         /**
+         * Archived
+         */
+        archived?: boolean;
+        /**
          * Offset
          */
         offset?: number;
@@ -10123,6 +10133,34 @@ export type DeleteMappingResponses = {
 };
 
 export type DeleteMappingResponse = DeleteMappingResponses[keyof DeleteMappingResponses];
+
+export type RestoreMappingData = {
+    body?: never;
+    path: {
+        /**
+         * Original
+         */
+        original: string;
+    };
+    query?: never;
+    url: '/api/tag-mappings/restore/{original}';
+};
+
+export type RestoreMappingErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type RestoreMappingError = RestoreMappingErrors[keyof RestoreMappingErrors];
+
+export type RestoreMappingResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
 
 export type ExportMappingsData = {
     body?: never;

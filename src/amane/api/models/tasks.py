@@ -188,6 +188,10 @@ class ScrapeRequest(BaseModel):
         default=None,
         description="只抓这一个来源页地址, 不走类型路由 (与 append_sources 配套)",
     )
+    search_sites: list[str] = Field(
+        default_factory=list,
+        description="手动搜索命中的站点, 选中项排第一; 给定时只抓这些站, 不走类型路由",
+    )
 
     @field_validator("theporndb_uuid", mode="before")
     @classmethod
@@ -236,6 +240,7 @@ class ScrapeRequest(BaseModel):
                     preferred_site=self.preferred_site,
                     append_sources=self.append_sources,
                     source_url=self.source_url,
+                    search_sites=self.search_sites,
                 )
             parsed = parse_file_info(media.path)
             assert parsed.number is not None
@@ -250,6 +255,7 @@ class ScrapeRequest(BaseModel):
                 preferred_site=self.preferred_site,
                 append_sources=self.append_sources,
                 source_url=self.source_url,
+                search_sites=self.search_sites,
             )
         assert self.number is not None
         return ScrapePayload(
@@ -262,6 +268,7 @@ class ScrapeRequest(BaseModel):
             preferred_site=self.preferred_site,
             append_sources=self.append_sources,
             source_url=self.source_url,
+            search_sites=self.search_sites,
         )
 
 
