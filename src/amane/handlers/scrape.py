@@ -933,11 +933,15 @@ class ScrapeHandler(TaskHandler[ScrapePayload, ScrapeResult]):
     async def _auto_organize_followups(
         self, payload: ScrapePayload, file: MediaFile | None, metadata_id: int
     ) -> list[FollowupTask]:
-        """库开启自动整理时为本次刮削的那一个文件描述 ORGANIZE 后继.
+        """库开启自动整理时为本次刮削涉及的文件描述 ORGANIZE 后继.
 
-        范围只有该文件, 且后继只在父成功后创建, 因此整理必然发生在它刮削完成之后.
-        按番号刮削没有可落盘的 `MediaFile` (库因此未知), 不在此列; `media_file_id` 非空但读不到
-        文件或库说明索引与任务不一致, 记 debug 后不链.
+        范围只有这些文件, 且后继只在父成功后创建, 因此整理必然发生在它刮削完成之后.
+
+        ``media_file_id`` 为空不等于「没有文件」: 手动搜索、按番号刮削、以及重新刮削一条已有
+        记录都不带它, 但那条记录在库里往往正挂着文件. 早期只认 ``media_file_id``, 于是这些
+        路径刮完一律不落盘, 文件永远停在「已刮削未整理」. 现在两种入口都算: 给了文件就整理那
+        一条, 没给就按这次的 ``metadata_id`` 找出挂着的全部文件.
+
         ``priority=0``: 与影片任务同档. 早先排最低 (-1), 结果是只要还有刮削排队,
         整理就一直轮不上 —— 每个刮削都派发一条整理, 而刮削一批要几十分钟,
         文件长时间停在「已刮削未落盘」.
@@ -945,34 +949,38 @@ class ScrapeHandler(TaskHandler[ScrapePayload, ScrapeResult]):
         整段 ``except`` 只为不让已写库的刮削任务转为 FAILED; 这一支不可达于任何预期输入, 出现即模型或
         数据库有问题, 按异常记日志. 此时整理不会发生, 该文件停在「已刮削未落盘」, 与完成事务失败同属不覆盖窗口.
         """
-        if payload.media_file_id is None:
-            return []
-        organize = await self._build_auto_organize(payload, file, metadata_id)
-        if organize is None:
-            return []
-        assert file is not None and file.id is not None
-        return [
-            FollowupTask(
-                key=f"organize:{file.id}",
-                task_type=TaskType.ORGANIZE,
-                payload=organize.model_dump(mode="json"),
-                # 比刮削高一级: 同档时按创建时间排序, 刚派生的后继会排在几十个待刮任务之后,
-                # 一部片刮完要等整批刮完才落盘.
-                priority=_FOLLOWUP_PRIORITY,
-            )
-        ]
+        candidates: list[MediaFile] = []
+        if payload.media_file_id is not None:
+            if file is None:
+                current().debug("auto organize skipped: media file missing", media_file_id=payload.media_file_id)
+                return []
+            candidates = [file]
+        else:
+            candidates = await self._repo.get_media_by_metadata_id(metadata_id)
 
-    async def _build_auto_organize(
-        self, payload: ScrapePayload, file: MediaFile | None, metadata_id: int
-    ) -> OrganizePayload | None:
-        """按库配置判断本次刮削该不该整理, 该则交出整理 payload.
+        followups: list[FollowupTask] = []
+        for candidate in candidates:
+            organize = await self._build_auto_organize(candidate, metadata_id)
+            if organize is None:
+                continue
+            followups.append(
+                FollowupTask(
+                    key=f"organize:{candidate.id}",
+                    task_type=TaskType.ORGANIZE,
+                    payload=organize.model_dump(mode="json"),
+                    # 比刮削高一级: 同档时按创建时间排序, 刚派生的后继会排在几十个待刮任务之后,
+                    # 一部片刮完要等整批刮完才落盘.
+                    priority=_FOLLOWUP_PRIORITY,
+                )
+            )
+        return followups
+
+    async def _build_auto_organize(self, file: MediaFile | None, metadata_id: int) -> OrganizePayload | None:
+        """按库配置判断这一个文件该不该整理, 该则交出整理 payload.
 
         判定与后继包装分开: 判定部分要被多处复用, 各自包装成不同的后继形状.
         """
-        if payload.media_file_id is None:
-            return None
         if file is None or file.id is None:
-            current().debug("auto organize skipped: media file missing", media_file_id=payload.media_file_id)
             return None
         try:
             library = await self._repo.get_library(file.library_id)

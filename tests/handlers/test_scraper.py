@@ -2501,3 +2501,62 @@ class TestPreferredSiteOutsideRoute:
         assert _NeverHitsCensored.asked == 0
 
 
+
+
+class TestOrganizeWithoutMediaFileId:
+    """按番号或手动搜索刮削时也要联动整理.
+
+    ``media_file_id`` 为空不等于「没有文件」: 从已有记录点手动搜索、按番号刮削都不带它,
+    但那条记录在库里正挂着文件. 早期只认 ``media_file_id``, 于是这些路径刮完一律不落盘.
+    """
+
+    class _Hit(Crawler):
+        @classmethod
+        def profile(cls) -> CrawlerProfile:
+            return CrawlerProfile(name="javbus", base_url="https://www.javbus.com")
+
+        async def _search(self, query, options=None) -> str | None:
+            return "https://www.javbus.com/n0888"
+
+        async def _scrape(self, url, options=None) -> MediaMetadata | None:
+            return MediaMetadata.model_validate({"number": "n0888", "title": "刮到的标题"})
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_metadata_id_only_still_dispatches_organize(self, repo: Repository, resource_store, tmp_path):
+        # 库里已有一条记录与它的文件.
+        lib = await repo.create_library(name="t", path=str(tmp_path), auto_organize=True)
+        assert lib.id is not None
+        media = await repo.create_media_file(
+            library_id=lib.id, path=str(tmp_path / "n0888.mp4"), status=MediaFileStatus.PENDING
+        )
+        meta = await repo.upsert_metadata(number="n0888", title="旧标题", content_type=ContentType.UNCENSORED)
+        assert meta.id is not None
+        await repo.update_media_file(media.id, metadata_id=meta.id)
+
+        hot = HotSettings()
+        hot.scraping.content_routes[ContentType.UNCENSORED] = ["javbus"]
+        h = ScrapeHandler(
+            repo=repo,
+            factory=FakeFactory({"javbus": self._Hit(client=None)}),
+            resource_store=resource_store,
+            pipeline_config=hot,
+        )
+
+        # 只带 metadata_id, 不带 media_file_id —— 手动搜索提交的形状.
+        result = await h.handle(
+            ScrapePayload(
+                number="n0888",
+                content_type=ContentType.UNCENSORED,
+                metadata_id=meta.id,
+                manual=True,
+                preferred_site="javbus",
+                search_sites=["javbus"],
+                source_url="https://www.javbus.com/n0888",
+                use_cache=[],
+            )
+        )
+
+        assert result.success is True
+        organize = [f for f in result.followups if f.task_type is TaskType.ORGANIZE]
+        assert len(organize) == 1
+        assert media.id in organize[0].payload["media_file_ids"]
