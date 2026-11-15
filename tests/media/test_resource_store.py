@@ -1,6 +1,7 @@
 """测试 ResourceStore 的派生资源 (裁剪), 就地超分与获取失败的收尾."""
 
 import asyncio
+from collections.abc import AsyncIterator
 from typing import TYPE_CHECKING, Any, ClassVar
 from unittest.mock import AsyncMock
 
@@ -408,6 +409,11 @@ class _StubResponse:
         self.status_code = status
         self.quit_now = None
 
+    async def aiter_content(self) -> AsyncIterator[bytes]:
+        """下载路径按流式读取: 桩也要能逐块吐出正文."""
+        if self.content:
+            yield self.content
+
     async def aclose(self) -> None:
         return
 
@@ -725,7 +731,7 @@ async def test_extrafanart_limits_parallel_downloads(resource_store: ResourceSto
     in_flight = 0
     client = AsyncMock()
 
-    async def fake_acquire(url: str, _client: Any) -> Path:
+    async def fake_acquire(url: str, _client: Any, **_kwargs: Any) -> Path:
         nonlocal peak, in_flight
         in_flight += 1
         peak = max(peak, in_flight)

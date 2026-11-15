@@ -56,6 +56,16 @@ def _rewrites_to_get(status: int, method: str) -> bool:
 _MAX_CHUNKS = 4096
 """分片下载的区间数上限. 上游自称的 ``Content-Length`` 直接决定区间数, 不设上限即内存与任务数无界."""
 
+_DEFAULT_DOWNLOAD_CAP = 64 * 1024**2
+"""无 ``Content-Length`` 时的下载字节上限. 谎报长度或干脆不报的上游不能让它撑爆内存."""
+
+_IMAGE_DOWNLOAD_TIMEOUT_S = 5.0
+"""图片下载的请求超时. 图片要么快要么就是没有: 用它比刮削页面的 20 秒短得多,
+一张卡住的图不该占着并发位等满三倍时间."""
+
+_IMAGE_DOWNLOAD_ATTEMPTS = 2
+"""图片下载的总尝试次数 (含首次). 图片重试收益低, 两次足够."""
+
 _IMPERSONATE_REJECTED_STATUSES = frozenset({403, 406})
 """判定「站点拦下此指纹」的状态码: 站点按 TLS 指纹放行时给出的典型响应;
 404 表示资源不存在, 换指纹无意义."""
@@ -641,41 +651,48 @@ class WebClient:
         use_proxy: bool = True,
         egress: EgressPolicy | None = None,
         max_bytes: int | None = None,
+        image: bool = False,
     ) -> bool:
         """下载. 分块阈值、分片大小与并发数取自 ``network`` 配置. 失败返回 False, 并按状态与原因记日志.
 
         ``max_bytes`` 给定时不信任 ``Content-Length``, 走流式写入并在超过上限时中止: 上游谎报长度
         或直接不给长度时, 整份读入内存会耗尽进程内存. 返回 False 时 ``dest`` 可能已有部分内容,
         由调用方决定清理.
+
+        ``image`` 用图片专用的短超时与少次数重试 (见 ``_IMAGE_DOWNLOAD_*``): 图片卡住基本等于
+        上游没有这张图, 按页面的 20 秒 × 3 次去等只会把并发位白白占满.
         """
+        timeout = _IMAGE_DOWNLOAD_TIMEOUT_S if image else None
+        attempts = _IMAGE_DOWNLOAD_ATTEMPTS if image else None
+
         if max_bytes is not None:
-            return await self._download_bounded(url, dest, use_proxy=use_proxy, egress=egress, max_bytes=max_bytes)
+            return await self._download_bounded(
+                url,
+                dest,
+                use_proxy=use_proxy,
+                egress=egress,
+                max_bytes=max_bytes,
+                timeout=timeout,
+                attempts=attempts,
+            )
 
         file_size, _ = await self._probe(url, use_proxy=use_proxy, egress=egress)
 
         if file_size and file_size > self._chunked_threshold:
             return await self._download_chunked(url, dest, file_size, use_proxy=use_proxy, egress=egress)
 
-        try:
-            content = await self.get_bytes(url, use_proxy=use_proxy, egress=egress)
-        except RequestError as e:
-            logger.error(
-                "download failed",
-                url=url,
-                status=e.failure.status if e.failure else None,
-                reason=e.reason,
-                error=e.message,
-            )
-            return False
-
-        try:
-            dest.parent.mkdir(parents=True, exist_ok=True)
-            async with aiofiles.open(dest, "wb") as f:
-                await f.write(content)
-            return True
-        except Exception as e:
-            logger.error("file write failed", path=str(dest), error=str(e))
-            return False
+        # 小文件也走流式写入: 有些 CDN 对非流式请求响应极慢 (实测同一张 228KB 图片:
+        # 非流式 26 秒, 流式 3.5 秒), 而流式还能边收边落盘, 不必把整份正文攒进内存.
+        # 无 Content-Length 时同样按默认上限兜底, 免得谎报长度的上游撑爆内存.
+        return await self._download_bounded(
+            url,
+            dest,
+            use_proxy=use_proxy,
+            egress=egress,
+            max_bytes=file_size if file_size else _DEFAULT_DOWNLOAD_CAP,
+            timeout=timeout,
+            attempts=attempts,
+        )
 
     async def _download_bounded(
         self,
@@ -685,10 +702,20 @@ class WebClient:
         use_proxy: bool,
         egress: EgressPolicy | None,
         max_bytes: int,
+        timeout: float | None = None,
+        attempts: int | None = None,
     ) -> bool:
         """限长下载: 边接收边写入, 超限即中止, 不把正文攒在内存里."""
         try:
-            resp = await self.request("GET", url, use_proxy=use_proxy, egress=egress, stream=True)
+            resp = await self.request(
+                "GET",
+                url,
+                use_proxy=use_proxy,
+                egress=egress,
+                stream=True,
+                timeout=timeout,
+                max_attempts=attempts,
+            )
         except RequestError as e:
             logger.error(
                 "download failed",

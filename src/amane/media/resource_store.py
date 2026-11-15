@@ -8,6 +8,7 @@
 import asyncio
 import hashlib
 import re
+import time
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from enum import StrEnum
@@ -41,7 +42,13 @@ _PLACEHOLDER_PATH_MARKERS: tuple[str, ...] = ("/now_printing/", "/noimage.")
 
 #: 剧照同时下载数. 一部片常有几十张, 不限并发会把连接池打满: 请求排队到超时,
 #: 逐个重试下来整条任务能卡十几分钟.
-_EXTRAFANART_CONCURRENCY = 10
+#: 也不能给高: 多个任务刮同一站点时并发是相乘的 (任务数 × 本值). 实测六个任务各 10 并发
+#: 打同一个图片 CDN, 整个 host 被限速到「每秒不足 1 字节」, 每张都超时重试, 比低并发更慢.
+_EXTRAFANART_CONCURRENCY = 4
+
+#: 单张图片的字节上限. 图片远小于它, 但给定上限能让下载直接走限长分支,
+#: 省掉一次 HEAD 探测 —— 一批几十张时那是一次几十个请求.
+_IMAGE_MAX_BYTES = 32 * 1024**2
 
 
 def _is_placeholder_url(url: str) -> bool:
@@ -234,10 +241,14 @@ class ResourceStore:
             return cached
 
         # 上游改派占位图时跳过, 不占用 dest 也不写记录.
-        final_url = await client.resolve_final_url(url, egress=egress)
-        if _is_placeholder_url(final_url):
-            logger.warning("resource is upstream placeholder", url=url, final_url=final_url)
-            return None
+        # 只对非图片资源做这次探测: 剧照一批几十张, 每张都先 HEAD 一次会把同一个 host
+        # 的请求量翻倍, 而图片 CDN 对此很敏感 (会被限速到 1 字节/秒, 整批卡住).
+        # 占位图本身就下不下来, 交给下载失败分支处理即可.
+        if not image_only:
+            final_url = await client.resolve_final_url(url, egress=egress)
+            if _is_placeholder_url(final_url):
+                logger.warning("resource is upstream placeholder", url=url, final_url=final_url)
+                return None
 
         dest = self._compute_path(url)
         dest.parent.mkdir(parents=True, exist_ok=True)
@@ -249,9 +260,24 @@ class ResourceStore:
         # 临时文件, 不触碰 dest (dest 只由 URL 决定, 而这里已按 URL 串行, 改名不会被并发写覆盖).
         # 临时文件保留原扩展名: download 的实现可能按扩展名决定写出的格式.
         tmp = dest.with_name(f"{dest.stem}.{uuid4().hex}.part{dest.suffix}")
+        _started = time.monotonic()
         try:
-            if not await client.download(url, tmp, egress=egress, max_bytes=max_bytes):
-                logger.warning("resource download failed", url=url, host=urlsplit(url).hostname)
+            # image_only 就是「这是一张图」: 用短超时与少次数重试, 别按页面的大小去等.
+            # 同时给它一个字节上限, 让下载走限长分支 —— 那条分支不再先发 HEAD 探长度,
+            # 图片一批几十张时这一次探测就是几十个多余请求, 而图片 CDN 对请求量很敏感.
+            if not await client.download(
+                url,
+                tmp,
+                egress=egress,
+                max_bytes=max_bytes if max_bytes is not None else (_IMAGE_MAX_BYTES if image_only else None),
+                image=image_only,
+            ):
+                logger.warning(
+                    "resource download failed",
+                    url=url,
+                    host=urlsplit(url).hostname,
+                    elapsed_s=round(time.monotonic() - _started, 2),
+                )
                 return None
             mime = detect_media_type(tmp)
             if image_only and not is_image_mime(mime):
@@ -262,6 +288,15 @@ class ResourceStore:
             tmp.unlink(missing_ok=True)
 
         size = dest.stat().st_size
+        if image_only:
+            # 图片是批量下载的主耗时, 记下每张的实际耗时: 一眼能看出是站点慢、
+            # 几张拖后腿, 还是整批都被限速.
+            logger.info(
+                "image downloaded",
+                host=urlsplit(url).hostname,
+                bytes=size,
+                elapsed_s=round(time.monotonic() - _started, 2),
+            )
         content_hash = self._hash_file(dest)
 
         # 写入记录.
@@ -496,18 +531,47 @@ class ResourceStore:
         client: WebClient,
     ) -> list[Path]:
         for site in priority:
-            if site not in urls_by_site:
+            urls = urls_by_site[site]
+            if not urls:
                 continue
             # 剧照动辄几十张, 全部并发会把连接池打满: 每个请求排队到超时, 再逐个重试,
             # 整条任务因此卡十几分钟. 限住同时在跑的请求数.
             gate = asyncio.Semaphore(_EXTRAFANART_CONCURRENCY)
+            total = len(urls)
+            done = 0
 
-            async def one(url: str, _gate: asyncio.Semaphore = gate) -> Path | None:
+            async def one(
+                url: str,
+                _gate: asyncio.Semaphore = gate,
+                _site: str = site,
+                _total: int = total,
+            ) -> Path | None:
+                nonlocal done
                 async with _gate:
-                    return await self.acquire(url, client)
+                    try:
+                        # 剧照址一定是图片: 跳过占位图探测, 少一次 HEAD.
+                        return await self.acquire(url, client, image_only=True)
+                    finally:
+                        done += 1
+                        # 每 10 张报一次: 几十张图要跑几十秒, 中间没有任何输出时
+                        # 界面上只能看到「卡住」, 分不清是在下第几张.
+                        if done % 10 == 0 or done == _total:
+                            logger.info(
+                                "extrafanart progress",
+                                site=_site,
+                                done=done,
+                                total=_total,
+                            )
 
-            results = await asyncio.gather(*(one(u) for u in urls_by_site[site]))
+            results = await asyncio.gather(*(one(u) for u in urls))
             paths = [p for p in results if p is not None]
+            logger.info(
+                "extrafanart finished",
+                site=site,
+                saved=len(paths),
+                total=total,
+                failed=total - len(paths),
+            )
             if paths:
                 return paths
         return []
