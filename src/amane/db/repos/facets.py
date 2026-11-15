@@ -768,6 +768,9 @@ async def _actors_sharing_name(session: AsyncSession, actor: Actor) -> list[Acto
     """展示名或别名与 ``actor`` 的名字集合有交集的其它实体.
 
     先用展示名与别名做一次粗筛, 精确判定交给 ``actor_merge.compare``.
+
+    筛法走 SQL 而不是把两张表全读进内存: 演员表有几万行, 每写一次演员都全表扫一遍,
+    一部片三个人就是十几万行的读取与归一化, 刮削任务的耗时会被拖到分钟级.
     """
     own = {normalize_name(actor.name)}
     if actor.id is not None:
@@ -776,20 +779,35 @@ async def _actors_sharing_name(session: AsyncSession, actor: Actor) -> list[Acto
     if not own:
         return []
 
-    rows = list((await session.exec(select(Actor))).all())
-    alias_rows = list((await session.exec(select(ActorAlias))).all())
-    aliases_by_actor: dict[int, set[str]] = {}
-    for row in alias_rows:
-        aliases_by_actor.setdefault(row.actor_id, set()).add(normalize_name(row.name))
+    # 归一化后的名字是「去空白 + NFKC + casefold」, 与库里存的原文不一定相同, 因此按
+    # 同一归一化函数在 SQL 里比对. SQLite 的 lower 只处理 ASCII, 这里退化用「候选名字的
+    # 原文集合」做 IN 查询, 再由 Python 侧按归一化结果复核.
+    raw_names = {actor.name, *own}
+    rows = list((await session.exec(select(Actor).where(col(Actor.name).in_(raw_names)))).all())
+    if actor.id is not None:
+        rows.extend(
+            (
+                await session.exec(
+                    select(Actor)
+                    .join(ActorAlias, col(ActorAlias.actor_id) == col(Actor.id))
+                    .where(col(ActorAlias.name).in_(raw_names))
+                )
+            ).all()
+        )
 
     found: list[Actor] = []
+    seen: set[int] = set()
     for other in rows:
-        if other.id == actor.id:
+        if other.id == actor.id or (other.id is not None and other.id in seen):
             continue
-        names = {normalize_name(other.name), *aliases_by_actor.get(other.id or 0, set())}
+        names = {normalize_name(other.name)}
+        if other.id is not None:
+            names.update(normalize_name(a) for a in await list_actor_aliases(session, other.id))
         names.discard("")
         if names & own:
             found.append(other)
+            if other.id is not None:
+                seen.add(other.id)
     return found
 
 
