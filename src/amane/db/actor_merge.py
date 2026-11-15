@@ -4,13 +4,10 @@
 
 1. **名字有交集** —— 展示名或任一侧别名命中对方任一名字. 名字只是"疑似", 不能单独作为依据:
    日文艺名重名常见, 「あかり」可能是多人.
-2. **身体数据一致** —— ``birthday`` 与 ``height`` 必须都存在且完全相等. 这是判据主体:
-   同一个人换艺名不会换生日与身高, 而重名的两个人几乎不可能两者都一样.
-   ``bust`` / ``waist`` / ``hip`` 与 ``cup`` 在双方都有值时也须相等, 用来挡住生日身高巧合
-   相同的极少数情况.
-
-任一项存在但不等 → 不合并. 数据缺失的字段不参与比较 (缺生日的人仍可与另一位缺生日的比对,
-但生日+身高必须都在才可能合并).
+2. **双方都有的身体数据一致** —— 生日、身高、三围、罩杯, 有哪项比哪项, 只要双方都有值就必须
+   相等. 不比"齐全": 许多演员只刮到其中一两项, 强求生日身高俱全等于永不合并. 而任一项对不上
+   就足以说明不是同一人, 已能挡住重名.
+   一项可比的资料都没有时不合并 —— 只凭名字会把重名的不同人并成一个.
 """
 
 from __future__ import annotations
@@ -73,24 +70,31 @@ def compare(
     right: Actor,
     right_aliases: list[str],
 ) -> MergeVerdict:
-    """判定两位演员是否为同一人."""
+    """判定两位演员是否为同一人.
+
+    闸门一: 名字有交集. 闸门二: 双方都有的身体数据必须一致 —— 有生日就比生日, 有身高就比
+    身高, 有哪项比哪项. 不要求这些字段同时齐备: 许多演员只刮到其中一两项, 强求齐全等于
+    永不合并, 而任何一项对不上都足以说明不是同一人, 已经足以挡住重名.
+    """
     left_names = _names_of(left, left_aliases)
     right_names = _names_of(right, right_aliases)
     if not (left_names & right_names):
         return MergeVerdict(False, "名字无交集")
 
-    # 硬条件: 生日与身高都必须在, 且完全相等.
+    # 生日: 双方都有时才比较.
     left_birthday, right_birthday = normalize_birthday(left.birthday), normalize_birthday(right.birthday)
-    if left_birthday is None or right_birthday is None:
-        return MergeVerdict(False, "缺少生日")
-    if left_birthday != right_birthday:
-        return MergeVerdict(False, f"生日不同 {left_birthday} / {right_birthday}")
+    compared = False
+    if left_birthday is not None and right_birthday is not None:
+        if left_birthday != right_birthday:
+            return MergeVerdict(False, f"生日不同 {left_birthday} / {right_birthday}")
+        compared = True
 
+    # 身高: 双方都有时才比较.
     left_height, right_height = _field(left.height), _field(right.height)
-    if left_height is None or right_height is None:
-        return MergeVerdict(False, "缺少身高")
-    if left_height != right_height:
-        return MergeVerdict(False, f"身高不同 {left_height} / {right_height}")
+    if left_height is not None and right_height is not None:
+        if left_height != right_height:
+            return MergeVerdict(False, f"身高不同 {left_height} / {right_height}")
+        compared = True
 
     # 辅助条件: 双方都有的三围与罩杯须一致, 不一致即判为不同人.
     for label, a, b in (
@@ -98,14 +102,21 @@ def compare(
         ("腰围", _field(left.waist), _field(right.waist)),
         ("臀围", _field(left.hip), _field(right.hip)),
     ):
-        if a is not None and b is not None and a != b:
-            return MergeVerdict(False, f"{label}不同 {a} / {b}")
+        if a is not None and b is not None:
+            if a != b:
+                return MergeVerdict(False, f"{label}不同 {a} / {b}")
+            compared = True
 
     left_cup, right_cup = normalize_cup(left.cup), normalize_cup(right.cup)
-    if left_cup is not None and right_cup is not None and left_cup != right_cup:
-        return MergeVerdict(False, f"罩杯不同 {left_cup} / {right_cup}")
+    if left_cup is not None and right_cup is not None:
+        if left_cup != right_cup:
+            return MergeVerdict(False, f"罩杯不同 {left_cup} / {right_cup}")
+        compared = True
 
-    return MergeVerdict(True, "生日身高一致, 名字有交集")
+    if not compared:
+        # 一项可比的资料都没有: 只凭名字就合并会把重名的不同人并成一个.
+        return MergeVerdict(False, "无可比的资料")
+    return MergeVerdict(True, "名字有交集, 可比资料一致")
 
 
 def needs(actor: Actor, actor_aliases: list[str], other: Actor, other_aliases: list[str]) -> bool:
