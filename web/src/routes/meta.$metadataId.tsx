@@ -1069,26 +1069,14 @@ function TitleDetailPage() {
             </FieldBlock>
           )}
 
-          {(item.plot || item.original_plot) && (
-            <Stack gap="sm">
-              {item.plot && (
-                <FieldBlock label={t("detail.fields.plot")} lock={lockProps("plot")}>
-                  <Text size="sm" style={{ whiteSpace: "pre-wrap" }}>
-                    {item.plot}
-                  </Text>
-                </FieldBlock>
-              )}
-              {item.original_plot && (
-                <FieldBlock
-                  label={t("detail.fields.originalPlot")}
-                  lock={!item.plot ? lockProps("plot") : undefined}
-                >
-                  <Text size="sm" style={{ whiteSpace: "pre-wrap" }}>
-                    {item.original_plot}
-                  </Text>
-                </FieldBlock>
-              )}
-            </Stack>
+          {/* 只显示译文剧情: 原剧情在同一处编辑框里也能看到, 详情页重复显示一份长文本
+              只会把页面撑得很长. */}
+          {item.plot && (
+            <FieldBlock label={t("detail.fields.plot")} lock={lockProps("plot")}>
+              <Text size="sm" style={{ whiteSpace: "pre-wrap" }}>
+                {item.plot}
+              </Text>
+            </FieldBlock>
           )}
 
           {hasExtrafanart && (
