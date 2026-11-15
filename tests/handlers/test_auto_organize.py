@@ -103,13 +103,24 @@ async def test_auto_organize_disabled_chains_nothing(repo: Repository, tmp_path:
 
 
 @pytest.mark.asyncio(loop_scope="function")
-async def test_auto_organize_ignores_by_number_scrape(repo: Repository, tmp_path: Path) -> None:
-    """按番号刮削没有可落盘的文件, 库未知, 因此不链整理."""
-    await _library_with_file(repo, tmp_path, auto_organize=True)
+async def test_auto_organize_adopts_unlinked_file_by_number(repo: Repository, tmp_path: Path) -> None:
+    """按番号刮削也要接上库里同番号的文件并整理.
+
+    用户手动搜索的场景就是「原来那条任务刮失败了, 文件还躺在库里」—— 此时文件行还是未关联
+    状态, 刮削成功后它理应继续落盘.
+    """
+    _, media_id = await _library_with_file(repo, tmp_path, auto_organize=True)
     result = await _handler(repo).handle(ScrapePayload(number="MIDV-123", media_file_id=None))
 
     assert result.success is True
-    assert _organize_followups(result) == []
+    organize = _organize_followups(result)
+    assert len(organize) == 1
+    assert media_id in organize[0].payload["media_file_ids"]
+    # 文件被接手: 关联到本次的条目, 状态推进到已刮削.
+    adopted = await repo.get_media_file(media_id)
+    assert adopted is not None
+    assert adopted.metadata_id is not None
+    assert adopted.status is MediaFileStatus.SCRAPED
 
 
 @pytest.mark.asyncio(loop_scope="function")

@@ -841,6 +841,10 @@ class ScrapeHandler(TaskHandler[ScrapePayload, ScrapeResult]):
         if payload.content_type != ContentType.WESTERN:
             t0 = time.monotonic()
             await finalize_media_file(self._repo, payload.media_file_id, meta.id)
+            # 手动搜索 / 按番号刮削不带 media_file_id, 但库里往往正躺着这部片的文件 —— 用户
+            # 之所以手动搜索, 就是原先那条任务刮失败了, 要让它接着落盘. 不把文件接过来, 它
+            # 就永远停在 PENDING, 随后也因为关联不上而派不出整理任务.
+            await self._adopt_number_files(meta.number, meta.id, payload.media_file_id)
             current().info("scrape step", step="finalize_media_file", duration_s=round(time.monotonic() - t0, 2))
 
         # 手动搜索: 用户点的那条来源排到第一位.
@@ -957,6 +961,12 @@ class ScrapeHandler(TaskHandler[ScrapePayload, ScrapeResult]):
             candidates = [file]
         else:
             candidates = await self._repo.get_media_by_metadata_id(metadata_id)
+            current().info(
+                "auto organize candidates",
+                metadata_id=metadata_id,
+                count=len(candidates),
+                ids=[item.id for item in candidates],
+            )
 
         followups: list[FollowupTask] = []
         for candidate in candidates:
@@ -974,6 +984,33 @@ class ScrapeHandler(TaskHandler[ScrapePayload, ScrapeResult]):
                 )
             )
         return followups
+
+    async def _adopt_number_files(self, number: str, metadata_id: int, already: int | None) -> None:
+        """把库内同番号、还没落到任何条目上的文件关联到本次的条目.
+
+        用户手动搜索的场景几乎都是「原来那条任务失败了, 文件刮不上」—— 此时文件行还是
+        PENDING / 未关联, 手动搜索成功后它理应继续往下走. 只认 ``media_file_id`` 会让这类
+        文件永远留在库里不动.
+
+        只接手**未关联**的行: 已挂在别的条目下的文件属于另一部作品, 顺手改它的关联会拆散
+        用户既有的整理结果.
+        """
+        try:
+            candidates = await self._repo.list_media_files(limit=None, search=number)
+        except Exception:
+            current().exception("adopt number files failed", number=number)
+            return
+        for candidate in candidates:
+            if candidate.id is None or candidate.id == already:
+                continue
+            if candidate.metadata_id is not None:
+                continue
+            if canonical_number(candidate.number or "") != canonical_number(number):
+                continue
+            await self._repo.update_media_file(
+                candidate.id, status=MediaFileStatus.SCRAPED, metadata_id=metadata_id
+            )
+            current().info("adopted unlinked file", media_file_id=candidate.id, number=number)
 
     async def _build_auto_organize(self, file: MediaFile | None, metadata_id: int) -> OrganizePayload | None:
         """按库配置判断这一个文件该不该整理, 该则交出整理 payload.

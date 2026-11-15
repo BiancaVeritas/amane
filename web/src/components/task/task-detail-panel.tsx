@@ -232,7 +232,15 @@ export function TaskDetailPanel({ task, linkKey, actions }: TaskDetailPanelProps
           </Button>
         )}
       </Group>
-      <ManualScrapeDialog opened={manualOpen} onClose={() => setManualOpen(false)} />
+      {/* 把本任务手上的文件一并带过去: 用户点手动搜索通常就是因为这条刮失败了, 要让它接着
+          落盘. 缺了这个 id, 新任务既不知道归档哪个文件, 也派不出整理. */}
+      <ManualScrapeDialog
+        opened={manualOpen}
+        onClose={() => setManualOpen(false)}
+        mediaFileId={
+          typeof detail?.payload?.media_file_id === "number" ? detail.payload.media_file_id : null
+        }
+      />
     </Stack>
   );
 }

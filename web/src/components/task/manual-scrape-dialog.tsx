@@ -19,6 +19,13 @@ interface ManualScrapeDialogProps {
    */
   metadata?: { id: number; number: string; content_type: ContentType } | null;
   /**
+   * 从任务详情页进来时, 沿用那个任务手上的文件.
+   *
+   * 用户点手动搜索的场景几乎都是「原来那条任务刮失败了」, 失败任务里就记着这部片的文件.
+   * 不传下去的话, 新任务既不知道该落盘哪个文件, 也派不出整理 —— 文件就永远停在未整理.
+   */
+  mediaFileId?: number | null;
+  /**
    * 落库方式:
    * - `force` (默认): 按选中的来源重置字段与来源顺序, 选中站点排第一.
    * - `append`: 只把选中的来源链接追到 `source_urls` 末尾, 不动既有链接与字段.
@@ -36,6 +43,7 @@ export function ManualScrapeDialog({
   opened,
   onClose,
   metadata,
+  mediaFileId,
   mode = "force",
 }: ManualScrapeDialogProps) {
   const { t } = useTranslation(["tasks", "common"]);
@@ -122,6 +130,9 @@ export function ManualScrapeDialog({
           // 绑定条目时把范围钉在这条记录上, 否则按选中的番号走.
           number: boundNumber ?? item.number,
           metadata_id: metadata?.id ?? null,
+          // 从失败任务进来时沿用它的文件: 刮削成功后要接着把这个文件整理落盘, 缺了它就派不出
+          // 整理任务, 文件永远停在未整理.
+          media_id: mediaFileId ?? null,
           content_type: boundType,
           manual: true,
           preferred_site: item.site,
