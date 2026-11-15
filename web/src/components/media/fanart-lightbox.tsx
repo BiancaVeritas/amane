@@ -250,12 +250,14 @@ export function FanartLightbox({ images, initialIndex = 0, onClose }: FanartLigh
 
 interface ThumbStripProps {
   images: string[];
-  /** Visible thumb limit; remainder shown as +N (still opens lightbox). Default: all. */
+  /** Visible thumb limit; remainder shown as +N (opens the full gallery). Default: all. */
   maxVisible?: number;
   thumbStyle?: CSSProperties;
   /** Called after opening lightbox; use to stopPropagation from parent selectors. */
   onThumbClick?: (e: MouseEvent) => void;
   empty?: ReactNode;
+  /** 「+N」点击时的动作. 不给则退回打开大图浏览 (从第一张未显示的开始). */
+  onShowAll?: () => void;
 }
 
 /** Thumbnail strip that opens FanartLightbox on click. */
@@ -265,6 +267,7 @@ export function FanartStrip({
   thumbStyle,
   onThumbClick,
   empty = null,
+  onShowAll,
 }: ThumbStripProps) {
   const [opened, { open, close }] = useDisclosure(false);
   const [start, setStart] = useState(0);
@@ -327,13 +330,22 @@ export function FanartStrip({
           <Box
             component="button"
             type="button"
-            onClick={(e) => openAt(shown.length, e)}
+            onClick={(e) => {
+              if (onShowAll) {
+                e.stopPropagation();
+                onShowAll();
+                return;
+              }
+              openAt(shown.length, e);
+            }}
             style={{
               padding: "0 8px",
               height: size.height ?? 64,
               border: "1px dashed var(--mantine-color-default-border)",
               borderRadius: "var(--mantine-radius-sm)",
-              cursor: "zoom-in",
+              // 「+N」不是一个可放大的图片, 是打开总览的入口: 放大镜在这里会误导.
+              // 只有退回直接开大图的那种情形才用 zoom-in.
+              cursor: onShowAll ? "pointer" : "zoom-in",
               background: "var(--mantine-color-default-hover)",
               color: "var(--mantine-color-dimmed)",
               fontSize: "var(--mantine-font-size-xs)",

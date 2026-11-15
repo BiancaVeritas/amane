@@ -1078,7 +1078,11 @@
     "alignCenter": "居中",
     "alignRight": "靠右",
     "alignCustom": "自定义",
-    "customLeftHint": "自定义位置: 左边距按封面宽度的比例填"
+    "customLeftHint": "自定义位置: 左边距按封面宽度的比例填",
+    "import": "导入规则",
+    "export": "导出规则",
+    "imported": "规则已导入",
+    "importFailed": "导入失败"
   },
   "cropCalibrate": {
     "title": "标定裁切",

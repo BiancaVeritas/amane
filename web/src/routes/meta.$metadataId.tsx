@@ -66,6 +66,7 @@ import { UserTagActions } from "@/components/media/user-tag-add";
 import { ManualScrapeDialog } from "@/components/task/manual-scrape-dialog";
 import { VrBadge } from "@/components/media/vr-badge";
 import { FanartLightbox, FanartStrip } from "@/components/media/fanart-lightbox";
+import { FanartGalleryDialog } from "@/components/media/fanart-gallery-dialog";
 import { FilePhaseBadges, FilePhaseOverlay } from "@/components/media/file-phase-badges";
 import { OverlayChip, OverlayChipLabel } from "@/components/media/overlay-chip";
 import { VrOverlayChip } from "@/components/media/vr-badge";
@@ -74,6 +75,7 @@ import { PosterCropDialog } from "@/components/media/poster-crop-dialog";
 import { useConfig, useUpdateConfig } from "@/hooks/use-config";
 import { useUIStore } from "@/stores/ui";
 import { type CropRule, CropRuleEditorDialog } from "@/components/settings/crop-rules-dialog";
+import { upsertCropRule } from "@/lib/crop-rules";
 import { useUploadMetaImage } from "@/components/media/use-upload-meta-image";
 import { MergeDialog } from "@/components/metadata/merge-dialog";
 import { type JSONSchemaObject, resolveSchema } from "@/components/schema-form/schema";
@@ -213,6 +215,8 @@ function TitleDetailPage() {
   const thumbPickerRef = useRef<HTMLInputElement>(null);
   const posterPickerRef = useRef<HTMLInputElement>(null);
   const [coverLightboxOpen, coverLightbox] = useDisclosure(false);
+  // 剧照总览弹窗: 缩略条只显示前几张, 其余从「+N」进来.
+  const [galleryOpen, setGalleryOpen] = useState(false);
   const [playingTrailer, setPlayingTrailer] = useState(false);
   // 播放失败的预告片地址: 只对该地址有效, 记录之外 (条目切换或重新刮削换了地址) 一律不算失败.
   const [failedTrailerUrl, setFailedTrailerUrl] = useState<string | null>(null);
@@ -515,14 +519,10 @@ function TitleDetailPage() {
   }
 
   if (isLoading) {
-    // DEBUG: 带上编号与状态, 确认到底是哪个查询卡住.
     return (
-      <Stack gap="xs">
+      <Group justify="center" py="xl">
         <Loader />
-        <Text size="sm" c="dimmed">
-          DEBUG: isLoading id={id} validId={String(validId)}
-        </Text>
-      </Stack>
+      </Group>
     );
   }
 
@@ -1084,7 +1084,14 @@ function TitleDetailPage() {
               label={`${t("detail.fields.extrafanart")} (${item.extrafanart?.length})`}
               lock={lockProps("extrafanart")}
             >
-              <FanartStrip images={item.extrafanart ?? []} />
+              {/* 只渲染前 12 张缩略图, 其余用 +N 打开总览弹窗.
+                  剧照常有几十张, 而每一张外链缩略图都要经 /api/resources/proxy 现场下载:
+                  全部铺开会瞬间打出几十个下载请求, 详情页因此长时间转圈. */}
+              <FanartStrip
+                images={item.extrafanart ?? []}
+                maxVisible={12}
+                onShowAll={() => setGalleryOpen(true)}
+              />
             </FieldBlock>
           )}
 
@@ -1406,7 +1413,16 @@ function TitleDetailPage() {
         <FanartLightbox images={[coverSrc]} onClose={coverLightbox.close} />
       )}
 
-      {/* 「精准裁切」带出来的规则草稿: 复用设置页的编辑器, 保存即追加一条规则. */}
+      {/* 剧照总览: 缩略条的「+N」进这里, 点某张再开大图. */}
+      <FanartGalleryDialog
+        opened={galleryOpen}
+        onClose={() => setGalleryOpen(false)}
+        images={item.extrafanart ?? []}
+        title={t("detail.fields.extrafanart")}
+      />
+
+      {/* 「精准裁切」带出来的规则草稿: 复用设置页的编辑器. 条件相同则覆盖原规则 ——
+          同一组条件留两份等于让「哪个窗口生效」靠列表顺序碰运气. */}
       <CropRuleEditorDialog
         opened={ruleDraft !== null}
         initial={ruleDraft ?? BLANK_RULE}
@@ -1414,7 +1430,7 @@ function TitleDetailPage() {
         onSubmit={(rule) => {
           setRuleDraft(null);
           addCropRuleMutation.mutate({
-            body: { scraping: { poster_crop_rules: [...cropRules, rule] } },
+            body: { scraping: { poster_crop_rules: upsertCropRule(cropRules, rule) } },
           });
         }}
       />

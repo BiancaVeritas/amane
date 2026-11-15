@@ -14,28 +14,16 @@ import {
 } from "@mantine/core";
 import { IconPhoto, IconPlus, IconTrash } from "@tabler/icons-react";
 import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { useRef, useState } from "react";
+import { notifications } from "@mantine/notifications";
 import { useTranslation } from "react-i18next";
 import { listFacetsOptions } from "@/client/@tanstack/react-query.gen";
 import { Z_INDEX } from "@/lib/z-index";
+import { type CropRule, upsertCropRule } from "@/lib/crop-rules";
 import { CropCalibrateDialog } from "./crop-calibrate-dialog";
-
-/** 后端 ``PosterCropRule`` 的等价形状; 字段全部可选, 裁切窗口按封面比例 0~1. */
-export interface CropRule {
-  name?: string;
-  series?: string | null;
-  number_prefix?: string | null;
-  filename_keyword?: string | null;
-  studio?: string | null;
-  publisher?: string | null;
-  use_aspect: boolean;
-  aspect: number;
-  align: "left" | "center" | "right" | "custom";
-  left: number;
-  top: number;
-  width: number;
-  height: number;
-}
+// 类型可以继续从这里借, 它不会被当成运行时代码; 而普通函数不再转出 ——
+// 组件文件同时导出函数会让 React Fast Refresh 判定为「导出不兼容」, 改一次就得整页刷新.
+export type { CropRule } from "@/lib/crop-rules";
 
 interface CropRulesDialogProps {
   opened: boolean;
@@ -96,6 +84,50 @@ const FACET_PICK_LIMIT = 1000;
 export function CropRulesDialog({ opened, onClose, rules, onChange }: CropRulesDialogProps) {
   const { t } = useTranslation(["settings", "common"]);
   const [editing, setEditing] = useState<{ rule: CropRule; index: number | null } | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  /** 导出成一个 JSON 文件: 规则只是配置里的一段, 用户在别的实例上粘回去要能手改. */
+  const exportRules = () => {
+    // 空字符串的备注名与 null 的限制条件都不写进文件: 导出的东西是给人看、
+    // 给人手改的, 满屏的 "name": "" 只会淹没真正有意义的字段.
+    const cleaned = rules.map((rule) => {
+      const entries = Object.entries(rule).filter(([key, value]) => {
+        if (key === "name") return Boolean(value);
+        return value !== null && value !== undefined;
+      });
+      return Object.fromEntries(entries);
+    });
+    const payload = JSON.stringify({ version: 1, rules: cleaned }, null, 2);
+    const url = URL.createObjectURL(new Blob([payload], { type: "application/json" }));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "poster_crop_rules.json";
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  /**
+   * 从 JSON 导入: 逐条按条件并入, 条件相同覆盖原条.
+   *
+   * 只认有意义的条目: 文件可能是手改过的, 缺字段的条目塞进列表只会让匹配行为变得不可预期.
+   */
+  const importRules = async (file: File) => {
+    const text = await file.text();
+    const parsed: unknown = JSON.parse(text);
+    const incoming = Array.isArray(parsed)
+      ? parsed
+      : typeof parsed === "object" &&
+          parsed !== null &&
+          Array.isArray((parsed as { rules?: unknown }).rules)
+        ? (parsed as { rules: unknown[] }).rules
+        : null;
+    if (incoming === null) throw new Error("文件里没有 rules 数组");
+    const valid = incoming.filter(
+      (item): item is CropRule => typeof item === "object" && item !== null && "use_aspect" in item,
+    );
+    if (valid.length === 0) throw new Error("没有可用的规则");
+    onChange(valid.reduce<CropRule[]>((acc, rule) => upsertCropRule(acc, rule), rules));
+  };
 
   const describe = (rule: CropRule) =>
     [
@@ -124,7 +156,9 @@ export function CropRulesDialog({ opened, onClose, rules, onChange }: CropRulesD
 
   const commit = (rule: CropRule) => {
     if (editing?.index === null || editing?.index === undefined) {
-      onChange([...rules, rule]);
+      // 条件相同的规则覆盖原条, 不再并列一条: 两条同条件的规则靠先后决定谁生效,
+      // 改了一次就多一行, 分不清哪条真正在起作用.
+      onChange(upsertCropRule(rules, rule));
     } else {
       const next = [...rules];
       next[editing.index] = rule;
@@ -144,9 +178,45 @@ export function CropRulesDialog({ opened, onClose, rules, onChange }: CropRulesD
         zIndex={Z_INDEX.ruleList}
       >
         <Stack gap="sm">
-          <Text size="sm" c="dimmed">
-            {t("cropRules.dialogHint")}
-          </Text>
+          <Group justify="space-between" align="flex-start" wrap="nowrap">
+            <Text size="sm" c="dimmed">
+              {t("cropRules.dialogHint")}
+            </Text>
+            <Group gap="xs" wrap="nowrap">
+              <Button variant="light" size="compact-sm" onClick={() => fileRef.current?.click()}>
+                {t("cropRules.import")}
+              </Button>
+              <input
+                ref={fileRef}
+                hidden
+                type="file"
+                accept="application/json,.json"
+                onChange={(event) => {
+                  const file = event.currentTarget.files?.[0];
+                  event.currentTarget.value = "";
+                  if (!file) return;
+                  void importRules(file)
+                    .then(() =>
+                      notifications.show({ message: t("cropRules.imported"), color: "teal" }),
+                    )
+                    .catch((error: unknown) => {
+                      notifications.show({
+                        message: `${String(t("cropRules.importFailed"))}: ${String(error)}`,
+                        color: "red",
+                      });
+                    });
+                }}
+              />
+              <Button
+                variant="light"
+                size="compact-sm"
+                onClick={exportRules}
+                disabled={!rules.length}
+              >
+                {t("cropRules.export")}
+              </Button>
+            </Group>
+          </Group>
 
           {rules.length === 0 ? (
             <Text size="sm" c="dimmed">

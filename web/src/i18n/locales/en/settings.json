@@ -1078,7 +1078,11 @@
     "alignCenter": "Center",
     "alignRight": "Right",
     "alignCustom": "Custom",
-    "customLeftHint": "Custom position: left offset as a share of cover width"
+    "customLeftHint": "Custom position: left offset as a share of cover width",
+    "import": "Import rules",
+    "export": "Export rules",
+    "imported": "Rules imported",
+    "importFailed": "Import failed"
   },
   "cropCalibrate": {
     "title": "Calibrate crop",
