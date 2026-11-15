@@ -39,6 +39,30 @@ _DETAIL_URL = "https://www.aventertainments.com/dvd/detail?pro={}"
 _PRO_INDEX_PATH = Path(__file__).with_name("aventertainments_pro.json")
 _pro_index: dict[str, int] | None = None
 
+_BR_RE = re.compile(r"<br\s*/?>", re.IGNORECASE)
+_BLOCK_END_RE = re.compile(r"</(?:div|p)>", re.IGNORECASE)
+
+
+def _synopsis_from_html(html_text: str) -> str | None:
+    """把正文 HTML 收成带段落的纯文本.
+
+    站点用连续 ``<br><br>`` 分段, 而两个 ``<br>`` 之间没有文本节点 —— 只取 ``//text()``
+    再滤掉空片段, 整篇就只剩单换行. 这里按 ``<br>`` 切 HTML, 空块代表一个段落间隔.
+    """
+    body = _BLOCK_END_RE.sub("", html_text)
+    out: list[str] = []
+    for chunk in _BR_RE.split(body):
+        text = re.sub(r"<[^>]+>", "", chunk)
+        text = re.sub(r"\s+", " ", text).strip()
+        if text:
+            out.append(text)
+        elif out and out[-1] != "":
+            # 连续空块只留一个, 且不在开头留空行.
+            out.append("")
+    while out and out[-1] == "":
+        out.pop()
+    return "\n".join(out) or None
+
 
 def _load_pro_index() -> dict[str, int]:
     """惰性加载并缓存. 文件缺失或损坏时返回空表, 不影响既有搜索流程."""
@@ -228,13 +252,19 @@ def _metadata_from_page(url: str, text: str) -> MediaMetadata | None:
     # The actual synopsis is rendered in the product page body. AVE's JSON-LD
     # description is usually only a title/site tagline, so prefer the dedicated
     # synopsis container and use JSON-LD only as a meaningful fallback.
-    synopsis_parts = html.xpath(
-        '//*[contains(concat(" ", normalize-space(@class), " "), " product-description ")]//text()'
-    ).getall()
-    # 保留段落换行: 站点正文靠 <br> 分段, 全折成空格会让整篇连成一坨.
-    description = "\n".join(
-        line for line in (re.sub(r"\s+", " ", part).strip() for part in synopsis_parts) if line
-    )
+    synopsis_html = html.xpath(
+        '//*[contains(concat(" ", normalize-space(@class), " "), " product-description ")]'
+    ).get()
+    # 站点用连续 <br> 分段, 而两个 <br> 之间没有文本节点: 只取 //text() 再滤掉空片段,
+    # 整篇就变成单换行, 段落结构丢失. 因此按 <br> 切 HTML, 空块代表段落间隔.
+    description = _synopsis_from_html(synopsis_html or "")
+    if not description:
+        synopsis_parts = html.xpath(
+            '//*[contains(concat(" ", normalize-space(@class), " "), " product-description ")]//text()'
+        ).getall()
+        description = "\n".join(
+            line for line in (re.sub(r"\s+", " ", part).strip() for part in synopsis_parts) if line
+        )
     if not description:
         description = _text(video.get("description"))
         if description:

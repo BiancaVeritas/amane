@@ -3,6 +3,7 @@
 与整理到媒体库路径无关. 任一步失败不抛, 仅降级.
 """
 
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -151,17 +152,29 @@ async def materialize_images(
     """
     kinds = set(config.scraping.download_resources)
 
+    def _start(step: str) -> float:
+        # 进入步骤前先落一条: 步骤若卡住, 这条就是「最后走到哪」的唯一线索.
+        logger.info("materialize step start", step=step)
+        return time.monotonic()
+
+    def _done(step: str, started: float) -> None:
+        logger.info("materialize step done", step=step, duration_s=round(time.monotonic() - started, 2))
+
     # 下载 thumb.
     thumb_winner: str | None = None
     thumb_src: str | None = None
     thumb_local: Path | None = None
     if DownloadableResource.thumb in kinds:
+        _t = _start(f"thumb candidates={len(thumb_urls)}")
         thumb_src, thumb_local = await _acquire_first(thumb_urls, store, client)
+        _done("thumb", _t)
         thumb_winner = thumb_src  # 下面的兜底裁剪会改写 thumb_src, 排序只认本步下载到的那个
         if thumb_src:
             res = await store.get_by_url(thumb_src)
             if res:
+                _t = _start("thumb_upscale")
                 await _maybe_upscale(store, res, config, data_dir)
+                _done("thumb_upscale", _t)
 
     # 海报一律从封面裁: 站点给的海报横向居多, 尺寸与构图都不统一, 也不能按人脸定位.
     # 裁剪失败时才退回站点原图, 免得一张海报也拿不到.
@@ -223,25 +236,36 @@ async def materialize_images(
                     detect_face=config.scraping.poster_crop_detect_face,
                 )
 
+            _t = _start(f"poster_crop rule={'yes' if rule is not None else 'no'}")
             crop_res = await store.acquire_derived(thumb_src or "", "crop", args, crop_producer, force=recrop)
+            _done("poster_crop", _t)
             if crop_res:
                 await _maybe_upscale(store, crop_res, config, data_dir)
                 result_poster_urls = [_internal_url(store, crop_res.url)]
             else:
                 # 裁不出来才退到站点原图, 至少别让海报空着.
+                _t = _start(f"poster_fallback candidates={len(poster_urls)}")
                 result_poster_urls = await _fallback_posters(store, poster_urls, client, config, data_dir)
+                _done("poster_fallback", _t)
         else:
+            _t = _start(f"poster_fallback candidates={len(poster_urls)}")
             result_poster_urls = await _fallback_posters(store, poster_urls, client, config, data_dir)
+            _done("poster_fallback", _t)
 
     # 下载预告片.
     trailer_winner: str | None = None
     if DownloadableResource.trailer in kinds:
+        _t = _start(f"trailer candidates={len(trailer_urls)}")
         trailer_winner, _ = await _acquire_first(trailer_urls, store, client)
+        _done("trailer", _t)
 
     # 下载剧照: 按站点优先级, 有结果即停.
     if DownloadableResource.extrafanart in kinds and extrafanart_urls:
         priority = list(extrafanart_urls.keys())
+        total = sum(len(urls) for urls in extrafanart_urls.values())
+        _t = _start(f"extrafanart urls={total} sites={priority}")
         await store.acquire_extrafanart(extrafanart_urls, priority, client)
+        _done("extrafanart", _t)
 
     out = MaterializedImages(
         poster_urls=result_poster_urls,

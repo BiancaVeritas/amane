@@ -147,7 +147,7 @@ def test_parser_prefers_real_product_description_over_jsonld_boilerplate() -> No
     )
     metadata = _metadata_from_page(DETAIL_URL, html)
     assert metadata is not None
-    assert metadata.plot == "First synopsis paragraph\nSecond synopsis paragraph"  # 段落换行保留
+    assert metadata.plot == "First synopsis paragraph\n\nSecond synopsis paragraph"  # 段落间空一行
 
 
 def test_parser_does_not_use_jsonld_title_or_site_tagline_as_plot() -> None:

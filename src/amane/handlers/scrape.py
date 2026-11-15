@@ -598,6 +598,14 @@ class ScrapeHandler(TaskHandler[ScrapePayload, ScrapeResult]):
                     # 文件名优先, 没有就退回番号 (见 crop_rules._searchable_text).
                     media_path=file.path if file is not None else None,
                 )
+                current().info(
+                    "materialize begin",
+                    number=payload.number,
+                    posters=len(result.metadata.poster_urls),
+                    thumbs=len(result.metadata.thumb_urls),
+                    trailers=len(result.metadata.trailer_urls),
+                    extrafanart=sum(len(u) for u in (result.metadata.extrafanart_urls or {}).values()),
+                )
                 materialized = await materialize_images(
                     result.metadata.poster_urls,
                     result.metadata.thumb_urls,
