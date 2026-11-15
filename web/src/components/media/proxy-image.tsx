@@ -96,5 +96,15 @@ export function ProxyImage({
     );
   }
   if (!cacheKeyedSrc) return placeholder;
-  return <img {...rest} src={cacheKeyedSrc} loading={loading} />;
+  return (
+    <img
+      {...rest}
+      src={cacheKeyedSrc}
+      loading={loading}
+      // 本地资源也要把回调交出去: 调用方靠 onLoad 记图片比例、靠 onError 退化成占位.
+      // 漏传会让比例永远停在缺省值, 图片被按错误比例裁切.
+      onLoad={onLoad}
+      onError={onError}
+    />
+  );
 }
