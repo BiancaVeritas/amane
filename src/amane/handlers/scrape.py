@@ -416,6 +416,14 @@ class ScrapeHandler(TaskHandler[ScrapePayload, ScrapeResult]):
         if not route:
             rec.warning("no eligible crawlers for content type", content_type=content_type)
             return TaskResult(success=False, error=f"内容类型 {content_type} 没有可用来源")
+
+        # 手动搜索选中了某个来源时, 它比番号判断出的类型更权威: 用户是在搜索结果里亲手挑的
+        # 那一家, 而类型是程序从番号猜的 (东京热的 n 系列被判成无码, 它在 javbus 这类有码站
+        # 也有条目). 选中的站不在当前路由时把它补进来, 否则就是「搜得到、选了却抓不到」.
+        preferred = payload.preferred_site
+        if preferred and preferred not in {str(site) for site in route}:
+            route = [*route, SiteName(preferred)]
+            rec.info("preferred site outside route, added", site=preferred, content_type=str(content_type))
         if content_type == ContentType.WESTERN and str(SiteName.THEPORNDB) not in {str(site) for site in route}:
             return TaskResult(
                 success=False, error="WESTERN 作品身份依赖 ThePornDB UUID，请在欧美来源路由中启用 ThePornDB"

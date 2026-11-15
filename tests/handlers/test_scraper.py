@@ -2374,3 +2374,54 @@ class TestPreviewFallsBackToAllRoutes:
 
         assert [item["site"] for item in items] == ["aventertainments"]
         assert self._OnlyCensored.asked == []
+
+
+class TestPreferredSiteOutsideRoute:
+    """手动搜索选中的来源比番号判断的类型更权威.
+
+    用户在搜索结果里亲手挑的那一家可能不在当前类型路由里 —— 东京热的 n 系列被判成无码,
+    而它在 javbus 这类有码站也有条目. 不把它补进路由就是「搜得到、选了却抓不到」.
+    """
+
+    class _Hit(Crawler):
+        @classmethod
+        def profile(cls) -> CrawlerProfile:
+            return CrawlerProfile(name="javbus", base_url="https://www.javbus.com")
+
+        async def _search(self, query, options=None) -> str | None:
+            return "https://www.javbus.com/n0888"
+
+        async def _scrape(self, url, options=None) -> MediaMetadata | None:
+            return MediaMetadata.model_validate({"number": "n0888", "title": "从有码站取到"})
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_preferred_site_is_added_to_route(self, repo: Repository, resource_store):
+        hot = HotSettings()
+        hot.scraping.content_routes[ContentType.UNCENSORED] = ["muramura"]
+        hot.scraping.content_routes[ContentType.CENSORED] = ["javbus"]
+        h = ScrapeHandler(
+            repo=repo,
+            factory=FakeFactory(
+                {
+                    "muramura": TestPreviewFallsBackToAllRoutes._NeverHits(client=None),
+                    "javbus": self._Hit(client=None),
+                }
+            ),
+            resource_store=resource_store,
+            pipeline_config=hot,
+        )
+
+        result = await h.handle(
+            ScrapePayload(
+                number="n0888",
+                content_type=ContentType.UNCENSORED,
+                manual=True,
+                preferred_site="javbus",
+                use_cache=[],
+            )
+        )
+
+        # 选中的 javbus 被补进路由, 因此真的取到了数据.
+        assert result.success is True
+        assert result.result is not None
+        assert result.result.field_sources.get("title") == "javbus"
