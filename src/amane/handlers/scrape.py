@@ -226,13 +226,34 @@ class ScrapeHandler(TaskHandler[ScrapePayload, ScrapeResult]):
         return await self._preview_number(url, content_type)
 
     async def _preview_number(self, term: str, content_type: ContentType) -> list[dict]:
-        """拿一个搜索词问当前类型路由里的每个来源.
+        """拿一个搜索词问各来源; 先问当前类型路由, 一条都没命中再扩大到全部路由.
 
         ``term`` 通常是番号; 番号对不上时也接受去标点的标题 —— 各站自己的搜索逻辑决定能否命中.
+
+        手动搜索**不该被类型局限**: 番号判断本身就可能是错的 (东京热的 n 系列被判成无码,
+        而它在 javbus 这类有码站也有条目), 只看当前路由会把明明存在的资料报成「搜不到」.
+        先查当前路由是为了结果更贴题; 一条都没有时再问其余来源, 让用户自己挑.
         """
-        route = self._config.scraping.content_routes.get(content_type)
+        route = list(self._config.scraping.content_routes.get(content_type) or [])
         if not route:
             return []
+        found = await self._search_route(term, content_type, route)
+        if found:
+            return found
+
+        # 全路由兜底: 换掉 content_type 也换候选站, 因为各站对类型有自己的判断.
+        for other_type, other_route in self._config.scraping.content_routes.items():
+            if other_type is content_type or not other_route:
+                continue
+            hits = await self._search_route(term, other_type, list(other_route))
+            if hits:
+                return hits
+        return []
+
+    async def _search_route(
+        self, term: str, content_type: ContentType, route: Sequence[SiteName]
+    ) -> list[dict]:
+        """在给定站点集合上搜一个词, 返回命中的候选."""
         crawlers = await self._factory.get_crawlers(route)
         if not crawlers:
             return []
@@ -251,14 +272,19 @@ class ScrapeHandler(TaskHandler[ScrapePayload, ScrapeResult]):
     async def _preview_url(
         self, url: str, content_type: ContentType, *, only_that_url: bool = False
     ) -> list[dict]:
-        """打开地址读出番号/标题, 再拿它们问当前类型路由里的其余来源.
+        """打开地址读出番号/标题, 再拿它们问各来源.
 
         找地址属于哪一家用与「添加来源链接」同一套三级查找; 之后按番号搜, 没有番号就用
         去标点的标题搜 —— 贴进来的页面往往只有一个站认识, 用户要的却是各站的对照.
         ``only_that_url`` 时到此为止: 只返回这个地址本身解析出来的那一条.
+
+        贴进来的地址可能属于任何类型 (用户从浏览器抄来的页面不会先自报类型), 所以站点查找
+        走 ``any_site``, 按番号扩搜时也由 ``_preview_number`` 在全路由上兜底.
         """
         route = self._config.scraping.content_routes.get(content_type) or []
-        crawlers = await self._factory.get_crawlers(route)
+        # 当前类型的站优先, 但地址可能只有别类型的站认识: 并上其余路由的站点一起找.
+        union = list(dict.fromkeys([*route, *(s for r in self._config.scraping.content_routes.values() for s in r)]))
+        crawlers = await self._factory.get_crawlers(union)
         found = await self._scrape_one_source(url, crawlers, content_type, any_site=True)
         if found is None:
             return []
@@ -271,7 +297,7 @@ class ScrapeHandler(TaskHandler[ScrapePayload, ScrapeResult]):
         # 番号为主, 标题只兜底: 有番号时各站都能按番号精确命中, 再按标题搜一轮只会多出
         # 一堆噪声命中 (标题里的通用词能匹配到别的片).
         term = meta.number.strip() or _searchable_title(meta.title)
-        # 只有当前类型的路由: 拿别类型的站去搜会混进别的类型的结果.
+        # 当前路由先搜; 一条都没有时 _preview_number 会自己扩大到全部路由.
         if term:
             for item in await self._preview_number(term, content_type):
                 if item["site"] not in seen:

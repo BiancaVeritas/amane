@@ -83,9 +83,14 @@ export function ManualScrapeDialog({
       // 原样交给后端: 地址由后端打开页面读番号. 前端截末段当番号是错的 ——
       // javdb 的 /v/dgVq9 里根本没有番号, 那样哪个来源都搜不到.
       const response = await previewScrape({
-        // append 模式只抓用户贴的这一个地址: 它要的是「把这条来源加进去」,
-        // 再多问其他来源只会列出并列结果, 与「只抓这一个链接」的语义相悖.
-        body: { number: value, content_type: boundType, only_that_url: mode === "append" },
+        // 贴了地址就只解析这一个地址: 「添加来源链接」要的是补一条来源, 手动刮削贴地址
+        // 也是同一个意思 —— 用户已经指明了页面, 再拿番号去问一圈只会多出并列结果.
+        // 只输入番号时反过来问各来源, 并由后端在当前路由无命中时扩大到全部路由.
+        body: {
+          number: value,
+          content_type: boundType,
+          only_that_url: mode === "append" || /^https?:\/\//i.test(value),
+        },
         throwOnError: true,
       });
       return response.data?.items ?? [];
@@ -117,8 +122,9 @@ export function ManualScrapeDialog({
           manual: true,
           preferred_site: item.site,
           append_sources: mode === "append",
-          // 「添加来源链接」只刮用户贴的那一条: 不传它就退化成把全部来源重新问一遍.
-          source_url: mode === "append" ? input.trim() : null,
+          // 贴了地址就钉在这一个地址上: 用户既然给出了那条来源页, 就按它抓, 别再拿番号
+          // 去问一遍其他来源. 「添加来源链接」一直如此; 手动刮削贴地址时同理.
+          source_url: mode === "append" || looksLikeUrl ? input.trim() : null,
           // 手动刮削要覆盖元数据: 留空集才会重新抓取, 否则命中 raw 快照等于什么都没改.
           use_cache: [],
         },

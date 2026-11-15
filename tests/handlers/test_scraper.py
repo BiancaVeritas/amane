@@ -2274,3 +2274,103 @@ def test_owns_host_accepts_builtin_domain_after_custom_base_url() -> None:
     assert ScrapeHandler._owns_host(crawler, "www.javbus.com"), "官方域名应当仍被认领"
     assert ScrapeHandler._owns_host(crawler, "mirror.example.com"), "自定义域名应当被认领"
     assert not ScrapeHandler._owns_host(crawler, "www.other.com")
+
+
+class TestPreviewFallsBackToAllRoutes:
+    """手动搜索不该被类型局限.
+
+    番号判断本身就可能是错的 (东京热的 n 系列被判成无码, 而它在有码站也有条目);
+    只看当前路由会把明明存在的资料报成「搜不到」.
+    """
+
+    class _OnlyCensored(Crawler):
+        """只在有码类型命中; 记录被问过的番号."""
+
+        asked: ClassVar[list[str]] = []
+
+        @classmethod
+        def profile(cls) -> CrawlerProfile:
+            return CrawlerProfile(name="javbus", base_url="https://www.javbus.com")
+
+        async def _search(self, query, options=None) -> str | None:
+            self.asked.append(query.number)
+            return "https://www.javbus.com/n1042"
+
+        async def _scrape(self, url, options=None) -> MediaMetadata | None:
+            return MediaMetadata.model_validate({"number": "n1042", "title": "only on censored"})
+
+    class _NeverHits(Crawler):
+        """无码路由里永不命中."""
+
+        @classmethod
+        def profile(cls) -> CrawlerProfile:
+            return CrawlerProfile(name="aventertainments", base_url="https://www.aventertainments.com")
+
+        async def _search(self, query, options=None) -> str | None:
+            return None
+
+        async def _scrape(self, url, options=None) -> MediaMetadata | None:
+            return None
+
+    @pytest.fixture(autouse=True)
+    def _reset(self):
+        self._OnlyCensored.asked = []
+        yield
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_uncensored_miss_falls_back_to_censored_route(self, repo: Repository, resource_store):
+        hot = HotSettings()
+        # 无码路由只有永不命中的那一家; 命中项在有码路由里.
+        hot.scraping.content_routes[ContentType.UNCENSORED] = ["aventertainments"]
+        hot.scraping.content_routes[ContentType.CENSORED] = ["javbus"]
+        h = ScrapeHandler(
+            repo=repo,
+            factory=FakeFactory(
+                {
+                    "aventertainments": self._NeverHits(client=None),
+                    "javbus": self._OnlyCensored(client=None),
+                }
+            ),
+            resource_store=resource_store,
+            pipeline_config=hot,
+        )
+
+        items = await h.preview("n1042", ContentType.UNCENSORED)
+
+        assert [item["site"] for item in items] == ["javbus"]
+        assert "n1042" in self._OnlyCensored.asked
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_current_route_hit_does_not_scan_other_routes(self, repo: Repository, resource_store):
+        """当前路由命中时不再扫其余路由: 结果更贴题, 也省掉一轮网络."""
+
+        class _Hits(Crawler):
+            @classmethod
+            def profile(cls) -> CrawlerProfile:
+                return CrawlerProfile(name="aventertainments", base_url="https://www.aventertainments.com")
+
+            async def _search(self, query, options=None) -> str | None:
+                return "https://www.aventertainments.com/x"
+
+            async def _scrape(self, url, options=None) -> MediaMetadata | None:
+                return MediaMetadata.model_validate({"number": "n1042", "title": "hit"})
+
+        hot = HotSettings()
+        hot.scraping.content_routes[ContentType.UNCENSORED] = ["aventertainments"]
+        hot.scraping.content_routes[ContentType.CENSORED] = ["javbus"]
+        h = ScrapeHandler(
+            repo=repo,
+            factory=FakeFactory(
+                {
+                    "aventertainments": _Hits(client=None),
+                    "javbus": self._OnlyCensored(client=None),
+                }
+            ),
+            resource_store=resource_store,
+            pipeline_config=hot,
+        )
+
+        items = await h.preview("n1042", ContentType.UNCENSORED)
+
+        assert [item["site"] for item in items] == ["aventertainments"]
+        assert self._OnlyCensored.asked == []
