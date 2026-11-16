@@ -1,8 +1,8 @@
 """StrEnum / 注册表 / profile() 声明一致性 — 站点名单由注册表推导, 不测具名双料站."""
 
-from amane.crawlers import MetadataField, SiteName, actor_registry, registry
-from amane.crawlers.models import MediaMetadata
 from amane.aggregate.engine import ALL_FIELDS
+from amane.crawlers import SiteName, actor_registry, registry
+from amane.crawlers.models import MediaMetadata
 from amane.crawlers.site_roles import (
     ACTOR_IMAGE_SITES,
     ACTOR_ONLY_SITES,

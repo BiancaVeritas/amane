@@ -27,6 +27,7 @@ from .file_info import (
     split_number,
     summarize_file_phases,
 )
+from .language import has_kana, is_chinese_only
 
 __all__ = [
     "CONTENT_TYPE_VALUES",
@@ -45,8 +46,10 @@ __all__ = [
     "detect_cd",
     "extract_number",
     "file_phase_from_path",
+    "has_kana",
     "infer_content_type",
     "is_amateur",
+    "is_chinese_only",
     "is_uncensored",
     "is_vr",
     "max_definition",

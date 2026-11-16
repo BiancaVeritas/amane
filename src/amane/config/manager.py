@@ -103,6 +103,7 @@ _DEFAULT_CONTENT_ROUTES: dict[ContentType, list[SiteName]] = {
         SiteName.AIRAV,
     ],
     ContentType.CHINESE: [
+        SiteName.TANGXIN,
         SiteName.IQQTV,
         SiteName.JAVDB,
         SiteName.AIRAV,
@@ -448,9 +449,7 @@ class ScrapingConfig(BaseModel):
     人物居中) 会裁偏. 检测不到人脸时同样退回取右侧.
     """
 
-    poster_crop_rules: list[PosterCropRule] = Field(
-        default_factory=list, json_schema_extra={"x-hidden": True}
-    )
+    poster_crop_rules: list[PosterCropRule] = Field(default_factory=list, json_schema_extra={"x-hidden": True})
     """按系列 / 番号前缀 / 文件名关键词 / 供应商 / 发行商命中的固定裁切位置.
 
     命中时优先于人脸检测: 同系列封面构图一致, 固定位置比逐张检测更准也更稳.

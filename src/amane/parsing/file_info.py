@@ -18,6 +18,8 @@ from enum import StrEnum
 from pathlib import Path
 from typing import TypedDict
 
+from .language import has_kana, is_chinese_only
+
 # ---------------------------------------------------------------------------
 # Types
 # ---------------------------------------------------------------------------
@@ -454,9 +456,7 @@ def shows_uncensored(mosaic: Mosaic | None, content_type: ContentType | None) ->
     return mosaic is Mosaic.UNCENSORED or content_type is ContentType.UNCENSORED
 
 
-def mosaic_nature(
-    mosaic: Mosaic | None, content_type: ContentType | None, *, ltx: bool = False
-) -> MosaicNature | None:
+def mosaic_nature(mosaic: Mosaic | None, content_type: ContentType | None, *, ltx: bool = False) -> MosaicNature | None:
     """马赛克性质: LTX 最优先, 其次文件名标记, 再次条目类型, 其余为空.
 
     LTX 与其他标记同在文件名里时只留 LTX: 两者本来就是同一段后缀的两种说法,
@@ -570,6 +570,12 @@ def _identify(
         if found := _match(name, escape, generic=False):
             return found
     if not fallback:
+        # 纯文本输入不产出番号, 但类型仍要看语种: 中日文标题判成欧美会让后续要求
+        # ThePornDB UUID 而整条任务失败. WESTERN 只该接全英文.
+        if has_kana(stem):
+            return None, ContentType.CENSORED
+        if is_chinese_only(stem):
+            return None, ContentType.CHINESE
         return None, ContentType.WESTERN
     return _fallback(stem, escape)
 
@@ -692,7 +698,11 @@ def _match(basename: str, escape_strings: list[str], *, generic: bool) -> tuple[
 
 
 def _fallback(stem: str, escape: list[str]) -> tuple[str, ContentType]:
-    """路径仍未命中: FC2/HEYZO 关键字视为该族, 否则清理后的原文 + 欧美."""
+    """路径仍未命中: FC2/HEYZO 关键字视为该族; 含中文或日文时不判欧美.
+
+    WESTERN 只该接全英文的标题 —— 中日文标题被归到欧美是纯粹的误判, 后续还会因为它
+    要求 ThePornDB UUID 而整条任务失败. 判据: 出现假名即日文, 只有汉字即中文.
+    """
     t = _prepare(stem, escape)
     if "FC2" in t.catalog:
         return t.catalog.replace("PPV", "").replace("_", "-").replace("--", "-"), ContentType.FC2
@@ -705,6 +715,10 @@ def _fallback(stem: str, escape: list[str]) -> tuple[str, ContentType]:
     result = temp_name.strip("-_. ")
     if result.startswith("FC-"):
         return result.replace("FC-", "FC2-"), ContentType.FC2
+    if has_kana(result):
+        return result, ContentType.CENSORED
+    if is_chinese_only(result):
+        return result, ContentType.CHINESE
     return result, ContentType.WESTERN
 
 
@@ -767,14 +781,21 @@ def _dir_names(path: Path) -> tuple[str, ...]:
 
 
 def _classify_from_path(stem: str, dir_names: tuple[str, ...]) -> ContentType | None:
-    """getchu 整段相等; 里番/裏番/欧美必须段首, 避免 这里番号 / 非欧美."""
+    """getchu 整段相等; 里番/裏番/欧美必须段首, 避免 这里番号 / 非欧美.
+
+    「糖心」按包含判定: 它是国产原创站的招牌字样, 库目录常写成 ``XX/糖心/`` 或
+    ``糖心Vlog-标题.mp4``, 不会作为其它词的一部分出现.
+    """
     for name in (stem, *dir_names):
-        if name.lower() == "getchu":
+        lowered = name.lower()
+        if lowered == "getchu":
             return ContentType.HENTAI
         if name.startswith(("里番", "裏番")):
             return ContentType.HENTAI
         if name.startswith("欧美"):
             return ContentType.WESTERN
+        if "糖心" in name or "tangxin" in lowered:
+            return ContentType.CHINESE
     return None
 
 

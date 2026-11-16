@@ -44,6 +44,7 @@ from .sites import (
     PondoCrawler,
     PrestigeCrawler,
     R18DevCrawler,
+    TangxinCrawler,
     TenmusumeCrawler,
     ThePornDBCrawler,
     TokyoHotCrawler,
@@ -81,6 +82,7 @@ registry.register(R18DevCrawler)
 registry.register(TenmusumeCrawler)
 registry.register(ThePornDBCrawler)
 registry.register(OfficialCrawler)
+registry.register(TangxinCrawler)
 registry.register(TokyoHotCrawler)
 registry.register(MuramuraCrawler)
 
@@ -130,6 +132,7 @@ __all__ = [
     "PrestigeCrawler",
     "R18DevCrawler",
     "SiteName",
+    "TangxinCrawler",
     "TenmusumeCrawler",
     "ThePornDBActorCrawler",
     "ThePornDBCrawler",

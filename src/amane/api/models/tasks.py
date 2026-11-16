@@ -260,7 +260,7 @@ class ScrapeRequest(BaseModel):
         assert self.number is not None
         return ScrapePayload(
             number=self.number,
-            content_type=self.content_type or infer_content_type(self.number),
+            content_type=self.content_type or self._infer_type(),
             metadata_id=self.metadata_id,
             theporndb_uuid=self.theporndb_uuid,
             use_cache=self.use_cache,
@@ -270,6 +270,24 @@ class ScrapeRequest(BaseModel):
             source_url=self.source_url,
             search_sites=self.search_sites,
         )
+
+    def _infer_type(self) -> ContentType:
+        """未显式给类型时推断它.
+
+        手动搜索带了来源站点时优先按站点所属路由定类型: 糖心这类国产站没有番号体系,
+        标题按番号规则一律落到兜底的 WESTERN, 于是任务一开跑就报「WESTERN 依赖
+        ThePornDB UUID」. 站点本身已经说明了它属于哪一类, 比从标题猜准得多.
+        """
+        assert self.number is not None
+        if self.preferred_site or self.search_sites:
+            from ...config.manager import HotSettings
+
+            routes = HotSettings().scraping.content_routes
+            wanted = {self.preferred_site, *self.search_sites} - {None}
+            for content_type, sites in routes.items():
+                if wanted & {str(site) for site in sites}:
+                    return content_type
+        return infer_content_type(self.number)
 
 
 class RefreshSubmission(RefreshPayload):

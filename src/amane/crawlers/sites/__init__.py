@@ -27,6 +27,7 @@ from .pacopacomama import PacopacomamaCrawler
 from .pondo import PondoCrawler
 from .prestige import PrestigeCrawler
 from .r18dev import R18DevCrawler
+from .tangxin import TangxinCrawler
 from .tenmusume import TenmusumeCrawler
 from .theporndb import ThePornDBCrawler
 from .tokyo_hot import TokyoHotCrawler
@@ -62,6 +63,7 @@ __all__ = [
     "PondoCrawler",
     "PrestigeCrawler",
     "R18DevCrawler",
+    "TangxinCrawler",
     "TenmusumeCrawler",
     "ThePornDBCrawler",
     "TokyoHotCrawler",

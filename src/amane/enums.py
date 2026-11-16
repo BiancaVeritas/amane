@@ -35,6 +35,7 @@ class SiteName(StrEnum):
     CARIBBEANCOMPR = "caribbeancompr"
     PRESTIGE = "prestige"
     R18DEV = "r18dev"
+    TANGXIN = "tangxin"
     TENMUSUME = "10musume"
     TOKYO_HOT = "tokyo_hot"
     THEPORNDB = "theporndb"

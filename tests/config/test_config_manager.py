@@ -385,7 +385,9 @@ class TestScrapingPriorityMigration:
     def test_default_routes_type_specific_heads(self):
         routes = ScrapingConfig().content_routes
         assert routes[ContentType.AMATEUR][0] == SiteName.MGSTAGE
-        assert routes[ContentType.CHINESE][0] == SiteName.IQQTV
+        # 糖心是国产原创站, 排第一; 其余国产路由里的站多为日系或有码站.
+        assert routes[ContentType.CHINESE][0] == SiteName.TANGXIN
+        assert routes[ContentType.CHINESE][1] == SiteName.IQQTV
         assert routes[ContentType.HENTAI][0] == SiteName.GETCHU
         assert routes[ContentType.WESTERN][0] == SiteName.THEPORNDB
         assert routes[ContentType.UNCENSORED][0] == SiteName.AVENTERTAINMENTS
