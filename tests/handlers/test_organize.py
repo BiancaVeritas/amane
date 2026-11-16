@@ -1516,7 +1516,7 @@ def test_genders_from_raw_ignores_unknown_and_garbage() -> None:
 
 @pytest.mark.asyncio(loop_scope="function")
 async def test_organize_uses_raw_gender_when_actor_row_missing(
-    repo: "Repository", resource_store: "ResourceStore", tmp_path: Path
+    repo: Repository, resource_store: ResourceStore, tmp_path: Path
 ) -> None:
     """Actor 表没有这位演员时, 用刮削快照里的性别判定女演员人数.
 
@@ -1588,7 +1588,7 @@ async def test_organize_uses_raw_gender_when_actor_row_missing(
 
 @pytest.mark.asyncio(loop_scope="function")
 async def test_in_place_does_not_move_target_dir_files(
-    repo: "Repository", resource_store: "ResourceStore", tmp_path: Path
+    repo: Repository, resource_store: ResourceStore, tmp_path: Path
 ) -> None:
     """开启独立监控后, 目标目录里的文件不移动也不改名.
 
@@ -1631,7 +1631,7 @@ async def test_in_place_does_not_move_target_dir_files(
 
 @pytest.mark.asyncio(loop_scope="function")
 async def test_artifacts_follow_video_location_not_template(
-    repo: "Repository", resource_store: "ResourceStore", tmp_path: Path
+    repo: Repository, resource_store: ResourceStore, tmp_path: Path
 ) -> None:
     """视频已在库内时, 图片/NFO 写到视频所在目录, 不按模板另算一处.
 

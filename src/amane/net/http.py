@@ -689,7 +689,7 @@ class WebClient:
             dest,
             use_proxy=use_proxy,
             egress=egress,
-            max_bytes=file_size if file_size else _DEFAULT_DOWNLOAD_CAP,
+            max_bytes=file_size or _DEFAULT_DOWNLOAD_CAP,
             timeout=timeout,
             attempts=attempts,
         )

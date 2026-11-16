@@ -2,8 +2,8 @@
 
 import io
 import os
-from ipaddress import ip_address
 from contextlib import contextmanager
+from ipaddress import ip_address
 from typing import TYPE_CHECKING
 
 import pytest

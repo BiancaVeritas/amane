@@ -145,7 +145,7 @@ async def test_actors_sharing_name_does_not_full_scan(repo: Repository) -> None:
     """
     from amane.db.repos.facets import _actors_sharing_name
 
-    session_factory = repo._session  # noqa: SLF001
+    session_factory = repo._session
 
     async def seed(count: int, *, with_target: bool) -> Actor | None:
         async with session_factory() as session:
