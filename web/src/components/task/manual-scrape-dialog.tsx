@@ -71,7 +71,6 @@ export function ManualScrapeDialog({
 
   // 绑定条目时, 范围钉在这一条上: 番号与类型都按它走, 不让用户改.
   // 「添加来源链接」例外: 它要手动填别处的番号, 钉死就填不进去了.
-  const boundNumber = mode === "append" ? null : (metadata?.number ?? null);
   const boundType = mode === "append" ? null : (metadata?.content_type ?? null);
 
   // 添加来源链接只要链接: 番号 / UUID 在这个口径下没有意义.
@@ -127,8 +126,9 @@ export function ManualScrapeDialog({
       return submitTask({
         body: {
           type: "scrape",
-          // 绑定条目时把范围钉在这条记录上, 否则按选中的番号走.
-          number: boundNumber ?? item.number,
+          // 用搜索结果里的规范番号: 来源可能把演员名从标题里剥掉 (糖心就是这样), item.number
+          // 才是最终该入库的值. 用户输入的原始标题只用来搜索, 不该带回写库.
+          number: item.number,
           metadata_id: metadata?.id ?? null,
           // 从失败任务进来时沿用它的文件: 刮削成功后要接着把这个文件整理落盘, 缺了它就派不出
           // 整理任务, 文件永远停在未整理.

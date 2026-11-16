@@ -18,8 +18,6 @@ from amane.crawlers.models import MediaMetadata
 from amane.db.models import MediaFileStatus, TaskType
 from amane.enums import SiteName
 from amane.handlers import (
-    ActorScrapeHandler,
-    ActorScrapePayload,
     FollowupTask,
     OrganizeHandler,
     OrganizePayload,

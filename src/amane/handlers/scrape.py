@@ -1,3 +1,4 @@
+import asyncio
 import time
 from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
@@ -26,7 +27,7 @@ from ..media import materialize_images
 from ..media.crop_rules import find_rule
 from ..observability import current
 from ..observability.models import SiteOutcomeKind
-from ..parsing import ContentType, canonical_number, parse_file_info
+from ..parsing import ContentType, canonical_number, is_chinese_only, parse_file_info
 from ..plugins.models import SourceDescriptor, SourceTrait
 from ..utils.litepan_strm import read_litepan_115_file_id
 from ..utils.path import path_is_under
@@ -152,9 +153,7 @@ class _FrozenCrawler:
     def __init__(self, meta: MediaMetadata) -> None:
         self._meta = meta
 
-    async def fetch(
-        self, query: SearchQuery, options: FetchOptions | None = None
-    ) -> MediaMetadata | None:
+    async def fetch(self, query: SearchQuery, options: FetchOptions | None = None) -> MediaMetadata | None:
         return self._meta
 
 
@@ -237,9 +236,7 @@ class ScrapeHandler(TaskHandler[ScrapePayload, ScrapeResult]):
         self._partial_sources = frozenset(d.id for d in catalog if SourceTrait.NEEDS_PARTIAL in d.traits)
         self._file_hash_sources = frozenset(d.id for d in catalog if SourceTrait.USES_FILE_HASH in d.traits)
 
-    async def preview(
-        self, input_text: str, content_type: ContentType, *, only_that_url: bool = False
-    ) -> list[dict]:
+    async def preview(self, input_text: str, content_type: ContentType, *, only_that_url: bool = False) -> list[dict]:
         """只抓不写: 把命中项原样交回调用方.
 
         手动搜索要让用户先挑再落库, 所以这里不碰 DB / 文件; 数据交回 UI 由用户决定.
@@ -262,6 +259,10 @@ class ScrapeHandler(TaskHandler[ScrapePayload, ScrapeResult]):
         手动搜索**不该被类型局限**: 番号判断本身就可能是错的 (东京热的 n 系列被判成无码,
         而它在 javbus 这类有码站也有条目), 只看当前路由会把明明存在的资料报成「搜不到」.
         先查当前路由是为了结果更贴题; 一条都没有时再问其余来源, 让用户自己挑.
+
+        中文标题只走 CHINESE 路由, 不扩大到其余类型: 中文标题拿去问有码站必然 404/403,
+        而每个失败还要重试两三次 —— 一次预览十几秒里有十秒耗在这上面, 换来的命中是零.
+        判据见 ``parsing.language.is_chinese_only`` (有假名即日文, 不会误伤日文标题).
         """
         route = list(self._config.scraping.content_routes.get(content_type) or [])
         if not route:
@@ -269,6 +270,10 @@ class ScrapeHandler(TaskHandler[ScrapePayload, ScrapeResult]):
         found = await self._search_route(term, content_type, route)
         if found:
             return found
+
+        if is_chinese_only(term):
+            current().info("chinese title, skip other routes", term=term[:40])
+            return []
 
         # 全路由兜底: 换掉 content_type 也换候选站, 因为各站对类型有自己的判断.
         for other_type, other_route in self._config.scraping.content_routes.items():
@@ -279,28 +284,29 @@ class ScrapeHandler(TaskHandler[ScrapePayload, ScrapeResult]):
                 return hits
         return []
 
-    async def _search_route(
-        self, term: str, content_type: ContentType, route: Sequence[SiteName]
-    ) -> list[dict]:
-        """在给定站点集合上搜一个词, 返回命中的候选."""
+    async def _search_route(self, term: str, content_type: ContentType, route: Sequence[SiteName]) -> list[dict]:
+        """在给定站点集合上搜一个词, 返回命中的候选.
+
+        并发问各站: 它们互不依赖, 串行时总耗时是各站之和 (一次预览十几秒里有八秒花在四个
+        全部未命中的站上). 结果按路由顺序排列, 不按完成先后 —— 顺序决定界面上的展示次序,
+        按完成先后排会让同一次搜索的结果顺序随网络抖动.
+        """
         crawlers = await self._factory.get_crawlers(route)
         if not crawlers:
             return []
         q = SearchQuery(term, None, None, content_type)
-        out: list[dict] = []
-        for name, crawler in crawlers.items():
+
+        async def one(name: str, crawler: CrawlerLike) -> dict | None:
             try:
                 meta = await crawler.fetch(q)
             except Exception:
-                continue
-            if meta is None:
-                continue
-            out.append(_preview_item(name, meta))
-        return out
+                return None
+            return _preview_item(name, meta) if meta is not None else None
 
-    async def _preview_url(
-        self, url: str, content_type: ContentType, *, only_that_url: bool = False
-    ) -> list[dict]:
+        results = await asyncio.gather(*(one(name, crawler) for name, crawler in crawlers.items()))
+        return [item for item in results if item is not None]
+
+    async def _preview_url(self, url: str, content_type: ContentType, *, only_that_url: bool = False) -> list[dict]:
         """打开地址读出番号/标题, 再拿它们问各来源.
 
         找地址属于哪一家用与「添加来源链接」同一套三级查找; 之后按番号搜, 没有番号就用
@@ -827,8 +833,14 @@ class ScrapeHandler(TaskHandler[ScrapePayload, ScrapeResult]):
             )
         else:
             t0 = time.monotonic()
+            # 糖心没有番号: 标题即唯一标识. 聚合层的 number 恒等于 payload.number (文件名,
+            # 带演员名前缀), 而糖心抓到的 title 已剥掉演员名. 只有标题确实来自糖心时才用
+            # title 当 number, 其它站照旧用 payload 的番号, 避免站点格式差异改变唯一标识.
+            number = payload.number
+            if result.field_sources.get("title") == "tangxin" and result.metadata.title:
+                number = result.metadata.title
             meta = await self._repo.upsert_metadata(
-                number=payload.number,
+                number=number,
                 content_type=payload.content_type,
                 mode=WriteMode.MANUAL if payload.manual else WriteMode.AUTO,
                 **metadata_fields,
@@ -860,7 +872,7 @@ class ScrapeHandler(TaskHandler[ScrapePayload, ScrapeResult]):
         # 同一演员会被写成两个目录. 整理本身仍是独立任务 (演员失败也照跑), 它自己在执行前
         # 检查同链的演员任务是否还在排队.
         t0 = time.monotonic()
-        actor_followups = await self._actor_scrape_followups(meta.actors)
+        actor_followups = await self._actor_scrape_followups(meta.actors, content_type)
         organize_followups = await self._auto_organize_followups(payload, file, meta.id)
         current().info(
             "scrape step",
@@ -1007,9 +1019,7 @@ class ScrapeHandler(TaskHandler[ScrapePayload, ScrapeResult]):
                 continue
             if canonical_number(candidate.number or "") != canonical_number(number):
                 continue
-            await self._repo.update_media_file(
-                candidate.id, status=MediaFileStatus.SCRAPED, metadata_id=metadata_id
-            )
+            await self._repo.update_media_file(candidate.id, status=MediaFileStatus.SCRAPED, metadata_id=metadata_id)
             current().info("adopted unlinked file", media_file_id=candidate.id, number=number)
 
     async def _build_auto_organize(self, file: MediaFile | None, metadata_id: int) -> OrganizePayload | None:
@@ -1042,14 +1052,20 @@ class ScrapeHandler(TaskHandler[ScrapePayload, ScrapeResult]):
             current().exception("failed to build auto organize followup", media_file_id=file.id)
             return None
 
-    async def _actor_scrape_followups(self, actor_names: list[str]) -> list[FollowupTask]:
+    async def _actor_scrape_followups(self, actor_names: list[str], content_type: ContentType) -> list[FollowupTask]:
         """为尚未刮削的影片演员描述 ACTOR_SCRAPE 后继; 失败不阻断主流程.
 
         ``meta.actors`` 已是 FacetRule 后的规范名, 与 sync_facets 创建的 Actor 对应, 缺失名静默跳过.
         跳过 ``Actor.raw`` 非空者 (站点快照可复用).
         ``priority=0``: 与影片任务同档. 早先排最低 (-1), 结果是只要还有影片刮削排队,
         演员就永远轮不上 —— 一部片刮完, 它的演员信息要等整批跑完才补上.
+
+        CHINESE 不派发: 国产演员 (糖心这类原创站的出镜者) 不在任何演员库里, 派出去必然
+        全站搜不到, 每个都要跑满重试与超时才失败, 几十个一起就把后台队列占死.
         """
+        if content_type is ContentType.CHINESE:
+            current().debug("chinese content, skip actor scraping", actors=len(actor_names))
+            return []
         if not self._config.actor_scraping.auto_scrape or not actor_names:
             return []
         try:
