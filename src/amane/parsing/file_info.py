@@ -18,7 +18,7 @@ from enum import StrEnum
 from pathlib import Path
 from typing import TypedDict
 
-from .language import has_kana, is_chinese_only
+from ..utils.language import has_han, has_kana
 
 # ---------------------------------------------------------------------------
 # Types
@@ -574,7 +574,7 @@ def _identify(
         # ThePornDB UUID 而整条任务失败. WESTERN 只该接全英文.
         if has_kana(stem):
             return None, ContentType.CENSORED
-        if is_chinese_only(stem):
+        if has_han(stem):
             return None, ContentType.CHINESE
         return None, ContentType.WESTERN
     return _fallback(stem, escape)
@@ -717,7 +717,7 @@ def _fallback(stem: str, escape: list[str]) -> tuple[str, ContentType]:
         return result.replace("FC-", "FC2-"), ContentType.FC2
     if has_kana(result):
         return result, ContentType.CENSORED
-    if is_chinese_only(result):
+    if has_han(result):
         return result, ContentType.CHINESE
     return result, ContentType.WESTERN
 

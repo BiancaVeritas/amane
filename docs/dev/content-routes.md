@@ -10,6 +10,7 @@
 - 厂牌站若对不匹配的番号仍发 HTTP, 不纳入默认表 (用户可按前缀自行加).
 - 未配置即立即返回 `None` 的源 (theporndb 无 token、r18dev 无 PG、official 前缀未命中) 可以排在链尾.
 - 会把无关番号拼成「看起来像详情页」的站不纳入默认表.
+- 路由只约束**刮削**, 不约束**手动搜索**: `handlers/scrape.py::_preview_number` 先问当前类型路由, 一条不中再扩大到其余路由 (按类型一刀切会把别的类型路由收录的资料藏起来). 各站并发发起, 结果按路由顺序而非完成先后排列.
 
 ## 类型取舍
 
@@ -20,7 +21,7 @@
 | censored | 中文索引 → FANZA 权威图文 → 稳定镜像 → 可空返回的官网 / r18 | 单厂牌 API (Prestige 等对每个候选 SKU 都请求); iqqtv (每部有碼片都会请求中文站; 需要时加入本路由再把 `field_priority.title` 提前) |
 | uncensored | 有独立无碼区的索引 + 无碼专站 | — |
 | fc2 | javdb 分类 + 专用索引 + 官方电子市场 + BT 与在线看索引排在链尾 | fc2club (跳转镜像不稳定) |
-| chinese | 有國產区的中文站第一, 综合 / BT 兜底 | javdb 当第一源 |
+| chinese | 原创站第一 (糖心), 有國產区的中文站次之, 综合 / BT 兜底 | javdb 当第一源 |
 | amateur | MGS 第一; FANZA 有素人频道; javbus 首页能见到 `300MIUM-*` | MGS 不纳入有碼默认, 否则 MIDV 会请求 MGS |
 | western | TPDB 第一 (需 token 才真正请求); 有歐美分类的索引排在链尾 | javbus 欧美域 (目录空); 不实现该域爬虫 |
 | hentai | getchu 对路径关键词分类的里番第一; DMM 动画 / 同人; javdb 兜底 | getchu 商品是数字 id 不是 JAV 番号, 仅因路径分类而纳入此链 |
@@ -44,6 +45,8 @@
 **airav.io** — 中文标题补强, 不是国产分区; 国产路由里置于 iqqtv 之后, fc2 路由里链尾 (官方电子市场下架的作品只剩这类索引站收录); FC2 番号站内恒写 `FC2-PPV-<id>`, 检索词用该写法; caribbeancom / 1pondo 等来源在番号前加来源名 (`caribbeancom_051318-665`), 比对与取值都先剥除.
 
 **iqqtv** (`iqq5.xyz` 会跳转到 `iqqk4.quest` 一类轮换域) — 导航有國產区 (爱豆傳媒、杏吧傳媒等, 不是 MD 号为主), 国产路由第一源; 爬虫带 `/cn|/jp` 语言前缀.
+
+**tangxinvlog.app (糖心)** — 国产原创站, 国产路由第一源. **站内没有番号体系**, 番号就是标题: 爬虫用剥离演员名后的标题同时当 `number` 与 `title`, 落库时由 `handlers/scrape.py` 按 `field_sources["title"] == "tangxin"` 把 `payload.number` 换成刮削到的标题 (聚合层一律用 payload 的番号, 不改这一处等于没改). 搜索页 `/search/?q=` 是纯前端过滤, 抓 HTML 永远拿不到结果, 检索只能读 `/search-index.json` 整份索引 (约 2MB, 进程内缓存). 有文件路径时只在路径含「糖心」/「tangxin」时认领, 无路径 (手动搜索) 一律放行.
 
 ## 类型专属 / 官方
 

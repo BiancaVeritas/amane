@@ -27,7 +27,7 @@ from ..media import materialize_images
 from ..media.crop_rules import find_rule
 from ..observability import current
 from ..observability.models import SiteOutcomeKind
-from ..parsing import ContentType, canonical_number, is_chinese_only, parse_file_info
+from ..parsing import ContentType, canonical_number, parse_file_info
 from ..plugins.models import SourceDescriptor, SourceTrait
 from ..utils.litepan_strm import read_litepan_115_file_id
 from ..utils.path import path_is_under
@@ -260,9 +260,9 @@ class ScrapeHandler(TaskHandler[ScrapePayload, ScrapeResult]):
         而它在 javbus 这类有码站也有条目), 只看当前路由会把明明存在的资料报成「搜不到」.
         先查当前路由是为了结果更贴题; 一条都没有时再问其余来源, 让用户自己挑.
 
-        中文标题只走 CHINESE 路由, 不扩大到其余类型: 中文标题拿去问有码站必然 404/403,
-        而每个失败还要重试两三次 —— 一次预览十几秒里有十秒耗在这上面, 换来的命中是零.
-        判据见 ``parsing.language.is_chinese_only`` (有假名即日文, 不会误伤日文标题).
+        中文标题同样走全路由: 它有可能是国产站的内容被别的类型路由收录 (糖心这类原创站的
+        标题也出现在有码站), 按类型一刀切会把存在的资料藏起来. 代价是日系站会 404/403 一轮,
+        但并发发起, 慢的是最慢那一个而不是全部之和.
         """
         route = list(self._config.scraping.content_routes.get(content_type) or [])
         if not route:
@@ -270,10 +270,6 @@ class ScrapeHandler(TaskHandler[ScrapePayload, ScrapeResult]):
         found = await self._search_route(term, content_type, route)
         if found:
             return found
-
-        if is_chinese_only(term):
-            current().info("chinese title, skip other routes", term=term[:40])
-            return []
 
         # 全路由兜底: 换掉 content_type 也换候选站, 因为各站对类型有自己的判断.
         for other_type, other_route in self._config.scraping.content_routes.items():

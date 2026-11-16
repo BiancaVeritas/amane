@@ -104,6 +104,7 @@
 | fc2ppvdb | fc2ppvdb.com | FC2 | | 可能被 Cloudflare 拦截, 拦截时由后续站点补位 |
 | fc2 | adult.contents.fc2.com | FC2 | | FC2 官方市场; 已下架的商品视为无此番号 |
 | airav | airav.io | FC2、国产 | | 中文标题 |
+| tangxin | tangxinvlog.app | 国产 | | 糖心 Vlog 原创站; 无番号体系, 番号即标题; 搜索按标题匹配站内索引 |
 | iqqtv | iqq5.xyz | 国产 | | 国产第一来源; 按「字段语言偏好」请求对应语言的页面 |
 | mgstage | mgstage.com | 素人 | | 素人第一来源; 素人影片不记录站内化名为演员 |
 | theporndb | theporndb.net | 欧美 | :material-check: | 需要 API Token; 新文件按 OSHASH 匹配, 重新刮削 / 手动兜底可指定 Scene ID; 指纹未命中不按重复番号猜测 |
@@ -147,7 +148,7 @@
 | 有码 | dmm → javdb → javbus → official |
 | 无码 | javdb → javbus → avsox → freejavbt |
 | FC2 | javdb → fc2ppvdb → fc2 → freejavbt → airav |
-| 国产 | iqqtv → javdb → airav → freejavbt |
+| 国产 | tangxin → iqqtv → javdb → airav → freejavbt |
 | 素人 | mgstage → dmm → javdb → javbus |
 | 欧美 | theporndb → javdb → freejavbt |
 | 动漫 | getchu → dmm → javdb |
