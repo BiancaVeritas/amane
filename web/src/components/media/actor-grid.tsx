@@ -8,8 +8,8 @@ import { ActorCard } from "./actor-card";
 /**
  * 演员墙的虚拟化状态按历史条目保存: 挂载时还原行尺寸与滚动位置.
  *
- * 路由器在 onRendered 复位窗口滚动, 此刻虚拟列表尚未产生高度, 复位会被浏览器夹回文档顶部;
- * 快照由 Virtuoso 在挂载后自行应用, 不依赖复位时机. 上限只保留最近浏览的若干条目.
+ * 每个演员列表使用自身滚动容器, 使分页可以固定在浏览区底部; 快照由 Virtuoso 在挂载后自行应用,
+ * 不依赖窗口滚动复位时机. 上限只保留最近浏览的若干条目.
  */
 const GRID_STATE_CACHE = new Map<string, StateSnapshot>();
 const GRID_STATE_LIMIT = 16;
@@ -86,7 +86,7 @@ export function ActorCardGrid({ items }: { items: ActorResponse[] }) {
 }
 
 /**
- * 窗口滚动虚拟化, 避免无限滚动把全部卡片留在 DOM.
+ * 容器滚动虚拟化, 避免无限滚动把全部卡片留在 DOM.
  *
  * `restoreStateFrom` 只在挂载时生效, 变更时会重新应用快照 —
  * 因此快照在挂载时读取一次, 身份在整个挂载期内保持稳定.
@@ -121,7 +121,7 @@ function ActorPosterWall({
   return (
     <Virtuoso
       ref={virtuosoRef}
-      useWindowScroll
+      style={{ height: "100%" }}
       data={rows}
       itemContent={renderRow}
       computeItemKey={actorRowKey}

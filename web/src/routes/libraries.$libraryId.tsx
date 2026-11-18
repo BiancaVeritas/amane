@@ -18,7 +18,7 @@ import { notifications } from "@mantine/notifications";
 import { IconArrowLeft, IconFilter, IconSearch, IconX } from "@tabler/icons-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link, stripSearchParams, useNavigate } from "@tanstack/react-router";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { z } from "zod";
 import {
@@ -95,6 +95,32 @@ function LibraryDetailPage() {
   const narrow = useNarrowViewport("md");
   const queryClient = useQueryClient();
   const listLimit = useUIStore((s) => s.pageSizes.libraryMedia);
+  const rememberedSort = useUIStore((s) => s.libraryMediaSort);
+  const setRememberedSort = useUIStore((s) => s.setLibraryMediaSort);
+
+  // 所有片库详情共用一份排序记忆; URL 使用默认排序时恢复上次选择.
+  useEffect(() => {
+    const currentBy = search.sort_by ?? "updated_at";
+    const currentOrder = search.order ?? "desc";
+    const isDefault = currentBy === "updated_at" && currentOrder === "desc";
+    const storedIsDefault =
+      rememberedSort.sort_by === "updated_at" && rememberedSort.order === "desc";
+    if (isDefault && !storedIsDefault) {
+      void routeNavigate({
+        search: (prev) => ({
+          ...prev,
+          sort_by: rememberedSort.sort_by,
+          order: rememberedSort.order,
+          page: 1,
+        }),
+      });
+    } else if (
+      !isDefault &&
+      (rememberedSort.sort_by !== currentBy || rememberedSort.order !== currentOrder)
+    ) {
+      setRememberedSort({ sort_by: currentBy, order: currentOrder });
+    }
+  }, [search.sort_by, search.order, rememberedSort, setRememberedSort, routeNavigate]);
 
   const id = Number(libraryId);
   const validId = Number.isInteger(id) && id > 0;
@@ -105,7 +131,8 @@ function LibraryDetailPage() {
   const [editOpen, setEditOpen] = useState(false);
   const [editForm, setEditForm] = useState<LibraryFormState>(emptyLibraryForm());
   const [searchInput, setSearchInput] = useResettingState(() => search.q ?? "", search.q);
-  const [advancedOpen, setAdvancedOpen] = useState(search.status != null);
+  // 筛选面板仅由用户主动展开; 已生效的筛选条件通过筛选标签显示, 不自动展开面板.
+  const [advancedOpen, setAdvancedOpen] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   const offset = (search.page - 1) * listLimit;
@@ -157,20 +184,18 @@ function LibraryDetailPage() {
   }
 
   function handleSort(field: MediaSortField) {
+    const nextOrder =
+      (search.sort_by ?? "updated_at") === field
+        ? (search.order ?? "desc") === "asc"
+          ? "desc"
+          : "asc"
+        : field === "size" || field === "created_at" || field === "updated_at"
+          ? "desc"
+          : "asc";
+    // 先写入持久化记忆, 再更新 URL; 离开详情页后重新进入时由上方 effect 恢复.
+    setRememberedSort({ sort_by: field, order: nextOrder });
     void routeNavigate({
-      search: (prev) => {
-        if ((prev.sort_by ?? "updated_at") === field) {
-          const nextOrder = (prev.order ?? "desc") === "asc" ? "desc" : "asc";
-          return { ...prev, sort_by: field, order: nextOrder, page: 1 };
-        }
-        return {
-          ...prev,
-          sort_by: field,
-          order:
-            field === "size" || field === "created_at" || field === "updated_at" ? "desc" : "asc",
-          page: 1,
-        };
-      },
+      search: (prev) => ({ ...prev, sort_by: field, order: nextOrder, page: 1 }),
     });
   }
 

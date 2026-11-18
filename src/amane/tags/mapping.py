@@ -38,6 +38,7 @@ class TagEntry:
     language: LanguageCode = "other"
     usage_count: int = 0
     sources: list[str] | None = None
+    archived: bool = False
 
 
 class TagMappingStore:
@@ -45,6 +46,7 @@ class TagMappingStore:
         self.path = data_dir / "tag_mappings.json"
         self._lock = threading.RLock()
         self._entries: dict[str, TagEntry] = {}
+        self._enabled = True
         self._last_seed = 0.0
         self._load()
 
@@ -53,6 +55,7 @@ class TagMappingStore:
             return
         try:
             raw = json.loads(self.path.read_text(encoding="utf-8"))
+            self._enabled = raw.get("enabled", True) is not False
             for key, value in raw.get("entries", {}).items():
                 if isinstance(value, dict):
                     self._entries[key] = TagEntry(
@@ -61,6 +64,7 @@ class TagMappingStore:
                         language=value.get("language") or detect_language(key),
                         usage_count=max(0, int(value.get("usage_count", 0))),
                         sources=list(value.get("sources") or []),
+                        archived=bool(value.get("archived", False)) and not bool(value.get("translation")),
                     )
         except OSError, ValueError, TypeError:
             # 不覆盖损坏文件；让服务保持可用，后续保存时使用当前可解析数据。
@@ -68,7 +72,11 @@ class TagMappingStore:
 
     def _save(self) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        payload = {"version": 1, "entries": {k: asdict(v) for k, v in sorted(self._entries.items())}}
+        payload = {
+            "version": 1,
+            "enabled": self._enabled,
+            "entries": {k: asdict(v) for k, v in sorted(self._entries.items())},
+        }
         fd, name = tempfile.mkstemp(prefix="tag-mappings-", suffix=".json", dir=self.path.parent)
         try:
             with os.fdopen(fd, "w", encoding="utf-8") as stream:
@@ -123,8 +131,21 @@ class TagMappingStore:
             if changed:
                 self._save()
 
+    @property
+    def enabled(self) -> bool:
+        with self._lock:
+            return self._enabled
+
+    def set_enabled(self, enabled: bool) -> bool:
+        with self._lock:
+            self._enabled = bool(enabled)
+            self._save()
+            return self._enabled
+
     def map_tags(self, tags: builtins.list[str]) -> builtins.list[str]:
         with self._lock:
+            if not self._enabled:
+                return list(dict.fromkeys(tag for tag in tags if tag))
             # 必须在映射后去重；未映射词条原样保留。
             translated: list[str] = []
             for tag in tags:
@@ -135,13 +156,21 @@ class TagMappingStore:
                 translated.append(translation or tag)
             return list(dict.fromkeys(translated))
 
+    def display_name(self, original: str) -> str:
+        """返回原始标签对应的展示名称；不修改原始标签。"""
+        with self._lock:
+            if not self._enabled:
+                return original
+            entry = self._entries.get(original)
+            return (entry.translation if entry else None) or original
+
     def map_id_map(self, values: dict[str, int]) -> dict[str, int]:
-        """将详情页标签名映射到同名展示标签，保留现有 FacetBadge 的 ID 筛选动作。"""
+        """将详情页标签名映射到展示名称；每个展示名称保留一个代表 ID。"""
         mapped: dict[str, int] = {}
         with self._lock:
             for original, facet_id in values.items():
-                entry = self._entries.get(original)
-                display = entry.translation if entry and entry.translation else original
+                entry = self._entries.get(original) if self._enabled else None
+                display = (entry.translation if entry else None) or original
                 mapped.setdefault(display, facet_id)
         return mapped
 
@@ -158,9 +187,11 @@ class TagMappingStore:
         with self._lock:
             values = list(self._entries.values())
             if status == "pending":
-                values = [v for v in values if not v.translation]
+                values = [v for v in values if not v.translation and not v.archived]
             elif status == "mapped":
-                values = [v for v in values if v.translation]
+                values = [v for v in values if bool(v.translation)]
+            elif status == "archived":
+                values = [v for v in values if v.archived]
             if language != "all":
                 values = [v for v in values if v.language == language]
             if frequency == "high":
@@ -177,7 +208,9 @@ class TagMappingStore:
         with self._lock:
             total = len(self._entries)
             mapped = sum(1 for entry in self._entries.values() if entry.translation)
-            return {"all": total, "mapped": mapped, "pending": total - mapped}
+            archived = sum(1 for entry in self._entries.values() if entry.archived)
+            pending = total - mapped - archived
+            return {"all": total, "mapped": mapped, "pending": pending, "archived": archived}
 
     def upsert(self, original: str, translation: str | None) -> TagEntry:
         original = original.strip()
@@ -186,21 +219,64 @@ class TagMappingStore:
         with self._lock:
             entry = self._entries.get(original) or TagEntry(original, language=detect_language(original), sources=[])
             entry.translation = translation.strip() if translation and translation.strip() else None
+            entry.archived = False
             self._entries[original] = entry
             self._save()
             return entry
 
-    def delete(self, original: str) -> bool:
+    def archive(self, original: str) -> bool:
         with self._lock:
-            if original not in self._entries:
+            entry = self._entries.get(original)
+            if entry is None or entry.translation:
                 return False
-            del self._entries[original]
+            entry.archived = True
             self._save()
             return True
 
+    def archive_many(self, originals: builtins.list[str]) -> tuple[int, int]:
+        archived = skipped = 0
+        with self._lock:
+            for original in dict.fromkeys(originals):
+                entry = self._entries.get(original)
+                if entry is None or entry.translation:
+                    skipped += 1
+                    continue
+                if not entry.archived:
+                    entry.archived = True
+                archived += 1
+            if archived:
+                self._save()
+        return archived, skipped
+
+    def restore(self, original: str) -> bool:
+        with self._lock:
+            entry = self._entries.get(original)
+            if entry is None or not entry.archived:
+                return False
+            entry.archived = False
+            entry.translation = None
+            self._save()
+            return True
+
+    def restore_many(self, originals: builtins.list[str]) -> int:
+        restored = 0
+        with self._lock:
+            for original in dict.fromkeys(originals):
+                entry = self._entries.get(original)
+                if entry is not None and entry.archived:
+                    entry.archived = False
+                    entry.translation = None
+                    restored += 1
+            if restored:
+                self._save()
+        return restored
+
     def export(self) -> dict:
         with self._lock:
-            return {"version": 1, "entries": {k: asdict(v) for k, v in sorted(self._entries.items())}}
+            return {
+                "version": 1,
+                "entries": {k: asdict(v) for k, v in sorted(self._entries.items()) if v.translation or v.archived},
+            }
 
     def import_data(self, payload: dict) -> int:
         entries = payload.get("entries", {})
@@ -219,6 +295,7 @@ class TagMappingStore:
                 current.translation = (
                     translation.strip() if isinstance(translation, str) and translation.strip() else None
                 )
+                current.archived = bool(value.get("archived", False)) and not bool(current.translation)
                 language = value.get("language")
                 if language in {"ja", "en", "zh", "other"}:
                     current.language = language

@@ -18,7 +18,7 @@
 | 类型 | 意图 | 不纳入默认表 |
 |------|------|----------|
 | censored | 中文索引 → FANZA 权威图文 → 稳定镜像 → 可空返回的官网 / r18 | 单厂牌 API (Prestige 等对每个候选 SKU 都请求); iqqtv (每部有碼片都会请求中文站; 需要时加入本路由再把 `field_priority.title` 提前) |
-| uncensored | 有独立无碼区的索引 + 无碼专站 | — |
+| uncensored DVD / streaming | DVD 走 AVE 与文件名映射索引聚合; streaming 按完整番号规则走逐站优先链 | — |
 | fc2 | javdb 分类 + 专用索引 + 官方电子市场 + BT 与在线看索引排在链尾 | fc2club (跳转镜像不稳定) |
 | chinese | 有國產区的中文站第一, 综合 / BT 兜底 | javdb 当第一源 |
 | amateur | MGS 第一; FANZA 有素人频道; javbus 首页能见到 `300MIUM-*` | MGS 不纳入有碼默认, 否则 MIDV 会请求 MGS |

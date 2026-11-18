@@ -78,7 +78,7 @@ Worker 替换不取消运行中任务: `_rebuild()` 构建新 worker 后旧 work
 
 ## `scraping` 影片路由 (Hot)
 
-`content_routes` 是按内容类型的**有序站点链**: 资格真值 + 该类型默认字段顺序. 实际请求的站点 ⊆ 此表, 空表则该类型刮削直接失败. 关闭某类型刮削须把该项设为空列表, 不允许删除 key.
+`content_routes` 是按刮削路由键配置的**有序站点链**: 资格真值 + 默认字段顺序. 普通类型沿用 `ContentType` 键; 无码的 `uncensored_dvd` 与 `uncensored_streaming` 共用 `ContentType.UNCENSORED`, 由完整番号匹配 `uncensored_streaming_number_rules` 分流, 未命中默认进入 DVD. 实际请求的站点 ⊆ 对应路由, 空表则该路由刮削直接失败. 关闭某路由须把该项设为空列表, 不允许删除 key.
 
 `field_priority` 是稀疏字段例外: 只写需要提前尝试的站; 编译时与该类型路由求交后前置, 其余路由站点保序回退. `field_blacklist` 是稀疏字段排除: 只写该字段不采用的站. 二者同时列出同一站时以字段排除为准. 不在该类型路由中的站无效, 也不额外发请求. 取值顺序与空值回退见 [task-system.md](task-system.md).
 

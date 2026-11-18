@@ -18,6 +18,8 @@ from amane.api.routes import API_PREFIX
 from amane.config import HotSettings
 from amane.db.models import Task, TaskType
 from amane.db.repository import Repository
+from amane.handlers.delete import DeleteHandler
+from amane.handlers.file import OrganizeHandler
 from amane.handlers.models import RefreshPayload, RefreshResult
 from amane.handlers.protocol import TaskHandler, TaskResult
 from amane.scheduler.worker import CANCEL_ERROR
@@ -195,17 +197,27 @@ async def test_library_locks_shared_across_workers(
     client, _blocker, runtime = swap_client
     locks = runtime.library_locks
     old_worker = runtime.worker
-    assert old_worker._handlers[TaskType.ORGANIZE]._library_locks is locks
-    assert old_worker._handlers[TaskType.DELETE]._library_locks is locks
+    old_organize = old_worker._handlers[TaskType.ORGANIZE]
+    old_delete = old_worker._handlers[TaskType.DELETE]
+
+    assert isinstance(old_organize, OrganizeHandler)
+    assert isinstance(old_delete, DeleteHandler)
+    assert old_organize._library_locks is locks
+    assert old_delete._library_locks is locks
 
     resp = await client.patch("config", json={"watermark": {"enabled": True}})
     assert resp.status_code == 200
 
     # 新 worker 与退役 worker 的 handlers 必须共用同一把锁
-    assert runtime.worker._handlers[TaskType.ORGANIZE]._library_locks is locks
-    assert runtime.worker._handlers[TaskType.DELETE]._library_locks is locks
-    assert old_worker._handlers[TaskType.ORGANIZE]._library_locks is locks
-    assert old_worker._handlers[TaskType.DELETE]._library_locks is locks
+    new_organize = runtime.worker._handlers[TaskType.ORGANIZE]
+    new_delete = runtime.worker._handlers[TaskType.DELETE]
+
+    assert isinstance(new_organize, OrganizeHandler)
+    assert isinstance(new_delete, DeleteHandler)
+    assert new_organize._library_locks is locks
+    assert new_delete._library_locks is locks
+    assert old_organize._library_locks is locks
+    assert old_delete._library_locks is locks
 
 
 @pytest.mark.asyncio(loop_scope="function")

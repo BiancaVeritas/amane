@@ -35,7 +35,6 @@ def upgrade() -> None:
         "ix_media_identities_type_value",
         "media_identities",
         ["identity_type", sa.text("lower(identity_value)")],
-        unique=True,
     )
     op.create_index("ix_media_identities_metadata_id", "media_identities", ["metadata_id"])
 

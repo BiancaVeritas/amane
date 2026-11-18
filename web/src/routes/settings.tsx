@@ -29,11 +29,17 @@ const settingsSearchSchema = z.object({
   section: z.string().optional(),
 });
 
+const DEFAULT_UNCENSORED_STREAMING_NUMBER_RULES = [
+  "[0-9]{6}[-_][0-9]{2,3}",
+  "N[0-9]+",
+  "HEYZO-[0-9]{4}",
+];
+
 // Keep these values aligned with ScrapingConfig defaults in src/amane/config/manager.py.
 const DEFAULT_CONTENT_ROUTES = {
-  censored: ["dmm", "mgstage", "javdb", "avbase", "javbus", "avsox"],
-  uncensored: [
-    "aventertainments",
+  censored: ["dmm", "mgstage", "avsox", "avbase", "javbus"],
+  uncensored_dvd: ["aventertainments", "caribbeancom_index", "avsox"],
+  uncensored_streaming: [
     "10musume",
     "1pondo",
     "caribbeancom",
@@ -41,13 +47,53 @@ const DEFAULT_CONTENT_ROUTES = {
     "tokyo_hot",
     "caribbeancompr",
     "d2pass",
+    "avsox",
   ],
-  fc2: ["javdb", "fc2ppvdb", "fc2", "freejavbt", "airav"],
-  chinese: ["iqqtv", "javdb", "airav", "freejavbt"],
-  amateur: ["mgstage", "dmm", "javdb", "javbus"],
+  chinese: [],
   western: ["theporndb"],
-  hentai: ["getchu", "dmm", "javdb"],
+  fc2: ["fc2"],
+  amateur: ["mgstage", "dmm"],
+  hentai: ["getchu", "dmm"],
 };
+
+function RestoreDefaultButton({
+  field,
+  defaultValue,
+  setValue,
+}: {
+  field: string;
+  defaultValue: unknown;
+  setValue: (value: unknown) => void;
+}) {
+  const { t } = useTranslation("settings");
+
+  return (
+    <Button
+      key={field}
+      size="xs"
+      variant="subtle"
+      leftSection={<IconRefresh size={14} />}
+      onClick={() => setValue(defaultValue)}
+    >
+      {t("restoreDefault")}
+    </Button>
+  );
+}
+
+function scrapingFieldActions(field: string, setValue: (value: unknown) => void) {
+  const defaults: Record<string, unknown> = {
+    poster_ratio: 0.7,
+    uncensored_poster_ratio: 0.87,
+    poster_crop_skip_ratio: 0.9,
+    content_routes: DEFAULT_CONTENT_ROUTES,
+    uncensored_streaming_number_rules: DEFAULT_UNCENSORED_STREAMING_NUMBER_RULES,
+    number_mapping_rules: [],
+  };
+
+  if (!(field in defaults)) return null;
+
+  return <RestoreDefaultButton field={field} defaultValue={defaults[field]} setValue={setValue} />;
+}
 
 export const Route = createFileRoute("/settings")({
   validateSearch: settingsSearchSchema,
@@ -91,18 +137,6 @@ function SettingsPage() {
     } finally {
       setTestingMediaServer(false);
     }
-  }
-
-  function restoreScrapingDefault(
-    field: "poster_ratio" | "uncensored_poster_ratio" | "poster_crop_skip_ratio" | "content_routes",
-  ) {
-    const defaults = {
-      poster_ratio: 0.7,
-      uncensored_poster_ratio: 0.87,
-      poster_crop_skip_ratio: 0.9,
-      content_routes: DEFAULT_CONTENT_ROUTES,
-    };
-    saveMutation.mutate({ body: { scraping: { [field]: defaults[field] } } });
   }
 
   const resolvedSchema = useMemo(() => (schema ? resolveSchema(schema, schema) : null), [schema]);
@@ -203,38 +237,7 @@ function SettingsPage() {
                     values={sectionValues}
                     i18nPrefix="settings:fields"
                     actionsPlacement="affix"
-                    fieldActions={
-                      key === "scraping"
-                        ? Object.fromEntries(
-                            [
-                              "poster_ratio",
-                              "uncensored_poster_ratio",
-                              "poster_crop_skip_ratio",
-                              "content_routes",
-                            ].map((field) => [
-                              field,
-                              <Button
-                                key={field}
-                                size="xs"
-                                variant="subtle"
-                                leftSection={<IconRefresh size={14} />}
-                                loading={saveMutation.isPending}
-                                onClick={() =>
-                                  restoreScrapingDefault(
-                                    field as
-                                      | "poster_ratio"
-                                      | "uncensored_poster_ratio"
-                                      | "poster_crop_skip_ratio"
-                                      | "content_routes",
-                                  )
-                                }
-                              >
-                                {t("restoreDefault")}
-                              </Button>,
-                            ]),
-                          )
-                        : undefined
-                    }
+                    fieldActions={key === "scraping" ? scrapingFieldActions : undefined}
                     onSave={(patch) => saveMutation.mutate({ body: { [key]: patch } })}
                     saving={saveMutation.isPending}
                   />

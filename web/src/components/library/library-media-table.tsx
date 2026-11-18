@@ -280,6 +280,7 @@ export function LibraryMediaTable({
 
   async function handleOverrideScrape(
     number: string,
+    libraryNumber: string,
     contentType: ContentType | undefined,
     theporndbUuid: string | undefined,
   ) {
@@ -291,6 +292,9 @@ export function LibraryMediaTable({
           type: "scrape",
           media_id: overrideTarget.id,
           number,
+          ...(contentType !== "western" && libraryNumber !== number
+            ? { library_number: libraryNumber }
+            : {}),
           ...(contentType != null ? { content_type: contentType } : {}),
           ...(theporndbUuid != null ? { theporndb_uuid: theporndbUuid } : {}),
         },
@@ -655,8 +659,8 @@ export function LibraryMediaTable({
         onClose={() => {
           if (!overrideSaving) setOverrideTarget(null);
         }}
-        onSubmit={(number, contentType, theporndbUuid) =>
-          void handleOverrideScrape(number, contentType, theporndbUuid)
+        onSubmit={(number, libraryNumber, contentType, theporndbUuid) =>
+          void handleOverrideScrape(number, libraryNumber, contentType, theporndbUuid)
         }
       />
       <MediaDeleteDialog

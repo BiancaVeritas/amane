@@ -47,7 +47,10 @@ def _make_handler(repo, actors: list[str], *, auto_scrape: bool) -> ScrapeHandle
     factory = AsyncMock(spec=CrawlerFactory)
     factory.get_crawlers.return_value = {"javdb": FakeCrawler(metadata)}
     cfg = HotSettings(
-        scraping=ScrapingConfig(field_priority={}),
+        scraping=ScrapingConfig(
+            content_routes={ContentType.CENSORED: [SiteName.JAVDB]},
+            field_priority={},
+        ),
         actor_scraping=ActorScrapingConfig(auto_scrape=auto_scrape, download_images=False),
     )
     return ScrapeHandler(repo, factory, AsyncMock(), cfg)

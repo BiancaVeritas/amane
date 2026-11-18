@@ -38,6 +38,12 @@ class MediaFileStatus(StrEnum):
     SKIP = "skip"
 
 
+class OshashSubmissionStatus(StrEnum):
+    PENDING = "pending"
+    SUBMITTING = "submitting"
+    UNCERTAIN = "uncertain"
+
+
 class TaskType(StrEnum):
     SCRAPE = "scrape"
     ORGANIZE = "organize"
@@ -199,6 +205,10 @@ class OshashSubmission(SQLModel, table=True):
     duration: int
     title: str | None = None
     path: str
+    status: OshashSubmissionStatus = Field(
+        default=OshashSubmissionStatus.PENDING,
+        index=True,
+    )
     created_at: datetime = Field(default_factory=_utcnow)
     last_error: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
 
@@ -379,7 +389,6 @@ class MediaIdentity(SQLModel, table=True):
             "ix_media_identities_type_value",
             "identity_type",
             text("lower(identity_value)"),
-            unique=True,
         ),
         Index("ix_media_identities_metadata_id", "metadata_id"),
     )

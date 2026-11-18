@@ -238,9 +238,13 @@ export const ActorPushSubmissionSchema = {
         },
         mode: {
             type: 'string',
-            enum: ['full', 'incremental'],
+            enum: [
+                'full',
+                'incremental'
+            ],
             title: 'Mode',
-            description: '同步模式: full 用 Amane 非空资料覆盖; incremental 仅补充目标空字段'
+            description: '同步模式: full 用 Amane 非空资料覆盖; incremental 仅补充目标空字段',
+            default: 'full'
         },
         type: {
             type: 'string',
@@ -1271,6 +1275,56 @@ export const BatchSubmitSchema = {
     title: 'BatchSubmit'
 } as const;
 
+export const Body_import_actor_mapping_tableSchema = {
+    properties: {
+        file: {
+            type: 'string',
+            contentMediaType: 'application/octet-stream',
+            title: 'File'
+        },
+        start_column: {
+            type: 'integer',
+            title: 'Start Column',
+            default: 1
+        },
+        skip_header: {
+            type: 'boolean',
+            title: 'Skip Header',
+            default: false
+        }
+    },
+    type: 'object',
+    required: [
+        'file'
+    ],
+    title: 'Body_import_actor_mapping_table'
+} as const;
+
+export const Body_import_number_mapping_tableSchema = {
+    properties: {
+        file: {
+            type: 'string',
+            contentMediaType: 'application/octet-stream',
+            title: 'File'
+        },
+        start_column: {
+            type: 'integer',
+            title: 'Start Column',
+            default: 1
+        },
+        skip_header: {
+            type: 'boolean',
+            title: 'Skip Header',
+            default: false
+        }
+    },
+    type: 'object',
+    required: [
+        'file'
+    ],
+    title: 'Body_import_number_mapping_table'
+} as const;
+
 export const Body_install_pluginSchema = {
     properties: {
         file: {
@@ -2149,6 +2203,41 @@ export const ErrorRowSchema = {
     ],
     title: 'ErrorRow',
     description: '回合异常; 文案直接进助手气泡.'
+} as const;
+
+export const ExceptionUpdateSchema = {
+    properties: {
+        group_id: {
+            type: 'integer',
+            title: 'Group Id'
+        },
+        side: {
+            type: 'string',
+            enum: [
+                'old',
+                'new'
+            ],
+            title: 'Side'
+        },
+        entry: {
+            anyOf: [
+                {
+                    additionalProperties: true,
+                    type: 'object'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Entry'
+        }
+    },
+    type: 'object',
+    required: [
+        'group_id',
+        'side'
+    ],
+    title: 'ExceptionUpdate'
 } as const;
 
 export const FacetBatchActionSchema = {
@@ -3206,50 +3295,48 @@ export const HotSettingsSchema = {
                 content_routes: {
                     amateur: [
                         'mgstage',
-                        'dmm',
-                        'javdb',
-                        'javbus'
+                        'dmm'
                     ],
                     censored: [
                         'dmm',
                         'mgstage',
-                        'javdb',
+                        'avsox',
                         'avbase',
-                        'javbus',
-                        'avsox'
+                        'javbus'
                     ],
-                    chinese: [
-                        'iqqtv',
-                        'javdb',
-                        'airav',
-                        'freejavbt'
-                    ],
+                    chinese: [],
                     fc2: [
-                        'javdb',
-                        'fc2ppvdb',
-                        'fc2',
-                        'freejavbt',
-                        'airav'
+                        'fc2'
                     ],
                     hentai: [
                         'getchu',
-                        'dmm',
-                        'javdb'
+                        'dmm'
                     ],
-                    uncensored: [
+                    uncensored_dvd: [
                         'aventertainments',
+                        'caribbeancom_index',
+                        'avsox'
+                    ],
+                    uncensored_streaming: [
                         '10musume',
                         '1pondo',
                         'caribbeancom',
                         'pacopacomama',
                         'tokyo_hot',
                         'caribbeancompr',
-                        'd2pass'
+                        'd2pass',
+                        'avsox'
                     ],
                     western: [
                         'theporndb'
                     ]
                 },
+                uncensored_streaming_number_rules: [
+                    '[0-9]{6}[-_][0-9]{2,3}',
+                    'N[0-9]+',
+                    'HEYZO-[0-9]{4}'
+                ],
+                number_mapping_rules: [],
                 field_priority: {},
                 field_blacklist: {},
                 field_language: {
@@ -3336,6 +3423,18 @@ export const HotSettingsSchema = {
                         use_proxy: true
                     },
                     caribbeancom: {
+                        cookie: {},
+                        languages: [
+                            'zh',
+                            'ja',
+                            'en'
+                        ],
+                        official_routes: {},
+                        rate_limit: 2,
+                        use_browser: 'auto',
+                        use_proxy: true
+                    },
+                    caribbeancom_index: {
                         cookie: {},
                         languages: [
                             'zh',
@@ -3875,6 +3974,30 @@ export const HotSettingsSchema = {
     description: '运行时可更新, 持久化到 TOML. extra=forbid, 未知字段须校验失败.'
 } as const;
 
+export const ImportRequestSchema = {
+    properties: {
+        data: {
+            additionalProperties: true,
+            type: 'object',
+            title: 'Data'
+        },
+        mode: {
+            type: 'string',
+            enum: [
+                'merge',
+                'replace'
+            ],
+            title: 'Mode',
+            default: 'merge'
+        }
+    },
+    type: 'object',
+    required: [
+        'data'
+    ],
+    title: 'ImportRequest'
+} as const;
+
 export const InterruptSchema = {
     properties: {
         id: {
@@ -4240,13 +4363,13 @@ export const LLMConfigSchema = {
                 }
             ],
             title: 'System Prompt',
-            'x-long': true
+            'x-ordered': true
         },
         field_prompts: {
             additionalProperties: {
                 type: 'string',
                 maxLength: 2000,
-                'x-long': true
+                'x-ordered': true
             },
             propertyNames: {
                 $ref: '#/components/schemas/MetadataField'
@@ -4332,15 +4455,31 @@ export const LibraryCreateRequestSchema = {
             type: 'string',
             title: 'Path'
         },
-        scan_paths: { items: { type: 'string' }, type: 'array', title: 'Scan Paths', default: [] },
+        scan_paths: {
+            items: {
+                type: 'string'
+            },
+            type: 'array',
+            title: 'Scan Paths'
+        },
         organize_path: {
             anyOf: [
-                { type: 'string' },
-                { type: 'null' }
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
             ],
             title: 'Organize Path'
         },
-        organize_paths: { items: { type: 'string' }, type: 'array', title: 'Organize Paths', default: [] },
+        organize_paths: {
+            items: {
+                type: 'string'
+            },
+            type: 'array',
+            title: 'Organize Paths'
+        },
         automation: {
             $ref: '#/components/schemas/LibraryAutomation',
             default: 'scrape'
@@ -4581,15 +4720,31 @@ export const LibraryResponseSchema = {
             type: 'string',
             title: 'Path'
         },
-        scan_paths: { items: { type: 'string' }, type: 'array', title: 'Scan Paths', default: [] },
+        scan_paths: {
+            items: {
+                type: 'string'
+            },
+            type: 'array',
+            title: 'Scan Paths'
+        },
         organize_path: {
             anyOf: [
-                { type: 'string' },
-                { type: 'null' }
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
             ],
             title: 'Organize Path'
         },
-        organize_paths: { items: { type: 'string' }, type: 'array', title: 'Organize Paths', default: [] },
+        organize_paths: {
+            items: {
+                type: 'string'
+            },
+            type: 'array',
+            title: 'Organize Paths'
+        },
         automation: {
             $ref: '#/components/schemas/LibraryAutomation'
         },
@@ -4812,12 +4967,44 @@ export const LibraryUpdateRequestSchema = {
             ],
             title: 'Path'
         },
+        scan_paths: {
+            anyOf: [
+                {
+                    items: {
+                        type: 'string'
+                    },
+                    type: 'array'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Scan Paths'
+        },
         organize_path: {
             anyOf: [
-                { type: 'string' },
-                { type: 'null' }
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
             ],
             title: 'Organize Path'
+        },
+        organize_paths: {
+            anyOf: [
+                {
+                    items: {
+                        type: 'string'
+                    },
+                    type: 'array'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Organize Paths'
         },
         automation: {
             anyOf: [
@@ -5164,6 +5351,39 @@ export const ManufacturerSchema = {
         'wanz_factory'
     ],
     title: 'Manufacturer'
+} as const;
+
+export const MappingSelectionSchema = {
+    properties: {
+        originals: {
+            items: {
+                type: 'string'
+            },
+            type: 'array',
+            maxItems: 200,
+            minItems: 1,
+            title: 'Originals'
+        }
+    },
+    type: 'object',
+    required: [
+        'originals'
+    ],
+    title: 'MappingSelection'
+} as const;
+
+export const MappingStateUpdateSchema = {
+    properties: {
+        enabled: {
+            type: 'boolean',
+            title: 'Enabled'
+        }
+    },
+    type: 'object',
+    required: [
+        'enabled'
+    ],
+    title: 'MappingStateUpdate'
 } as const;
 
 export const MappingUpdateSchema = {
@@ -7362,7 +7582,11 @@ export const RefreshResultSchema = {
             type: 'integer',
             title: 'Scrape'
         },
-        associated: { type: 'integer', title: 'Associated', default: 0 }
+        associated: {
+            type: 'integer',
+            title: 'Associated',
+            default: 0
+        }
     },
     type: 'object',
     required: [
@@ -7416,6 +7640,13 @@ export const RefreshSubmissionSchema = {
             title: 'Patterns',
             description: '覆盖 Library 的 patterns; None 沿用库设置'
         },
+        paths: {
+            items: {
+                type: 'string'
+            },
+            type: 'array',
+            title: 'Paths'
+        },
         scan: {
             items: {
                 $ref: '#/components/schemas/ScanMode'
@@ -7438,7 +7669,6 @@ export const RefreshSubmissionSchema = {
                 'pending'
             ]
         },
-        associate: { type: 'boolean', title: 'Associate', default: false },
         use_cache: {
             items: {
                 $ref: '#/components/schemas/CacheKind'
@@ -7450,6 +7680,11 @@ export const RefreshSubmissionSchema = {
                 'metadata',
                 'trans'
             ]
+        },
+        associate: {
+            type: 'boolean',
+            title: 'Associate',
+            default: false
         },
         type: {
             type: 'string',
@@ -8417,6 +8652,18 @@ export const ScrapeSubmissionSchema = {
             ],
             title: 'Number'
         },
+        library_number: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Library Number',
+            description: '手动指定刮削的最终片库番号；未提供时沿用 number'
+        },
         media_id: {
             anyOf: [
                 {
@@ -8548,6 +8795,7 @@ export const ScrapingConfigSchema = {
                         'pacopacomama',
                         'caribbeancom',
                         'caribbeancompr',
+                        'caribbeancom_index',
                         'd2pass',
                         'prestige',
                         'r18dev',
@@ -8561,11 +8809,39 @@ export const ScrapingConfigSchema = {
                 'x-ordered': true
             },
             propertyNames: {
-                $ref: '#/components/schemas/ContentType'
+                type: 'string',
+                enum: [
+                    'censored',
+                    'uncensored_dvd',
+                    'uncensored_streaming',
+                    'chinese',
+                    'western',
+                    'fc2',
+                    'amateur',
+                    'hentai'
+                ]
             },
             type: 'object',
             title: 'Content Routes',
             'x-frozen-keys': true
+        },
+        uncensored_streaming_number_rules: {
+            items: {
+                type: 'string'
+            },
+            type: 'array',
+            title: 'Uncensored Streaming Number Rules',
+            description: '无码流媒体番号完整匹配规则; 每条规则为正则表达式, 不区分大小写.',
+            'x-ordered': true
+        },
+        number_mapping_rules: {
+            items: {
+                type: 'string'
+            },
+            type: 'array',
+            title: 'Number Mapping Rules',
+            description: '通用番号映射规则; 每行格式为完整匹配正则表达式 => 替换表达式, 仅自动非欧美非无码流媒体刮削使用.',
+            'x-ordered': true
         },
         field_priority: {
             additionalProperties: {
@@ -8597,6 +8873,7 @@ export const ScrapingConfigSchema = {
                         'pacopacomama',
                         'caribbeancom',
                         'caribbeancompr',
+                        'caribbeancom_index',
                         'd2pass',
                         'prestige',
                         'r18dev',
@@ -8646,6 +8923,7 @@ export const ScrapingConfigSchema = {
                         'pacopacomama',
                         'caribbeancom',
                         'caribbeancompr',
+                        'caribbeancom_index',
                         'd2pass',
                         'prestige',
                         'r18dev',
@@ -9333,6 +9611,7 @@ export const SiteNameSchema = {
         'pacopacomama',
         'caribbeancom',
         'caribbeancompr',
+        'caribbeancom_index',
         'd2pass',
         'prestige',
         'r18dev',
@@ -11160,4 +11439,155 @@ export const WorkerConfigSchema = {
     },
     type: 'object',
     title: 'WorkerConfig'
+} as const;
+
+export const amane__api__routes__actor_mappings__BatchDeleteRequestSchema = {
+    properties: {
+        ids: {
+            items: {
+                type: 'string'
+            },
+            type: 'array',
+            title: 'Ids'
+        }
+    },
+    type: 'object',
+    required: [
+        'ids'
+    ],
+    title: 'BatchDeleteRequest'
+} as const;
+
+export const amane__api__routes__actor_mappings__EntryUpdateSchema = {
+    properties: {
+        id: {
+            type: 'string',
+            maxLength: 12,
+            minLength: 1,
+            title: 'Id'
+        },
+        name: {
+            type: 'string',
+            maxLength: 200,
+            minLength: 1,
+            title: 'Name'
+        },
+        aliases: {
+            items: {
+                type: 'string'
+            },
+            type: 'array',
+            title: 'Aliases'
+        },
+        original_id: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Original Id'
+        }
+    },
+    type: 'object',
+    required: [
+        'id',
+        'name'
+    ],
+    title: 'EntryUpdate'
+} as const;
+
+export const amane__api__routes__number_mappings__BatchDeleteRequestSchema = {
+    properties: {
+        keys: {
+            items: {
+                type: 'string'
+            },
+            type: 'array',
+            title: 'Keys'
+        }
+    },
+    type: 'object',
+    required: [
+        'keys'
+    ],
+    title: 'BatchDeleteRequest'
+} as const;
+
+export const amane__api__routes__number_mappings__EntryUpdateSchema = {
+    properties: {
+        key: {
+            type: 'string',
+            maxLength: 300,
+            minLength: 1,
+            title: 'Key'
+        },
+        original_key: {
+            anyOf: [
+                {
+                    type: 'string',
+                    maxLength: 300
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Original Key'
+        },
+        id: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'integer'
+                }
+            ],
+            title: 'Id'
+        },
+        title: {
+            anyOf: [
+                {
+                    type: 'string',
+                    maxLength: 2000
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Title'
+        },
+        actor: {
+            anyOf: [
+                {
+                    type: 'string',
+                    maxLength: 2000
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Actor'
+        },
+        override_title: {
+            anyOf: [
+                {
+                    type: 'string',
+                    maxLength: 2000
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Override Title'
+        }
+    },
+    type: 'object',
+    required: [
+        'key',
+        'id'
+    ],
+    title: 'EntryUpdate'
 } as const;

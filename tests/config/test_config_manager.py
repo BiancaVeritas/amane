@@ -34,6 +34,17 @@ from amane.enums import (
 )
 from amane.parsing import ContentType
 
+_SCRAPE_ROUTE_KEYS = {
+    "censored",
+    "uncensored_dvd",
+    "uncensored_streaming",
+    "chinese",
+    "western",
+    "fc2",
+    "amateur",
+    "hentai",
+}
+
 # ---------------------------------------------------------------------------
 # ColdSettings
 # ---------------------------------------------------------------------------
@@ -361,8 +372,24 @@ class TestScrapingPriorityMigration:
     def test_no_default_priority_keeps_route_order(self):
         cfg = ScrapingConfig.model_validate({"content_routes": {"censored": ["javbus", "javdb"]}})
         assert cfg.content_routes[ContentType.CENSORED] == [SiteName.JAVBUS, SiteName.JAVDB]
-        assert set(cfg.content_routes) == set(ContentType)
+        assert set(cfg.content_routes) == _SCRAPE_ROUTE_KEYS
         assert cfg.content_routes[ContentType.FC2] == ScrapingConfig().content_routes[ContentType.FC2]
+
+    def test_uncensored_streaming_number_rules_are_validated(self):
+        cfg = ScrapingConfig.model_validate(
+            {"uncensored_streaming_number_rules": [r"[0-9]{6}[-_][0-9]{2,3}", "N[0-9]+"]}
+        )
+        assert cfg.uncensored_streaming_number_rules == [r"[0-9]{6}[-_][0-9]{2,3}", "N[0-9]+"]
+        with pytest.raises(ValidationError, match="无效的无码流媒体番号规则"):
+            ScrapingConfig(uncensored_streaming_number_rules=["["])
+
+    def test_number_mapping_rules_are_validated(self):
+        cfg = ScrapingConfig.model_validate({"number_mapping_rules": [r"^(RED)-([0-9]+)$ => RED\\2"]})
+        assert cfg.number_mapping_rules == [r"^(RED)-([0-9]+)$ => RED\\2"]
+        with pytest.raises(ValidationError, match="番号映射规则必须使用"):
+            ScrapingConfig(number_mapping_rules=["RED"])
+        with pytest.raises(ValidationError, match="无效的番号映射规则"):
+            ScrapingConfig(number_mapping_rules=["[ => x"])
 
     def test_uncensored_poster_ratio_is_independent(self):
         cfg = ScrapingConfig.model_validate({"poster_ratio": 0.65, "uncensored_poster_ratio": 0.82})
@@ -370,31 +397,34 @@ class TestScrapingPriorityMigration:
         assert cfg.uncensored_poster_ratio == 0.82
         assert ScrapingConfig().uncensored_poster_ratio == 0.87
 
-    def test_legacy_uncensored_default_route_adds_aventertainments(self):
+    def test_legacy_uncensored_route_becomes_streaming_route(self):
         cfg = ScrapingConfig.model_validate(
-            {"content_routes": {"uncensored": ["javdb", "javbus", "avsox", "freejavbt"]}}
+            {"content_routes": {"uncensored": ["aventertainments", "javdb", "javbus", "avsox", "freejavbt"]}}
         )
-        assert cfg.content_routes[ContentType.UNCENSORED] == [
+        assert cfg.content_routes["uncensored_streaming"] == [
             SiteName.JAVDB,
             SiteName.JAVBUS,
             SiteName.AVSOX,
             SiteName.FREEJAVBT,
+        ]
+        assert cfg.content_routes["uncensored_dvd"] == [
             SiteName.AVENTERTAINMENTS,
+            SiteName.CARIBBEANCOM_INDEX,
+            SiteName.AVSOX,
         ]
 
     def test_default_routes_type_specific_heads(self):
         routes = ScrapingConfig().content_routes
         assert routes[ContentType.AMATEUR][0] == SiteName.MGSTAGE
-        assert routes[ContentType.CHINESE][0] == SiteName.IQQTV
-        assert routes[ContentType.HENTAI][0] == SiteName.GETCHU
-        assert routes[ContentType.WESTERN][0] == SiteName.THEPORNDB
-        assert routes[ContentType.UNCENSORED][0] == SiteName.AVENTERTAINMENTS
-        assert routes[ContentType.UNCENSORED].index(SiteName.CARIBBEANCOMPR) < routes[ContentType.UNCENSORED].index(
+        assert routes[ContentType.CHINESE] == []
+        assert routes[ContentType.HENTAI] == [SiteName.GETCHU, SiteName.DMM]
+        assert routes[ContentType.WESTERN] == [SiteName.THEPORNDB]
+        assert routes["uncensored_dvd"] == [SiteName.AVENTERTAINMENTS, SiteName.CARIBBEANCOM_INDEX, SiteName.AVSOX]
+        assert routes["uncensored_streaming"][0] == SiteName.TENMUSUME
+        assert routes["uncensored_streaming"].index(SiteName.CARIBBEANCOMPR) < routes["uncensored_streaming"].index(
             SiteName.D2PASS
         )
-        assert SiteName.FC2PPVDB in routes[ContentType.FC2]
-        # 官方电子市场下架的作品只剩索引站在线看站收录, airav 排在 fc2 路线的链尾
-        assert routes[ContentType.FC2][-1] == SiteName.AIRAV
+        assert routes[ContentType.FC2] == [SiteName.FC2]
 
 
 class TestFrozenKeyDictCompleteness:
@@ -403,7 +433,7 @@ class TestFrozenKeyDictCompleteness:
     def test_defaults_cover_canonical_keys(self):
         cfg = ScrapingConfig()
         assert set(cfg.site_config) == set(SiteName)
-        assert set(cfg.content_routes) == set(ContentType)
+        assert set(cfg.content_routes) == _SCRAPE_ROUTE_KEYS
         assert MetadataField.TITLE in cfg.field_language
         assert set(cfg.field_language) == LANG_METADATA_FIELD_SET
 
@@ -437,7 +467,7 @@ class TestFrozenKeyDictCompleteness:
     ) -> None:
         cfg = ScrapingConfig.model_validate({"content_routes": payload})
         defaults = ScrapingConfig()
-        assert set(cfg.content_routes) == set(ContentType)
+        assert set(cfg.content_routes) == _SCRAPE_ROUTE_KEYS
         expected = defaults.content_routes[ContentType.CENSORED] if censored is None else censored
         assert cfg.content_routes[ContentType.CENSORED] == expected
         assert cfg.content_routes[ContentType.FC2] == defaults.content_routes[ContentType.FC2]
@@ -641,7 +671,7 @@ class TestConfigManagerLoad:
         assert set(scraping.site_config) == set(SiteName)
         assert scraping.site_config[SiteName.JAVDB].use_proxy is False
         assert scraping.site_config[SiteName.GFRIENDS].use_proxy is True
-        assert set(scraping.content_routes) == set(ContentType)
+        assert set(scraping.content_routes) == _SCRAPE_ROUTE_KEYS
         assert scraping.content_routes[ContentType.CENSORED] == [SiteName.JAVBUS]
         assert scraping.content_routes[ContentType.FC2] == defaults.content_routes[ContentType.FC2]
         assert set(scraping.field_language) == set(defaults.field_language)
@@ -751,9 +781,9 @@ class TestBskBackendAvailability:
             BrowserConfig(bsk_path=str(tmp_path / "absent"), backend=BrowserBackendName.BSK)
 
 
-def test_default_uncensored_route_appends_d2pass() -> None:
+def test_default_uncensored_streaming_route_appends_avsox() -> None:
     cfg = ScrapingConfig()
-    assert cfg.content_routes[ContentType.UNCENSORED][-1] == SiteName.D2PASS
+    assert cfg.content_routes["uncensored_streaming"][-1] == SiteName.AVSOX
 
 
 def test_default_actor_source_orders() -> None:

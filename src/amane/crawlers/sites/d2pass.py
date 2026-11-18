@@ -12,38 +12,23 @@ from ...enums import SiteName
 from ..base import Crawler, CrawlerProfile
 from ..http import RequestError
 from ..models import FetchOptions, MediaMetadata, SearchQuery, film_actors
+from .number_mapping import load_number_mapping
 
 logger = structlog.get_logger(__name__)
 _BASE_URL = "https://www.d2pass.com"
 _DETAIL_PATH = "/product/movies/{}"
 _IMAGE_URL = "https://images.d2pass.com/images/meta/movies/flash/{}.webp"
-_INDEX_PATH = Path(__file__).with_name("d2pass_heyzo_index.json")
-_index: dict[str, dict[str, object]] | None = None
 _NUMBER_RE = re.compile(r"^HEYZO[-_ ]?(?P<digits>\d+)$", re.IGNORECASE)
 _PRODUCT_START = '"product":{"product_id":'
 _BLOCK_SPAN = 4000
 
 
-def _load_index() -> dict[str, dict[str, object]]:
-    global _index
-    if _index is not None:
-        return _index
-    try:
-        raw = json.loads(_INDEX_PATH.read_text(encoding="utf-8"))
-    except OSError, json.JSONDecodeError:
-        logger.warning("D2PASS HEYZO 映射索引不可用", path=str(_INDEX_PATH))
-        _index = {}
-        return _index
-    _index = {str(k): v for k, v in raw.items() if isinstance(v, dict)} if isinstance(raw, dict) else {}
-    return _index
-
-
-def _product_id(number: str) -> int | None:
+def _product_id(number: str, mapping_path: Path | None) -> int | None:
     match = _NUMBER_RE.fullmatch(number.strip())
     if not match:
         return None
     key = match.group("digits").lstrip("0") or "0"
-    entry = _load_index().get(key.zfill(4))
+    entry = load_number_mapping(mapping_path).get(key.zfill(4))
     value = entry.get("id") if entry else None
     return value if isinstance(value, int) and not isinstance(value, bool) else None
 
@@ -70,8 +55,9 @@ def _block(html: str) -> str | None:
 
 
 class D2PassCrawler(Crawler):
-    def __init__(self, client, config=None):
+    def __init__(self, client, config=None, *, mapping_path: Path | None = None):
         super().__init__(client, config)
+        self._mapping_path = mapping_path
         self._pages: dict[str, str] = {}
         self._numbers: dict[str, str] = {}
 
@@ -83,7 +69,7 @@ class D2PassCrawler(Crawler):
         del options
         self._pages.clear()
         self._numbers.clear()
-        pid = _product_id(query.number)
+        pid = _product_id(query.number, self._mapping_path)
         if pid is None:
             return None
         url = f"{self.base_url.rstrip('/')}{_DETAIL_PATH.format(pid)}"

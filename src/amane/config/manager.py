@@ -1,6 +1,7 @@
 import contextlib
 import importlib
 import os
+import re
 import tempfile
 import tomllib
 from copy import copy
@@ -69,18 +70,33 @@ def _languages_schema(schema: dict[str, Any]) -> None:
     schema["x-visible-keys"] = _SITES_WITH_LANGUAGES
 
 
-#: 各内容类型默认有序路由 (资格真值 + 该类型默认字段优先级).
-_DEFAULT_CONTENT_ROUTES: dict[ContentType, list[SiteName]] = {
-    ContentType.CENSORED: [
+#: 无码 DVD 与流媒体共享 UNCENSORED 业务类型, 使用独立刮削路由键.
+_UNCENSORED_DVD_ROUTE = "uncensored_dvd"
+_UNCENSORED_STREAMING_ROUTE = "uncensored_streaming"
+_SCRAPE_ROUTE_KEYS = (
+    ContentType.CENSORED.value,
+    _UNCENSORED_DVD_ROUTE,
+    _UNCENSORED_STREAMING_ROUTE,
+    ContentType.CHINESE.value,
+    ContentType.WESTERN.value,
+    ContentType.FC2.value,
+    ContentType.AMATEUR.value,
+    ContentType.HENTAI.value,
+)
+_DEFAULT_CONTENT_ROUTES: dict[str, list[SiteName]] = {
+    ContentType.CENSORED.value: [
         SiteName.DMM,
         SiteName.MGSTAGE,
-        SiteName.JAVDB,
+        SiteName.AVSOX,
         SiteName.AVBASE,
         SiteName.JAVBUS,
+    ],
+    _UNCENSORED_DVD_ROUTE: [
+        SiteName.AVENTERTAINMENTS,
+        SiteName.CARIBBEANCOM_INDEX,
         SiteName.AVSOX,
     ],
-    ContentType.UNCENSORED: [
-        SiteName.AVENTERTAINMENTS,
+    _UNCENSORED_STREAMING_ROUTE: [
         SiteName.TENMUSUME,
         SiteName.PONDO,
         SiteName.CARIBBEANCOM,
@@ -88,35 +104,19 @@ _DEFAULT_CONTENT_ROUTES: dict[ContentType, list[SiteName]] = {
         SiteName.TOKYO_HOT,
         SiteName.CARIBBEANCOMPR,
         SiteName.D2PASS,
+        SiteName.AVSOX,
     ],
-    ContentType.FC2: [
-        SiteName.JAVDB,
-        SiteName.FC2PPVDB,
-        SiteName.FC2,
-        SiteName.FREEJAVBT,
-        SiteName.AIRAV,
-    ],
-    ContentType.CHINESE: [
-        SiteName.IQQTV,
-        SiteName.JAVDB,
-        SiteName.AIRAV,
-        SiteName.FREEJAVBT,
-    ],
-    ContentType.AMATEUR: [
-        SiteName.MGSTAGE,
-        SiteName.DMM,
-        SiteName.JAVDB,
-        SiteName.JAVBUS,
-    ],
-    ContentType.WESTERN: [
-        SiteName.THEPORNDB,
-    ],
-    ContentType.HENTAI: [
-        SiteName.GETCHU,
-        SiteName.DMM,
-        SiteName.JAVDB,
-    ],
+    ContentType.CHINESE.value: [],
+    ContentType.WESTERN.value: [SiteName.THEPORNDB],
+    ContentType.FC2.value: [SiteName.FC2],
+    ContentType.AMATEUR.value: [SiteName.MGSTAGE, SiteName.DMM],
+    ContentType.HENTAI.value: [SiteName.GETCHU, SiteName.DMM],
 }
+_DEFAULT_UNCENSORED_STREAMING_NUMBER_RULES = [
+    r"[0-9]{6}[-_][0-9]{2,3}",
+    r"N[0-9]+",
+    r"HEYZO-[0-9]{4}",
+]
 
 
 class R18Config(BaseModel):
@@ -348,16 +348,29 @@ class ScrapingConfig(BaseModel):
 
     jpeg_quality: int = Field(default=95, ge=50, le=100, json_schema_extra={"x-hidden": True})
 
-    content_routes: dict[ContentType, list[str]] = Field(
-        default_factory=lambda: {ct: [str(site) for site in _DEFAULT_CONTENT_ROUTES.get(ct, [])] for ct in ContentType},
+    content_routes: dict[str, list[str]] = Field(
+        default_factory=lambda: {key: [str(site) for site in sites] for key, sites in _DEFAULT_CONTENT_ROUTES.items()},
         json_schema_extra=kv(
             {
                 "x-frozen-keys": True,
+                "propertyNames": {"type": "string", "enum": list(_SCRAPE_ROUTE_KEYS)},
                 **{f"v-{k}": v for k, v in site_list_value_schema(FILM_METADATA_SITES, ordered=True).items()},
             }
         ),
     )
-    """该类型实际请求的站点 ⊆ 此表; field_priority 只在表内重排."""
+    """按刮削路由键配置来源; 无码 DVD 与流媒体分别选择, 业务 ContentType 仍共用 UNCENSORED."""
+
+    uncensored_streaming_number_rules: list[str] = Field(
+        default_factory=lambda: list(_DEFAULT_UNCENSORED_STREAMING_NUMBER_RULES),
+        json_schema_extra={"x-ordered": True},
+        description="无码流媒体番号完整匹配规则; 每条规则为正则表达式, 不区分大小写.",
+    )
+
+    number_mapping_rules: list[str] = Field(
+        default_factory=list,
+        json_schema_extra={"x-ordered": True},
+        description="通用番号映射规则; 每行格式为完整匹配正则表达式 => 替换表达式, 仅自动非欧美非无码流媒体刮削使用.",
+    )
 
     field_priority: dict[MetadataField, list[str]] = Field(
         default_factory=dict,
@@ -394,17 +407,43 @@ class ScrapingConfig(BaseModel):
 
     @field_validator("content_routes", mode="before")
     @classmethod
-    def _complete_content_routes(cls, v: Any) -> Any:
-        # Upgrade an untouched legacy default route so existing installations start
-        # querying the newly added AVE source; preserve any user-customized ordering.
-        if isinstance(v, dict):
-            uncensored = v.get(ContentType.UNCENSORED, v.get(ContentType.UNCENSORED.value))
-            legacy_default = ["javdb", "javbus", "avsox", "freejavbt"]
-            if uncensored == legacy_default:
-                v = {**v, ContentType.UNCENSORED.value: [*legacy_default, str(SiteName.AVENTERTAINMENTS)]}
+    def _complete_content_routes(cls, value: Any) -> Any:
+        if not isinstance(value, dict):
+            return value
+        routes = {_site_value(key): sites for key, sites in value.items()}
+        legacy_uncensored = routes.pop(ContentType.UNCENSORED.value, None)
+        if legacy_uncensored is not None and _UNCENSORED_STREAMING_ROUTE not in routes:
+            routes[_UNCENSORED_STREAMING_ROUTE] = [
+                site for site in legacy_uncensored if _site_value(site) != str(SiteName.AVENTERTAINMENTS)
+            ]
         return _complete_frozen_dict(
-            v, {ct: [str(site) for site in _DEFAULT_CONTENT_ROUTES.get(ct, [])] for ct in ContentType}
+            routes, {key: [str(site) for site in sites] for key, sites in _DEFAULT_CONTENT_ROUTES.items()}
         )
+
+    @field_validator("uncensored_streaming_number_rules")
+    @classmethod
+    def _valid_uncensored_streaming_number_rules(cls, value: list[str]) -> list[str]:
+        rules = list(dict.fromkeys(rule.strip() for rule in value if rule.strip()))
+        for rule in rules:
+            try:
+                re.compile(rule, re.IGNORECASE)
+            except re.error as exc:
+                raise ValueError(f"无效的无码流媒体番号规则 {rule!r}: {exc}") from exc
+        return rules
+
+    @field_validator("number_mapping_rules")
+    @classmethod
+    def _valid_number_mapping_rules(cls, value: list[str]) -> list[str]:
+        rules = list(dict.fromkeys(rule.strip() for rule in value if rule.strip()))
+        for rule in rules:
+            if "=>" not in rule:
+                raise ValueError(f"番号映射规则必须使用 正则表达式 => 替换表达式 格式: {rule!r}")
+            pattern, _replacement = (part.strip() for part in rule.split("=>", 1))
+            try:
+                re.compile(pattern, re.IGNORECASE)
+            except re.error as exc:
+                raise ValueError(f"无效的番号映射规则 {pattern!r}: {exc}") from exc
+        return rules
 
     @field_validator("field_language", mode="before")
     @classmethod
@@ -428,11 +467,11 @@ class ScrapingConfig(BaseModel):
 
     @field_validator("content_routes")
     @classmethod
-    def _film_content_routes(cls, v: dict[ContentType, list[str]]) -> dict[ContentType, list[str]]:
+    def _film_content_routes(cls, value: dict[str, list[str]]) -> dict[str, list[str]]:
         allowed = frozenset(FILM_METADATA_SITES)
-        for ct, sites in v.items():
-            assert_sites_allowed(sites, allowed, field=f"content_routes.{ct}", allow_external=True)
-        return v
+        for route, sites in value.items():
+            assert_sites_allowed(sites, allowed, field=f"content_routes.{route}", allow_external=True)
+        return value
 
     @model_validator(mode="before")
     @classmethod
@@ -652,7 +691,7 @@ class SrConfig(BaseModel):
 PROMPT_MAX_LENGTH = 2000
 """单条提示词长度上限, 避免超长文本撑大 TOML 与设置表单."""
 
-PromptText = Annotated[str, Field(max_length=PROMPT_MAX_LENGTH, json_schema_extra={"x-long": True})]
+PromptText = Annotated[str, Field(max_length=PROMPT_MAX_LENGTH, json_schema_extra={"x-ordered": True})]
 """提示词文本框: ``x-long`` 声明多行, 顶层字段与 dict 值共用同一控制符."""
 
 
@@ -665,7 +704,7 @@ class LLMConfig(BaseModel):
     translate_fields: list[MetadataField] = Field(default_factory=lambda: [MetadataField.TITLE, MetadataField.PLOT])
     """当前仅支持文本标量字段 (title/plot)."""
 
-    system_prompt: str | None = Field(default=None, max_length=PROMPT_MAX_LENGTH, json_schema_extra={"x-long": True})
+    system_prompt: str | None = Field(default=None, max_length=PROMPT_MAX_LENGTH, json_schema_extra={"x-ordered": True})
     """自定义 system 提示词的指令部分; 空白等价于未配置, 使用内置.
 
     可用 ``{target_lang}`` 引用目标语言名; 字段说明与输出约束由 Amane 追加, 不受此值影响.

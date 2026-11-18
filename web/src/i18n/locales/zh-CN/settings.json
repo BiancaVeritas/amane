@@ -77,6 +77,7 @@
         "description": "单独设定特定字段的优先级, 类型路由中的其他站点仍会请求",
         "options": {
           "title": "标题",
+          "original_title": "原标题",
           "actors": "演员",
           "tags": "标签",
           "release": "发行日期",
@@ -86,6 +87,7 @@
           "studio": "制作商",
           "publisher": "发行商",
           "plot": "剧情",
+          "original_plot": "原剧情",
           "poster_urls": "海报",
           "cover_urls": "封面",
           "trailer_urls": "预告片",
@@ -129,7 +131,8 @@
             "caribbeancom": "Caribbeancom",
             "caribbeancompr": "Caribbeancompr",
             "pacopacomama": "Pacopacomama",
-            "tokyo_hot": "Tokyo-Hot"
+            "tokyo_hot": "Tokyo-Hot",
+            "caribbeancom_index": "Caribbeancom Index"
           },
           "$": {
             "options": {
@@ -169,7 +172,8 @@
               "caribbeancompr": "Caribbeancompr",
               "pacopacomama": "Pacopacomama",
               "tokyo_hot": "Tokyo-Hot",
-              "d2pass": "d2pass"
+              "d2pass": "d2pass",
+              "caribbeancom_index": "Caribbeancom Index"
             }
           }
         }
@@ -179,6 +183,7 @@
         "description": "指定字段不采用的站点",
         "options": {
           "title": "标题",
+          "original_title": "原标题",
           "actors": "演员",
           "tags": "标签",
           "release": "发行日期",
@@ -188,6 +193,7 @@
           "studio": "制作商",
           "publisher": "发行商",
           "plot": "剧情",
+          "original_plot": "原剧情",
           "poster_urls": "海报",
           "cover_urls": "封面",
           "trailer_urls": "预告片",
@@ -231,7 +237,8 @@
             "caribbeancom": "Caribbeancom",
             "caribbeancompr": "Caribbeancompr",
             "pacopacomama": "Pacopacomama",
-            "tokyo_hot": "Tokyo-Hot"
+            "tokyo_hot": "Tokyo-Hot",
+            "caribbeancom_index": "Caribbeancom Index"
           },
           "$": {
             "options": {
@@ -271,7 +278,8 @@
               "caribbeancompr": "Caribbeancompr",
               "pacopacomama": "Pacopacomama",
               "tokyo_hot": "Tokyo-Hot",
-              "d2pass": "d2pass"
+              "d2pass": "d2pass",
+              "caribbeancom_index": "Caribbeancom Index"
             }
           }
         }
@@ -335,7 +343,8 @@
           "r18dev": "r18dev",
           "theporndb": "theporndb",
           "wikipedia": "wikipedia",
-          "xcity": "xcity"
+          "xcity": "xcity",
+          "caribbeancom_index": "Caribbeancom Index"
         },
         "$": {
           "base_url": {
@@ -437,12 +446,13 @@
         "description": "按影片类型指定来源站点和默认优先级",
         "options": {
           "censored": "有码",
-          "uncensored": "无码",
           "chinese": "国产",
           "western": "欧美",
           "fc2": "FC2",
           "amateur": "素人",
-          "hentai": "动漫"
+          "hentai": "动漫",
+          "uncensored_dvd": "无码 DVD",
+          "uncensored_streaming": "无码流媒体"
         },
         "$": {
           "options": {
@@ -481,7 +491,8 @@
             "caribbeancom": "Caribbeancom",
             "caribbeancompr": "Caribbeancompr",
             "pacopacomama": "Pacopacomama",
-            "tokyo_hot": "Tokyo-Hot"
+            "tokyo_hot": "Tokyo-Hot",
+            "caribbeancom_index": "Caribbeancom Index"
           },
           "$": {
             "options": {
@@ -521,10 +532,18 @@
               "caribbeancompr": "Caribbeancompr",
               "pacopacomama": "Pacopacomama",
               "tokyo_hot": "Tokyo-Hot",
-              "d2pass": "d2pass"
+              "d2pass": "d2pass",
+              "caribbeancom_index": "Caribbeancom Index"
             }
           }
         }
+      },
+      "uncensored_streaming_number_rules": {
+        "label": "无码流媒体番号识别规则",
+        "description": "每行一条正则表达式，按完整番号匹配且不区分大小写。"
+      },
+      "number_mapping_rules": {
+        "label": "番号映射规则"
       }
     },
     "network": {

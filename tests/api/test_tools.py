@@ -300,7 +300,15 @@ async def test_api_docs_work_with_bearer(token_app: tuple[FastAPI, Path]) -> Non
     assert page.status_code == 200
     assert "swagger" in page.text.lower()
     assert schema.status_code == 200
-    assert schema.json()["info"]["title"] == "Amane API"
+    openapi = schema.json()
+    assert openapi["info"]["title"] == "Amane API"
+    operation_ids = [
+        operation["operationId"]
+        for path_item in openapi["paths"].values()
+        for method, operation in path_item.items()
+        if method in {"get", "put", "post", "delete", "patch", "options", "head", "trace"}
+    ]
+    assert len(operation_ids) == len(set(operation_ids)), "OpenAPI operationId 必须全局唯一"
 
 
 @pytest.mark.parametrize("path", ["/docs", "/redoc", "/openapi.json"])

@@ -399,7 +399,8 @@
         "caribbeancom": "Caribbeancom",
         "caribbeancompr": "Caribbeancompr",
         "pacopacomama": "Pacopacomama",
-        "tokyo_hot": "Tokyo-Hot"
+        "tokyo_hot": "Tokyo-Hot",
+        "caribbeancom_index": "Caribbeancom Index"
       }
     },
     "source_urls": {
@@ -408,7 +409,8 @@
         "caribbeancom": "Caribbeancom",
         "caribbeancompr": "Caribbeancompr",
         "pacopacomama": "Pacopacomama",
-        "tokyo_hot": "Tokyo-Hot"
+        "tokyo_hot": "Tokyo-Hot",
+        "caribbeancom_index": "Caribbeancom Index"
       }
     }
   },

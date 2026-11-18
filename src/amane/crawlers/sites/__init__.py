@@ -3,6 +3,7 @@ from .avbase import AvbaseCrawler
 from .aventertainments import AVEntertainmentsCrawler
 from .avsox import AvsoxCrawler
 from .caribbeancom import CaribbeancomCrawler
+from .caribbeancom_index import CaribbeancomIndexCrawler
 from .caribbeancompr import CaribbeancomprCrawler
 from .d2pass import D2PassCrawler
 from .dahlia import DahliaCrawler
@@ -37,6 +38,7 @@ __all__ = [
     "AvbaseCrawler",
     "AvsoxCrawler",
     "CaribbeancomCrawler",
+    "CaribbeancomIndexCrawler",
     "CaribbeancomprCrawler",
     "D2PassCrawler",
     "DahliaCrawler",

@@ -8,7 +8,7 @@ from pydantic import TypeAdapter
 
 from ...aggregate import compute_merge_updates
 from ...db.embeddings import EmbeddingKind
-from ...db.models import Metadata, MetadataSortField, SavedQueryEntity, SortOrder, TaskType
+from ...db.models import FacetKind, FacetSortField, Metadata, MetadataSortField, SavedQueryEntity, SortOrder, TaskType
 from ...db.repo_types import WriteMode
 from ...db.repos.media import file_phase_of
 from ...enums import MetadataField
@@ -96,6 +96,49 @@ async def get_metadata_schema() -> dict:
     return TypeAdapter(PartialMetadata).json_schema()
 
 
+async def _mapped_tag_id_groups(
+    repo: RepoDep, runtime: RuntimeDep, selected_ids: list[int] | None
+) -> list[list[int]] | None:
+    """把展示标签代表 ID 扩展为其全部原始标签 ID；每组 OR、组间 AND。"""
+    if not selected_ids:
+        return None
+    if not runtime.tag_mappings.enabled:
+        return [[tag_id] for tag_id in selected_ids]
+    all_facets = []
+    offset = 0
+    while True:
+        page, total = await repo.list_facets(
+            FacetKind.TAG,
+            offset=offset,
+            limit=1000,
+            sort_by=FacetSortField.NAME,
+            order=SortOrder.ASC,
+        )
+        all_facets.extend(page)
+        offset += len(page)
+        if not page or offset >= total:
+            break
+    by_id = {item.id: item for item in all_facets}
+    ids_by_display: dict[str, list[int]] = {}
+    for item in all_facets:
+        display = runtime.tag_mappings.display_name(item.name)
+        ids_by_display.setdefault(display, []).append(item.id)
+
+    groups: list[list[int]] = []
+    seen_displays: set[str] = set()
+    for selected_id in selected_ids:
+        item = by_id.get(selected_id)
+        if item is None:
+            groups.append([selected_id])
+            continue
+        display = runtime.tag_mappings.display_name(item.name)
+        if display in seen_displays:
+            continue
+        seen_displays.add(display)
+        groups.append(ids_by_display.get(display, [selected_id]))
+    return groups
+
+
 @router.get("")
 async def list_metadata(
     repo: RepoDep,
@@ -112,6 +155,7 @@ async def list_metadata(
     semantic_kind: Annotated[Literal["all", "cover", "still"], Query(description="参与语义排序的图片来源")] = "all",
 ) -> MetadataListResponse:
     definition = require_known_definition(filters.definition)
+    tag_id_groups = await _mapped_tag_id_groups(repo, runtime, filters.tag_id)
     id_subquery_sql = None
     if filters.saved_query_id is not None:
         id_subquery_sql = await resolve_saved_query_id_subquery(repo, filters.saved_query_id, SavedQueryEntity.METADATA)
@@ -125,6 +169,7 @@ async def list_metadata(
             semantic_kind=semantic_kind,
             definition=definition,
             id_subquery_sql=id_subquery_sql,
+            tag_id_groups=tag_id_groups,
             offset=offset,
             limit=limit,
         )
@@ -136,7 +181,7 @@ async def list_metadata(
         order=order,
         actor_ids=filters.actor_id,
         director_ids=filters.director_id,
-        tag_ids=filters.tag_id,
+        tag_id_groups=tag_id_groups,
         studio_ids=filters.studio_id,
         publisher_ids=filters.publisher_id,
         series_ids=filters.series_id,
@@ -164,6 +209,7 @@ async def _semantic_list(
     semantic_kind: Literal["all", "cover", "still"],
     definition: str | None,
     id_subquery_sql: str | None,
+    tag_id_groups: list[list[int]] | None,
     offset: int,
     limit: int,
 ) -> MetadataListResponse:
@@ -177,7 +223,7 @@ async def _semantic_list(
             keyword=search,
             actor_ids=filters.actor_id,
             director_ids=filters.director_id,
-            tag_ids=filters.tag_id,
+            tag_id_groups=tag_id_groups,
             studio_ids=filters.studio_id,
             publisher_ids=filters.publisher_id,
             series_ids=filters.series_id,
@@ -251,6 +297,7 @@ async def batch_scrape_metadata(req: MetadataBatchScrapeRequest, repo: RepoDep) 
                 content_type=resolved_type,
                 metadata_id=metadata.id if preserve_identity else None,
                 theporndb_uuid=metadata.theporndb_uuid if preserve_identity else None,
+                allow_number_variants=False,
                 use_cache=req.use_cache,
             )
         )

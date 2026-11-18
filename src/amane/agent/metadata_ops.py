@@ -142,6 +142,7 @@ def build_metadata_ops_capability() -> Capability[AgentDeps]:
                 content_type=resolved_type,
                 metadata_id=metadata.id if preserve_identity else None,
                 theporndb_uuid=metadata.theporndb_uuid if preserve_identity else None,
+                allow_number_variants=False,
                 use_cache=cache_kinds,
             )
             await ctx.deps.repo.create_task(task_type=TaskType.SCRAPE, payload=payload)

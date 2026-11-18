@@ -3,7 +3,7 @@
 刮削是从多个站点获取影片与演员元数据的过程. 本页说明刮削的入口、类型识别、站点与类型路由、字段取值规则、缓存与重新刮削、演员刮削、LLM 翻译、图像超分与 r18.dev 数据源, 以及 设置 → 影片刮削 / 演员刮削 / LLM 翻译 / 图像超分 四个分区的全部设置项. 网络、代理与站点登录见 [网络与站点访问](network.md).
 
 !!! tip "推荐做法"
-    多数情况下保持默认设置即可: 默认类型路由已按内容类型排好站点顺序. 需要调整时, 先用「字段优先级」与「字段排除」处理个别字段, 只有确实要增减站点时再修改「类型路由」.
+    多数情况下保持默认设置即可: 默认路由已按内容类型与无码分流策略排好站点顺序. 需要调整时, 先用「字段优先级」与「字段排除」处理个别字段, 只有确实要增减站点时再修改「类型路由」.
 
 ## 刮削入口 {#entry}
 
@@ -26,7 +26,7 @@
 一次刮削按以下顺序执行:
 
 1. **确定番号与内容类型**: 来自用户输入、订阅条目或文件路径, 见 [番号与类型识别](#identify).
-2. **请求站点**: 请求该类型「类型路由」中的站点. 已有站点快照且启用元数据缓存时, 对应站点不再请求.
+2. **选择路由并请求站点**: 普通类型直接使用对应路由; 无码按完整番号规则选择 DVD 或流媒体路由. 已有站点快照且启用元数据缓存时, 对应站点不再请求.
 3. **按字段取值**: 每个字段按自己的站点顺序取值, 见 [字段优先级与字段排除](#field-priority).
 4. **翻译**: 启用 LLM 翻译时翻译标题与剧情, 并完成简繁转换, 见 [LLM 翻译](#llm).
 5. **下载图片**: 按「刮削时下载」下载封面、海报、剧照, 按需裁切海报与超分.
@@ -38,7 +38,7 @@
 
 ### 内容类型 {#content-types}
 
-内容类型由番号的形态推断, 决定刮削时使用哪条类型路由.
+内容类型由番号的形态推断. 无码影片仍统一属于「无码」业务类型, 刮削开始前再按完整番号规则选择「无码 DVD」或「无码流媒体」执行路由.
 
 | 类型 | 识别依据 |
 |------|----------|
@@ -50,7 +50,7 @@
 | 欧美 | 片商加日期 (`Vixen.23.01.15`)、`KIN8-1234`, 以及其它未识别形态 |
 | 动漫 | 只依据路径关键词 (`getchu`、`里番`、`裏番`) |
 
-类型属于影片本身: 只在影片首次创建时确定, 之后不随文件增删或重新刮削改变, 也不能在编辑界面修改. 类型决定该影片使用哪条类型路由.
+类型属于影片本身: 只在影片首次创建时确定, 之后不随文件增删或重新刮削改变, 也不能在编辑界面修改. 刮削执行路由与业务类型分离, 不改变媒体库中的「有码 / 无码」分类、角标或筛选.
 
 !!! note "无码标记与类型"
     文件名或目录中的「无码」「破解」「流出」等是文件的马赛克标记, 与影片类型相互独立: 有码影片的破解版文件, 其影片类型仍是有码.
@@ -96,16 +96,26 @@
 | 站点 | 网站 | 默认路由 | 演员资料 | 说明 |
 |------|------|----------|:--------:|------|
 | dmm | dmm.co.jp (FANZA) | 有码、素人、动漫 | | 有码权威来源, 字段齐全 (含剧情、导演、评分、剧照与高清封面) |
-| javdb | javdb.com | 全部七种类型 | :material-check: | 中文标题, 不提供剧情; 无码影片需要登录 Cookie, 见 [站点登录](network.md#credentials) |
-| javbus | javbus.com | 有码、无码、素人 | | 不提供剧情; 欧美目录不可用 |
-| official | Will / Outvision 等制作商官网 | 有码 | | 按番号前缀匹配制作商官网, 匹配不到时不发出请求; 可在站点配置的「制作商路由」中按前缀指定 |
-| avsox | avsox.click | 无码 | | 无码专站 |
-| freejavbt | freejavbt.com | 无码、FC2、国产、欧美 | | 覆盖面宽, 位于链尾; 不提供制作商与发行商 |
+| javdb | javdb.com | | :material-check: | 可手动加入需要的路由; 中文标题, 不提供剧情; 无码影片需要登录 Cookie, 见 [站点登录](network.md#credentials) |
+| javbus | javbus.com | 有码 | | 不提供剧情; 欧美目录不可用 |
+| official | Will / Outvision 等制作商官网 | | | 按番号前缀匹配制作商官网, 匹配不到时不发出请求; 可在站点配置的「制作商路由」中按前缀指定 |
+| avsox | avsox.click | 有码、无码 DVD、无码流媒体 | | 综合索引, 无码专站 |
+| aventertainments | aventertainments.com | 无码 DVD | | DVD / Blu-ray 撞库检索 |
+| Caribbeancom Index | caribbeancompr.com | 无码 DVD | | 内部来源 ID 为 `caribbeancom_index`; 使用完整本地文件名查询独立映射表, 再访问详情页 |
+| 10musume | www.10musume.com | 无码流媒体 | | 无码流媒体专站 |
+| 1pondo | 1pondo.tv | 无码流媒体 | | 无码流媒体专站 |
+| caribbeancom | caribbeancom.com | 无码流媒体 | | 无码流媒体专站 |
+| pacopacomama | www.pacopacomama.com | 无码流媒体 | | 无码流媒体专站 |
+| tokyo_hot | my.tokyo-hot.com | 无码流媒体 | | 无码流媒体专站 |
+| caribbeancompr | www.caribbeancompr.com | 无码流媒体 | | HEYZO 映射源; D2Pass 可补充发行日期 |
+| d2pass | www.d2pass.com | 无码流媒体 | | Caribbeancompr 的发行日期补充源 |
+| avbase | avbase.net | 有码 | :material-check: | 受 Cloudflare 保护, 通常需要 [浏览器渲染](network.md#browser) |
+| freejavbt | freejavbt.com | | | 覆盖面宽, 可手动加入需要的路由; 不提供制作商与发行商 |
 | fc2ppvdb | fc2ppvdb.com | FC2 | | 可能被 Cloudflare 拦截, 拦截时由后续站点补位 |
 | fc2 | adult.contents.fc2.com | FC2 | | FC2 官方市场; 已下架的商品视为无此番号 |
-| airav | airav.io | FC2、国产 | | 中文标题 |
-| iqqtv | iqq5.xyz | 国产 | | 国产第一来源; 按「字段语言偏好」请求对应语言的页面 |
-| mgstage | mgstage.com | 素人 | | 素人第一来源; 素人影片不记录站内化名为演员 |
+| airav | airav.io | | | 中文标题, 可手动加入需要的路由 |
+| iqqtv | iqq5.xyz | | | 国产站, 可手动加入需要的路由; 按「字段语言偏好」请求对应语言的页面 |
+| mgstage | mgstage.com | 有码、素人 | | 素人第一来源; 素人影片不记录站内化名为演员 |
 | theporndb | theporndb.net | 欧美 | :material-check: | 需要 API Token; 新文件按 OSHASH 匹配, 重新刮削 / 手动兜底可指定 Scene ID; 指纹未命中不按重复番号猜测 |
 | getchu | getchu.com | 动漫 | | 动漫第一来源 |
 | r18dev | 本地 PostgreSQL 镜像 | | | 离线数据源, 见 [r18.dev](#r18dev) |
@@ -135,28 +145,28 @@
 
 ## 类型路由 {#content-routes}
 
-「设置 → 影片刮削 → 类型路由」为每种内容类型设置一条有序站点列表. 它有两个作用:
+「设置 → 影片刮削 → 类型路由」为每条刮削路由设置有序站点列表. 普通类型各有一条路由; 无码拆分为「无码 DVD」与「无码流媒体」两条执行路由, 但数据库和媒体库仍只有「无码」这一业务类型.
 
-- **决定请求哪些站点**: 刮削只请求该类型路由中的站点. 字段优先级与字段排除不会增加请求.
-- **决定默认取值顺序**: 未单独设置的字段按路由顺序取值.
+无码分流由同一设置区域下方的「无码流媒体番号识别规则」控制: 每条规则按完整番号 Full Match 匹配且不区分大小写; 命中走「无码流媒体」, 未命中默认走「无码 DVD」. 可在设置中添加或删除规则. 流媒体路由按顺序逐站尝试, 首个有效结果即停止; DVD 路由使用多源聚合, 各来源独立检索后汇合到原始影片记录.
 
-默认值:
+两条无码路由以外, 默认路由如下:
 
 | 类型 | 默认路由 |
 |------|----------|
-| 有码 | dmm → javdb → javbus → official |
-| 无码 | javdb → javbus → avsox → freejavbt |
-| FC2 | javdb → fc2ppvdb → fc2 → freejavbt → airav |
-| 国产 | iqqtv → javdb → airav → freejavbt |
-| 素人 | mgstage → dmm → javdb → javbus |
-| 欧美 | theporndb → javdb → freejavbt |
-| 动漫 | getchu → dmm → javdb |
+| 有码 | dmm → mgstage → avsox → avbase → javbus |
+| 无码 DVD | aventertainments → Caribbeancom Index → avsox |
+| 无码流媒体 | 10musume → 1pondo → caribbeancom → pacopacomama → tokyo_hot → caribbeancompr → d2pass → avsox |
+| 国产 | 无 |
+| 欧美 | theporndb |
+| FC2 | fc2 |
+| 素人 | mgstage → dmm |
+| 动漫 | getchu → dmm |
 
-把某个类型的路由清空即关闭该类型的刮削, 此时该类型的刮削任务失败并提示「没有可用来源」. 已禁用或未安装的插件来源可以留在路由中, 刮削时跳过.
+把某条路由清空即关闭该路由的刮削, 此时该类型的刮削任务失败并提示「没有可用来源」. 已禁用或未安装的插件来源可以留在路由中, 刮削时跳过.
 
 ## 字段优先级与字段排除 {#field-priority}
 
-两项设置都按字段生效, 只在该类型路由内部调整顺序, 不在路由中的站点无效:
+两项设置都按字段生效, 只在当前路由内部调整顺序, 不在路由中的站点无效:
 
 - **字段优先级**: 只列出需要提前的站点. 这些站点按列出顺序排到前面, 路由中的其余站点保持原顺序跟在后面.
 - **字段排除**: 列出该字段不采用的站点. 同一站点同时出现在两项中时以字段排除为准. 某站点被所有字段排除时不再请求.
@@ -164,18 +174,18 @@
 可设置的字段: 标题、演员、标签、发行日期、时长、导演、系列、制作商、发行商、剧情、海报、封面、预告片、剧照、评分.
 
 !!! example "示例"
-    有码影片使用默认路由 dmm → javdb → javbus → official, 并设置:
+    有码影片使用默认路由 dmm → mgstage → avsox → avbase → javbus, 并设置:
 
-    - 字段优先级 → 标题: javdb, airav
+    - 字段优先级 → 标题: avsox, javbus
     - 字段排除 → 演员: dmm
 
     结果:
 
     | 字段 | 取值顺序 |
     |------|----------|
-    | 标题 | javdb → dmm → javbus → official (airav 不在有码路由中, 忽略) |
-    | 演员 | javdb → javbus → official |
-    | 其余字段 | dmm → javdb → javbus → official |
+    | 标题 | avsox → javbus → dmm → mgstage → avbase |
+    | 演员 | mgstage → avsox → avbase → javbus |
+    | 其余字段 | dmm → mgstage → avsox → avbase → javbus |
 
 取值规则:
 

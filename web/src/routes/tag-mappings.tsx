@@ -12,6 +12,7 @@ import {
   Text,
   TextInput,
   Title,
+  Tooltip,
 } from "@mantine/core";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
@@ -26,11 +27,12 @@ type Entry = {
   language: string;
   usage_count: number;
   sources: string[];
+  archived: boolean;
 };
 type Result = {
   items: Entry[];
   total: number;
-  stats: { all: number; pending: number; mapped: number };
+  stats: { all: number; pending: number; mapped: number; archived: number };
 };
 const PAGE_SIZE = 30;
 
@@ -56,6 +58,21 @@ function TagMappingsPage() {
   const selectionAnchor = useRef<string | null>(null);
   const [suggestError, setSuggestError] = useState<string | null>(null);
   const importRef = useRef<HTMLInputElement>(null);
+  const mappingState = useQuery({
+    queryKey: ["tag-mapping-state"],
+    queryFn: () => request<{ enabled: boolean }>("/api/tag-mappings/state"),
+  });
+  const toggleMapping = useMutation({
+    mutationFn: (enabled: boolean) =>
+      request<{ enabled: boolean }>("/api/tag-mappings/state", {
+        method: "PUT",
+        body: JSON.stringify({ enabled }),
+      }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["tag-mapping-state"] });
+      void qc.invalidateQueries();
+    },
+  });
   const query = useQuery({
     queryKey: ["tag-mappings", status, language, frequency, search, page],
     queryFn: () =>
@@ -102,11 +119,21 @@ function TagMappingsPage() {
       }),
     onSuccess: () => void qc.invalidateQueries({ queryKey: ["tag-mappings"] }),
   });
-  const remove = useMutation({
+  const archiveOne = useMutation({
     mutationFn: (original: string) =>
-      request<void>(`/api/tag-mappings/${encodeURIComponent(original)}`, { method: "DELETE" }),
+      request<{ archived: boolean }>(`/api/tag-mappings/${encodeURIComponent(original)}/archive`, {
+        method: "PUT",
+      }),
     onSuccess: () => void qc.invalidateQueries({ queryKey: ["tag-mappings"] }),
   });
+  const restoreOne = useMutation({
+    mutationFn: (original: string) =>
+      request<{ archived: boolean }>(`/api/tag-mappings/${encodeURIComponent(original)}/restore`, {
+        method: "PUT",
+      }),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ["tag-mappings"] }),
+  });
+
   async function batchConfirmSelected() {
     const targets = selected.filter((original) =>
       Object.prototype.hasOwnProperty.call(edits, original),
@@ -135,38 +162,69 @@ function TagMappingsPage() {
     void qc.invalidateQueries({ queryKey: ["tag-mappings"] });
   }
 
-  async function batchDeleteSelected() {
-    const targets = [...selected];
-    if (!targets.length) return;
-    const results = await Promise.allSettled(
-      targets.map((original) =>
-        request<void>(`/api/tag-mappings/${encodeURIComponent(original)}`, { method: "DELETE" }),
-      ),
-    );
-    const succeeded = targets.filter((_original, index) => results[index]?.status === "fulfilled");
-    setSelected((old) => old.filter((original) => !succeeded.includes(original)));
-    setEdits((old) => {
-      const next = { ...old };
-      for (const original of succeeded) delete next[original];
-      return next;
-    });
-    setSuggestError(
-      results.some((result) => result.status === "rejected")
-        ? `批量删除完成：成功 ${succeeded.length} 项，失败 ${targets.length - succeeded.length} 项`
-        : null,
-    );
-    void qc.invalidateQueries({ queryKey: ["tag-mappings"] });
+  async function batchArchiveSelected() {
+    if (!selected.length) return;
+    try {
+      const result = await request<{ archived: number; skipped: number }>(
+        "/api/tag-mappings/archive",
+        {
+          method: "POST",
+          body: JSON.stringify({ originals: selected }),
+        },
+      );
+      setSelected([]);
+      selectionAnchor.current = null;
+      setSuggestError(
+        `批量归档完成：成功归档 ${result.archived} 条，跳过 ${result.skipped} 条（已有中文译名或词条不存在）`,
+      );
+      void qc.invalidateQueries({ queryKey: ["tag-mappings"] });
+    } catch (error) {
+      setSuggestError(String(error));
+    }
+  }
+
+  async function batchRestoreSelected() {
+    if (!selected.length) return;
+    try {
+      const result = await request<{ restored: number }>("/api/tag-mappings/restore", {
+        method: "POST",
+        body: JSON.stringify({ originals: selected }),
+      });
+      setSelected([]);
+      selectionAnchor.current = null;
+      setSuggestError(`批量还原完成：成功还原 ${result.restored} 条`);
+      void qc.invalidateQueries({ queryKey: ["tag-mappings"] });
+    } catch (error) {
+      setSuggestError(String(error));
+    }
   }
 
   const entries = query.data?.items ?? [];
   const pages = Math.max(1, Math.ceil((query.data?.total ?? 0) / PAGE_SIZE));
+  const mappingEnabled = mappingState.data?.enabled ?? true;
   return (
     <Stack gap="md" pb={120}>
       <Group justify="space-between" align="center">
         <div>
-          <Title order={2}>标签中文映射</Title>
+          <Group align="center" gap="sm">
+            <Title order={2}>标签中文映射</Title>
+            <Button
+              size="sm"
+              variant={mappingEnabled ? "filled" : "light"}
+              color={mappingEnabled ? "green" : "gray"}
+              loading={toggleMapping.isPending || mappingState.isLoading}
+              disabled={mappingState.isLoading}
+              onClick={() => toggleMapping.mutate(!mappingEnabled)}
+            >
+              {mappingEnabled ? "已启用" : "已停用"}
+            </Button>
+          </Group>
           <Text c="dimmed" size="sm">
             原始标签保留不变；确认映射后，影片标签展示使用中文结果。
+          </Text>
+          <Text c="dimmed" size="xs">
+            开启：已映射标签显示中文，未映射标签保留原文。关闭：所有标签均显示原文，NFO
+            也写入原文；映射词典不会被删除。
           </Text>
         </div>
         <Group>
@@ -214,6 +272,7 @@ function TagMappingsPage() {
           data={[
             { value: "pending", label: "待映射" },
             { value: "mapped", label: "已映射" },
+            { value: "archived", label: "已归档" },
             { value: "all", label: "全部词条" },
           ]}
         />
@@ -270,15 +329,21 @@ function TagMappingsPage() {
         >
           批量确认
         </Button>
-        <Button
-          size="xs"
-          color="red"
-          variant="light"
-          disabled={!selected.length}
-          onClick={() => void batchDeleteSelected()}
-        >
-          批量删除
-        </Button>
+        {status === "archived" ? (
+          <Button size="xs" disabled={!selected.length} onClick={() => void batchRestoreSelected()}>
+            批量还原
+          </Button>
+        ) : (
+          <Button
+            size="xs"
+            color="gray"
+            variant="light"
+            disabled={!selected.length}
+            onClick={() => void batchArchiveSelected()}
+          >
+            批量归档
+          </Button>
+        )}
         <Text size="xs" c="dimmed">
           已选择 {selected.length} 项
         </Text>
@@ -286,6 +351,7 @@ function TagMappingsPage() {
       <Group gap="xs">
         <Badge color="orange">待映射 {query.data?.stats.pending ?? 0}</Badge>
         <Badge color="teal">已映射 {query.data?.stats.mapped ?? 0}</Badge>
+        <Badge color="gray">已归档 {query.data?.stats.archived ?? 0}</Badge>
         <Badge>全部 {query.data?.stats.all ?? 0}</Badge>
         <Text size="xs" c="dimmed">
           默认按使用次数从高到低排列
@@ -371,7 +437,18 @@ function TagMappingsPage() {
                   />
                 </Table.Td>
                 <Table.Td>
-                  <Text fw={500}>{entry.original}</Text>
+                  <Group gap="xs" wrap="nowrap">
+                    <Text fw={500}>{entry.original}</Text>
+                    {entry.archived ? (
+                      <Badge size="xs" color="gray">
+                        已归档
+                      </Badge>
+                    ) : entry.translation ? (
+                      <Badge size="xs" color="teal">
+                        已映射
+                      </Badge>
+                    ) : null}
+                  </Group>
                 </Table.Td>
                 <Table.Td>
                   {(
@@ -388,7 +465,7 @@ function TagMappingsPage() {
                   <TextInput
                     size="sm"
                     value={edits[entry.original] ?? entry.translation ?? ""}
-                    placeholder="填写中文译名"
+                    placeholder={entry.archived ? "无需译名" : "填写中文译名"}
                     onChange={(e) => {
                       const value = e.currentTarget.value;
                       setEdits((old) => ({ ...old, [entry.original]: value }));
@@ -400,14 +477,35 @@ function TagMappingsPage() {
                     <Button size="xs" onClick={() => save.mutate(entry)} loading={save.isPending}>
                       确认保存
                     </Button>
-                    <Button
-                      size="xs"
-                      variant="subtle"
-                      color="red"
-                      onClick={() => remove.mutate(entry.original)}
-                    >
-                      删除
-                    </Button>
+                    {entry.archived ? (
+                      <Button
+                        size="xs"
+                        variant="light"
+                        onClick={() => restoreOne.mutate(entry.original)}
+                      >
+                        还原
+                      </Button>
+                    ) : (
+                      <Tooltip
+                        label="已映射的词条不能归档，请先清空中文译名"
+                        color="white"
+                        c="black"
+                        withArrow
+                        disabled={!(edits[entry.original] ?? entry.translation ?? "").trim()}
+                      >
+                        <span>
+                          <Button
+                            size="xs"
+                            variant="subtle"
+                            color="gray"
+                            disabled={!!(edits[entry.original] ?? entry.translation ?? "").trim()}
+                            onClick={() => archiveOne.mutate(entry.original)}
+                          >
+                            归档
+                          </Button>
+                        </span>
+                      </Tooltip>
+                    )}
                   </Group>
                 </Table.Td>
               </Table.Tr>

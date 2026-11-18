@@ -1,10 +1,12 @@
 import {
   ActionIcon,
   Badge,
+  Box,
   Button,
   Group,
   Menu,
   SegmentedControl,
+  Stack,
   Text,
   TextInput,
   Title,
@@ -54,7 +56,6 @@ import {
   DEFAULT_ACTOR_GENDER_FILTER,
   formatActorRangeChip,
   hasActiveActorFilters,
-  hasNonDefaultActorFilters,
   mergeActorFilterPatch,
   rangeValue,
   replaceActorFilters,
@@ -175,10 +176,10 @@ function ActorsIndexPage() {
 
   const filters = actorFilterValuesFromSearch(search);
   const hasActiveFilters = hasActiveActorFilters(filters) || search.saved_query_id != null;
-  const hasNonDefaultFilters = hasNonDefaultActorFilters(filters) || search.saved_query_id != null;
 
   const [searchInput, setSearchInput] = useState(search.q ?? "");
-  const [advancedOpen, setAdvancedOpen] = useState(hasNonDefaultFilters);
+  // 筛选条件可以保留在 URL 中, 但面板展开状态不继承筛选条件.
+  const [advancedOpen, setAdvancedOpen] = useState(false);
   const narrowViewport = useNarrowViewport("md");
   const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
@@ -262,7 +263,7 @@ function ActorsIndexPage() {
 
   return (
     <BrowsePageShell
-      fill={isList}
+      fill
       title={<Title order={2}>{t("actors.title")}</Title>}
       actions={<ListDefaultActions update={{ key: "actors", value: actorListDefaults(search) }} />}
       viewSwitch={
@@ -355,7 +356,7 @@ function ActorsIndexPage() {
           {/* 窄屏的筛选在底部面板里常驻展开, 该开关只在宽屏有意义. */}
           {narrowViewport ? null : (
             <HintedActionIcon
-              variant={advancedOpen || hasNonDefaultFilters ? "filled" : "default"}
+              variant={advancedOpen ? "filled" : "default"}
               size={36}
               onClick={() => setAdvancedOpen((v) => !v)}
               label={t("search.advanced")}
@@ -491,19 +492,32 @@ function ActorsIndexPage() {
           onSort={onSort}
         />
       ) : (
-        <>
-          <ActorGrid
-            cardSize={cardSize}
-            items={gridItems}
-            loading={gridQuery.isLoading && gridItems.length === 0}
-            emptyMessage={t("actors.empty")}
-          />
-          <ListPagination
-            totalPages={Math.ceil(gridTotal / listLimit)}
-            page={search.page}
-            onChange={(page) => void navigate({ search: (prev) => ({ ...prev, page }) })}
-          />
-        </>
+        <Stack gap="sm" style={{ flex: 1, minHeight: 0, justifyContent: "space-between" }}>
+          <Box style={{ flex: 1, minHeight: 0, overflow: "hidden" }}>
+            <ActorGrid
+              cardSize={cardSize}
+              items={gridItems}
+              loading={gridQuery.isLoading && gridItems.length === 0}
+              emptyMessage={t("actors.empty")}
+            />
+          </Box>
+          <Box
+            style={{
+              marginTop: "auto",
+              position: "sticky",
+              bottom: 0,
+              zIndex: 2,
+              background: "var(--mantine-color-body)",
+              paddingBlock: "var(--mantine-spacing-xs)",
+            }}
+          >
+            <ListPagination
+              totalPages={Math.ceil(gridTotal / listLimit)}
+              page={search.page}
+              onChange={(page) => void navigate({ search: (prev) => ({ ...prev, page }) })}
+            />
+          </Box>
+        </Stack>
       )}
     </BrowsePageShell>
   );

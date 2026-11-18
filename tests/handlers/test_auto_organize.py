@@ -27,6 +27,7 @@ from amane.handlers import (
     TaskResult,
 )
 from amane.handlers._common import register_media_file
+from amane.parsing.file_info import ContentType
 
 if TYPE_CHECKING:
     from amane.db.repository import Repository
@@ -55,7 +56,10 @@ def _handler(repo: Repository) -> ScrapeHandler:
     factory = AsyncMock(spec=CrawlerFactory)
     factory.get_crawlers.return_value = {"javdb": _FakeCrawler(metadata)}
     cfg = HotSettings(
-        scraping=ScrapingConfig(field_priority={}),
+        scraping=ScrapingConfig(
+            content_routes={ContentType.CENSORED: [SiteName.JAVDB]},
+            field_priority={},
+        ),
         actor_scraping=ActorScrapingConfig(auto_scrape=False, download_images=False),
     )
     return ScrapeHandler(repo, factory, AsyncMock(), cfg)

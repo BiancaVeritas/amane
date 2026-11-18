@@ -21,7 +21,7 @@ from ..handlers._common import (
 )
 from ..handlers.models import ScrapePayload
 from ..library import LibraryFileKind, LibraryScan
-from ..parsing import parse_file_info
+from ..parsing import ContentType, parse_file_info
 from ..utils.path import is_descendant, path_is_under
 from .clouddrive import CloudDriveChange, CloudDriveRoute, local_for, match_route
 from .watcher import FileWatcher
@@ -609,12 +609,20 @@ class WatcherService:
             logger.debug("cannot parse number", path=path_str)
             parsed = None
 
-        if library is not None and library.automation == LibraryAutomation.REFRESH:
+        automation = library.automation if library is not None else None
+        western_matched = False
+
+        if parsed is not None and parsed.content_type == ContentType.WESTERN:
+            if parsed.number is not None and automation in (LibraryAutomation.REFRESH, LibraryAutomation.SCRAPE):
+                western_matched = await refresh_media_association(self._repo, media)
+        elif automation == LibraryAutomation.REFRESH:
             await refresh_media_association(self._repo, media)
+
         if parsed is not None and parsed.number is not None:
-            if library is None or library.automation != LibraryAutomation.REFRESH:
+            if automation != LibraryAutomation.REFRESH and not western_matched:
                 await self._repo.update_media_file(media.id, number=parsed.number)
-            if library is not None and library.automation == LibraryAutomation.SCRAPE:
+
+            if automation == LibraryAutomation.SCRAPE and not western_matched:
                 task = await self._repo.create_task(
                     task_type=TaskType.SCRAPE,
                     payload=ScrapePayload(
@@ -651,8 +659,39 @@ class WatcherService:
         updated = await self._repo.update_media_file(media.id, path=dest_str)
         if updated is not None and library is not None:
             await refresh_external_subtitle(self._repo, updated, library)
-            if library.automation == LibraryAutomation.REFRESH:
+
+            try:
+                parsed = parse_file_info(dest_str)
+            except Exception:
+                logger.debug("cannot parse number after move", path=dest_str)
+                parsed = None
+
+            automation = library.automation
+            western_matched = False
+
+            if parsed is not None and parsed.content_type == ContentType.WESTERN:
+                if parsed.number is not None and automation in (LibraryAutomation.REFRESH, LibraryAutomation.SCRAPE):
+                    western_matched = await refresh_media_association(self._repo, updated)
+            elif automation == LibraryAutomation.REFRESH:
                 await refresh_media_association(self._repo, updated)
+
+            if (
+                parsed is not None
+                and parsed.number is not None
+                and parsed.content_type == ContentType.WESTERN
+                and automation == LibraryAutomation.SCRAPE
+                and not western_matched
+            ):
+                task = await self._repo.create_task(
+                    task_type=TaskType.SCRAPE,
+                    payload=ScrapePayload(
+                        media_file_id=updated.id,
+                        number=parsed.number,
+                        content_type=parsed.content_type,
+                    ),
+                )
+                logger.info("scrape task submitted after move", task_id=task.id, number=parsed.number, path=dest_str)
+
         logger.info("file path updated", src=src_str, dest=dest_str, media_file_id=media.id)
 
     async def _debounce_loop(self) -> None:

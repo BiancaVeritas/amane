@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import structlog
 
@@ -12,7 +12,7 @@ from ..net.connectivity import ConnectivityOutcome, SkipReason, probe_get
 from ..plugins.api import FilmSourceProvider, PluginContext
 from ..plugins.manager import PluginManager
 from ..plugins.models import PluginConfig, SourceDescriptor
-from .actor import ActorFetcher, GFriendsActorCrawler, actor_registry
+from .actor import ActorCrawler, ActorFetcher, GFriendsActorCrawler, actor_registry
 from .base import Crawler
 from .registry import registry
 from .sites import R18DevCrawler
@@ -22,7 +22,6 @@ if TYPE_CHECKING:
 
     from ..aggregate import CrawlerLike
     from ..config import SiteConfig
-    from .actor import ActorCrawler
     from .connectivity import ConnectivityProbe
     from .http import HttpClient
     from .r18dev import R18Database
@@ -103,13 +102,28 @@ class CrawlerFactory:
 
         cls = registry.get(name)
         if cls is not None:
+            # Registry stores the common crawler base type; selected built-ins
+            # may expose additional keyword-only constructor dependencies.
+            crawler_cls = cast(Callable[..., Crawler], cls)
             site_config = self._site_configs.get(name)
             client = self._http.for_source(name, site_config)
             # R18DevCrawler 额外注入只读 DB.
             if cls is R18DevCrawler:
                 instance: Crawler = R18DevCrawler(client=client, config=site_config, db=self._r18_db)
+            elif self._data_dir is not None and name in {"caribbeancompr", "d2pass", "caribbeancom_index"}:
+                mapping_names = {
+                    "caribbeancompr": "caribbeancompr_heyzo_index.json",
+                    "d2pass": "d2pass_heyzo_index.json",
+                    "caribbeancom_index": "caribbeancom_index.json",
+                }
+                mapping_dir = self._data_dir / "mappings"
+                mapping_dir.mkdir(parents=True, exist_ok=True)
+                mapping_path = mapping_dir / mapping_names[name]
+                if not mapping_path.exists():
+                    mapping_path.write_text("{}\n", encoding="utf-8")
+                instance = crawler_cls(client=client, config=site_config, mapping_path=mapping_path)
             else:
-                instance = cls(client=client, config=site_config)
+                instance = crawler_cls(client=client, config=site_config)
             self._instances[name] = instance
             return instance
 
@@ -168,6 +182,7 @@ class CrawlerFactory:
             logger.error("actor crawler not registered", name=name)
             return None
 
+        actor_cls = cast(Callable[..., ActorCrawler], cls)
         site_config = self._site_configs.get(name)
         client = self._http.for_source(name, site_config)
         if cls is GFriendsActorCrawler:
@@ -177,8 +192,10 @@ class CrawlerFactory:
                 data_dir=self._data_dir,
                 repo_url=self._gfriends_repo,
             )
+        elif name == "minnano":
+            instance = actor_cls(client=client, config=site_config, data_dir=self._data_dir)
         else:
-            instance = cls(client=client, config=site_config)
+            instance = actor_cls(client=client, config=site_config)
         self._actor_instances[name] = instance
         return instance
 

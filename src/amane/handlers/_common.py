@@ -91,24 +91,46 @@ async def refresh_external_subtitle(repo: Repository, media: MediaFile, library:
 
 
 async def refresh_media_association(repo: Repository, media: MediaFile) -> bool:
-    """只使用已登记的内部身份恢复关联；绝不计算/写入新 OSHASH 或覆盖番号/身份字段。"""
+    """通过番号限定 WESTERN 候选，再只读核对当前文件身份；命中后恢复关联。"""
     if media.id is None or media.metadata_id is not None:
         return False
+
     parsed = parse_file_info(media.path)
     metadata = None
+
     if parsed.number and parsed.content_type != ContentType.WESTERN:
         metadata = await repo.get_metadata_by_number(parsed.number, content_type=parsed.content_type)
-    elif parsed.content_type == ContentType.WESTERN:
-        file_115_id = await read_litepan_115_file_id(Path(media.path))
-        if file_115_id:
-            metadata = await repo.get_metadata_by_identity(MediaIdentityType.FILE_115_ID, file_115_id)
-        if metadata is None and media.oshash:
-            metadata = await repo.get_metadata_by_identity(MediaIdentityType.LOCAL_OSHASH, media.oshash)
-            if metadata is None:
-                metadata = await repo.get_metadata_by_oshash(media.oshash)
+
+    elif parsed.number and parsed.content_type == ContentType.WESTERN:
+        candidates = await repo.list_western_metadata_by_number(parsed.number)
+        candidate_ids = [item.id for item in candidates if item.id is not None]
+        if not candidate_ids:
+            return False
+
+        path = Path(media.path)
+        if path.suffix.casefold() == ".strm":
+            file_115_id = await read_litepan_115_file_id(path)
+            if file_115_id:
+                metadata = await repo.get_metadata_by_identity_in_candidates(
+                    candidate_ids,
+                    MediaIdentityType.FILE_115_ID,
+                    file_115_id,
+                )
+        else:
+            disk = await existing_disk_path(path)
+            if disk is not None:
+                current_oshash = await compute_oshash(disk)
+                if current_oshash:
+                    metadata = await repo.get_metadata_by_identity_in_candidates(
+                        candidate_ids,
+                        MediaIdentityType.LOCAL_OSHASH,
+                        current_oshash,
+                    )
+
     if metadata is None or metadata.id is None:
         return False
-    # finalize_media_file 只提交 status / metadata_id / MetadataLibrary，不写番号、115 ID 或 OSHASH。
+
+    # finalize_media_file 只恢复关联，不登记或修改番号、115 ID、OSHASH。
     await repo.finalize_media_file(media.id, metadata.id)
     return True
 

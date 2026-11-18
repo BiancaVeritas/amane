@@ -31,6 +31,7 @@ class SiteName(StrEnum):
     PACOPACOMAMA = "pacopacomama"
     CARIBBEANCOM = "caribbeancom"
     CARIBBEANCOMPR = "caribbeancompr"
+    CARIBBEANCOM_INDEX = "caribbeancom_index"
     D2PASS = "d2pass"
     PRESTIGE = "prestige"
     R18DEV = "r18dev"

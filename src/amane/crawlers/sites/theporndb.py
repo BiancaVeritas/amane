@@ -123,7 +123,7 @@ class ThePornDBCrawler(Crawler):
         return _scene_url(await self._search_scene(query, token))
 
     async def _search_scene(self, query: SearchQuery, token: str) -> dict[str, Any] | None:
-        """优先复用明确 UUID; WESTERN 多结果先按片商 + 日期匹配, 再用 OSHASH 消歧."""
+        """优先精确查询明确 UUID；自动 WESTERN 先按番号搜索，单结果直接采用，多结果仅通过 OSHASH 唯一匹配."""
         headers = {"Authorization": f"Bearer {token}"}
         gql_url = self._gql_url(query.content_type)
 
@@ -152,12 +152,7 @@ class ThePornDBCrawler(Crawler):
             )
             if len(scenes) == 1:
                 return scenes[0]
-            if len(scenes) > 1:
-                # 搜索词可能返回同片商的多部影片: 先用日期号中的片商 + 日期
-                # 筛出唯一候选, 只有仍无法确定时才尝试 OSHASH 消歧.
-                scene = pick_scene(scenes, query.number)
-                if scene is not None:
-                    return scene
+
             if len(scenes) > 1 and query.file_hash:
                 fingerprint_data = await self.client.post_json(
                     gql_url,

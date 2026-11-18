@@ -20,6 +20,7 @@ from .sites import (
     AVEntertainmentsCrawler,
     AvsoxCrawler,
     CaribbeancomCrawler,
+    CaribbeancomIndexCrawler,
     CaribbeancomprCrawler,
     D2PassCrawler,
     DahliaCrawler,
@@ -75,6 +76,7 @@ registry.register(PondoCrawler)
 registry.register(PacopacomamaCrawler)
 registry.register(CaribbeancomCrawler)
 registry.register(CaribbeancomprCrawler)
+registry.register(CaribbeancomIndexCrawler)
 registry.register(D2PassCrawler)
 registry.register(R18DevCrawler)
 registry.register(TenmusumeCrawler)
@@ -93,6 +95,7 @@ __all__ = [
     "AvbaseCrawler",
     "AvsoxCrawler",
     "CaribbeancomCrawler",
+    "CaribbeancomIndexCrawler",
     "CaribbeancomprCrawler",
     "Crawler",
     "D2PassCrawler",

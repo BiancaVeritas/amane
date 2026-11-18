@@ -17,6 +17,7 @@ from amane.db.models import (
     MediaSortField,
     Metadata,
     MetadataSortField,
+    OshashSubmissionStatus,
     RoutineType,
     SortOrder,
     TaskSortField,
@@ -538,14 +539,20 @@ class TestMetadataRepo:
         )
 
         assert updated.id == metadata.id
-        assert await repo.get_metadata_by_identity(MediaIdentityType.FILE_115_ID, "old-115") is None
-        assert await repo.get_metadata_by_identity(MediaIdentityType.LOCAL_OSHASH, "old-hash") is None
+
+        old_115 = await repo.get_metadata_by_identity(MediaIdentityType.FILE_115_ID, "old-115")
         new_115 = await repo.get_metadata_by_identity(MediaIdentityType.FILE_115_ID, "new-115")
-        new_oshash = await repo.get_metadata_by_identity(MediaIdentityType.LOCAL_OSHASH, "new-hash")
+        old_hash = await repo.get_metadata_by_identity(MediaIdentityType.LOCAL_OSHASH, "old-hash")
+        new_hash = await repo.get_metadata_by_identity(MediaIdentityType.LOCAL_OSHASH, "new-hash")
+
+        assert old_115 is not None
         assert new_115 is not None
-        assert new_oshash is not None
+        assert old_hash is not None
+        assert new_hash is not None
+        assert old_115.id == metadata.id
         assert new_115.id == metadata.id
-        assert new_oshash.id == metadata.id
+        assert old_hash.id == metadata.id
+        assert new_hash.id == metadata.id
 
     @pytest.mark.asyncio(loop_scope="function")
     async def test_western_finalize_rolls_back_all_writes_on_identity_conflict(self, repo: Repository):
@@ -563,22 +570,36 @@ class TestMetadataRepo:
 
         await repo.register_media_identity(owner.id, MediaIdentityType.LOCAL_OSHASH, "atomic-hash")
 
-        with pytest.raises(ValueError, match="already linked"):
-            await repo.finalize_western_scrape(
-                theporndb_uuid="uuid-new",
-                number=number,
-                media_file_id=media.id,
-                oshash="atomic-hash",
-                file_115_id="3500105553135273569",
-                title="Must Roll Back",
-            )
+        updated = await repo.finalize_western_scrape(
+            theporndb_uuid="uuid-new",
+            number=number,
+            media_file_id=media.id,
+            oshash="atomic-hash",
+            file_115_id="3500105553135273569",
+            title="Identity transfer",
+        )
 
-        assert await repo.get_metadata_by_theporndb_uuid("uuid-new") is None
+        assert updated.id is not None
+        assert updated.id != owner.id
+
+        new_metadata = await repo.get_metadata_by_theporndb_uuid("uuid-new")
+        assert new_metadata is not None
+        assert new_metadata.id == updated.id
+
         refreshed_media = await repo.get_media_file(media.id)
         assert refreshed_media is not None
-        assert refreshed_media.metadata_id is None
-        assert refreshed_media.status == MediaFileStatus.PENDING
-        assert await repo.get_metadata_by_identity(MediaIdentityType.FILE_115_ID, "3500105553135273569") is None
+        assert refreshed_media.metadata_id == updated.id
+        assert refreshed_media.status == MediaFileStatus.SCRAPED
+
+        found_hash = await repo.get_metadata_by_identity(MediaIdentityType.LOCAL_OSHASH, "atomic-hash")
+        found_115 = await repo.get_metadata_by_identity(
+            MediaIdentityType.FILE_115_ID,
+            "3500105553135273569",
+        )
+        assert found_hash is not None
+        assert found_hash.id == updated.id
+        assert found_115 is not None
+        assert found_115.id == updated.id
 
     @pytest.mark.asyncio(loop_scope="function")
     async def test_western_finalize_rejects_115_and_oshash_owned_by_different_metadata(self, repo: Repository):
@@ -597,27 +618,33 @@ class TestMetadataRepo:
         )
         assert media.id is not None
 
-        with pytest.raises(ValueError, match="already linked"):
-            await repo.finalize_western_scrape(
-                theporndb_uuid="uuid-new-cross-conflict",
-                number=number,
-                media_file_id=media.id,
-                oshash="oshash-cross-conflict",
-                file_115_id="115-cross-conflict",
-                title="Must Not Be Linked",
-            )
+        updated = await repo.finalize_western_scrape(
+            theporndb_uuid="uuid-new-cross-conflict",
+            number=number,
+            media_file_id=media.id,
+            oshash="oshash-cross-conflict",
+            file_115_id="115-cross-conflict",
+            title="Identity transfer",
+        )
 
-        assert await repo.get_metadata_by_theporndb_uuid("uuid-new-cross-conflict") is None
+        assert updated.id is not None
+        assert updated.id not in {owner_115.id, owner_hash.id}
+
+        new_metadata = await repo.get_metadata_by_theporndb_uuid("uuid-new-cross-conflict")
+        assert new_metadata is not None
+        assert new_metadata.id == updated.id
+
         refreshed_media = await repo.get_media_file(media.id)
         assert refreshed_media is not None
-        assert refreshed_media.metadata_id is None
-        assert refreshed_media.status == MediaFileStatus.PENDING
+        assert refreshed_media.metadata_id == updated.id
+        assert refreshed_media.status == MediaFileStatus.SCRAPED
+
         found_115 = await repo.get_metadata_by_identity(MediaIdentityType.FILE_115_ID, "115-cross-conflict")
         found_hash = await repo.get_metadata_by_identity(MediaIdentityType.LOCAL_OSHASH, "oshash-cross-conflict")
         assert found_115 is not None
         assert found_hash is not None
-        assert found_115.id == owner_115.id
-        assert found_hash.id == owner_hash.id
+        assert found_115.id == updated.id
+        assert found_hash.id == updated.id
 
     @pytest.mark.asyncio(loop_scope="function")
     async def test_western_finalize_rolls_back_when_115_id_belongs_to_another_metadata(self, repo: Repository):
@@ -633,22 +660,39 @@ class TestMetadataRepo:
         )
         assert media.id is not None
 
-        with pytest.raises(ValueError, match="already linked"):
-            await repo.finalize_western_scrape(
-                theporndb_uuid="uuid-new-115-conflict",
-                number=number,
-                media_file_id=media.id,
-                oshash="oshash-not-yet-registered",
-                file_115_id="115-owned-elsewhere",
-                title="Must Roll Back",
-            )
+        updated = await repo.finalize_western_scrape(
+            theporndb_uuid="uuid-new-115-conflict",
+            number=number,
+            media_file_id=media.id,
+            oshash="oshash-not-yet-registered",
+            file_115_id="115-owned-elsewhere",
+            title="Identity transfer",
+        )
 
-        assert await repo.get_metadata_by_theporndb_uuid("uuid-new-115-conflict") is None
+        assert updated.id is not None
+        assert updated.id != owner.id
+
+        new_metadata = await repo.get_metadata_by_theporndb_uuid("uuid-new-115-conflict")
+        assert new_metadata is not None
+        assert new_metadata.id == updated.id
+
         refreshed_media = await repo.get_media_file(media.id)
         assert refreshed_media is not None
-        assert refreshed_media.metadata_id is None
-        assert refreshed_media.status == MediaFileStatus.PENDING
-        assert await repo.get_metadata_by_identity(MediaIdentityType.LOCAL_OSHASH, "oshash-not-yet-registered") is None
+        assert refreshed_media.metadata_id == updated.id
+        assert refreshed_media.status == MediaFileStatus.SCRAPED
+
+        found_115 = await repo.get_metadata_by_identity(
+            MediaIdentityType.FILE_115_ID,
+            "115-owned-elsewhere",
+        )
+        found_hash = await repo.get_metadata_by_identity(
+            MediaIdentityType.LOCAL_OSHASH,
+            "oshash-not-yet-registered",
+        )
+        assert found_115 is not None
+        assert found_hash is not None
+        assert found_115.id == updated.id
+        assert found_hash.id == updated.id
 
     @pytest.mark.asyncio(loop_scope="function")
     async def test_media_identity_survives_western_metadata_facet_refresh(self, repo: Repository):
@@ -2436,3 +2480,163 @@ class TestGlobalMediaPathRegistration:
         assert created_again is False
         assert second.id == first.id
         assert second.library_id == library_a.id
+
+
+class TestOshashSubmissionRepo:
+    async def _enqueue(self, repo: Repository) -> int:
+        await repo.enqueue_oshash_submission(
+            theporndb_uuid="scene-001",
+            oshash="0123456789abcdef",
+            duration=3600,
+            title="test scene",
+            path="/video/test.mp4",
+        )
+        rows, total = await repo.list_oshash_submissions(offset=0, limit=100)
+        assert total == 1
+        assert rows[0].id is not None
+        return rows[0].id
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_claim_only_once_and_success_deletes(self, repo: Repository):
+        submission_id = await self._enqueue(repo)
+
+        assert await repo.claim_oshash_submission(submission_id) is True
+        assert await repo.claim_oshash_submission(submission_id) is False
+
+        assert await repo.finish_oshash_submission(submission_id, error=None) is True
+        assert await repo.get_oshash_submission(submission_id) is None
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_explicit_failure_returns_to_pending(self, repo: Repository):
+        submission_id = await self._enqueue(repo)
+
+        assert await repo.claim_oshash_submission(submission_id) is True
+        assert (
+            await repo.finish_oshash_submission(
+                submission_id,
+                error="HTTP 400: rejected",
+            )
+            is True
+        )
+
+        row = await repo.get_oshash_submission(submission_id)
+        assert row is not None
+        assert row.status == OshashSubmissionStatus.PENDING
+        assert row.last_error == "HTTP 400: rejected"
+        assert await repo.claim_oshash_submission(submission_id) is True
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_uncertain_submission_cannot_be_claimed_again(self, repo: Repository):
+        submission_id = await self._enqueue(repo)
+
+        assert await repo.claim_oshash_submission(submission_id) is True
+        assert (
+            await repo.finish_oshash_submission(
+                submission_id,
+                error="request result uncertain",
+                uncertain=True,
+            )
+            is True
+        )
+
+        row = await repo.get_oshash_submission(submission_id)
+        assert row is not None
+        assert row.status == OshashSubmissionStatus.UNCERTAIN
+        assert await repo.claim_oshash_submission(submission_id) is False
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_restart_recovers_only_submitting_rows(self, repo: Repository):
+        submitting_id = await self._enqueue(repo)
+
+        await repo.enqueue_oshash_submission(
+            theporndb_uuid="scene-002",
+            oshash="fedcba9876543210",
+            duration=3600,
+            title="pending scene",
+            path="/video/pending.mp4",
+        )
+        rows, total = await repo.list_oshash_submissions(offset=0, limit=100)
+        assert total == 2
+        pending_id = next(row.id for row in rows if row.id != submitting_id)
+        assert pending_id is not None
+
+        assert await repo.claim_oshash_submission(submitting_id) is True
+        assert await repo.recover_oshash_submissions() == 1
+
+        submitting_row = await repo.get_oshash_submission(submitting_id)
+        pending_row = await repo.get_oshash_submission(pending_id)
+
+        assert submitting_row is not None
+        assert submitting_row.status == OshashSubmissionStatus.UNCERTAIN
+        assert submitting_row.last_error is not None
+        assert pending_row is not None
+        assert pending_row.status == OshashSubmissionStatus.PENDING
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_manual_confirmation_resolves_uncertain_rows(self, repo: Repository):
+        accepted_id = await self._enqueue(repo)
+
+        await repo.enqueue_oshash_submission(
+            theporndb_uuid="scene-002",
+            oshash="fedcba9876543210",
+            duration=3600,
+            title="second scene",
+            path="/video/second.mp4",
+        )
+        rows, total = await repo.list_oshash_submissions(offset=0, limit=100)
+        assert total == 2
+        not_accepted_id = next(row.id for row in rows if row.id != accepted_id)
+        assert not_accepted_id is not None
+
+        for submission_id in (accepted_id, not_accepted_id):
+            assert await repo.claim_oshash_submission(submission_id) is True
+            assert (
+                await repo.finish_oshash_submission(
+                    submission_id,
+                    error="request result uncertain",
+                    uncertain=True,
+                )
+                is True
+            )
+
+        assert await repo.confirm_oshash_submission_accepted(accepted_id) is True
+        assert await repo.get_oshash_submission(accepted_id) is None
+
+        assert await repo.retry_uncertain_oshash_submission(not_accepted_id) is True
+        row = await repo.get_oshash_submission(not_accepted_id)
+        assert row is not None
+        assert row.status == OshashSubmissionStatus.PENDING
+        assert row.last_error is None
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_delete_only_removes_pending_rows(self, repo: Repository):
+        pending_id = await self._enqueue(repo)
+
+        await repo.enqueue_oshash_submission(
+            theporndb_uuid="scene-002",
+            oshash="fedcba9876543210",
+            duration=3600,
+            title="uncertain scene",
+            path="/video/uncertain.mp4",
+        )
+        rows, total = await repo.list_oshash_submissions(offset=0, limit=100)
+        assert total == 2
+        uncertain_id = next(row.id for row in rows if row.id != pending_id)
+        assert uncertain_id is not None
+
+        assert await repo.claim_oshash_submission(uncertain_id) is True
+        assert (
+            await repo.finish_oshash_submission(
+                uncertain_id,
+                error="request result uncertain",
+                uncertain=True,
+            )
+            is True
+        )
+
+        assert await repo.delete_oshash_submissions([pending_id, uncertain_id]) == 1
+        assert await repo.get_oshash_submission(pending_id) is None
+
+        uncertain_row = await repo.get_oshash_submission(uncertain_id)
+        assert uncertain_row is not None
+        assert uncertain_row.status == OshashSubmissionStatus.UNCERTAIN

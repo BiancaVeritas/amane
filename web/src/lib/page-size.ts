@@ -1,6 +1,8 @@
 /** 各列表表面的页大小选项 - catalog 词云上限对齐 facets API (1000), 其余对齐 media/metadata/tasks (200). */
 export const PAGE_SIZE_OPTIONS = {
   metaList: [10, 20, 30, 40, 50, 60, 70, 80, 90, 100],
+  metaGrid: [10, 20, 30, 40, 50, 60, 70, 80, 90, 100],
+  metaCover: [10, 20, 30, 40, 50, 60, 70, 80, 90, 100],
   catalogList: [20, 50, 100, 200],
   catalogKind: [50, 100, 200, 500, 1000],
   actorsList: [10, 20, 30, 40, 50, 60, 70, 80, 90, 100],
@@ -17,6 +19,8 @@ export type PageSize = (typeof PAGE_SIZE_OPTIONS)[PageSizeKey][number];
 
 export const DEFAULT_PAGE_SIZES = {
   metaList: 30,
+  metaGrid: 30,
+  metaCover: 30,
   catalogList: 50,
   catalogKind: 500,
   actorsList: 30,

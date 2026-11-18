@@ -153,7 +153,16 @@ def fake_factory(fake_metadata):
 
 @pytest.fixture
 def handler(repo, fake_factory, resource_store):
-    return ScrapeHandler(repo=repo, factory=fake_factory, resource_store=resource_store, pipeline_config=HotSettings())
+    return ScrapeHandler(
+        repo=repo,
+        factory=fake_factory,
+        resource_store=resource_store,
+        pipeline_config=HotSettings(
+            scraping=ScrapingConfig(
+                content_routes={ContentType.CENSORED: [SiteName.JAVDB]},
+            )
+        ),
+    )
 
 
 @pytest.fixture

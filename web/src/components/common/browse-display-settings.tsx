@@ -10,14 +10,17 @@ const CARD_SIZES = ["xs", "sm", "small", "medium", "default", "large", "xl", "xx
 export function BrowseDisplaySettings({
   pageSizeKey,
   onPageSizeChanged,
+  cardSizeKeyOverride,
 }: {
   pageSizeKey: PageSizeKey;
   onPageSizeChanged: () => void;
+  cardSizeKeyOverride?: CardSizeKey;
 }) {
   const { t } = useTranslation("common");
   const pageSize = useUIStore((s) => s.pageSizes[pageSizeKey]);
   const setPageSize = useUIStore((s) => s.setPageSize);
-  const cardSizeKey: CardSizeKey = pageSizeKey === "metaList" ? "meta" : "actors";
+  const cardSizeKey: CardSizeKey =
+    cardSizeKeyOverride ?? (pageSizeKey === "metaList" ? "meta" : "actors");
   const cardSize = useUIStore((s) => s.cardSizes[cardSizeKey]);
   const setCardSize = useUIStore((s) => s.setCardSize);
   const cardSizeLabels = [

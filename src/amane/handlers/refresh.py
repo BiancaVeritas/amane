@@ -6,7 +6,7 @@ import structlog
 
 from ..db import TaskType
 from ..library import MEDIA_EXTENSIONS, InventoryStore, LibraryHit, LibraryScan, OrphanScan, scan_inventory
-from ..parsing import parse_file_info
+from ..parsing import ContentType, parse_file_info
 from ..utils.path import is_descendant, nfc_path
 from ..utils.threads import path_exists, path_is_dir
 from ._common import LibraryTaskLocks, refresh_media_association, register_media_file
@@ -207,12 +207,18 @@ class RefreshHandler(TaskHandler[RefreshPayload, RefreshResult]):
             else await self._repo.list_media_files(library_id=payload.library_id, status=payload.scrape, limit=None)
         )
 
-        # 扇出 SCRAPE; 只描述后继, 由完成事务创建.
+        # 扇出 SCRAPE; 只描述后续, 由完成事务创建
         followups = []
         for f in media_files:
             parsed = parse_file_info(f.path)
             assert f.id is not None
             assert parsed.number is not None
+
+            # WESTERN 先执行只读本地身份预检查；命中则恢复关联，不再创建刮削任务。
+            if parsed.content_type == ContentType.WESTERN and await refresh_media_association(self._repo, f):
+                associated += 1
+                continue
+
             followups.append(
                 FollowupTask(
                     key=f"scrape:{f.id}",

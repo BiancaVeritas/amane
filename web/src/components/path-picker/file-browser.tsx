@@ -163,7 +163,7 @@ export function FileBrowser({
         normalizedCurrentPath.startsWith(`${normalizedPath}/`) ||
         normalizedPath === "",
     )
-    .sort((a, b) => b.normalizedPath.length - a.normalizedPath.length)[0]?.item;
+    .toSorted((a, b) => b.normalizedPath.length - a.normalizedPath.length)[0]?.item;
   const relativeSegments = matchingRoot
     ? currentPath
         .replace(/\\/g, "/")

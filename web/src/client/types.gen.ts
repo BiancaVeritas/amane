@@ -714,6 +714,42 @@ export type BatchSubmit = {
 };
 
 /**
+ * Body_import_actor_mapping_table
+ */
+export type BodyImportActorMappingTable = {
+    /**
+     * File
+     */
+    file: Blob | File;
+    /**
+     * Start Column
+     */
+    start_column?: number;
+    /**
+     * Skip Header
+     */
+    skip_header?: boolean;
+};
+
+/**
+ * Body_import_number_mapping_table
+ */
+export type BodyImportNumberMappingTable = {
+    /**
+     * File
+     */
+    file: Blob | File;
+    /**
+     * Start Column
+     */
+    start_column?: number;
+    /**
+     * Skip Header
+     */
+    skip_header?: boolean;
+};
+
+/**
  * Body_install_plugin
  */
 export type BodyInstallPlugin = {
@@ -1275,6 +1311,26 @@ export type ErrorRow = {
      * Message
      */
     message: string;
+};
+
+/**
+ * ExceptionUpdate
+ */
+export type ExceptionUpdate = {
+    /**
+     * Group Id
+     */
+    group_id: number;
+    /**
+     * Side
+     */
+    side: 'old' | 'new';
+    /**
+     * Entry
+     */
+    entry?: {
+        [key: string]: unknown;
+    } | null;
 };
 
 /**
@@ -1890,6 +1946,22 @@ export type HotSettings = {
 };
 
 /**
+ * ImportRequest
+ */
+export type ImportRequest = {
+    /**
+     * Data
+     */
+    data: {
+        [key: string]: unknown;
+    };
+    /**
+     * Mode
+     */
+    mode?: 'merge' | 'replace';
+};
+
+/**
  * Interrupt
  *
  * A pause carried inside ``RunFinishedEvent.outcome`` when the outcome is
@@ -2153,11 +2225,17 @@ export type LibraryCreateRequest = {
      * Path
      */
     path: string;
-    /** Scan Paths */
+    /**
+     * Scan Paths
+     */
     scan_paths?: Array<string>;
-    /** Organize Path */
+    /**
+     * Organize Path
+     */
     organize_path?: string | null;
-    /** Organize Paths */
+    /**
+     * Organize Paths
+     */
     organize_paths?: Array<string>;
     automation?: LibraryAutomation;
     /**
@@ -2282,12 +2360,18 @@ export type LibraryResponse = {
      * Path
      */
     path: string;
-    /** Scan Paths */
-    scan_paths: Array<string>;
-    /** Organize Path */
+    /**
+     * Scan Paths
+     */
+    scan_paths?: Array<string>;
+    /**
+     * Organize Path
+     */
     organize_path?: string | null;
-    /** Organize Paths */
-    organize_paths: Array<string>;
+    /**
+     * Organize Paths
+     */
+    organize_paths?: Array<string>;
     automation: LibraryAutomation;
     /**
      * Auto Organize
@@ -2386,8 +2470,18 @@ export type LibraryUpdateRequest = {
      * Path
      */
     path?: string | null;
-    /** Organize Path */
+    /**
+     * Scan Paths
+     */
+    scan_paths?: Array<string> | null;
+    /**
+     * Organize Path
+     */
     organize_path?: string | null;
+    /**
+     * Organize Paths
+     */
+    organize_paths?: Array<string> | null;
     automation?: LibraryAutomation | null;
     /**
      * Auto Organize
@@ -2499,6 +2593,26 @@ export type LoggingConfig = {
  * Manufacturer
  */
 export type Manufacturer = 'attackers' | 'befree' | 'bi' | 'bibian' | 'das' | 'ebody' | 'fitch' | 'hajime_kikaku' | 'honnaka' | 'hunter' | 'idea_pocket' | 'kawaii' | 'kirakira' | 'madonna' | 'miman' | 'mko_labo' | 'moodyz' | 'muku' | 'mvg' | 'nanpa_japan' | 'oppai' | 'opera' | 'premium_beauty' | 'rookie' | 's1' | 'tameikegoro' | 'tosatsu' | 'v' | 'wanz_factory';
+
+/**
+ * MappingSelection
+ */
+export type MappingSelection = {
+    /**
+     * Originals
+     */
+    originals: Array<string>;
+};
+
+/**
+ * MappingStateUpdate
+ */
+export type MappingStateUpdate = {
+    /**
+     * Enabled
+     */
+    enabled: boolean;
+};
 
 /**
  * MappingUpdate
@@ -3731,7 +3845,9 @@ export type RefreshResult = {
      * Scrape
      */
     scrape: number;
-    /** Number of files associated using existing internal identities */
+    /**
+     * Associated
+     */
     associated?: number;
 };
 
@@ -3764,6 +3880,10 @@ export type RefreshSubmission = {
      */
     patterns?: Array<string> | null;
     /**
+     * Paths
+     */
+    paths?: Array<string>;
+    /**
      * Scan
      */
     scan?: Array<ScanMode>;
@@ -3771,12 +3891,14 @@ export type RefreshSubmission = {
      * Scrape
      */
     scrape?: Array<MediaFileStatus>;
-    /** Associate using existing internal identities without scraping */
-    associate?: boolean;
     /**
      * Use Cache
      */
     use_cache?: Array<CacheKind>;
+    /**
+     * Associate
+     */
+    associate?: boolean;
     /**
      * Type
      */
@@ -4351,6 +4473,12 @@ export type ScrapeSubmission = {
      */
     number?: string | null;
     /**
+     * Library Number
+     *
+     * 手动指定刮削的最终片库番号；未提供时沿用 number
+     */
+    library_number?: string | null;
+    /**
      * Media Id
      *
      * MediaFile ID. 通常仅用于内部提交任务，手动提交无需指定
@@ -4412,19 +4540,31 @@ export type ScrapingConfig = {
      * Content Routes
      */
     content_routes?: {
-        [key in ContentType]?: Array<'airav' | 'avbase' | 'aventertainments' | 'avsox' | 'dahlia' | 'dmm' | 'faleno' | 'fc2' | 'fc2club' | 'fc2ppvdb' | 'freejavbt' | 'getchu' | 'giga' | 'iqqtv' | 'jav321' | 'javbus' | 'javdb' | 'javlibrary' | 'kin8' | 'mgstage' | 'official' | '1pondo' | 'pacopacomama' | 'caribbeancom' | 'caribbeancompr' | 'd2pass' | 'prestige' | 'r18dev' | '10musume' | 'tokyo_hot' | 'theporndb' | 'xcity'>;
+        [key: string]: Array<'airav' | 'avbase' | 'aventertainments' | 'avsox' | 'dahlia' | 'dmm' | 'faleno' | 'fc2' | 'fc2club' | 'fc2ppvdb' | 'freejavbt' | 'getchu' | 'giga' | 'iqqtv' | 'jav321' | 'javbus' | 'javdb' | 'javlibrary' | 'kin8' | 'mgstage' | 'official' | '1pondo' | 'pacopacomama' | 'caribbeancom' | 'caribbeancompr' | 'caribbeancom_index' | 'd2pass' | 'prestige' | 'r18dev' | '10musume' | 'tokyo_hot' | 'theporndb' | 'xcity'>;
     };
+    /**
+     * Uncensored Streaming Number Rules
+     *
+     * 无码流媒体番号完整匹配规则; 每条规则为正则表达式, 不区分大小写.
+     */
+    uncensored_streaming_number_rules?: Array<string>;
+    /**
+     * Number Mapping Rules
+     *
+     * 通用番号映射规则; 每行格式为完整匹配正则表达式 => 替换表达式, 仅自动非欧美非无码流媒体刮削使用.
+     */
+    number_mapping_rules?: Array<string>;
     /**
      * Field Priority
      */
     field_priority?: {
-        [key in MetadataField]?: Array<'airav' | 'avbase' | 'aventertainments' | 'avsox' | 'dahlia' | 'dmm' | 'faleno' | 'fc2' | 'fc2club' | 'fc2ppvdb' | 'freejavbt' | 'getchu' | 'giga' | 'iqqtv' | 'jav321' | 'javbus' | 'javdb' | 'javlibrary' | 'kin8' | 'mgstage' | 'official' | '1pondo' | 'pacopacomama' | 'caribbeancom' | 'caribbeancompr' | 'd2pass' | 'prestige' | 'r18dev' | '10musume' | 'tokyo_hot' | 'theporndb' | 'xcity'>;
+        [key in MetadataField]?: Array<'airav' | 'avbase' | 'aventertainments' | 'avsox' | 'dahlia' | 'dmm' | 'faleno' | 'fc2' | 'fc2club' | 'fc2ppvdb' | 'freejavbt' | 'getchu' | 'giga' | 'iqqtv' | 'jav321' | 'javbus' | 'javdb' | 'javlibrary' | 'kin8' | 'mgstage' | 'official' | '1pondo' | 'pacopacomama' | 'caribbeancom' | 'caribbeancompr' | 'caribbeancom_index' | 'd2pass' | 'prestige' | 'r18dev' | '10musume' | 'tokyo_hot' | 'theporndb' | 'xcity'>;
     };
     /**
      * Field Blacklist
      */
     field_blacklist?: {
-        [key in MetadataField]?: Array<'airav' | 'avbase' | 'aventertainments' | 'avsox' | 'dahlia' | 'dmm' | 'faleno' | 'fc2' | 'fc2club' | 'fc2ppvdb' | 'freejavbt' | 'getchu' | 'giga' | 'iqqtv' | 'jav321' | 'javbus' | 'javdb' | 'javlibrary' | 'kin8' | 'mgstage' | 'official' | '1pondo' | 'pacopacomama' | 'caribbeancom' | 'caribbeancompr' | 'd2pass' | 'prestige' | 'r18dev' | '10musume' | 'tokyo_hot' | 'theporndb' | 'xcity'>;
+        [key in MetadataField]?: Array<'airav' | 'avbase' | 'aventertainments' | 'avsox' | 'dahlia' | 'dmm' | 'faleno' | 'fc2' | 'fc2club' | 'fc2ppvdb' | 'freejavbt' | 'getchu' | 'giga' | 'iqqtv' | 'jav321' | 'javbus' | 'javdb' | 'javlibrary' | 'kin8' | 'mgstage' | 'official' | '1pondo' | 'pacopacomama' | 'caribbeancom' | 'caribbeancompr' | 'caribbeancom_index' | 'd2pass' | 'prestige' | 'r18dev' | '10musume' | 'tokyo_hot' | 'theporndb' | 'xcity'>;
     };
     /**
      * Field Language
@@ -4833,7 +4973,7 @@ export type SiteConfig = {
  *
  * 爬虫站点名称 (影片与演员源共用).
  */
-export type SiteName = 'airav' | 'avbase' | 'aventertainments' | 'avsox' | 'dahlia' | 'dmm' | 'faleno' | 'fc2' | 'fc2club' | 'fc2ppvdb' | 'freejavbt' | 'getchu' | 'gfriends' | 'giga' | 'iqqtv' | 'jav321' | 'javbus' | 'javdb' | 'javlibrary' | 'kin8' | 'mgstage' | 'minnano' | 'official' | '1pondo' | 'pacopacomama' | 'caribbeancom' | 'caribbeancompr' | 'd2pass' | 'prestige' | 'r18dev' | '10musume' | 'tokyo_hot' | 'theporndb' | 'tushy' | 'tushy_raw' | 'wikipedia' | 'xcity';
+export type SiteName = 'airav' | 'avbase' | 'aventertainments' | 'avsox' | 'dahlia' | 'dmm' | 'faleno' | 'fc2' | 'fc2club' | 'fc2ppvdb' | 'freejavbt' | 'getchu' | 'gfriends' | 'giga' | 'iqqtv' | 'jav321' | 'javbus' | 'javdb' | 'javlibrary' | 'kin8' | 'mgstage' | 'minnano' | 'official' | '1pondo' | 'pacopacomama' | 'caribbeancom' | 'caribbeancompr' | 'caribbeancom_index' | 'd2pass' | 'prestige' | 'r18dev' | '10musume' | 'tokyo_hot' | 'theporndb' | 'tushy' | 'tushy_raw' | 'wikipedia' | 'xcity';
 
 /**
  * SiteOutcomeKind
@@ -5874,6 +6014,78 @@ export type WorkerConfig = {
      * Shutdown Timeout
      */
     shutdown_timeout?: number;
+};
+
+/**
+ * BatchDeleteRequest
+ */
+export type AmaneApiRoutesActorMappingsBatchDeleteRequest = {
+    /**
+     * Ids
+     */
+    ids: Array<string>;
+};
+
+/**
+ * EntryUpdate
+ */
+export type AmaneApiRoutesActorMappingsEntryUpdate = {
+    /**
+     * Id
+     */
+    id: string;
+    /**
+     * Name
+     */
+    name: string;
+    /**
+     * Aliases
+     */
+    aliases?: Array<string>;
+    /**
+     * Original Id
+     */
+    original_id?: string | null;
+};
+
+/**
+ * BatchDeleteRequest
+ */
+export type AmaneApiRoutesNumberMappingsBatchDeleteRequest = {
+    /**
+     * Keys
+     */
+    keys: Array<string>;
+};
+
+/**
+ * EntryUpdate
+ */
+export type AmaneApiRoutesNumberMappingsEntryUpdate = {
+    /**
+     * Key
+     */
+    key: string;
+    /**
+     * Original Key
+     */
+    original_key?: string | null;
+    /**
+     * Id
+     */
+    id: string | number;
+    /**
+     * Title
+     */
+    title?: string | null;
+    /**
+     * Actor
+     */
+    actor?: string | null;
+    /**
+     * Override Title
+     */
+    override_title?: string | null;
 };
 
 export type HealthCheckData = {
@@ -6987,6 +7199,62 @@ export type SubmitBatchErrors = {
 export type SubmitBatchError = SubmitBatchErrors[keyof SubmitBatchErrors];
 
 export type SubmitBatchResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
+export type ConfirmAcceptedData = {
+    body?: never;
+    path: {
+        /**
+         * Submission Id
+         */
+        submission_id: number;
+    };
+    query?: never;
+    url: '/api/oshash-submissions/{submission_id}/confirm-accepted';
+};
+
+export type ConfirmAcceptedErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ConfirmAcceptedError = ConfirmAcceptedErrors[keyof ConfirmAcceptedErrors];
+
+export type ConfirmAcceptedResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
+export type ConfirmNotAcceptedData = {
+    body?: never;
+    path: {
+        /**
+         * Submission Id
+         */
+        submission_id: number;
+    };
+    query?: never;
+    url: '/api/oshash-submissions/{submission_id}/confirm-not-accepted';
+};
+
+export type ConfirmNotAcceptedErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ConfirmNotAcceptedError = ConfirmNotAcceptedErrors[keyof ConfirmNotAcceptedErrors];
+
+export type ConfirmNotAcceptedResponses = {
     /**
      * Successful Response
      */
@@ -9314,7 +9582,7 @@ export type ListMappingsData = {
         /**
          * Status
          */
-        status?: 'all' | 'pending' | 'mapped';
+        status?: 'all' | 'pending' | 'mapped' | 'archived';
         /**
          * Language
          */
@@ -9378,7 +9646,44 @@ export type SaveMappingResponses = {
     200: unknown;
 };
 
-export type DeleteMappingData = {
+export type GetMappingStateData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/tag-mappings/state';
+};
+
+export type GetMappingStateResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
+export type UpdateMappingStateData = {
+    body: MappingStateUpdate;
+    path?: never;
+    query?: never;
+    url: '/api/tag-mappings/state';
+};
+
+export type UpdateMappingStateErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type UpdateMappingStateError = UpdateMappingStateErrors[keyof UpdateMappingStateErrors];
+
+export type UpdateMappingStateResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
+export type ArchiveMappingData = {
     body?: never;
     path: {
         /**
@@ -9387,26 +9692,98 @@ export type DeleteMappingData = {
         original: string;
     };
     query?: never;
-    url: '/api/tag-mappings/{original}';
+    url: '/api/tag-mappings/{original}/archive';
 };
 
-export type DeleteMappingErrors = {
+export type ArchiveMappingErrors = {
     /**
      * Validation Error
      */
     422: HttpValidationError;
 };
 
-export type DeleteMappingError = DeleteMappingErrors[keyof DeleteMappingErrors];
+export type ArchiveMappingError = ArchiveMappingErrors[keyof ArchiveMappingErrors];
 
-export type DeleteMappingResponses = {
+export type ArchiveMappingResponses = {
     /**
      * Successful Response
      */
-    204: void;
+    200: unknown;
 };
 
-export type DeleteMappingResponse = DeleteMappingResponses[keyof DeleteMappingResponses];
+export type RestoreMappingData = {
+    body?: never;
+    path: {
+        /**
+         * Original
+         */
+        original: string;
+    };
+    query?: never;
+    url: '/api/tag-mappings/{original}/restore';
+};
+
+export type RestoreMappingErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type RestoreMappingError = RestoreMappingErrors[keyof RestoreMappingErrors];
+
+export type RestoreMappingResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
+export type ArchiveMappingsData = {
+    body: MappingSelection;
+    path?: never;
+    query?: never;
+    url: '/api/tag-mappings/archive';
+};
+
+export type ArchiveMappingsErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ArchiveMappingsError = ArchiveMappingsErrors[keyof ArchiveMappingsErrors];
+
+export type ArchiveMappingsResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
+export type RestoreMappingsData = {
+    body: MappingSelection;
+    path?: never;
+    query?: never;
+    url: '/api/tag-mappings/restore';
+};
+
+export type RestoreMappingsErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type RestoreMappingsError = RestoreMappingsErrors[keyof RestoreMappingsErrors];
+
+export type RestoreMappingsResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
 
 export type ExportMappingsData = {
     body?: never;
@@ -9467,6 +9844,593 @@ export type SuggestMappingsErrors = {
 export type SuggestMappingsError = SuggestMappingsErrors[keyof SuggestMappingsErrors];
 
 export type SuggestMappingsResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
+export type ListNumberMappingsData = {
+    body?: never;
+    path?: never;
+    query: {
+        /**
+         * Source
+         */
+        source: 'caribbeancompr' | 'd2pass' | 'caribbeancom';
+        /**
+         * Search
+         */
+        search?: string;
+        /**
+         * Limit
+         */
+        limit?: number;
+        /**
+         * Offset
+         */
+        offset?: number;
+    };
+    url: '/api/number-mappings';
+};
+
+export type ListNumberMappingsErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListNumberMappingsError = ListNumberMappingsErrors[keyof ListNumberMappingsErrors];
+
+export type ListNumberMappingsResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
+export type SaveNumberMappingData = {
+    body: AmaneApiRoutesNumberMappingsEntryUpdate;
+    path?: never;
+    query: {
+        /**
+         * Source
+         */
+        source: 'caribbeancompr' | 'd2pass' | 'caribbeancom';
+    };
+    url: '/api/number-mappings';
+};
+
+export type SaveNumberMappingErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type SaveNumberMappingError = SaveNumberMappingErrors[keyof SaveNumberMappingErrors];
+
+export type SaveNumberMappingResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
+export type DeleteNumberMappingData = {
+    body?: never;
+    path: {
+        /**
+         * Key
+         */
+        key: string;
+    };
+    query: {
+        /**
+         * Source
+         */
+        source: 'caribbeancompr' | 'd2pass' | 'caribbeancom';
+    };
+    url: '/api/number-mappings/{key}';
+};
+
+export type DeleteNumberMappingErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type DeleteNumberMappingError = DeleteNumberMappingErrors[keyof DeleteNumberMappingErrors];
+
+export type DeleteNumberMappingResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type DeleteNumberMappingResponse = DeleteNumberMappingResponses[keyof DeleteNumberMappingResponses];
+
+export type ListNumberExceptionsData = {
+    body?: never;
+    path?: never;
+    query: {
+        /**
+         * Source
+         */
+        source: 'caribbeancompr' | 'd2pass' | 'caribbeancom';
+    };
+    url: '/api/number-mappings/exceptions';
+};
+
+export type ListNumberExceptionsErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListNumberExceptionsError = ListNumberExceptionsErrors[keyof ListNumberExceptionsErrors];
+
+export type ListNumberExceptionsResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
+export type UpdateNumberExceptionData = {
+    body: ExceptionUpdate;
+    path?: never;
+    query: {
+        /**
+         * Source
+         */
+        source: 'caribbeancompr' | 'd2pass' | 'caribbeancom';
+    };
+    url: '/api/number-mappings/exceptions';
+};
+
+export type UpdateNumberExceptionErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type UpdateNumberExceptionError = UpdateNumberExceptionErrors[keyof UpdateNumberExceptionErrors];
+
+export type UpdateNumberExceptionResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
+export type SaveNumberExceptionData = {
+    body: ExceptionUpdate;
+    path?: never;
+    query: {
+        /**
+         * Source
+         */
+        source: 'caribbeancompr' | 'd2pass' | 'caribbeancom';
+    };
+    url: '/api/number-mappings/exceptions/save';
+};
+
+export type SaveNumberExceptionErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type SaveNumberExceptionError = SaveNumberExceptionErrors[keyof SaveNumberExceptionErrors];
+
+export type SaveNumberExceptionResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
+export type ClearNumberExceptionsData = {
+    body?: never;
+    path?: never;
+    query: {
+        /**
+         * Source
+         */
+        source: 'caribbeancompr' | 'd2pass' | 'caribbeancom';
+    };
+    url: '/api/number-mappings/exceptions/clear';
+};
+
+export type ClearNumberExceptionsErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ClearNumberExceptionsError = ClearNumberExceptionsErrors[keyof ClearNumberExceptionsErrors];
+
+export type ClearNumberExceptionsResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
+export type ExportNumberMappingsData = {
+    body?: never;
+    path?: never;
+    query: {
+        /**
+         * Source
+         */
+        source: 'caribbeancompr' | 'd2pass' | 'caribbeancom';
+    };
+    url: '/api/number-mappings/export';
+};
+
+export type ExportNumberMappingsErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ExportNumberMappingsError = ExportNumberMappingsErrors[keyof ExportNumberMappingsErrors];
+
+export type ExportNumberMappingsResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
+export type ImportNumberMappingsData = {
+    body: ImportRequest;
+    path?: never;
+    query: {
+        /**
+         * Source
+         */
+        source: 'caribbeancompr' | 'd2pass' | 'caribbeancom';
+    };
+    url: '/api/number-mappings/import';
+};
+
+export type ImportNumberMappingsErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ImportNumberMappingsError = ImportNumberMappingsErrors[keyof ImportNumberMappingsErrors];
+
+export type ImportNumberMappingsResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
+export type BatchDeleteNumberMappingsData = {
+    body: AmaneApiRoutesNumberMappingsBatchDeleteRequest;
+    path?: never;
+    query: {
+        /**
+         * Source
+         */
+        source: 'caribbeancompr' | 'd2pass' | 'caribbeancom';
+    };
+    url: '/api/number-mappings/batch-delete';
+};
+
+export type BatchDeleteNumberMappingsErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type BatchDeleteNumberMappingsError = BatchDeleteNumberMappingsErrors[keyof BatchDeleteNumberMappingsErrors];
+
+export type BatchDeleteNumberMappingsResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
+export type ImportNumberMappingTableData = {
+    body: BodyImportNumberMappingTable;
+    path?: never;
+    query: {
+        /**
+         * Source
+         */
+        source: 'caribbeancompr' | 'd2pass' | 'caribbeancom';
+    };
+    url: '/api/number-mappings/import-table';
+};
+
+export type ImportNumberMappingTableErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ImportNumberMappingTableError = ImportNumberMappingTableErrors[keyof ImportNumberMappingTableErrors];
+
+export type ImportNumberMappingTableResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
+export type ListActorMappingsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Search
+         */
+        search?: string;
+        /**
+         * Limit
+         */
+        limit?: number;
+        /**
+         * Offset
+         */
+        offset?: number;
+    };
+    url: '/api/actor-mappings';
+};
+
+export type ListActorMappingsErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListActorMappingsError = ListActorMappingsErrors[keyof ListActorMappingsErrors];
+
+export type ListActorMappingsResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
+export type SaveActorMappingData = {
+    body: AmaneApiRoutesActorMappingsEntryUpdate;
+    path?: never;
+    query?: never;
+    url: '/api/actor-mappings';
+};
+
+export type SaveActorMappingErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type SaveActorMappingError = SaveActorMappingErrors[keyof SaveActorMappingErrors];
+
+export type SaveActorMappingResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
+export type DeleteActorMappingData = {
+    body?: never;
+    path: {
+        /**
+         * Identifier
+         */
+        identifier: string;
+    };
+    query?: never;
+    url: '/api/actor-mappings/{identifier}';
+};
+
+export type DeleteActorMappingErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type DeleteActorMappingError = DeleteActorMappingErrors[keyof DeleteActorMappingErrors];
+
+export type DeleteActorMappingResponses = {
+    /**
+     * Successful Response
+     */
+    204: void;
+};
+
+export type DeleteActorMappingResponse = DeleteActorMappingResponses[keyof DeleteActorMappingResponses];
+
+export type BatchDeleteActorMappingsData = {
+    body: AmaneApiRoutesActorMappingsBatchDeleteRequest;
+    path?: never;
+    query?: never;
+    url: '/api/actor-mappings/batch-delete';
+};
+
+export type BatchDeleteActorMappingsErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type BatchDeleteActorMappingsError = BatchDeleteActorMappingsErrors[keyof BatchDeleteActorMappingsErrors];
+
+export type BatchDeleteActorMappingsResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
+export type ListActorExceptionsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/actor-mappings/exceptions';
+};
+
+export type ListActorExceptionsResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
+export type UpdateActorExceptionData = {
+    body: ExceptionUpdate;
+    path?: never;
+    query?: never;
+    url: '/api/actor-mappings/exceptions';
+};
+
+export type UpdateActorExceptionErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type UpdateActorExceptionError = UpdateActorExceptionErrors[keyof UpdateActorExceptionErrors];
+
+export type UpdateActorExceptionResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
+export type SaveActorExceptionData = {
+    body: ExceptionUpdate;
+    path?: never;
+    query?: never;
+    url: '/api/actor-mappings/exceptions/save';
+};
+
+export type SaveActorExceptionErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type SaveActorExceptionError = SaveActorExceptionErrors[keyof SaveActorExceptionErrors];
+
+export type SaveActorExceptionResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
+export type ClearActorExceptionsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/actor-mappings/exceptions/clear';
+};
+
+export type ClearActorExceptionsResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
+export type ExportActorMappingsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Format
+         */
+        format?: 'json' | 'csv';
+    };
+    url: '/api/actor-mappings/export';
+};
+
+export type ExportActorMappingsErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ExportActorMappingsError = ExportActorMappingsErrors[keyof ExportActorMappingsErrors];
+
+export type ExportActorMappingsResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
+export type ImportActorMappingsData = {
+    body: ImportRequest;
+    path?: never;
+    query?: never;
+    url: '/api/actor-mappings/import';
+};
+
+export type ImportActorMappingsErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ImportActorMappingsError = ImportActorMappingsErrors[keyof ImportActorMappingsErrors];
+
+export type ImportActorMappingsResponses = {
+    /**
+     * Successful Response
+     */
+    200: unknown;
+};
+
+export type ImportActorMappingTableData = {
+    body: BodyImportActorMappingTable;
+    path?: never;
+    query?: never;
+    url: '/api/actor-mappings/import-table';
+};
+
+export type ImportActorMappingTableErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ImportActorMappingTableError = ImportActorMappingTableErrors[keyof ImportActorMappingTableErrors];
+
+export type ImportActorMappingTableResponses = {
     /**
      * Successful Response
      */

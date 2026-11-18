@@ -8,7 +8,7 @@ import pytest
 from pydantic import BaseModel
 
 from amane.api.models.tasks import ScrapeRequest, TaskResultPayload
-from amane.db.models import TaskType
+from amane.db.models import MediaFile, TaskType
 from amane.enums import DownloadableResource
 from amane.handlers import models as handler_models
 
@@ -19,9 +19,19 @@ if TYPE_CHECKING:
     from amane.db.repository import Repository
 
 
-def test_manual_scrape_number_preserves_user_case() -> None:
+def test_manual_scrape_number_preserves_user_case_and_exact_search() -> None:
     request = ScrapeRequest(number="  LancelotStylesEvolution.26.04.05  ")
     assert request.number == "LancelotStylesEvolution.26.04.05"
+    payload = request.build_payload(None)
+    assert payload is not None
+    assert payload.allow_number_variants is False
+
+
+def test_file_derived_scrape_allows_automatic_number_variants() -> None:
+    request = ScrapeRequest(media_id=1)
+    payload = request.build_payload(MediaFile(path="RED-049.mp4", library_id=1))
+    assert payload is not None
+    assert payload.allow_number_variants is True
 
 
 class TestListTasks:

@@ -145,7 +145,7 @@ class TestScanInventory:
 
     @pytest.mark.skipif(sys.platform == "win32", reason="Windows 无 POSIX 权限位")
     def test_skips_unreadable_directory(self, tmp_path: Path) -> None:
-        if os.geteuid() == 0:  # pragma: no cover - root 无视权限位
+        if getattr(os, "geteuid", lambda: -1)() == 0:  # pragma: no cover - root 无视权限位
             pytest.skip("root 可以读任意目录")
         lib = tmp_path / "lib"
         blocked = lib / "blocked"

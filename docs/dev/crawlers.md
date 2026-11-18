@@ -48,7 +48,7 @@ CrawlerFactory (缓存实例)
 | 按 `media_id` 同时填写 `number` | submission 字符串 | **不会.** 空白 `number` 视为未填写, 回退到只按路径解析. |
 | RSS 自动入队 | `extract_number` | **会** (与路径同一套已知形态); 未命中则没有番号, **不会**把标题原文当番号. 源上设置了 `number_pattern` 时只采用该正则, 见 [feeds.md](feeds.md) |
 
-落库 `Metadata.number` 也是这份 payload 原样 (UNIQUE 忽略大小写, 保留首次写入的大小写), 因此补刮 / RESCRAPE 可能再次把无横线手填号送入爬虫.
+落库 `Metadata.number` 也是这份 payload 原样 (UNIQUE 忽略大小写, 保留首次写入的大小写), 因此补刮 / RESCRAPE 可能再次把无横线手填号送入爬虫. 无码路由选择使用这份解析后的完整番号做 Full Match; `CaribbeancomIndexCrawler` 则独立使用本地视频完整文件名查自己的映射表, 映射 ID 只用于详情页 URL, 不参与作品身份.
 
 ## 检索命中
 

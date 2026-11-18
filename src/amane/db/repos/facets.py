@@ -29,6 +29,7 @@ from ..models import (
     FacetRule,
     FacetSortField,
     Metadata,
+    MetadataTag,
     MetadataUserTag,
     Publisher,
     Series,
@@ -252,6 +253,18 @@ class FacetsRepoMixin(RepositoryMixinBase):
                 sort_by=sort_by,
                 order=order,
             )
+
+    async def list_tag_metadata_links(self, tag_ids: Sequence[int] | None = None) -> list[tuple[int, int]]:
+        """返回指定标签与影片的关联对；展示标签合并时可按影片 ID 去重计数。"""
+        ids = unique_ids(tag_ids)
+        if tag_ids is not None and not ids:
+            return []
+        async with self._session() as session:
+            stmt = select(MetadataTag.tag_id, MetadataTag.metadata_id)
+            if ids:
+                stmt = stmt.where(col(MetadataTag.tag_id).in_(ids))
+            rows = await session.exec(stmt)
+            return [(int(tag_id), int(metadata_id)) for tag_id, metadata_id in rows.all()]
 
     async def set_facets_favorite(
         self, kind: FacetKind, facet_ids: Sequence[int], is_favorite: bool

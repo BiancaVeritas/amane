@@ -31,6 +31,7 @@ interface ScrapeOverrideDialogProps {
   onClose: () => void;
   onSubmit: (
     number: string,
+    libraryNumber: string,
     contentType: ContentType | undefined,
     theporndbUuid: string | undefined,
   ) => void;
@@ -70,12 +71,14 @@ function ScrapeOverrideForm({
   onClose: () => void;
   onSubmit: (
     number: string,
+    libraryNumber: string,
     contentType: ContentType | undefined,
     theporndbUuid: string | undefined,
   ) => void;
 }) {
   const { t } = useTranslation(["library", "common"]);
   const [number, setNumber] = useState(initialNumber);
+  const [libraryNumber, setLibraryNumber] = useState(initialNumber);
   const [contentType, setContentType] = useState<ContentTypeChoice>("");
   const [theporndbUuid, setTheporndbUuid] = useState("");
   const initialSearch = splitSceneSearch(initialNumber);
@@ -102,6 +105,7 @@ function ScrapeOverrideForm({
     onSuccess: () => setSceneError(null),
   });
   const trimmed = number.trim();
+  const trimmedLibraryNumber = libraryNumber.trim();
   const trimmedThePornDBUuid = theporndbUuid.trim();
 
   return (
@@ -113,6 +117,14 @@ function ScrapeOverrideForm({
         onChange={(event) => setNumber(event.currentTarget.value)}
         data-autofocus
       />
+      {contentType !== "" && contentType !== "western" && (
+        <TextInput
+          label="片库番号"
+          placeholder="刮削完成后用于片库 Metadata 的番号"
+          value={libraryNumber}
+          onChange={(event) => setLibraryNumber(event.currentTarget.value)}
+        />
+      )}
       <Input.Wrapper
         label={t("scrapeOverride.contentType")}
         description={t("scrapeOverride.contentTypeHint")}
@@ -209,10 +221,14 @@ function ScrapeOverrideForm({
         </Button>
         <Button
           loading={saving}
-          disabled={trimmed === ""}
+          disabled={
+            trimmed === "" ||
+            (contentType !== "" && contentType !== "western" && trimmedLibraryNumber === "")
+          }
           onClick={() =>
             onSubmit(
               trimmed,
+              contentType === "" || contentType === "western" ? trimmed : trimmedLibraryNumber,
               contentType === "" ? undefined : contentType,
               contentType === "western" && trimmedThePornDBUuid !== ""
                 ? trimmedThePornDBUuid

@@ -78,7 +78,12 @@ async def test_full_pipeline_with_post_processing(repo: Repository, fake_factory
     assert lib.id is not None
     media = await repo.create_media_file(library_id=lib.id, path=str(src_file))
 
-    pipeline_config = HotSettings(scraping=ScrapingConfig(field_priority={}))
+    pipeline_config = HotSettings(
+        scraping=ScrapingConfig(
+            content_routes={ContentType.CENSORED: [SiteName.JAVDB]},
+            field_priority={},
+        )
+    )
 
     async def _fake_download(url: str, dest: Path, **_: object) -> bool:
         dest.parent.mkdir(parents=True, exist_ok=True)
@@ -152,7 +157,12 @@ async def test_pipeline_copy_mode_keeps_source(repo: Repository, fake_factory, r
         repo=repo,
         factory=fake_factory,
         resource_store=resource_store,
-        pipeline_config=HotSettings(scraping=ScrapingConfig(field_priority={})),
+        pipeline_config=HotSettings(
+            scraping=ScrapingConfig(
+                content_routes={ContentType.CENSORED: [SiteName.JAVDB]},
+                field_priority={},
+            )
+        ),
         web_client=mock_web_client,
     )
     result = await scrape.handle(
@@ -161,7 +171,12 @@ async def test_pipeline_copy_mode_keeps_source(repo: Repository, fake_factory, r
     assert result.success is True
     org = OrganizeHandler(
         repo,
-        HotSettings(scraping=ScrapingConfig(field_priority={})),
+        HotSettings(
+            scraping=ScrapingConfig(
+                content_routes={ContentType.CENSORED: [SiteName.JAVDB]},
+                field_priority={},
+            )
+        ),
         resource_store,
         mock_web_client,
         safe_dirs=[tmp_path],
@@ -178,7 +193,12 @@ async def test_scrape_does_not_move_files(repo: Repository, fake_factory, resour
     src_file.write_text("fake video")
     media = await repo.create_media_file(library_id=1, path=str(src_file))
 
-    pipeline_config = HotSettings(scraping=ScrapingConfig(field_priority={}))
+    pipeline_config = HotSettings(
+        scraping=ScrapingConfig(
+            content_routes={ContentType.CENSORED: [SiteName.JAVDB]},
+            field_priority={},
+        )
+    )
 
     handler = ScrapeHandler(
         repo=repo,
@@ -203,7 +223,12 @@ async def test_dead_poster_url_reordered_before_persist(repo: Repository, fake_f
     src_file.write_text("fake video")
     media = await repo.create_media_file(library_id=1, path=str(src_file))
 
-    pipeline_config = HotSettings(scraping=ScrapingConfig(field_priority={}))
+    pipeline_config = HotSettings(
+        scraping=ScrapingConfig(
+            content_routes={ContentType.CENSORED: [SiteName.JAVDB]},
+            field_priority={},
+        )
+    )
 
     async def _fake_download(url: str, dest: Path, **_: object) -> bool:
         if url == "https://img.example.com/p1.jpg":

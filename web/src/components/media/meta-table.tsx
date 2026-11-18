@@ -17,7 +17,7 @@ import { notifications } from "@mantine/notifications";
 import { IconDots, IconRefresh, IconTag, IconTrash } from "@tabler/icons-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   batchDeleteMetadataMutation,
@@ -169,7 +169,38 @@ export function MetaTable({
     return effectiveWidth(key);
   }
   const pageIds = items.map((i) => i.id);
-  const { selected, selectedIds, toggleOne, toggleAll, isAllSelected, clear } = useIdSelection();
+  const { selected, selectedIds, toggleAll, isAllSelected, clear, setSelected } = useIdSelection();
+  const selectionAnchorId = useRef<number | null>(null);
+
+  function handleRowSelection(id: number, checked: boolean, shiftKey: boolean) {
+    const currentIndex = pageIds.indexOf(id);
+    const anchorIndex =
+      selectionAnchorId.current == null ? -1 : pageIds.indexOf(selectionAnchorId.current);
+
+    if (shiftKey && anchorIndex >= 0 && currentIndex >= 0) {
+      const start = Math.min(anchorIndex, currentIndex);
+      const end = Math.max(anchorIndex, currentIndex);
+      const rangeIds = pageIds.slice(start, end + 1);
+      setSelected((prev) => {
+        const next = new Set(prev);
+        for (const rangeId of rangeIds) {
+          if (checked) next.add(rangeId);
+          else next.delete(rangeId);
+        }
+        return next;
+      });
+      return;
+    }
+
+    selectionAnchorId.current = id;
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  }
+
   const [tagModalOpen, setTagModalOpen] = useState(false);
   const [tagIds, setTagIds] = useState<string[]>([]);
 
@@ -381,7 +412,18 @@ export function MetaTable({
                 bg={selected.has(item.id) ? "var(--mantine-color-blue-light)" : undefined}
               >
                 <Table.Td>
-                  <Checkbox checked={selected.has(item.id)} onChange={() => toggleOne(item.id)} />
+                  <Checkbox
+                    checked={selected.has(item.id)}
+                    onChange={(event) => {
+                      const checked =
+                        event.target instanceof HTMLInputElement && event.target.checked;
+                      handleRowSelection(
+                        item.id,
+                        checked,
+                        (event.nativeEvent as MouseEvent).shiftKey,
+                      );
+                    }}
+                  />
                 </Table.Td>
                 {SORTABLE_COLUMNS.map((field) => {
                   const value = cellValue(item, field);

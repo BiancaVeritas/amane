@@ -645,7 +645,7 @@ class TestBlockedUnexplained:
     @pytest.mark.skipif(sys.platform == "win32", reason="Windows 无 POSIX 权限位")
     def test_skipped_is_separate_from_blocked(self, tmp_path: Path) -> None:
         """读不到的目录进 `skipped_*`, 白名单外的文件进 `blocked`: 两种原因分开计数."""
-        if os.geteuid() == 0:  # pragma: no cover - root 无视权限位
+        if getattr(os, "geteuid", lambda: -1)() == 0:  # pragma: no cover - root 无视权限位
             pytest.skip("root 可以读任意目录")
         lib = tmp_path / "lib"
         _touch(lib / "old" / "poster.jpg")

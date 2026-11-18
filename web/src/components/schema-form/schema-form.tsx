@@ -153,8 +153,10 @@ interface SchemaFormProps {
    * - `grid`: consecutive short scalars share a 2-col row on `sm+`.
    */
   fieldLayout?: "stack" | "grid";
-  /** Optional per-field actions rendered beside the field heading area. */
-  fieldActions?: Record<string, ReactNode>;
+  /** Optional per-field actions rendered beside the field heading area.
+   * The setter updates the field in the local form state (never persists directly).
+   */
+  fieldActions?: (fieldKey: string, setValue: (value: unknown) => void) => ReactNode;
 }
 
 export function SchemaForm({
@@ -291,7 +293,9 @@ export function SchemaForm({
 
   const fieldBlocks: ReactNode[] = rows.map((row, rowIdx) => {
     const fields = row.map(({ key, schema: fieldSchema }) => {
-      const action = fieldActions?.[key];
+      const action = fieldActions?.(key, (value) =>
+        form.setFieldValue(`${prefix}.${key}` as never, value as never),
+      );
       return (
         <Group key={key} align="flex-start" wrap="nowrap" gap="xs">
           <Box style={{ flex: 1, minWidth: 0 }}>

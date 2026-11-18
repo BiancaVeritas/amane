@@ -23,14 +23,14 @@ import {
   type PageSizeKey,
 } from "@/lib/page-size";
 import type { LogLevel } from "./logs";
-import type { ActorSortField } from "@/client/types.gen";
-import { ACTOR_SORT_FIELDS } from "@/lib/exhaustive-maps";
+import type { ActorSortField, MediaSortField } from "@/client/types.gen";
+import { ACTOR_SORT_FIELDS, MEDIA_SORT_FIELDS } from "@/lib/exhaustive-maps";
 
 type Theme = "light" | "dark" | "auto";
 type Language = "zh-CN" | "en";
 
 export type CardSize = "xs" | "sm" | "small" | "medium" | "default" | "large" | "xl" | "xxl";
-export type CardSizeKey = "meta" | "actors";
+export type CardSizeKey = "meta" | "metaGrid" | "metaCover" | "actors";
 
 const STORAGE_KEY = "amane-web";
 
@@ -101,6 +101,8 @@ interface UIState {
   metaSort: MetadataSortPreference;
   /** 演员列表排序记忆. */
   actorListSort: { sort_by: ActorSortField; order: "asc" | "desc" };
+  /** 片库详情页媒体文件排序记忆, 所有片库共用. */
+  libraryMediaSort: { sort_by: MediaSortField; order: "asc" | "desc" };
   toggleNavbar: () => void;
   setNavbarCollapsed: (collapsed: boolean) => void;
   setTheme: (theme: Theme) => void;
@@ -119,6 +121,7 @@ interface UIState {
   setActorWorksSort: (sort: MetadataSortPreference) => void;
   setMetaSort: (sort: MetadataSortPreference) => void;
   setActorListSort: (sort: { sort_by: ActorSortField; order: "asc" | "desc" }) => void;
+  setLibraryMediaSort: (sort: { sort_by: MediaSortField; order: "asc" | "desc" }) => void;
 }
 
 export const useUIStore = create<UIState>()(
@@ -130,7 +133,7 @@ export const useUIStore = create<UIState>()(
       autoScroll: true,
       logLevelFilter: [],
       pageSizes: { ...DEFAULT_PAGE_SIZES },
-      cardSizes: { meta: "default", actors: "default" },
+      cardSizes: { meta: "default", metaGrid: "default", metaCover: "default", actors: "default" },
       metaView: "grid",
       actorsView: "grid",
       metaColumnWidths: {},
@@ -140,6 +143,7 @@ export const useUIStore = create<UIState>()(
       actorWorksSort: { ...DEFAULT_METADATA_SORT_PREFERENCE },
       metaSort: { ...DEFAULT_METADATA_SORT_PREFERENCE },
       actorListSort: { sort_by: "count", order: "desc" },
+      libraryMediaSort: { sort_by: "updated_at", order: "desc" },
       toggleNavbar: () => set((s) => ({ navbarCollapsed: !s.navbarCollapsed })),
       setNavbarCollapsed: (collapsed) => set({ navbarCollapsed: collapsed }),
       setTheme: (theme) => set({ theme }),
@@ -163,6 +167,7 @@ export const useUIStore = create<UIState>()(
       setActorWorksSort: (sort) => set({ actorWorksSort: sort }),
       setMetaSort: (sort) => set({ metaSort: sort }),
       setActorListSort: (sort) => set({ actorListSort: sort }),
+      setLibraryMediaSort: (sort) => set({ libraryMediaSort: sort }),
     }),
     {
       name: STORAGE_KEY,
@@ -183,6 +188,16 @@ export const useUIStore = create<UIState>()(
           pageSizes,
           cardSizes: {
             meta: isCardSize(persistedCardSizes?.meta) ? persistedCardSizes.meta : "default",
+            metaGrid: isCardSize(persistedCardSizes?.metaGrid)
+              ? persistedCardSizes.metaGrid
+              : isCardSize(persistedCardSizes?.meta)
+                ? persistedCardSizes.meta
+                : "default",
+            metaCover: isCardSize(persistedCardSizes?.metaCover)
+              ? persistedCardSizes.metaCover
+              : isCardSize(persistedCardSizes?.meta)
+                ? persistedCardSizes.meta
+                : "default",
             actors: isCardSize(persistedCardSizes?.actors) ? persistedCardSizes.actors : "default",
           },
           metaView:
@@ -205,6 +220,12 @@ export const useUIStore = create<UIState>()(
           metaSort: metadataSortPreferenceSchema.safeParse(p?.metaSort).data ?? {
             ...DEFAULT_METADATA_SORT_PREFERENCE,
           },
+          libraryMediaSort:
+            p?.libraryMediaSort &&
+            (MEDIA_SORT_FIELDS as readonly string[]).includes(p.libraryMediaSort.sort_by) &&
+            (p.libraryMediaSort.order === "asc" || p.libraryMediaSort.order === "desc")
+              ? p.libraryMediaSort
+              : { sort_by: "updated_at", order: "desc" },
           actorListSort:
             p?.actorListSort &&
             (ACTOR_SORT_FIELDS as readonly string[]).includes(p.actorListSort.sort_by) &&

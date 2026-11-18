@@ -104,8 +104,8 @@ async def test_fetch(number: str, scenes: list[dict[str, Any]], expected: tuple[
 
 
 @pytest.mark.asyncio
-async def test_western_multiple_number_results_match_unique_studio_and_date_without_hash() -> None:
-    """多条番号搜索结果中, 唯一片商 + 日期匹配可直接命中, 不要求 OSHASH."""
+async def test_western_multiple_number_results_reject_unique_studio_and_date_without_hash() -> None:
+    """多条番号搜索结果即使片商和日期能筛出唯一候选，没有 OSHASH 也必须拒绝."""
     studio = "Lancelot Styles evolution"
     other_date_a = _scene("lancelot:other-a", title="Other A", date="2026-09-10", studio=studio)
     other_date_b = _scene("lancelot:other-b", title="Other B", date="2026-09-10", studio=studio)
@@ -118,8 +118,7 @@ async def test_western_multiple_number_results_match_unique_studio_and_date_with
         SearchQuery(number="LancelotStylesEvolution.26.10.09", content_type=ContentType.WESTERN)
     )
 
-    assert metadata is not None
-    assert metadata.external_id == exact["id"]
+    assert metadata is None
     assert web.post_json.await_count == 1
 
 
@@ -241,6 +240,44 @@ async def test_western_oshash_disambiguates_same_number_candidates_by_scene_id()
 
     assert metadata is not None
     assert metadata.external_id == _BLACKED["id"]
+
+
+@pytest.mark.asyncio
+async def test_western_oshash_matching_multiple_candidates_is_rejected() -> None:
+    """同一厂牌 + 日期的多个候选同时命中 OSHASH 时，必须拒绝刮削."""
+    web = AsyncMock()
+    web.post_json.side_effect = [
+        {"data": {"searchScene": [_BLACKED, _BLACKED_SAME_DAY]}},
+        {"data": {"findScenesBySceneFingerprints": [[_BLACKED, _BLACKED_SAME_DAY]]}},
+    ]
+    crawler = _crawler(web)
+
+    metadata = await crawler.fetch(
+        SearchQuery(number="Blacked.26.03.29", file_hash=_OSHASH, content_type=ContentType.WESTERN)
+    )
+
+    assert metadata is None
+    assert web.post_json.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_western_oshash_duplicate_scene_id_counts_as_one_match() -> None:
+    """OSHASH 重复返回同一个 Scene ID 时，去重后仍是唯一命中."""
+    duplicate_same_scene = dict(_BLACKED)
+    web = AsyncMock()
+    web.post_json.side_effect = [
+        {"data": {"searchScene": [_BLACKED, _BLACKED_SAME_DAY]}},
+        {"data": {"findScenesBySceneFingerprints": [[_BLACKED, duplicate_same_scene]]}},
+    ]
+    crawler = _crawler(web)
+
+    metadata = await crawler.fetch(
+        SearchQuery(number="Blacked.26.03.29", file_hash=_OSHASH, content_type=ContentType.WESTERN)
+    )
+
+    assert metadata is not None
+    assert metadata.external_id == _BLACKED["id"]
+    assert web.post_json.await_count == 2
 
 
 @pytest.mark.asyncio

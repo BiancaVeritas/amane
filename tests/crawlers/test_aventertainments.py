@@ -10,11 +10,8 @@ from amane.crawlers.models import SearchQuery
 from amane.crawlers.sites.aventertainments import (
     _detail_links,
     _image_bytes_valid,
-    _is_bd_number,
     _metadata_from_page,
-    _number_key,
-    _search_terms,
-    _version_links,
+    _search_number_key,
 )
 from amane.enums import SiteName
 
@@ -56,12 +53,6 @@ def _detail_html(number: str = "S2MBD-046") -> str:
 
 def test_aventertainments_is_registered_as_film_source() -> None:
     assert registry.get(SiteName.AVENTERTAINMENTS) is not None
-
-
-def test_number_normalization_matches_bd_and_dvd_sibling() -> None:
-    assert _number_key("S2MBD-046") == _number_key("S2M-046")
-    assert _search_terms("S2M-046") == ["S2M-046", "S2MBD-046"]
-    assert _search_terms("S2MBD-046") == ["S2MBD-046", "S2M-046"]
 
 
 def test_parser_preserves_each_actor_link_as_an_independent_name() -> None:
@@ -112,10 +103,45 @@ def test_parser_extracts_bigcover_from_product_image_area_without_video_poster()
     assert metadata.cover_urls == [bigcover]
 
 
-def test_bd_number_with_prefix_and_hyphen_is_recognized() -> None:
-    assert _is_bd_number("SMBD-06")
-    assert _is_bd_number("S2MBD-046")
-    assert not _is_bd_number("S2M-046")
+def test_parser_extracts_all_modal_screenshots_and_deduplicates_urls() -> None:
+    screenshots = "".join(
+        f'<img src="https://imgs02.aventertainments.com/vodimages/screenshot/large/RED027_{group}/{i:03}.webp">'
+        for group in ("s1", "s2")
+        for i in range(1, 35)
+    )
+    html = _detail_html().replace(
+        "</body></html>",
+        f'<div id="sscontainerppv123">{screenshots}'
+        '<img src="https://imgs02.aventertainments.com/vodimages/screenshot/large/RED027_s1/001.webp">'
+        "</div></body></html>",
+    )
+    metadata = _metadata_from_page(DETAIL_URL, html)
+    assert metadata is not None
+    assert len(metadata.extrafanart) == 68
+    assert metadata.extrafanart[0].endswith("RED027_s1/001.webp")
+    assert metadata.extrafanart[-1].endswith("RED027_s2/034.webp")
+
+
+def test_parser_falls_back_to_screenshot_preview_gallery() -> None:
+    html = _detail_html().replace(
+        "</body></html>",
+        '<div class="gallery-block grid-gallery">'
+        '<img src="/vodimages/screenshot/large/ABC_s1/001.webp">'
+        '<img src="/vodimages/screenshot/large/ABC_s1/002.webp">'
+        "</div></body></html>",
+    )
+    metadata = _metadata_from_page(DETAIL_URL, html)
+    assert metadata is not None
+    assert metadata.extrafanart == [
+        "https://imgs02.aventertainments.com/vodimages/screenshot/large/ABC_s1/001.webp",
+        "https://imgs02.aventertainments.com/vodimages/screenshot/large/ABC_s1/002.webp",
+    ]
+
+
+def test_search_number_key_normalizes_case_and_hyphens_without_merging_dvd_and_bd() -> None:
+    assert _search_number_key("s2m-046") == "s2m046"
+    assert _search_number_key("S2MBD-046") == "s2mbd046"
+    assert _search_number_key("S2M-046") != _search_number_key("S2MBD-046")
 
 
 def test_parser_does_not_use_video_poster_when_bigcover_link_is_missing() -> None:
@@ -157,12 +183,6 @@ def test_parser_does_not_use_jsonld_title_or_site_tagline_as_plot() -> None:
     assert metadata.plot is None
 
 
-def test_version_links_identify_bd_and_dvd_tabs() -> None:
-    bd, dvd = _version_links(DETAIL_URL, _detail_html())
-    assert bd == "https://www.aventertainments.com/dvd/detail?pro=87393&lang=2&cat=29"
-    assert dvd == "https://www.aventertainments.com/dvd/detail?pro=87392&lang=2&cat=29"
-
-
 def test_search_result_links_are_limited_to_product_detail_pages() -> None:
     page = """<a href="/dvd/detail?pro=87393&amp;lang=2&amp;cat=29">Blu-ray</a>
               <a href="/dvd/detail?pro=87392&amp;lang=2&amp;cat=29">DVD</a>
@@ -195,65 +215,7 @@ def _version_html(number: str, image_stem: str) -> str:
 
 
 @pytest.mark.asyncio
-async def test_scrape_prefers_bd_even_when_search_result_starts_at_dvd() -> None:
-    from amane.crawlers.sites.aventertainments import AVEntertainmentsCrawler
-
-    bd_url = "https://www.aventertainments.com/dvd/detail?pro=87393&lang=2&cat=29"
-    dvd_url = "https://www.aventertainments.com/dvd/detail?pro=87392&lang=2&cat=29"
-    bd_html = _version_html("S2MBD-046", "dvd1s2mbd-046")
-    dvd_html = _version_html("S2M-046", "dvd1s2m-046")
-    bd_jacket = "https://imgs02.aventertainments.com/new/jacket_images/dvd1s2mbd-046.webp"
-    bd_cover = "https://imgs02.aventertainments.com/new/bigcover/dvd1s2mbd-046.webp"
-    dvd_jacket = "https://imgs02.aventertainments.com/new/jacket_images/dvd1s2m-046.webp"
-    dvd_cover = "https://imgs02.aventertainments.com/new/bigcover/dvd1s2m-046.webp"
-    client = _FakeClient(
-        {bd_url: bd_html, dvd_url: dvd_html},
-        {
-            bd_jacket: b"RIFF\x00\x00\x00\x00WEBPdata",
-            bd_cover: b"RIFF\x00\x00\x00\x00WEBPdata",
-            dvd_jacket: b"RIFF\x00\x00\x00\x00WEBPdata",
-            dvd_cover: b"RIFF\x00\x00\x00\x00WEBPdata",
-        },
-    )
-    crawler = AVEntertainmentsCrawler(cast(HttpClient, client))
-    result = await crawler._scrape(dvd_url)
-    assert result is not None
-    assert result.number == "S2MBD-046"
-    assert result.poster_urls == [bd_jacket]
-    assert result.cover_urls == [bd_cover]
-
-
-@pytest.mark.asyncio
-async def test_scrape_falls_back_to_complete_dvd_when_bd_images_are_invalid() -> None:
-    from amane.crawlers.sites.aventertainments import AVEntertainmentsCrawler
-
-    bd_url = "https://www.aventertainments.com/dvd/detail?pro=87393&lang=2&cat=29"
-    dvd_url = "https://www.aventertainments.com/dvd/detail?pro=87392&lang=2&cat=29"
-    bd_html = _version_html("S2MBD-046", "dvd1s2mbd-046")
-    dvd_html = _version_html("S2M-046", "dvd1s2m-046")
-    bd_jacket = "https://imgs02.aventertainments.com/new/jacket_images/dvd1s2mbd-046.webp"
-    bd_cover = "https://imgs02.aventertainments.com/new/bigcover/dvd1s2mbd-046.webp"
-    dvd_jacket = "https://imgs02.aventertainments.com/new/jacket_images/dvd1s2m-046.webp"
-    dvd_cover = "https://imgs02.aventertainments.com/new/bigcover/dvd1s2m-046.webp"
-    client = _FakeClient(
-        {bd_url: bd_html, dvd_url: dvd_html},
-        {
-            bd_jacket: b"<html>not an image</html>",
-            bd_cover: b"<html>not an image</html>",
-            dvd_jacket: b"RIFF\x00\x00\x00\x00WEBPdata",
-            dvd_cover: b"RIFF\x00\x00\x00\x00WEBPdata",
-        },
-    )
-    crawler = AVEntertainmentsCrawler(cast(HttpClient, client))
-    result = await crawler._scrape(dvd_url)
-    assert result is not None
-    assert result.number == "S2M-046"
-    assert result.poster_urls == [dvd_jacket]
-    assert result.cover_urls == [dvd_cover]
-
-
-@pytest.mark.asyncio
-async def test_search_prefers_bd_candidate_for_dvd_number() -> None:
+async def test_search_does_not_treat_bd_sibling_as_a_search_match() -> None:
     from amane.crawlers.sites.aventertainments import AVEntertainmentsCrawler
 
     search_url = "https://www.aventertainments.com/dvd/search?lang=2&cat=29&keyword=S2M-046&searchby=keyword&page=1"
@@ -272,33 +234,7 @@ async def test_search_prefers_bd_candidate_for_dvd_number() -> None:
             ),
         )
     )
-    assert await crawler._search(SearchQuery("S2M-046")) == bd_url
-    assert crawler._search_dvd_fallback == dvd_url
-
-
-@pytest.mark.asyncio
-async def test_scrape_falls_back_to_dvd_when_bd_metadata_is_incomplete() -> None:
-    from amane.crawlers.sites.aventertainments import AVEntertainmentsCrawler
-
-    bd_url = "https://www.aventertainments.com/dvd/detail?pro=87393&lang=2&cat=29"
-    dvd_url = "https://www.aventertainments.com/dvd/detail?pro=87392&lang=2&cat=29"
-    bd_html = _version_html("S2MBD-046", "dvd1s2mbd-046").replace('"name":"Encore Vol.46"', '"name":""')
-    dvd_html = _version_html("S2M-046", "dvd1s2m-046")
-    bd_jacket = "https://imgs02.aventertainments.com/new/jacket_images/dvd1s2mbd-046.webp"
-    bd_cover = "https://imgs02.aventertainments.com/new/bigcover/dvd1s2mbd-046.webp"
-    dvd_jacket = "https://imgs02.aventertainments.com/new/jacket_images/dvd1s2m-046.webp"
-    dvd_cover = "https://imgs02.aventertainments.com/new/bigcover/dvd1s2m-046.webp"
-    image = b"RIFF\x00\x00\x00\x00WEBPdata"
-    client = _FakeClient(
-        {bd_url: bd_html, dvd_url: dvd_html},
-        {bd_jacket: image, bd_cover: image, dvd_jacket: image, dvd_cover: image},
-    )
-    crawler = AVEntertainmentsCrawler(cast(HttpClient, client))
-    result = await crawler._scrape(dvd_url)
-    assert result is not None
-    assert result.number == "S2M-046"
-    assert result.poster_urls == [dvd_jacket]
-    assert result.cover_urls == [dvd_cover]
+    assert await crawler._search(SearchQuery("S2M-046")) == dvd_url
 
 
 def test_parser_extracts_title_from_h3_when_jsonld_and_h1_are_absent() -> None:

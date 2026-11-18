@@ -2,9 +2,11 @@ import {
   ActionIcon,
   Alert,
   Badge,
+  Box,
   Button,
   Group,
   SegmentedControl,
+  Stack,
   Text,
   TextInput,
   Title,
@@ -160,7 +162,12 @@ function MetaIndexPage() {
   const semanticQuery = semanticMode && search.q ? search.q : undefined;
   const semanticActive = semanticQuery != null;
   const navigate = Route.useNavigate();
-  const listLimit = useUIStore((s) => s.pageSizes.metaList);
+  const activePageSizeKey =
+    search.view === "cover" ? "metaCover" : search.view === "grid" ? "metaGrid" : "metaList";
+  const listLimit = useUIStore((s) => s.pageSizes[activePageSizeKey]);
+  const gridCardSize = useUIStore((s) => s.cardSizes.metaGrid);
+  const coverCardSize = useUIStore((s) => s.cardSizes.metaCover);
+  const cardSize = search.view === "cover" ? coverCardSize : gridCardSize;
   const rememberedView = useUIStore((s) => s.metaView);
   const setRememberedView = useUIStore((s) => s.setMetaView);
 
@@ -173,7 +180,6 @@ function MetaIndexPage() {
   const { data: librariesData } = useQuery(listLibrariesOptions());
   const libraries = librariesData?.items ?? [];
   const libraryNameById = new Map(libraries.map((library) => [library.id, library.name]));
-  const cardSize = useUIStore((s) => s.cardSizes.meta);
   const metaSort = useUIStore((s) => s.metaSort);
   const setMetaSort = useUIStore((s) => s.setMetaSort);
   const narrowViewport = useNarrowViewport("md");
@@ -194,9 +200,8 @@ function MetaIndexPage() {
     filePhase.definition != null ||
     filePhase.content_type != null;
   const [searchInput, setSearchInput] = useState(search.q ?? "");
-  const [advancedOpen, setAdvancedOpen] = useState(
-    hasFiles !== null || vr !== null || phaseActive || libraryIds.length > 0,
-  );
+  // 筛选条件可以保留在 URL 中, 但每次进入媒体资料页时筛选面板都从关闭状态开始.
+  const [advancedOpen, setAdvancedOpen] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   const filters: FacetFilters = {
@@ -245,18 +250,27 @@ function MetaIndexPage() {
     if (semanticMode) void refetchSemanticStatus();
   }, [semanticMode, refetchSemanticStatus]);
 
-  // URL 未携带有效的非默认排序时，恢复 UI 持久化的上次选择；
-  // URL 已明确使用非默认排序时，以当前 URL 为准并同步记忆。
+  // URL 未显式携带排序时, 恢复上次记忆; URL 显式携带排序时, 以 URL 为准同步记忆.
+  // 必须区分“没有排序参数”和“用户主动选择默认排序”, 否则显式选择默认值会被旧记忆覆盖.
   useEffect(() => {
     const currentBy = search.sort_by ?? "updated_at";
     const currentOrder = search.order ?? "desc";
-    const isDefault = currentBy === "updated_at" && currentOrder === "desc";
-    const storedIsDefault = metaSort.sort_by === "updated_at" && metaSort.order === "desc";
-    if (isDefault && !storedIsDefault) {
-      void navigate({
-        search: (prev) => ({ ...prev, sort_by: metaSort.sort_by, order: metaSort.order, page: 1 }),
-      });
-    } else if (!isDefault && (metaSort.sort_by !== currentBy || metaSort.order !== currentOrder)) {
+    const hasExplicitSort = search.sort_by != null || search.order != null;
+    const storedMatchesCurrent = metaSort.sort_by === currentBy && metaSort.order === currentOrder;
+
+    if (!hasExplicitSort) {
+      const storedIsDefault = metaSort.sort_by === "updated_at" && metaSort.order === "desc";
+      if (!storedIsDefault) {
+        void navigate({
+          search: (prev) => ({
+            ...prev,
+            sort_by: metaSort.sort_by,
+            order: metaSort.order,
+            page: 1,
+          }),
+        });
+      }
+    } else if (!storedMatchesCurrent) {
       setMetaSort({ sort_by: currentBy, order: currentOrder });
     }
   }, [search.sort_by, search.order, metaSort, setMetaSort, navigate]);
@@ -424,17 +438,16 @@ function MetaIndexPage() {
   }
 
   function handleSort(field: MetadataSortField) {
+    const nextOrder =
+      (search.sort_by ?? "updated_at") === field
+        ? (search.order ?? "desc") === "asc"
+          ? "desc"
+          : "asc"
+        : "desc";
+    // 状态更新必须在 navigate 的 search updater 外执行, 保证排序记忆不依赖路由回调时机.
+    setMetaSort({ sort_by: field, order: nextOrder });
     void navigate({
-      search: (prev) => {
-        const nextOrder =
-          (prev.sort_by ?? "updated_at") === field
-            ? (prev.order ?? "desc") === "asc"
-              ? "desc"
-              : "asc"
-            : "desc";
-        setMetaSort({ sort_by: field, order: nextOrder });
-        return { ...prev, sort_by: field, order: nextOrder, page: 1 };
-      },
+      search: (prev) => ({ ...prev, sort_by: field, order: nextOrder, page: 1 }),
     });
   }
 
@@ -446,10 +459,10 @@ function MetaIndexPage() {
     phaseActive ||
     search.saved_query_id != null;
 
+  // 三种展示模式共用有界页面高度; 列表由 ListToolbar 内部滚动, 海报/封面由下方网格容器滚动.
   return (
     <BrowsePageShell
-      fill={isList}
-      // 搜索槽内另有语义切换按钮, 放宽到 560, 使输入框宽度接近其他页面的 480
+      fill
       searchMaxWidth={560}
       title={<Title order={2}>{t("common:nav.meta")}</Title>}
       actions={<ListDefaultActions update={{ key: "meta", value: metaListDefaults(search) }} />}
@@ -545,7 +558,7 @@ function MetaIndexPage() {
           {/* 窄屏的筛选在底部面板里常驻展开, 该开关只在宽屏有意义. */}
           {narrowViewport ? null : (
             <HintedActionIcon
-              variant={advancedOpen || hasFiles !== null || vr !== null ? "filled" : "default"}
+              variant={advancedOpen ? "filled" : "default"}
               size={36}
               onClick={() => setAdvancedOpen((v) => !v)}
               label={t("search.advanced")}
@@ -577,13 +590,15 @@ function MetaIndexPage() {
               order={search.order}
               defaultSortBy="updated_at"
               defaultOrder="desc"
-              onChange={(sort_by, order) =>
-                void navigate({ search: (prev) => ({ ...prev, sort_by, order, page: 1 }) })
-              }
+              onChange={(sort_by, order) => {
+                setMetaSort({ sort_by, order });
+                void navigate({ search: (prev) => ({ ...prev, sort_by, order, page: 1 }) });
+              }}
             />
           )}
           <BrowseDisplaySettings
-            pageSizeKey="metaList"
+            pageSizeKey={activePageSizeKey}
+            cardSizeKeyOverride={search.view === "cover" ? "metaCover" : "metaGrid"}
             onPageSizeChanged={() => void navigate({ search: (prev) => ({ ...prev, page: 1 }) })}
           />
         </>
@@ -707,31 +722,56 @@ function MetaIndexPage() {
           onSort={handleSort}
         />
       ) : (
-        <>
-          <PosterGrid
-            cardSize={cardSize}
-            items={gridItems}
-            loading={gridQuery.isLoading && gridItems.length === 0}
-            emptyMessage={t("empty")}
-            imageUrlOf={(item) => {
-              const hit = semanticHits.get(item.id);
-              if (hit?.kind === "still") return hit.resource_url;
-              return search.view === "cover" ? (item.cover_urls?.[0] ?? null) : undefined;
+        <Stack
+          gap="sm"
+          style={{ flex: 1, minHeight: 0, minWidth: 0, justifyContent: "space-between" }}
+        >
+          <Box
+            style={{
+              flex: 1,
+              minHeight: 0,
+              minWidth: 0,
+              overflowY: "auto",
+              overflowX: "hidden",
             }}
-            imageRatioOf={(item) =>
-              semanticHits.get(item.id)?.kind === "still" || search.view === "cover"
-                ? 16 / 9
-                : undefined
-            }
-            defaultImageRatio={search.view === "cover" ? 16 / 9 : 0.7}
-            imageFit={search.view === "cover" ? "fill" : "cover"}
-          />
-          <ListPagination
-            totalPages={Math.ceil(total / listLimit)}
-            page={search.page}
-            onChange={(page) => void navigate({ search: (prev) => ({ ...prev, page }) })}
-          />
-        </>
+          >
+            <PosterGrid
+              cardSize={cardSize}
+              items={gridItems}
+              loading={gridQuery.isLoading && gridItems.length === 0}
+              emptyMessage={t("empty")}
+              imageUrlOf={(item) => {
+                const hit = semanticHits.get(item.id);
+                if (hit?.kind === "still") return hit.resource_url;
+                return search.view === "cover" ? (item.cover_urls?.[0] ?? null) : undefined;
+              }}
+              imageRatioOf={(item) =>
+                semanticHits.get(item.id)?.kind === "still" || search.view === "cover"
+                  ? 16 / 9
+                  : undefined
+              }
+              defaultImageRatio={search.view === "cover" ? 16 / 9 : 0.7}
+              imageFit={search.view === "cover" ? "fill" : "cover"}
+            />
+          </Box>
+          <Box
+            style={{
+              marginTop: "auto",
+              position: "sticky",
+              bottom: 0,
+              zIndex: 2,
+              background: "var(--mantine-color-body)",
+              paddingBlock: "var(--mantine-spacing-xs)",
+              flexShrink: 0,
+            }}
+          >
+            <ListPagination
+              totalPages={Math.ceil(total / listLimit)}
+              page={search.page}
+              onChange={(page) => void navigate({ search: (prev) => ({ ...prev, page }) })}
+            />
+          </Box>
+        </Stack>
       )}
     </BrowsePageShell>
   );

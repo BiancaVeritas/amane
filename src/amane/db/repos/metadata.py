@@ -177,6 +177,7 @@ class MetadataRepoMixin(RepositoryMixinBase):
         actor_ids: Sequence[int] | None = None,
         director_ids: Sequence[int] | None = None,
         tag_ids: Sequence[int] | None = None,
+        tag_id_groups: Sequence[Sequence[int]] | None = None,
         studio_ids: Sequence[int] | None = None,
         publisher_ids: Sequence[int] | None = None,
         series_ids: Sequence[int] | None = None,
@@ -217,10 +218,21 @@ class MetadataRepoMixin(RepositoryMixinBase):
             )
             for director_id in unique_ids(director_ids)
         )
-        conditions.extend(
-            col(Metadata.id).in_(select(MetadataTag.metadata_id).where(MetadataTag.tag_id == tag_id))
-            for tag_id in unique_ids(tag_ids)
-        )
+        if tag_id_groups is not None:
+            # 每组代表一个展示标签：组内原始标签为 OR，多个展示标签组之间为 AND。
+            for group in tag_id_groups:
+                group_ids = unique_ids(group)
+                if group_ids:
+                    conditions.append(
+                        col(Metadata.id).in_(
+                            select(MetadataTag.metadata_id).where(col(MetadataTag.tag_id).in_(group_ids))
+                        )
+                    )
+        else:
+            conditions.extend(
+                col(Metadata.id).in_(select(MetadataTag.metadata_id).where(MetadataTag.tag_id == tag_id))
+                for tag_id in unique_ids(tag_ids)
+            )
         conditions.extend(
             col(Metadata.id).in_(select(MetadataUserTag.metadata_id).where(MetadataUserTag.user_tag_id == user_tag_id))
             for user_tag_id in unique_ids(user_tag_ids)
@@ -290,6 +302,7 @@ class MetadataRepoMixin(RepositoryMixinBase):
         actor_ids: Sequence[int] | None = None,
         director_ids: Sequence[int] | None = None,
         tag_ids: Sequence[int] | None = None,
+        tag_id_groups: Sequence[Sequence[int]] | None = None,
         studio_ids: Sequence[int] | None = None,
         publisher_ids: Sequence[int] | None = None,
         series_ids: Sequence[int] | None = None,
@@ -306,7 +319,7 @@ class MetadataRepoMixin(RepositoryMixinBase):
         id_subquery_sql: str | None = None,
         updated_before: datetime | None = None,
     ) -> tuple[list[Metadata], int]:
-        """关联类 facet 同 kind 多 id 为 AND; 标量类同 kind 多 id 为 OR (未知 id 忽略, 全部未知则空).
+        """关联类 facet 同 kind 多 id 为 AND; tag_id_groups 组内 OR、组间 AND; 标量类同 kind 多 id 为 OR.
         跨 kind 始终 AND. 相位筛选项: 布尔 True=至少一份具备, False=没有任何一份具备.
         """
         async with self._session() as session:
@@ -316,6 +329,7 @@ class MetadataRepoMixin(RepositoryMixinBase):
                 actor_ids=actor_ids,
                 director_ids=director_ids,
                 tag_ids=tag_ids,
+                tag_id_groups=tag_id_groups,
                 studio_ids=studio_ids,
                 publisher_ids=publisher_ids,
                 series_ids=series_ids,
@@ -355,6 +369,7 @@ class MetadataRepoMixin(RepositoryMixinBase):
         actor_ids: Sequence[int] | None = None,
         director_ids: Sequence[int] | None = None,
         tag_ids: Sequence[int] | None = None,
+        tag_id_groups: Sequence[Sequence[int]] | None = None,
         studio_ids: Sequence[int] | None = None,
         publisher_ids: Sequence[int] | None = None,
         series_ids: Sequence[int] | None = None,
@@ -379,6 +394,7 @@ class MetadataRepoMixin(RepositoryMixinBase):
                 actor_ids=actor_ids,
                 director_ids=director_ids,
                 tag_ids=tag_ids,
+                tag_id_groups=tag_id_groups,
                 studio_ids=studio_ids,
                 publisher_ids=publisher_ids,
                 series_ids=series_ids,
@@ -417,6 +433,19 @@ class MetadataRepoMixin(RepositoryMixinBase):
             rows = result.all()
             return rows[0] if len(rows) == 1 else None
 
+    async def list_western_metadata_by_number(self, number: str) -> list[Metadata]:
+        """返回指定番号下的全部 WESTERN Metadata 候选。"""
+        async with self._session() as session:
+            stmt = (
+                select(Metadata)
+                .where(
+                    Metadata.content_type == ContentType.WESTERN,
+                    metadata_number_predicate(number),
+                )
+                .order_by(col(Metadata.id))
+            )
+            return list((await session.exec(stmt)).all())
+
     async def get_metadata_by_theporndb_uuid(self, theporndb_uuid: str) -> Metadata | None:
         """按 WESTERN ThePornDB UUID 定位作品; ThePornDB UUID 是外部作品身份."""
         theporndb_uuid = theporndb_uuid.strip().casefold()
@@ -444,6 +473,31 @@ class MetadataRepoMixin(RepositoryMixinBase):
             )
             return (await session.exec(stmt)).first()
 
+    async def get_metadata_by_identity_in_candidates(
+        self,
+        metadata_ids: Sequence[int],
+        identity_type: MediaIdentityType,
+        identity_value: str,
+    ) -> Metadata | None:
+        """只在指定的 WESTERN Metadata 候选范围内查询身份。"""
+        value = identity_value.strip().casefold()
+        if not value or not metadata_ids:
+            return None
+
+        async with self._session() as session:
+            stmt = (
+                select(Metadata)
+                .join(MediaIdentity, col(MediaIdentity.metadata_id) == col(Metadata.id))
+                .where(
+                    col(Metadata.id).in_(metadata_ids),
+                    Metadata.content_type == ContentType.WESTERN,
+                    MediaIdentity.identity_type == identity_type,
+                    func.lower(MediaIdentity.identity_value) == value,
+                )
+                .limit(1)
+            )
+            return (await session.exec(stmt)).first()
+
     async def register_media_identity_in_session(
         self,
         session: AsyncSession,
@@ -451,14 +505,25 @@ class MetadataRepoMixin(RepositoryMixinBase):
         identity_type: MediaIdentityType,
         identity_value: str,
     ) -> MediaIdentity:
-        """在调用方事务中幂等登记身份; 不提交事务."""
+        """在调用方事务中幂等登记身份；冲突检查仅限同番号 WESTERN 作品。"""
         value = identity_value.strip()
         if not value:
             raise ValueError("Media identity cannot be empty")
+
         metadata = await session.get(Metadata, metadata_id)
         if metadata is None or metadata.content_type != ContentType.WESTERN:
             raise ValueError(f"Metadata {metadata_id} does not exist or is not WESTERN")
+
+        candidate_stmt = select(Metadata.id).where(
+            Metadata.content_type == ContentType.WESTERN,
+            metadata_number_predicate(metadata.number),
+        )
+        candidate_ids = [row for row in (await session.exec(candidate_stmt)).all() if row is not None]
+        if not candidate_ids:
+            raise ValueError(f"No WESTERN metadata candidates for number {metadata.number}")
+
         stmt = select(MediaIdentity).where(
+            col(MediaIdentity.metadata_id).in_(candidate_ids),
             MediaIdentity.identity_type == identity_type,
             func.lower(MediaIdentity.identity_value) == value.casefold(),
         )
@@ -466,10 +531,16 @@ class MetadataRepoMixin(RepositoryMixinBase):
         if existing is not None:
             if existing.metadata_id != metadata_id:
                 raise ValueError(
-                    f"Identity {identity_type}:{value} is already linked to Metadata {existing.metadata_id}"
+                    f"Identity {identity_type}:{value} is already linked to "
+                    f"Metadata {existing.metadata_id} with the same number"
                 )
             return existing
-        identity = MediaIdentity(metadata_id=metadata_id, identity_type=identity_type, identity_value=value)
+
+        identity = MediaIdentity(
+            metadata_id=metadata_id,
+            identity_type=identity_type,
+            identity_value=value,
+        )
         session.add(identity)
         await session.flush()
         return identity
@@ -481,38 +552,106 @@ class MetadataRepoMixin(RepositoryMixinBase):
         identity_type: MediaIdentityType,
         identity_value: str,
     ) -> MediaIdentity:
-        """正常刮削收尾时更新作品身份；新值被其他作品占用则拒绝，旧值原位替换。"""
+        """刮削收尾时在同番号候选之间转移身份；不同番号互不影响。"""
         value = identity_value.strip()
         if not value:
             raise ValueError("Media identity cannot be empty")
+
         metadata = await session.get(Metadata, metadata_id)
         if metadata is None or metadata.content_type != ContentType.WESTERN:
             raise ValueError(f"Metadata {metadata_id} does not exist or is not WESTERN")
 
-        rows = (await session.exec(select(MediaIdentity).where(MediaIdentity.identity_type == identity_type))).all()
-        normalized = value.casefold()
-        owner = next((row for row in rows if row.identity_value.strip().casefold() == normalized), None)
-        if owner is not None and owner.metadata_id != metadata_id:
-            raise ValueError(f"Identity {identity_type}:{value} is already linked to Metadata {owner.metadata_id}")
+        candidate_stmt = select(Metadata.id).where(
+            Metadata.content_type == ContentType.WESTERN,
+            metadata_number_predicate(metadata.number),
+        )
+        candidate_ids = [row for row in (await session.exec(candidate_stmt)).all() if row is not None]
+        if not candidate_ids:
+            raise ValueError(f"No WESTERN metadata candidates for number {metadata.number}")
 
-        own_rows = [row for row in rows if row.metadata_id == metadata_id]
-        if owner is not None:
-            # 已是本作品当前身份：保留该行，并清理同类型历史重复行。
-            target = owner
-            for row in own_rows:
+        rows_stmt = (
+            select(MediaIdentity)
+            .where(
+                col(MediaIdentity.metadata_id).in_(candidate_ids),
+                MediaIdentity.identity_type == identity_type,
+            )
+            .order_by(col(MediaIdentity.created_at), col(MediaIdentity.id))
+        )
+        rows = list((await session.exec(rows_stmt)).all())
+        normalized = value.casefold()
+
+        matching_rows = [row for row in rows if row.identity_value.strip().casefold() == normalized]
+
+        if identity_type == MediaIdentityType.FILE_115_ID:
+            own_rows = [row for row in rows if row.metadata_id == metadata_id]
+
+            own_match = next(
+                (row for row in matching_rows if row.metadata_id == metadata_id),
+                None,
+            )
+
+            if own_match is not None:
+                target = own_match
+                target.identity_value = value
+                target.updated_at = _utcnow()
+                session.add(target)
+
+            elif matching_rows:
+                # 相同 115 ID 原本属于同番号的其他作品：
+                # 转入前先为目标作品腾出位置，优先淘汰最早的旧 ID。
+                while len(own_rows) >= 2:
+                    oldest = own_rows.pop(0)
+                    await session.delete(oldest)
+
+                target = matching_rows[0]
+                target.metadata_id = metadata_id
+                target.identity_value = value
+                target.updated_at = _utcnow()
+                session.add(target)
+
+            else:
+                # 新 115 ID：目标已有两个时，先淘汰最早的一个。
+                while len(own_rows) >= 2:
+                    oldest = own_rows.pop(0)
+                    await session.delete(oldest)
+
+                target = MediaIdentity(
+                    metadata_id=metadata_id,
+                    identity_type=identity_type,
+                    identity_value=value,
+                )
+                session.add(target)
+
+            # 删除同番号范围内重复的相同 115 ID，只保留目标记录。
+            for row in matching_rows:
                 if row.id != target.id:
                     await session.delete(row)
-            return target
-        if own_rows:
-            target = own_rows[0]
-            target.identity_value = value
-            target.updated_at = _utcnow()
-            session.add(target)
-            for row in own_rows[1:]:
-                await session.delete(row)
-            await session.flush()
-            return target
-        return await self.register_media_identity_in_session(session, metadata_id, identity_type, value)
+
+        else:
+            # OSHASH 可以有多个，不因新增身份删除目标作品的其他 OSHASH。
+            if matching_rows:
+                target = next(
+                    (row for row in matching_rows if row.metadata_id == metadata_id),
+                    matching_rows[0],
+                )
+                target.metadata_id = metadata_id
+                target.identity_value = value
+                target.updated_at = _utcnow()
+                session.add(target)
+
+                for row in matching_rows:
+                    if row.id != target.id:
+                        await session.delete(row)
+            else:
+                target = MediaIdentity(
+                    metadata_id=metadata_id,
+                    identity_type=identity_type,
+                    identity_value=value,
+                )
+                session.add(target)
+
+        await session.flush()
+        return target
 
     async def register_media_identity(
         self, metadata_id: int, identity_type: MediaIdentityType, identity_value: str
@@ -544,6 +683,39 @@ class MetadataRepoMixin(RepositoryMixinBase):
                 select(Metadata)
                 .join(MediaFile, col(MediaFile.metadata_id) == col(Metadata.id))
                 .where(MediaFile.oshash == oshash, Metadata.content_type == ContentType.WESTERN)
+            )
+            rows = [*(await session.exec(identity_stmt)).all(), *(await session.exec(legacy_stmt)).all()]
+            return list({row.id: row for row in rows if row.id is not None}.values())
+
+    async def get_metadata_by_oshash_matches_in_candidates(
+        self,
+        metadata_ids: Sequence[int],
+        oshash: str,
+    ) -> list[Metadata]:
+        """只在指定的 WESTERN Metadata 候选范围内查询 OSHASH，并合并新旧身份记录。"""
+        value = oshash.strip().casefold()
+        if not value or not metadata_ids:
+            return []
+
+        async with self._session() as session:
+            identity_stmt = (
+                select(Metadata)
+                .join(MediaIdentity, col(MediaIdentity.metadata_id) == col(Metadata.id))
+                .where(
+                    col(Metadata.id).in_(metadata_ids),
+                    Metadata.content_type == ContentType.WESTERN,
+                    MediaIdentity.identity_type == MediaIdentityType.LOCAL_OSHASH,
+                    func.lower(MediaIdentity.identity_value) == value,
+                )
+            )
+            legacy_stmt = (
+                select(Metadata)
+                .join(MediaFile, col(MediaFile.metadata_id) == col(Metadata.id))
+                .where(
+                    col(Metadata.id).in_(metadata_ids),
+                    Metadata.content_type == ContentType.WESTERN,
+                    func.lower(MediaFile.oshash) == value,
+                )
             )
             rows = [*(await session.exec(identity_stmt)).all(), *(await session.exec(legacy_stmt)).all()]
             return list({row.id: row for row in rows if row.id is not None}.values())

@@ -737,7 +737,7 @@ def test_media_probe_reports_ancestor_and_level_reason(tmp_path: Path) -> None:
 )
 def test_reverify_subtree_reports_unreadable(tmp_path: Path, mode: int, expected: str) -> None:
     """读不到按拒绝处理, 与「有媒体」分开: 只缺搜索位时列得出来, 但 lstat 不了子项."""
-    if os.geteuid() == 0:  # pragma: no cover - root 无视权限位
+    if getattr(os, "geteuid", lambda: -1)() == 0:  # pragma: no cover - root 无视权限位
         pytest.skip("root 可以读任意目录")
     container = tmp_path / "old"
     container.mkdir()

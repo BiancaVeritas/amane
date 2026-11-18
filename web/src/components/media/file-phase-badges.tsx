@@ -170,7 +170,12 @@ interface FilePhaseOverlayProps {
 export function FilePhaseOverlay({ phase, bottomExtra }: FilePhaseOverlayProps) {
   const { t } = useTranslation("metadata");
   const mosaic = phase != null ? mosaicChips(phase, t) : [];
-  const media = phase != null ? mediaChips(phase, t) : [];
+  const media =
+    phase != null
+      ? mediaChips(phase, t).map((chip) =>
+          chip.key === "def" ? { ...chip, label: chip.label.toUpperCase() } : chip,
+        )
+      : [];
 
   return (
     <>

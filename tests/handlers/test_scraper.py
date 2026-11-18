@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from types import SimpleNamespace
 from typing import TYPE_CHECKING
 
 import pytest
@@ -14,7 +15,7 @@ from amane.crawlers.models import MediaMetadata
 from amane.db.models import MediaFileStatus, Task, TaskStatus, TaskType
 from amane.enums import MetadataField, SiteName
 from amane.handlers import RefreshHandler, RefreshPayload, ScanMode, ScrapeHandler, ScrapePayload
-from amane.handlers.scrape import _prepare_image_content_type
+from amane.handlers.scrape import _prepare_image_content_type, _release_from_local_number, _scrape_route_key
 from amane.library import CleanupInventory, InventorySource, InventoryStore, LibraryFileKind, LibraryHit, scan_inventory
 from amane.observability import Recorder
 from amane.parsing import ContentType
@@ -25,6 +26,32 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from amane.db.repository import Repository
+
+
+@pytest.mark.parametrize(
+    "number",
+    ["102910_01", "051014_807", "103126-001", "101726_100", "N0001", "HEYZO-1234", "heyzo-1234"],
+)
+def test_uncensored_route_uses_full_number_rules(number: str) -> None:
+    rules = ScrapingConfig().uncensored_streaming_number_rules
+    assert _scrape_route_key(ContentType.UNCENSORED, number, rules) == "uncensored_streaming"
+
+
+@pytest.mark.parametrize("number", ["XHEYZO-1234", "HEYZO-12345", "RED-163", "102910_0123"])
+def test_uncensored_route_defaults_to_dvd_when_full_number_does_not_match(number: str) -> None:
+    rules = ScrapingConfig().uncensored_streaming_number_rules
+    assert _scrape_route_key(ContentType.UNCENSORED, number, rules) == "uncensored_dvd"
+
+
+def test_non_uncensored_route_keeps_content_type_key() -> None:
+    assert _scrape_route_key(ContentType.CENSORED, "MIDV-123", []) == ContentType.CENSORED.value
+
+
+def test_release_date_can_be_recovered_from_local_caribbean_number() -> None:
+    assert _release_from_local_number("103126-001", None) == "2026-10-31"
+    assert _release_from_local_number("HEYZO-1234", "/media/103126-001.mp4") == "2026-10-31"
+    assert _release_from_local_number("HEYZO-1234", None) is None
+
 
 # --- 辅助类 ---
 
@@ -100,7 +127,12 @@ def factory():
 
 @pytest.fixture
 def handler(repo, factory, resource_store):
-    return ScrapeHandler(repo=repo, factory=factory, resource_store=resource_store, pipeline_config=HotSettings())
+    return ScrapeHandler(
+        repo=repo,
+        factory=factory,
+        resource_store=resource_store,
+        pipeline_config=_config_with({ContentType.CENSORED: [SiteName.JAVDB]}),
+    )
 
 
 # --- ScrapeHandler 测试 ---
@@ -457,7 +489,7 @@ class TestScrapeHandler:
             repo=repo,
             factory=empty_factory,
             resource_store=resource_store,
-            pipeline_config=HotSettings(),
+            pipeline_config=_config_with({ContentType.CENSORED: [SiteName.JAVDB]}),
         )
         media = await repo.create_media_file(library_id=1, path="/media/TEST-001.mp4")
         # 站点明细来自 `Recorder`, 没有它时失败载荷只有 `failed_sites`.
@@ -497,7 +529,7 @@ class TestScrapeHandler:
             repo=repo,
             factory=FakeFactory({"javdb": PosterOnlyCrawler()}),
             resource_store=resource_store,
-            pipeline_config=HotSettings(),
+            pipeline_config=_config_with({ContentType.CENSORED: [SiteName.JAVDB]}),
         )
         media = await repo.create_media_file(library_id=1, path="/media/POSTER-001.mp4")
         result = await h.handle(
@@ -530,7 +562,7 @@ class TestScrapeHandler:
             repo=repo,
             factory=FakeFactory({"javdb": PosterOnlyCrawler()}),
             resource_store=resource_store,
-            pipeline_config=HotSettings(),
+            pipeline_config=_config_with({ContentType.CENSORED: [SiteName.JAVDB]}),
         )
         media = await repo.create_media_file(library_id=1, path="/media/POSTER-001.mp4")
         result = await h.handle(
@@ -568,7 +600,7 @@ class TestScrapeHandler:
             repo=repo,
             factory=FakeFactory({"dmm": first_phase, "javdb": declared}),
             resource_store=resource_store,
-            pipeline_config=HotSettings(),
+            pipeline_config=_config_with({ContentType.CENSORED: [SiteName.DMM, SiteName.JAVDB]}),
             source_catalog=catalog,
         )
         media = await repo.create_media_file(library_id=1, path="/media/PHASE-001.mp4")
@@ -661,7 +693,7 @@ class TestScrapeHandler:
             repo=repo,
             factory=FakeFactory({"javdb": ImgCrawler()}),
             resource_store=resource_store,
-            pipeline_config=HotSettings(),
+            pipeline_config=_config_with({ContentType.CENSORED: [SiteName.JAVDB]}),
             web_client=cast("WebClient", FakeWebClient()),
         )
         media = await repo.create_media_file(library_id=1, path="/media/MIDV-123.mp4")
@@ -804,7 +836,7 @@ class TestScrapeTranslation:
             async def translate(self, text, target, field, *, use_cache=True):
                 return f"[{target}]{text}"
 
-        config = HotSettings()
+        config = _config_with({ContentType.CENSORED: [SiteName.JAVDB]})
         config.scraping.field_language = {MetadataField.TITLE: Language.ZH_CN}
         config.llm.translate_fields = [MetadataField.TITLE]
         h = ScrapeHandler(
@@ -864,7 +896,7 @@ class TestScrapeTranslation:
             async def translate(self, text, target, field, *, use_cache=True):
                 raise RuntimeError("llm down")
 
-        config = HotSettings()
+        config = _config_with({ContentType.CENSORED: [SiteName.JAVDB]})
         config.scraping.field_language = {MetadataField.TITLE: Language.ZH_CN}
         h = ScrapeHandler(
             repo=repo,
@@ -1372,3 +1404,158 @@ class TestRefreshHandler:
         assert result.result.scrape == n
         scrapes = [f for f in (result.followups or []) if f.task_type == TaskType.SCRAPE]
         assert len(scrapes) == n
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_western_identity_match_skips_scrape(
+        self, repo: Repository, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        """WESTERN 命中本地身份时恢复关联，不创建 SCRAPE 任务。"""
+        media = await repo.create_media_file(
+            library_id=1,
+            path=str(tmp_path / "western.mp4"),
+            status=MediaFileStatus.PENDING,
+        )
+        assert media.id is not None
+
+        monkeypatch.setattr(
+            "amane.handlers.refresh.parse_file_info",
+            lambda _path: SimpleNamespace(
+                number="VIXEN-230415",
+                content_type=ContentType.WESTERN,
+            ),
+        )
+
+        matched_ids = []
+
+        async def fake_refresh_media_association(_repo, current_media):
+            matched_ids.append(current_media.id)
+            return True
+
+        monkeypatch.setattr(
+            "amane.handlers.refresh.refresh_media_association",
+            fake_refresh_media_association,
+        )
+
+        result = await RefreshHandler(repo=repo).handle(
+            RefreshPayload(
+                library_id=1,
+                path=str(tmp_path),
+                scan=set(),
+                scrape={MediaFileStatus.PENDING},
+            )
+        )
+
+        assert result.success is True
+        assert result.result is not None
+        assert result.result.associated == 1
+        assert result.result.scrape == 0
+        assert matched_ids == [media.id]
+        assert not [task for task in (result.followups or []) if task.task_type == TaskType.SCRAPE]
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_western_identity_miss_creates_scrape_task(
+        self, repo: Repository, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        """WESTERN 未命中本地身份时正常创建 SCRAPE 任务。"""
+        media = await repo.create_media_file(
+            library_id=1,
+            path=str(tmp_path / "western.mp4"),
+            status=MediaFileStatus.PENDING,
+        )
+        assert media.id is not None
+
+        monkeypatch.setattr(
+            "amane.handlers.refresh.parse_file_info",
+            lambda _path: SimpleNamespace(
+                number="VIXEN-230415",
+                content_type=ContentType.WESTERN,
+            ),
+        )
+
+        checked_ids = []
+
+        async def fake_refresh_media_association(_repo, current_media):
+            checked_ids.append(current_media.id)
+            return False
+
+        monkeypatch.setattr(
+            "amane.handlers.refresh.refresh_media_association",
+            fake_refresh_media_association,
+        )
+
+        result = await RefreshHandler(repo=repo).handle(
+            RefreshPayload(
+                library_id=1,
+                path=str(tmp_path),
+                scan=set(),
+                scrape={MediaFileStatus.PENDING},
+            )
+        )
+
+        assert result.success is True
+        assert result.result is not None
+        assert result.result.associated == 0
+        assert result.result.scrape == 1
+        assert checked_ids == [media.id]
+
+        scrapes = [task for task in (result.followups or []) if task.task_type == TaskType.SCRAPE]
+        assert len(scrapes) == 1
+        assert scrapes[0].payload["media_file_id"] == media.id
+        assert scrapes[0].payload["number"] == "VIXEN-230415"
+        assert scrapes[0].payload["content_type"] == ContentType.WESTERN.value
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_non_western_skips_identity_precheck(
+        self, repo: Repository, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        """非 WESTERN 保持原有行为，不调用 WESTERN 本地身份预检查。"""
+        media = await repo.create_media_file(
+            library_id=1,
+            path=str(tmp_path / "MIDV-123.mp4"),
+            status=MediaFileStatus.PENDING,
+        )
+        assert media.id is not None
+
+        monkeypatch.setattr(
+            "amane.handlers.refresh.parse_file_info",
+            lambda _path: SimpleNamespace(
+                number="MIDV-123",
+                content_type=ContentType.CENSORED,
+            ),
+        )
+
+        async def unexpected_precheck(_repo, _media):
+            raise AssertionError("非 WESTERN 不应调用本地身份预检查")
+
+        monkeypatch.setattr(
+            "amane.handlers.refresh.refresh_media_association",
+            unexpected_precheck,
+        )
+
+        result = await RefreshHandler(repo=repo).handle(
+            RefreshPayload(
+                library_id=1,
+                path=str(tmp_path),
+                scan=set(),
+                scrape={MediaFileStatus.PENDING},
+            )
+        )
+
+        assert result.success is True
+        assert result.result is not None
+        assert result.result.associated == 0
+        assert result.result.scrape == 1
+
+        scrapes = [task for task in (result.followups or []) if task.task_type == TaskType.SCRAPE]
+        assert len(scrapes) == 1
+        assert scrapes[0].payload["media_file_id"] == media.id
+
+
+def test_number_mapping_requires_full_match_and_applies_capture_replacement():
+    from amane.handlers.scrape import _map_search_number
+
+    rules = [r"^(RED)-([0-9]+)$ => PRED-\\2"]
+    assert _map_search_number("RED-163", rules) == "PRED-163"
+    assert _map_search_number("red-163", rules) == "PRED-163"
+    assert _map_search_number("PRED-163", rules) == "PRED-163"
+    assert _map_search_number("XRED-163", rules) == "XRED-163"

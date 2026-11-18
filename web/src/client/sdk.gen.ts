@@ -2,7 +2,7 @@
 
 import { type Client, type ClientMeta, formDataBodySerializer, type Options as Options2, type RequestResult, type ServerSentEventsResult, type TDataShape } from './client';
 import { client } from './client.gen';
-import type { BatchActorGenderData, BatchActorGenderErrors, BatchActorGenderResponses, BatchActorUserTagsData, BatchActorUserTagsErrors, BatchActorUserTagsResponses, BatchClearActorPersonData, BatchClearActorPersonErrors, BatchClearActorPersonResponses, BatchDeleteMediaData, BatchDeleteMediaErrors, BatchDeleteMediaResponses, BatchDeleteMetadataData, BatchDeleteMetadataErrors, BatchDeleteMetadataResponses, BatchFacetsData, BatchFacetsErrors, BatchFacetsResponses, BatchFeedItemsData, BatchFeedItemsErrors, BatchFeedItemsResponses, BatchMetadataUserTagsData, BatchMetadataUserTagsErrors, BatchMetadataUserTagsResponses, BatchSavedQueriesData, BatchSavedQueriesErrors, BatchSavedQueriesResponses, BatchScrapeMetadataData, BatchScrapeMetadataErrors, BatchScrapeMetadataResponses, BatchSubmitTasksData, BatchSubmitTasksErrors, BatchSubmitTasksResponses, BatchTasksData, BatchTasksErrors, BatchTasksResponses, BrowserBackendsData, BrowserBackendsResponses, CallToolData, CallToolErrors, CallToolResponses, CancelAguiTurnData, CancelAguiTurnErrors, CancelAguiTurnResponses, CheckConnectivityData, CheckConnectivityErrors, CheckConnectivityResponses, ClearActorPersonData, ClearActorPersonErrors, ClearActorPersonResponses, ClouddriveNotifyData, ClouddriveNotifyErrors, ClouddriveNotifyResponses, CreateAgentSessionData, CreateAgentSessionErrors, CreateAgentSessionResponses, CreateCommentData, CreateCommentErrors, CreateCommentResponses, CreateFeedData, CreateFeedErrors, CreateFeedResponses, CreateLibraryData, CreateLibraryErrors, CreateLibraryResponses, CreateSavedQueryData, CreateSavedQueryErrors, CreateSavedQueryResponses, CreateScheduleData, CreateScheduleErrors, CreateScheduleResponses, CreateUserTagsData, CreateUserTagsErrors, CreateUserTagsResponses, CropActorAvatarData, CropActorAvatarErrors, CropActorAvatarResponses, CropPosterFromCoverData, CropPosterFromCoverErrors, CropPosterFromCoverResponses, DeleteAgentSessionData, DeleteAgentSessionErrors, DeleteAgentSessionResponses, DeleteBatchData, DeleteBatchErrors, DeleteBatchResponses, DeleteCommentData, DeleteCommentErrors, DeleteCommentResponses, DeleteFacetData, DeleteFacetErrors, DeleteFacetResponses, DeleteFacetRuleData, DeleteFacetRuleErrors, DeleteFacetRuleResponses, DeleteFeedData, DeleteFeedErrors, DeleteFeedResponses, DeleteLibraryData, DeleteLibraryErrors, DeleteLibraryResponses, DeleteMappingData, DeleteMappingErrors, DeleteMappingResponses, DeleteMediaData, DeleteMediaErrors, DeleteMediaResponses, DeleteMetadataData, DeleteMetadataErrors, DeleteMetadataResponses, DeleteOneData, DeleteOneErrors, DeleteOneResponses, DeleteScheduleData, DeleteScheduleErrors, DeleteScheduleResponses, DesktopInfoData, DesktopInfoResponses, ExpandCleanupSelectionData, ExpandCleanupSelectionErrors, ExpandCleanupSelectionResponses, ExportMappingsData, ExportMappingsResponses, FollowAgentEventsData, FollowAgentEventsErrors, FollowAgentEventsResponses, GenerateAgentSessionTitleData, GenerateAgentSessionTitleErrors, GenerateAgentSessionTitleResponses, GetActorData, GetActorErrors, GetActorResponses, GetAgentGuideData, GetAgentGuideResponses, GetAgentTraceData, GetAgentTraceErrors, GetAgentTraceResponses, GetCleanupInventoryData, GetCleanupInventoryErrors, GetCleanupInventoryNodesData, GetCleanupInventoryNodesErrors, GetCleanupInventoryNodesResponses, GetCleanupInventoryResponses, GetCleanupTrashData, GetCleanupTrashErrors, GetCleanupTrashResponses, GetConfigData, GetConfigResponses, GetConfigSchemaData, GetConfigSchemaResponses, GetDbSchemaData, GetDbSchemaResponses, GetFacetData, GetFacetErrors, GetFacetResponses, GetFeedData, GetFeedErrors, GetFeedResponses, GetLibraryData, GetLibraryErrors, GetLibraryResponses, GetMediaData, GetMediaErrors, GetMediaResponses, GetMetadataData, GetMetadataErrors, GetMetadataResponses, GetMetadataSchemaData, GetMetadataSchemaResponses, GetPathTemplateSchemaData, GetPathTemplateSchemaResponses, GetPluginData, GetPluginErrors, GetPluginResponses, GetReleaseData, GetReleaseResponses, GetSavedQueryData, GetSavedQueryErrors, GetSavedQueryResponses, GetSavedQueryResultData, GetSavedQueryResultErrors, GetSavedQueryResultResponses, GetScheduleData, GetScheduleErrors, GetScheduleResponses, GetScheduleSchemaData, GetScheduleSchemaResponses, GetTaskChildrenData, GetTaskChildrenErrors, GetTaskChildrenResponses, GetTaskData, GetTaskErrors, GetTaskLogData, GetTaskLogErrors, GetTaskLogResponses, GetTaskRecordData, GetTaskRecordErrors, GetTaskRecordResponses, GetTaskResponses, GetTaskSchemaData, GetTaskSchemaResponses, GetTaskWorkerData, GetTaskWorkerResponses, GetToolCatalogData, GetToolCatalogResponses, GetToolDetailData, GetToolDetailErrors, GetToolDetailResponses, HealthCheckData, HealthCheckResponses, ImportMappingsData, ImportMappingsErrors, ImportMappingsResponses, InstallPluginData, InstallPluginErrors, InstallPluginResponses, ListActorsData, ListActorsErrors, ListActorsResponses, ListAgentSessionsData, ListAgentSessionsResponses, ListAllFeedItemsData, ListAllFeedItemsErrors, ListAllFeedItemsResponses, ListFacetRulesData, ListFacetRulesErrors, ListFacetRulesResponses, ListFacetsData, ListFacetsErrors, ListFacetsResponses, ListFeedItemsData, ListFeedItemsErrors, ListFeedItemsResponses, ListFeedsData, ListFeedsResponses, ListFilesData, ListFilesErrors, ListFilesResponses, ListLibrariesData, ListLibrariesResponses, ListMappingsData, ListMappingsErrors, ListMappingsResponses, ListMediaData, ListMediaErrors, ListMediaResponses, ListMetadataData, ListMetadataErrors, ListMetadataResponses, ListPlaybackSourcesData, ListPlaybackSourcesResponses, ListPlaybackStreamsData, ListPlaybackStreamsErrors, ListPlaybackStreamsResponses, ListPluginsData, ListPluginsResponses, ListSavedQueriesData, ListSavedQueriesErrors, ListSavedQueriesResponses, ListSchedulesData, ListSchedulesResponses, ListSubmissionsData, ListSubmissionsErrors, ListSubmissionsResponses, ListTasksData, ListTasksErrors, ListTasksResponses, MergeFacetsData, MergeFacetsErrors, MergeFacetsResponses, MergeMetadataData, MergeMetadataErrors, MergeMetadataResponses, PauseTaskWorkerData, PauseTaskWorkerResponses, PlayMetadataData, PlayMetadataErrors, PlayMetadataHlsPartData, PlayMetadataHlsPartErrors, PlayMetadataHlsPartResponses, PlayMetadataPlaylistData, PlayMetadataPlaylistErrors, PlayMetadataPlaylistResponses, PlayMetadataResponses, PlayMetadataSubtitleData, PlayMetadataSubtitleErrors, PlayMetadataSubtitleResponses, PlayStreamData, PlayStreamErrors, PlayStreamHlsPartData, PlayStreamHlsPartErrors, PlayStreamHlsPartResponses, PlayStreamPlaylistData, PlayStreamPlaylistErrors, PlayStreamPlaylistResponses, PlayStreamResponses, PlayStreamSubtitleData, PlayStreamSubtitleErrors, PlayStreamSubtitleResponses, PollFeedData, PollFeedErrors, PollFeedResponses, ProxyImageData, ProxyImageErrors, ProxyImageResponses, ReleaseSemanticData, ReleaseSemanticResponses, ReloadPluginsData, ReloadPluginsResponses, RenameFacetData, RenameFacetErrors, RenameFacetResponses, RestartServerData, RestartServerResponses, ResumeTaskWorkerData, ResumeTaskWorkerResponses, RunAgentAguiData, RunAgentAguiErrors, RunAgentAguiResponses, SaveMappingData, SaveMappingErrors, SaveMappingResponses, ScrapeActorData, ScrapeActorErrors, ScrapeActorResponses, SearchScenesData, SearchScenesErrors, SearchScenesResponses, SemanticDiagnosticsData, SemanticDiagnosticsResponses, SemanticStatusData, SemanticStatusResponses, ServeResourceData, ServeResourceErrors, ServeResourceResponses, SetActorLocksData, SetActorLocksErrors, SetActorLocksResponses, SetMetadataLocksData, SetMetadataLocksErrors, SetMetadataLocksResponses, SubmitBatchData, SubmitBatchErrors, SubmitBatchResponses, SubmitOneData, SubmitOneErrors, SubmitOneResponses, SubmitTaskData, SubmitTaskErrors, SubmitTaskResponses, SuggestMappingsData, SuggestMappingsErrors, SuggestMappingsResponses, TestMediaServerConnectionData, TestMediaServerConnectionErrors, TestMediaServerConnectionResponses, TriggerScheduleData, TriggerScheduleErrors, TriggerScheduleResponses, UninstallPluginData, UninstallPluginErrors, UninstallPluginResponses, UpdateActorData, UpdateActorErrors, UpdateActorResponses, UpdateAgentSessionData, UpdateAgentSessionErrors, UpdateAgentSessionResponses, UpdateCommentData, UpdateCommentErrors, UpdateCommentResponses, UpdateConfigData, UpdateConfigErrors, UpdateConfigResponses, UpdateFeedData, UpdateFeedErrors, UpdateFeedResponses, UpdateLibraryData, UpdateLibraryErrors, UpdateLibraryResponses, UpdateMediaData, UpdateMediaErrors, UpdateMediaResponses, UpdateMetadataData, UpdateMetadataErrors, UpdateMetadataResponses, UpdatePluginData, UpdatePluginErrors, UpdatePluginResponses, UpdateSavedQueryData, UpdateSavedQueryErrors, UpdateSavedQueryResponses, UpdateScheduleData, UpdateScheduleErrors, UpdateScheduleResponses, UploadMetadataImageData, UploadMetadataImageErrors, UploadMetadataImageResponses } from './types.gen';
+import type { ArchiveMappingData, ArchiveMappingErrors, ArchiveMappingResponses, ArchiveMappingsData, ArchiveMappingsErrors, ArchiveMappingsResponses, BatchActorGenderData, BatchActorGenderErrors, BatchActorGenderResponses, BatchActorUserTagsData, BatchActorUserTagsErrors, BatchActorUserTagsResponses, BatchClearActorPersonData, BatchClearActorPersonErrors, BatchClearActorPersonResponses, BatchDeleteActorMappingsData, BatchDeleteActorMappingsErrors, BatchDeleteActorMappingsResponses, BatchDeleteMediaData, BatchDeleteMediaErrors, BatchDeleteMediaResponses, BatchDeleteMetadataData, BatchDeleteMetadataErrors, BatchDeleteMetadataResponses, BatchDeleteNumberMappingsData, BatchDeleteNumberMappingsErrors, BatchDeleteNumberMappingsResponses, BatchFacetsData, BatchFacetsErrors, BatchFacetsResponses, BatchFeedItemsData, BatchFeedItemsErrors, BatchFeedItemsResponses, BatchMetadataUserTagsData, BatchMetadataUserTagsErrors, BatchMetadataUserTagsResponses, BatchSavedQueriesData, BatchSavedQueriesErrors, BatchSavedQueriesResponses, BatchScrapeMetadataData, BatchScrapeMetadataErrors, BatchScrapeMetadataResponses, BatchSubmitTasksData, BatchSubmitTasksErrors, BatchSubmitTasksResponses, BatchTasksData, BatchTasksErrors, BatchTasksResponses, BrowserBackendsData, BrowserBackendsResponses, CallToolData, CallToolErrors, CallToolResponses, CancelAguiTurnData, CancelAguiTurnErrors, CancelAguiTurnResponses, CheckConnectivityData, CheckConnectivityErrors, CheckConnectivityResponses, ClearActorExceptionsData, ClearActorExceptionsResponses, ClearActorPersonData, ClearActorPersonErrors, ClearActorPersonResponses, ClearNumberExceptionsData, ClearNumberExceptionsErrors, ClearNumberExceptionsResponses, ClouddriveNotifyData, ClouddriveNotifyErrors, ClouddriveNotifyResponses, ConfirmAcceptedData, ConfirmAcceptedErrors, ConfirmAcceptedResponses, ConfirmNotAcceptedData, ConfirmNotAcceptedErrors, ConfirmNotAcceptedResponses, CreateAgentSessionData, CreateAgentSessionErrors, CreateAgentSessionResponses, CreateCommentData, CreateCommentErrors, CreateCommentResponses, CreateFeedData, CreateFeedErrors, CreateFeedResponses, CreateLibraryData, CreateLibraryErrors, CreateLibraryResponses, CreateSavedQueryData, CreateSavedQueryErrors, CreateSavedQueryResponses, CreateScheduleData, CreateScheduleErrors, CreateScheduleResponses, CreateUserTagsData, CreateUserTagsErrors, CreateUserTagsResponses, CropActorAvatarData, CropActorAvatarErrors, CropActorAvatarResponses, CropPosterFromCoverData, CropPosterFromCoverErrors, CropPosterFromCoverResponses, DeleteActorMappingData, DeleteActorMappingErrors, DeleteActorMappingResponses, DeleteAgentSessionData, DeleteAgentSessionErrors, DeleteAgentSessionResponses, DeleteBatchData, DeleteBatchErrors, DeleteBatchResponses, DeleteCommentData, DeleteCommentErrors, DeleteCommentResponses, DeleteFacetData, DeleteFacetErrors, DeleteFacetResponses, DeleteFacetRuleData, DeleteFacetRuleErrors, DeleteFacetRuleResponses, DeleteFeedData, DeleteFeedErrors, DeleteFeedResponses, DeleteLibraryData, DeleteLibraryErrors, DeleteLibraryResponses, DeleteMediaData, DeleteMediaErrors, DeleteMediaResponses, DeleteMetadataData, DeleteMetadataErrors, DeleteMetadataResponses, DeleteNumberMappingData, DeleteNumberMappingErrors, DeleteNumberMappingResponses, DeleteOneData, DeleteOneErrors, DeleteOneResponses, DeleteScheduleData, DeleteScheduleErrors, DeleteScheduleResponses, DesktopInfoData, DesktopInfoResponses, ExpandCleanupSelectionData, ExpandCleanupSelectionErrors, ExpandCleanupSelectionResponses, ExportActorMappingsData, ExportActorMappingsErrors, ExportActorMappingsResponses, ExportMappingsData, ExportMappingsResponses, ExportNumberMappingsData, ExportNumberMappingsErrors, ExportNumberMappingsResponses, FollowAgentEventsData, FollowAgentEventsErrors, FollowAgentEventsResponses, GenerateAgentSessionTitleData, GenerateAgentSessionTitleErrors, GenerateAgentSessionTitleResponses, GetActorData, GetActorErrors, GetActorResponses, GetAgentGuideData, GetAgentGuideResponses, GetAgentTraceData, GetAgentTraceErrors, GetAgentTraceResponses, GetCleanupInventoryData, GetCleanupInventoryErrors, GetCleanupInventoryNodesData, GetCleanupInventoryNodesErrors, GetCleanupInventoryNodesResponses, GetCleanupInventoryResponses, GetCleanupTrashData, GetCleanupTrashErrors, GetCleanupTrashResponses, GetConfigData, GetConfigResponses, GetConfigSchemaData, GetConfigSchemaResponses, GetDbSchemaData, GetDbSchemaResponses, GetFacetData, GetFacetErrors, GetFacetResponses, GetFeedData, GetFeedErrors, GetFeedResponses, GetLibraryData, GetLibraryErrors, GetLibraryResponses, GetMappingStateData, GetMappingStateResponses, GetMediaData, GetMediaErrors, GetMediaResponses, GetMetadataData, GetMetadataErrors, GetMetadataResponses, GetMetadataSchemaData, GetMetadataSchemaResponses, GetPathTemplateSchemaData, GetPathTemplateSchemaResponses, GetPluginData, GetPluginErrors, GetPluginResponses, GetReleaseData, GetReleaseResponses, GetSavedQueryData, GetSavedQueryErrors, GetSavedQueryResponses, GetSavedQueryResultData, GetSavedQueryResultErrors, GetSavedQueryResultResponses, GetScheduleData, GetScheduleErrors, GetScheduleResponses, GetScheduleSchemaData, GetScheduleSchemaResponses, GetTaskChildrenData, GetTaskChildrenErrors, GetTaskChildrenResponses, GetTaskData, GetTaskErrors, GetTaskLogData, GetTaskLogErrors, GetTaskLogResponses, GetTaskRecordData, GetTaskRecordErrors, GetTaskRecordResponses, GetTaskResponses, GetTaskSchemaData, GetTaskSchemaResponses, GetTaskWorkerData, GetTaskWorkerResponses, GetToolCatalogData, GetToolCatalogResponses, GetToolDetailData, GetToolDetailErrors, GetToolDetailResponses, HealthCheckData, HealthCheckResponses, ImportActorMappingsData, ImportActorMappingsErrors, ImportActorMappingsResponses, ImportActorMappingTableData, ImportActorMappingTableErrors, ImportActorMappingTableResponses, ImportMappingsData, ImportMappingsErrors, ImportMappingsResponses, ImportNumberMappingsData, ImportNumberMappingsErrors, ImportNumberMappingsResponses, ImportNumberMappingTableData, ImportNumberMappingTableErrors, ImportNumberMappingTableResponses, InstallPluginData, InstallPluginErrors, InstallPluginResponses, ListActorExceptionsData, ListActorExceptionsResponses, ListActorMappingsData, ListActorMappingsErrors, ListActorMappingsResponses, ListActorsData, ListActorsErrors, ListActorsResponses, ListAgentSessionsData, ListAgentSessionsResponses, ListAllFeedItemsData, ListAllFeedItemsErrors, ListAllFeedItemsResponses, ListFacetRulesData, ListFacetRulesErrors, ListFacetRulesResponses, ListFacetsData, ListFacetsErrors, ListFacetsResponses, ListFeedItemsData, ListFeedItemsErrors, ListFeedItemsResponses, ListFeedsData, ListFeedsResponses, ListFilesData, ListFilesErrors, ListFilesResponses, ListLibrariesData, ListLibrariesResponses, ListMappingsData, ListMappingsErrors, ListMappingsResponses, ListMediaData, ListMediaErrors, ListMediaResponses, ListMetadataData, ListMetadataErrors, ListMetadataResponses, ListNumberExceptionsData, ListNumberExceptionsErrors, ListNumberExceptionsResponses, ListNumberMappingsData, ListNumberMappingsErrors, ListNumberMappingsResponses, ListPlaybackSourcesData, ListPlaybackSourcesResponses, ListPlaybackStreamsData, ListPlaybackStreamsErrors, ListPlaybackStreamsResponses, ListPluginsData, ListPluginsResponses, ListSavedQueriesData, ListSavedQueriesErrors, ListSavedQueriesResponses, ListSchedulesData, ListSchedulesResponses, ListSubmissionsData, ListSubmissionsErrors, ListSubmissionsResponses, ListTasksData, ListTasksErrors, ListTasksResponses, MergeFacetsData, MergeFacetsErrors, MergeFacetsResponses, MergeMetadataData, MergeMetadataErrors, MergeMetadataResponses, PauseTaskWorkerData, PauseTaskWorkerResponses, PlayMetadataData, PlayMetadataErrors, PlayMetadataHlsPartData, PlayMetadataHlsPartErrors, PlayMetadataHlsPartResponses, PlayMetadataPlaylistData, PlayMetadataPlaylistErrors, PlayMetadataPlaylistResponses, PlayMetadataResponses, PlayMetadataSubtitleData, PlayMetadataSubtitleErrors, PlayMetadataSubtitleResponses, PlayStreamData, PlayStreamErrors, PlayStreamHlsPartData, PlayStreamHlsPartErrors, PlayStreamHlsPartResponses, PlayStreamPlaylistData, PlayStreamPlaylistErrors, PlayStreamPlaylistResponses, PlayStreamResponses, PlayStreamSubtitleData, PlayStreamSubtitleErrors, PlayStreamSubtitleResponses, PollFeedData, PollFeedErrors, PollFeedResponses, ProxyImageData, ProxyImageErrors, ProxyImageResponses, ReleaseSemanticData, ReleaseSemanticResponses, ReloadPluginsData, ReloadPluginsResponses, RenameFacetData, RenameFacetErrors, RenameFacetResponses, RestartServerData, RestartServerResponses, RestoreMappingData, RestoreMappingErrors, RestoreMappingResponses, RestoreMappingsData, RestoreMappingsErrors, RestoreMappingsResponses, ResumeTaskWorkerData, ResumeTaskWorkerResponses, RunAgentAguiData, RunAgentAguiErrors, RunAgentAguiResponses, SaveActorExceptionData, SaveActorExceptionErrors, SaveActorExceptionResponses, SaveActorMappingData, SaveActorMappingErrors, SaveActorMappingResponses, SaveMappingData, SaveMappingErrors, SaveMappingResponses, SaveNumberExceptionData, SaveNumberExceptionErrors, SaveNumberExceptionResponses, SaveNumberMappingData, SaveNumberMappingErrors, SaveNumberMappingResponses, ScrapeActorData, ScrapeActorErrors, ScrapeActorResponses, SearchScenesData, SearchScenesErrors, SearchScenesResponses, SemanticDiagnosticsData, SemanticDiagnosticsResponses, SemanticStatusData, SemanticStatusResponses, ServeResourceData, ServeResourceErrors, ServeResourceResponses, SetActorLocksData, SetActorLocksErrors, SetActorLocksResponses, SetMetadataLocksData, SetMetadataLocksErrors, SetMetadataLocksResponses, SubmitBatchData, SubmitBatchErrors, SubmitBatchResponses, SubmitOneData, SubmitOneErrors, SubmitOneResponses, SubmitTaskData, SubmitTaskErrors, SubmitTaskResponses, SuggestMappingsData, SuggestMappingsErrors, SuggestMappingsResponses, TestMediaServerConnectionData, TestMediaServerConnectionErrors, TestMediaServerConnectionResponses, TriggerScheduleData, TriggerScheduleErrors, TriggerScheduleResponses, UninstallPluginData, UninstallPluginErrors, UninstallPluginResponses, UpdateActorData, UpdateActorErrors, UpdateActorExceptionData, UpdateActorExceptionErrors, UpdateActorExceptionResponses, UpdateActorResponses, UpdateAgentSessionData, UpdateAgentSessionErrors, UpdateAgentSessionResponses, UpdateCommentData, UpdateCommentErrors, UpdateCommentResponses, UpdateConfigData, UpdateConfigErrors, UpdateConfigResponses, UpdateFeedData, UpdateFeedErrors, UpdateFeedResponses, UpdateLibraryData, UpdateLibraryErrors, UpdateLibraryResponses, UpdateMappingStateData, UpdateMappingStateErrors, UpdateMappingStateResponses, UpdateMediaData, UpdateMediaErrors, UpdateMediaResponses, UpdateMetadataData, UpdateMetadataErrors, UpdateMetadataResponses, UpdateNumberExceptionData, UpdateNumberExceptionErrors, UpdateNumberExceptionResponses, UpdatePluginData, UpdatePluginErrors, UpdatePluginResponses, UpdateSavedQueryData, UpdateSavedQueryErrors, UpdateSavedQueryResponses, UpdateScheduleData, UpdateScheduleErrors, UpdateScheduleResponses, UploadMetadataImageData, UploadMetadataImageErrors, UploadMetadataImageResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -333,6 +333,16 @@ export const submitBatch = <ThrowOnError extends boolean = false>(options: Optio
         ...options.headers
     }
 });
+
+/**
+ * Confirm Accepted
+ */
+export const confirmAccepted = <ThrowOnError extends boolean = false>(options: Options<ConfirmAcceptedData, ThrowOnError>): RequestResult<ConfirmAcceptedResponses, ConfirmAcceptedErrors, ThrowOnError> => (options.client ?? client).post<ConfirmAcceptedResponses, ConfirmAcceptedErrors, ThrowOnError>({ url: '/api/oshash-submissions/{submission_id}/confirm-accepted', ...options });
+
+/**
+ * Confirm Not Accepted
+ */
+export const confirmNotAccepted = <ThrowOnError extends boolean = false>(options: Options<ConfirmNotAcceptedData, ThrowOnError>): RequestResult<ConfirmNotAcceptedResponses, ConfirmNotAcceptedErrors, ThrowOnError> => (options.client ?? client).post<ConfirmNotAcceptedResponses, ConfirmNotAcceptedErrors, ThrowOnError>({ url: '/api/oshash-submissions/{submission_id}/confirm-not-accepted', ...options });
 
 /**
  * Delete One
@@ -971,9 +981,55 @@ export const saveMapping = <ThrowOnError extends boolean = false>(options: Optio
 });
 
 /**
- * Delete Mapping
+ * Get Mapping State
  */
-export const deleteMapping = <ThrowOnError extends boolean = false>(options: Options<DeleteMappingData, ThrowOnError>): RequestResult<DeleteMappingResponses, DeleteMappingErrors, ThrowOnError> => (options.client ?? client).delete<DeleteMappingResponses, DeleteMappingErrors, ThrowOnError>({ url: '/api/tag-mappings/{original}', ...options });
+export const getMappingState = <ThrowOnError extends boolean = false>(options?: Options<GetMappingStateData, ThrowOnError>): RequestResult<GetMappingStateResponses, unknown, ThrowOnError> => (options?.client ?? client).get<GetMappingStateResponses, unknown, ThrowOnError>({ url: '/api/tag-mappings/state', ...options });
+
+/**
+ * Update Mapping State
+ */
+export const updateMappingState = <ThrowOnError extends boolean = false>(options: Options<UpdateMappingStateData, ThrowOnError>): RequestResult<UpdateMappingStateResponses, UpdateMappingStateErrors, ThrowOnError> => (options.client ?? client).put<UpdateMappingStateResponses, UpdateMappingStateErrors, ThrowOnError>({
+    url: '/api/tag-mappings/state',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Archive Mapping
+ */
+export const archiveMapping = <ThrowOnError extends boolean = false>(options: Options<ArchiveMappingData, ThrowOnError>): RequestResult<ArchiveMappingResponses, ArchiveMappingErrors, ThrowOnError> => (options.client ?? client).put<ArchiveMappingResponses, ArchiveMappingErrors, ThrowOnError>({ url: '/api/tag-mappings/{original}/archive', ...options });
+
+/**
+ * Restore Mapping
+ */
+export const restoreMapping = <ThrowOnError extends boolean = false>(options: Options<RestoreMappingData, ThrowOnError>): RequestResult<RestoreMappingResponses, RestoreMappingErrors, ThrowOnError> => (options.client ?? client).put<RestoreMappingResponses, RestoreMappingErrors, ThrowOnError>({ url: '/api/tag-mappings/{original}/restore', ...options });
+
+/**
+ * Archive Mappings
+ */
+export const archiveMappings = <ThrowOnError extends boolean = false>(options: Options<ArchiveMappingsData, ThrowOnError>): RequestResult<ArchiveMappingsResponses, ArchiveMappingsErrors, ThrowOnError> => (options.client ?? client).post<ArchiveMappingsResponses, ArchiveMappingsErrors, ThrowOnError>({
+    url: '/api/tag-mappings/archive',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Restore Mappings
+ */
+export const restoreMappings = <ThrowOnError extends boolean = false>(options: Options<RestoreMappingsData, ThrowOnError>): RequestResult<RestoreMappingsResponses, RestoreMappingsErrors, ThrowOnError> => (options.client ?? client).post<RestoreMappingsResponses, RestoreMappingsErrors, ThrowOnError>({
+    url: '/api/tag-mappings/restore',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
 
 /**
  * Export Mappings
@@ -1002,6 +1058,204 @@ export const suggestMappings = <ThrowOnError extends boolean = false>(options: O
     ...options,
     headers: {
         'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * List Number Mappings
+ */
+export const listNumberMappings = <ThrowOnError extends boolean = false>(options: Options<ListNumberMappingsData, ThrowOnError>): RequestResult<ListNumberMappingsResponses, ListNumberMappingsErrors, ThrowOnError> => (options.client ?? client).get<ListNumberMappingsResponses, ListNumberMappingsErrors, ThrowOnError>({ url: '/api/number-mappings', ...options });
+
+/**
+ * Save Number Mapping
+ */
+export const saveNumberMapping = <ThrowOnError extends boolean = false>(options: Options<SaveNumberMappingData, ThrowOnError>): RequestResult<SaveNumberMappingResponses, SaveNumberMappingErrors, ThrowOnError> => (options.client ?? client).put<SaveNumberMappingResponses, SaveNumberMappingErrors, ThrowOnError>({
+    url: '/api/number-mappings',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Delete Number Mapping
+ */
+export const deleteNumberMapping = <ThrowOnError extends boolean = false>(options: Options<DeleteNumberMappingData, ThrowOnError>): RequestResult<DeleteNumberMappingResponses, DeleteNumberMappingErrors, ThrowOnError> => (options.client ?? client).delete<DeleteNumberMappingResponses, DeleteNumberMappingErrors, ThrowOnError>({ url: '/api/number-mappings/{key}', ...options });
+
+/**
+ * List Number Exceptions
+ */
+export const listNumberExceptions = <ThrowOnError extends boolean = false>(options: Options<ListNumberExceptionsData, ThrowOnError>): RequestResult<ListNumberExceptionsResponses, ListNumberExceptionsErrors, ThrowOnError> => (options.client ?? client).get<ListNumberExceptionsResponses, ListNumberExceptionsErrors, ThrowOnError>({ url: '/api/number-mappings/exceptions', ...options });
+
+/**
+ * Update Number Exception
+ */
+export const updateNumberException = <ThrowOnError extends boolean = false>(options: Options<UpdateNumberExceptionData, ThrowOnError>): RequestResult<UpdateNumberExceptionResponses, UpdateNumberExceptionErrors, ThrowOnError> => (options.client ?? client).put<UpdateNumberExceptionResponses, UpdateNumberExceptionErrors, ThrowOnError>({
+    url: '/api/number-mappings/exceptions',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Save Number Exception
+ */
+export const saveNumberException = <ThrowOnError extends boolean = false>(options: Options<SaveNumberExceptionData, ThrowOnError>): RequestResult<SaveNumberExceptionResponses, SaveNumberExceptionErrors, ThrowOnError> => (options.client ?? client).post<SaveNumberExceptionResponses, SaveNumberExceptionErrors, ThrowOnError>({
+    url: '/api/number-mappings/exceptions/save',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Clear Number Exceptions
+ */
+export const clearNumberExceptions = <ThrowOnError extends boolean = false>(options: Options<ClearNumberExceptionsData, ThrowOnError>): RequestResult<ClearNumberExceptionsResponses, ClearNumberExceptionsErrors, ThrowOnError> => (options.client ?? client).post<ClearNumberExceptionsResponses, ClearNumberExceptionsErrors, ThrowOnError>({ url: '/api/number-mappings/exceptions/clear', ...options });
+
+/**
+ * Export Number Mappings
+ */
+export const exportNumberMappings = <ThrowOnError extends boolean = false>(options: Options<ExportNumberMappingsData, ThrowOnError>): RequestResult<ExportNumberMappingsResponses, ExportNumberMappingsErrors, ThrowOnError> => (options.client ?? client).get<ExportNumberMappingsResponses, ExportNumberMappingsErrors, ThrowOnError>({ url: '/api/number-mappings/export', ...options });
+
+/**
+ * Import Number Mappings
+ */
+export const importNumberMappings = <ThrowOnError extends boolean = false>(options: Options<ImportNumberMappingsData, ThrowOnError>): RequestResult<ImportNumberMappingsResponses, ImportNumberMappingsErrors, ThrowOnError> => (options.client ?? client).post<ImportNumberMappingsResponses, ImportNumberMappingsErrors, ThrowOnError>({
+    url: '/api/number-mappings/import',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Batch Delete Number Mappings
+ */
+export const batchDeleteNumberMappings = <ThrowOnError extends boolean = false>(options: Options<BatchDeleteNumberMappingsData, ThrowOnError>): RequestResult<BatchDeleteNumberMappingsResponses, BatchDeleteNumberMappingsErrors, ThrowOnError> => (options.client ?? client).post<BatchDeleteNumberMappingsResponses, BatchDeleteNumberMappingsErrors, ThrowOnError>({
+    url: '/api/number-mappings/batch-delete',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Import Number Mapping Table
+ *
+ * Convert CSV/XLSX relative columns to mapping JSON, then run normal merge import.
+ */
+export const importNumberMappingTable = <ThrowOnError extends boolean = false>(options: Options<ImportNumberMappingTableData, ThrowOnError>): RequestResult<ImportNumberMappingTableResponses, ImportNumberMappingTableErrors, ThrowOnError> => (options.client ?? client).post<ImportNumberMappingTableResponses, ImportNumberMappingTableErrors, ThrowOnError>({
+    ...formDataBodySerializer,
+    url: '/api/number-mappings/import-table',
+    ...options,
+    headers: {
+        'Content-Type': null,
+        ...options.headers
+    }
+});
+
+/**
+ * List Actor Mappings
+ */
+export const listActorMappings = <ThrowOnError extends boolean = false>(options?: Options<ListActorMappingsData, ThrowOnError>): RequestResult<ListActorMappingsResponses, ListActorMappingsErrors, ThrowOnError> => (options?.client ?? client).get<ListActorMappingsResponses, ListActorMappingsErrors, ThrowOnError>({ url: '/api/actor-mappings', ...options });
+
+/**
+ * Save Actor Mapping
+ */
+export const saveActorMapping = <ThrowOnError extends boolean = false>(options: Options<SaveActorMappingData, ThrowOnError>): RequestResult<SaveActorMappingResponses, SaveActorMappingErrors, ThrowOnError> => (options.client ?? client).put<SaveActorMappingResponses, SaveActorMappingErrors, ThrowOnError>({
+    url: '/api/actor-mappings',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Delete Actor Mapping
+ */
+export const deleteActorMapping = <ThrowOnError extends boolean = false>(options: Options<DeleteActorMappingData, ThrowOnError>): RequestResult<DeleteActorMappingResponses, DeleteActorMappingErrors, ThrowOnError> => (options.client ?? client).delete<DeleteActorMappingResponses, DeleteActorMappingErrors, ThrowOnError>({ url: '/api/actor-mappings/{identifier}', ...options });
+
+/**
+ * Batch Delete Actor Mappings
+ */
+export const batchDeleteActorMappings = <ThrowOnError extends boolean = false>(options: Options<BatchDeleteActorMappingsData, ThrowOnError>): RequestResult<BatchDeleteActorMappingsResponses, BatchDeleteActorMappingsErrors, ThrowOnError> => (options.client ?? client).post<BatchDeleteActorMappingsResponses, BatchDeleteActorMappingsErrors, ThrowOnError>({
+    url: '/api/actor-mappings/batch-delete',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * List Actor Exceptions
+ */
+export const listActorExceptions = <ThrowOnError extends boolean = false>(options?: Options<ListActorExceptionsData, ThrowOnError>): RequestResult<ListActorExceptionsResponses, unknown, ThrowOnError> => (options?.client ?? client).get<ListActorExceptionsResponses, unknown, ThrowOnError>({ url: '/api/actor-mappings/exceptions', ...options });
+
+/**
+ * Update Actor Exception
+ */
+export const updateActorException = <ThrowOnError extends boolean = false>(options: Options<UpdateActorExceptionData, ThrowOnError>): RequestResult<UpdateActorExceptionResponses, UpdateActorExceptionErrors, ThrowOnError> => (options.client ?? client).put<UpdateActorExceptionResponses, UpdateActorExceptionErrors, ThrowOnError>({
+    url: '/api/actor-mappings/exceptions',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Save Actor Exception
+ */
+export const saveActorException = <ThrowOnError extends boolean = false>(options: Options<SaveActorExceptionData, ThrowOnError>): RequestResult<SaveActorExceptionResponses, SaveActorExceptionErrors, ThrowOnError> => (options.client ?? client).post<SaveActorExceptionResponses, SaveActorExceptionErrors, ThrowOnError>({
+    url: '/api/actor-mappings/exceptions/save',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Clear Actor Exceptions
+ */
+export const clearActorExceptions = <ThrowOnError extends boolean = false>(options?: Options<ClearActorExceptionsData, ThrowOnError>): RequestResult<ClearActorExceptionsResponses, unknown, ThrowOnError> => (options?.client ?? client).post<ClearActorExceptionsResponses, unknown, ThrowOnError>({ url: '/api/actor-mappings/exceptions/clear', ...options });
+
+/**
+ * Export Actor Mappings
+ */
+export const exportActorMappings = <ThrowOnError extends boolean = false>(options?: Options<ExportActorMappingsData, ThrowOnError>): RequestResult<ExportActorMappingsResponses, ExportActorMappingsErrors, ThrowOnError> => (options?.client ?? client).get<ExportActorMappingsResponses, ExportActorMappingsErrors, ThrowOnError>({ url: '/api/actor-mappings/export', ...options });
+
+/**
+ * Import Actor Mappings
+ */
+export const importActorMappings = <ThrowOnError extends boolean = false>(options: Options<ImportActorMappingsData, ThrowOnError>): RequestResult<ImportActorMappingsResponses, ImportActorMappingsErrors, ThrowOnError> => (options.client ?? client).post<ImportActorMappingsResponses, ImportActorMappingsErrors, ThrowOnError>({
+    url: '/api/actor-mappings/import',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Import Actor Mapping Table
+ */
+export const importActorMappingTable = <ThrowOnError extends boolean = false>(options: Options<ImportActorMappingTableData, ThrowOnError>): RequestResult<ImportActorMappingTableResponses, ImportActorMappingTableErrors, ThrowOnError> => (options.client ?? client).post<ImportActorMappingTableResponses, ImportActorMappingTableErrors, ThrowOnError>({
+    ...formDataBodySerializer,
+    url: '/api/actor-mappings/import-table',
+    ...options,
+    headers: {
+        'Content-Type': null,
         ...options.headers
     }
 });

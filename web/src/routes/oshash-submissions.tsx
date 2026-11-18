@@ -27,6 +27,7 @@ type OshashSubmission = {
   path: string;
   created_at: string;
   last_error: string | null;
+  status: "pending" | "submitting" | "uncertain";
 };
 type OshashResult = { items: OshashSubmission[]; total: number };
 const PAGE_SIZE = 30;
@@ -62,7 +63,11 @@ function OshashSubmissionsPage() {
       setFeedback("OSHASH 提交成功，记录已从待提交列表移除。");
       void qc.invalidateQueries({ queryKey: ["oshash-submissions"] });
     },
-    onError: (error) => setFeedback(`提交失败：${String(error)}`),
+    onError: (error, id) => {
+      setSelected((old) => old.filter((selectedId) => selectedId !== id));
+      setFeedback(`提交失败：${String(error)}`);
+      void qc.invalidateQueries({ queryKey: ["oshash-submissions"] });
+    },
   });
   const deleteOne = useMutation({
     mutationFn: (id: number) =>
@@ -72,7 +77,12 @@ function OshashSubmissionsPage() {
       setFeedback("OSHASH 记录已删除。");
       void qc.invalidateQueries({ queryKey: ["oshash-submissions"] });
     },
-    onError: (error) => setFeedback(`删除失败：${String(error)}`),
+    onError: (error, id) => {
+      setSelected((old) => old.filter((selectedId) => selectedId !== id));
+      if (anchor.current === id) anchor.current = null;
+      setFeedback(`删除失败：${String(error)}`);
+      void qc.invalidateQueries({ queryKey: ["oshash-submissions"] });
+    },
   });
   const deleteBatch = useMutation({
     mutationFn: (ids: number[]) =>
@@ -86,7 +96,10 @@ function OshashSubmissionsPage() {
       setFeedback(`已删除选中的 ${result.deleted} 条记录。`);
       void qc.invalidateQueries({ queryKey: ["oshash-submissions"] });
     },
-    onError: (error) => setFeedback(`批量删除失败：${String(error)}`),
+    onError: (error) => {
+      setFeedback(`批量删除失败：${String(error)}`);
+      void qc.invalidateQueries({ queryKey: ["oshash-submissions"] });
+    },
   });
   const submitBatch = useMutation({
     mutationFn: (ids: number[]) =>
@@ -102,16 +115,63 @@ function OshashSubmissionsPage() {
       );
       void qc.invalidateQueries({ queryKey: ["oshash-submissions"] });
     },
-    onError: (error) => setFeedback(`批量提交失败：${String(error)}`),
+    onError: (error) => {
+      setSelected([]);
+      anchor.current = null;
+      setFeedback(`批量提交失败：${String(error)}`);
+      void qc.invalidateQueries({ queryKey: ["oshash-submissions"] });
+    },
   });
+  const confirmAccepted = useMutation({
+    mutationFn: (id: number) =>
+      request<{ resolved: string; deleted: boolean }>(
+        `/api/oshash-submissions/${id}/confirm-accepted`,
+        { method: "POST" },
+      ),
+    onSuccess: (_result, id) => {
+      setSelected((old) => old.filter((selectedId) => selectedId !== id));
+      setFeedback("已确认官网接收，记录已移除。");
+      void qc.invalidateQueries({ queryKey: ["oshash-submissions"] });
+    },
+    onError: (error) => {
+      setFeedback(`确认失败：${String(error)}`);
+      void qc.invalidateQueries({ queryKey: ["oshash-submissions"] });
+    },
+  });
+
+  const confirmNotAccepted = useMutation({
+    mutationFn: (id: number) =>
+      request<{ resolved: string; status: string }>(
+        `/api/oshash-submissions/${id}/confirm-not-accepted`,
+        { method: "POST" },
+      ),
+    onSuccess: (_result, id) => {
+      setSelected((old) => old.filter((selectedId) => selectedId !== id));
+      setFeedback("已确认官网未接收，记录已恢复为待提交。");
+      void qc.invalidateQueries({ queryKey: ["oshash-submissions"] });
+    },
+    onError: (error) => {
+      setFeedback(`确认失败：${String(error)}`);
+      void qc.invalidateQueries({ queryKey: ["oshash-submissions"] });
+    },
+  });
+  const actionsBusy =
+    submitOne.isPending ||
+    submitBatch.isPending ||
+    deleteOne.isPending ||
+    deleteBatch.isPending ||
+    confirmAccepted.isPending ||
+    confirmNotAccepted.isPending;
   const total = query.data?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   if (query.data && page > totalPages) {
     setPage(totalPages);
   }
   const items = query.data?.items ?? [];
-  const pageAllSelected = items.length > 0 && items.every((item) => selected.includes(item.id));
-  const pageSomeSelected = items.some((item) => selected.includes(item.id));
+  const pendingItems = items.filter((item) => item.status === "pending");
+  const pageAllSelected =
+    pendingItems.length > 0 && pendingItems.every((item) => selected.includes(item.id));
+  const pageSomeSelected = pendingItems.some((item) => selected.includes(item.id));
 
   return (
     <Stack p="md" gap="md">
@@ -127,7 +187,7 @@ function OshashSubmissionsPage() {
             已勾选 {selected.length} 条
           </Text>
           <Button
-            disabled={!selected.length || submitBatch.isPending}
+            disabled={!selected.length || actionsBusy}
             loading={submitBatch.isPending}
             onClick={() => submitBatch.mutate([...selected])}
           >
@@ -154,9 +214,10 @@ function OshashSubmissionsPage() {
             label="全选当前页"
             checked={pageAllSelected}
             indeterminate={pageSomeSelected && !pageAllSelected}
+            disabled={!pendingItems.length || actionsBusy}
             onChange={(event) => {
               const checked = event.currentTarget?.checked ?? false;
-              const ids = items.map((item) => item.id);
+              const ids = pendingItems.map((item) => item.id);
               setSelected((old) =>
                 checked ? [...new Set([...old, ...ids])] : old.filter((id) => !ids.includes(id)),
               );
@@ -166,7 +227,7 @@ function OshashSubmissionsPage() {
           <Button
             color="red"
             variant="light"
-            disabled={!selected.length || deleteBatch.isPending}
+            disabled={!selected.length || actionsBusy}
             loading={deleteBatch.isPending}
             onClick={() => {
               const ids = [...selected];
@@ -198,6 +259,7 @@ function OshashSubmissionsPage() {
                   <Checkbox
                     aria-label={`选择 OSHASH ${item.id}`}
                     checked={selected.includes(item.id)}
+                    disabled={item.status !== "pending" || actionsBusy}
                     onChange={(event) => {
                       const checked = event.currentTarget?.checked ?? false;
                       const previousAnchor = anchor.current;
@@ -208,6 +270,7 @@ function OshashSubmissionsPage() {
                       if ((event.nativeEvent as MouseEvent).shiftKey && anchorIndex >= 0) {
                         const range = items
                           .slice(Math.min(anchorIndex, index), Math.max(anchorIndex, index) + 1)
+                          .filter((row) => row.status === "pending")
                           .map((row) => row.id);
                         setSelected((old) =>
                           checked
@@ -241,39 +304,105 @@ function OshashSubmissionsPage() {
                 </Table.Td>
                 <Table.Td>{Math.round(item.duration)} 秒</Table.Td>
                 <Table.Td>
-                  {item.last_error ? (
-                    <Text size="xs" c="red">
-                      {item.last_error}
-                    </Text>
-                  ) : (
-                    <Badge color="orange">待提交</Badge>
-                  )}
+                  <Stack gap={4}>
+                    {item.status === "pending" && <Badge color="orange">待提交</Badge>}
+
+                    {item.status === "submitting" && <Badge color="blue">提交中</Badge>}
+
+                    {item.status === "uncertain" && (
+                      <>
+                        <Badge color="yellow">提交中 · 请求结果待确认</Badge>
+                        <Text size="xs" c="dimmed">
+                          请先在 ThePornDB 官网核实，不要直接重新提交。
+                        </Text>
+                      </>
+                    )}
+
+                    {item.last_error && (
+                      <Text size="xs" c="red">
+                        {item.last_error}
+                      </Text>
+                    )}
+                  </Stack>
                 </Table.Td>
                 <Table.Td>
-                  <Group gap="xs">
-                    <Button
-                      size="xs"
-                      loading={submitOne.isPending && submitOne.variables === item.id}
-                      disabled={
-                        submitBatch.isPending || deleteOne.isPending || deleteBatch.isPending
-                      }
-                      onClick={() => submitOne.mutate(item.id)}
-                    >
-                      提交
-                    </Button>
-                    <Button
-                      size="xs"
-                      color="red"
-                      variant="light"
-                      loading={deleteOne.isPending && deleteOne.variables === item.id}
-                      disabled={deleteOne.isPending || deleteBatch.isPending}
-                      onClick={() => {
-                        if (window.confirm("确定删除这条 OSHASH 记录吗？"))
-                          deleteOne.mutate(item.id);
-                      }}
-                    >
-                      删除
-                    </Button>
+                  <Group gap="xs" wrap="wrap">
+                    {item.status === "pending" && (
+                      <>
+                        <Button
+                          size="xs"
+                          loading={submitOne.isPending && submitOne.variables === item.id}
+                          disabled={actionsBusy}
+                          onClick={() => submitOne.mutate(item.id)}
+                        >
+                          提交
+                        </Button>
+
+                        <Button
+                          size="xs"
+                          color="red"
+                          variant="light"
+                          loading={deleteOne.isPending && deleteOne.variables === item.id}
+                          disabled={actionsBusy}
+                          onClick={() => {
+                            if (window.confirm("确定删除这条 OSHASH 记录吗？"))
+                              deleteOne.mutate(item.id);
+                          }}
+                        >
+                          删除
+                        </Button>
+                      </>
+                    )}
+
+                    {item.status === "uncertain" && (
+                      <>
+                        <Button
+                          size="xs"
+                          color="green"
+                          variant="light"
+                          loading={
+                            confirmAccepted.isPending && confirmAccepted.variables === item.id
+                          }
+                          disabled={actionsBusy}
+                          onClick={() => {
+                            if (
+                              window.confirm(
+                                "请确认已在 ThePornDB 官网核实该 OSHASH 已被接收。确认后将删除本地记录。",
+                              )
+                            )
+                              confirmAccepted.mutate(item.id);
+                          }}
+                        >
+                          确认官网已接收
+                        </Button>
+
+                        <Button
+                          size="xs"
+                          color="orange"
+                          variant="light"
+                          loading={
+                            confirmNotAccepted.isPending && confirmNotAccepted.variables === item.id
+                          }
+                          disabled={actionsBusy}
+                          onClick={() => {
+                            if (
+                              window.confirm(
+                                "请确认已在 ThePornDB 官网核实该 OSHASH 未被接收。确认后记录将恢复为待提交。",
+                              )
+                            )
+                              confirmNotAccepted.mutate(item.id);
+                          }}
+                        >
+                          确认官网未接收
+                        </Button>
+                      </>
+                    )}
+
+                    {item.status === "submitting" && (
+                      <Text size="xs" c="dimmed">
+                        正在提交，请勿重复操作
+                      </Text>
+                    )}
                   </Group>
                 </Table.Td>
               </Table.Tr>

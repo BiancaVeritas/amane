@@ -6,9 +6,19 @@
 
 from __future__ import annotations
 
-import pytest
+import json
+from urllib.parse import parse_qs, urlparse
 
-from amane.crawlers.actor.sites.minnano import _parse_figure, _parse_name_line, parse_minnano_detail
+import pytest
+from parsel import Selector
+
+from amane.crawlers.actor.sites.minnano import (
+    MinnanoActorCrawler,
+    _parse_figure,
+    _parse_name_line,
+    parse_minnano_detail,
+)
+from amane.net.errors import SourceError
 
 # (id, 原始名字行, 同页标签, 期望展示名, 期望读音)
 _NAME_CASES: list[tuple[str, str, frozenset[str], str, list[str]]] = [
@@ -97,3 +107,72 @@ def test_parse_figure_keeps_individual_measurements_and_standalone_cup() -> None
     assert _parse_figure("B70") == (None, 70, None, None, None)
     assert _parse_figure("Cカップ") == (None, None, None, None, "C")
     assert _parse_figure("B70 / Cカップ / W52") == (None, 70, 52, None, "C")
+
+
+@pytest.mark.asyncio
+async def test_search_uses_only_exact_standard_name_mapping_before_site_search(tmp_path):
+    mapping_dir = tmp_path / "mappings"
+    mapping_dir.mkdir()
+    (mapping_dir / "minnano_actress_map.json").write_text(
+        json.dumps({"725921": {"name": "長谷川杏実", "aliases": ["長谷川みお"]}}, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+    class NeverCalledClient:
+        async def get_html(self, *args, **kwargs):
+            raise AssertionError("mapped primary name should bypass website search")
+
+    crawler = MinnanoActorCrawler(NeverCalledClient(), data_dir=tmp_path)
+    assert await crawler._search("長谷川杏実") == "https://www.minnano-av.com/actress725921.html"
+
+
+@pytest.mark.asyncio
+async def test_search_alias_does_not_use_mapping(tmp_path):
+    mapping_dir = tmp_path / "mappings"
+    mapping_dir.mkdir()
+    (mapping_dir / "minnano_actress_map.json").write_text(
+        json.dumps({"725921": {"name": "長谷川杏実", "aliases": ["長谷川みお"]}}, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+    class EmptySearchClient:
+        async def get_html(self, url, **kwargs):
+            assert parse_qs(urlparse(url).query)["search_word"] == ["長谷川みお"]
+            return "<html><body></body></html>"
+
+    crawler = MinnanoActorCrawler(EmptySearchClient(), data_dir=tmp_path)
+    with pytest.raises(SourceError, match="网站检索"):
+        await crawler._search("長谷川みお")
+
+
+@pytest.mark.asyncio
+async def test_search_rejects_multiple_mapping_ids(tmp_path):
+    mapping_dir = tmp_path / "mappings"
+    mapping_dir.mkdir()
+    (mapping_dir / "minnano_actress_map.json").write_text(
+        json.dumps({"1": {"name": "同名", "aliases": []}, "2": {"name": "同名", "aliases": []}}, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+    class NeverCalledClient:
+        async def get_html(self, *args, **kwargs):
+            raise AssertionError("ambiguous mapping must not fall back to website search")
+
+    crawler = MinnanoActorCrawler(NeverCalledClient(), data_dir=tmp_path)
+    with pytest.raises(SourceError, match="多个 ID"):
+        await crawler._search("同名")
+
+
+def test_pick_search_hits_requires_unique_exact_result():
+    crawler = MinnanoActorCrawler(object())
+    html = Selector(
+        text="""<table class="tbllist actress">
+      <tr><td><h2 class="ttl"><a href="actress1.html">CCC</a></h2></td></tr>
+      <tr><td><h2 class="ttl"><a href="actress2.html">AAACCC</a></h2></td></tr>
+      <tr><td><h2 class="ttl"><a href="actress3.html">CCC</a></h2></td></tr>
+    </table>"""
+    )
+    assert crawler._pick_search_hits(html, "CCC") == [
+        "https://www.minnano-av.com/actress1.html",
+        "https://www.minnano-av.com/actress3.html",
+    ]

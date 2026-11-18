@@ -13,7 +13,9 @@ from urllib.parse import quote, urljoin, urlsplit, urlunsplit
 from parsel import Selector
 
 from amane.enums import ActorGender, SiteName
+from amane.mappings.actor_store import ActorMappingStore
 from amane.net.connectivity import ConnectivityOutcome
+from amane.net.errors import FailureReason, SourceError
 from amane.parsing import split_actor_aliases
 from amane.plugins.models import SourceCapability
 from amane.utils.dates import normalize_calendar_date
@@ -35,6 +37,9 @@ _ACTRESS_HREF_RE = re.compile(r"actress\d+\.html", re.IGNORECASE)
 
 
 class MinnanoActorCrawler(ActorCrawler):
+    # Minnano 的映射与站内检索只使用演员展示名, 不尝试数据库别名.
+    primary_name_only = True
+
     @classmethod
     def profile(cls) -> CrawlerProfile:
         return CrawlerProfile(
@@ -46,27 +51,52 @@ class MinnanoActorCrawler(ActorCrawler):
             cookies={"age_verified": "1"},
         )
 
+    def __init__(self, client, config=None, *, data_dir=None):
+        super().__init__(client, config)
+        self._actor_mappings = ActorMappingStore(data_dir) if data_dir is not None else None
+
     async def _search(self, name: str) -> str | None:
+        # 优先按展示名精确查询标准主名映射; 别名完全不参与.
+        if self._actor_mappings is not None:
+            matches = self._actor_mappings.find_ids_by_name(name)
+            if len(matches) == 1:
+                return f"{self.base_url}/actress{matches[0]}.html"
+            if len(matches) > 1:
+                raise SourceError(
+                    FailureReason.NOT_FOUND,
+                    detail=f"演员映射表中标准姓名「{name}」对应多个 ID：{', '.join(matches)}",
+                )
+
+        # 映射没有命中时才使用 Minnano 网站检索; 必须唯一命中才允许刮削.
         search_url = self._search_url(name)
         text = await self.client.get_html(search_url, cookies=self.cookies)
         html = Selector(text=text)
 
-        # 精确命中时常 302 到详情页; 跟随重定向后 HTML 已是详情.
+        # 站点精确检索常 302 到详情页; 详情页本身代表唯一结果.
         if html.css("div.act-profile").get():
             detail = extract_text(html, '//link[@rel="canonical"]/@href') or extract_text(
                 html, '//meta[@property="og:url"]/@content'
             )
             if detail:
                 return detail
-            # 未命中则从头像路径回退.
             img = extract_text(html, '//div[contains(@class,"thumb")]//img[contains(@src,"p_actress")]/@src')
             if img:
-                m = re.search(r"/(\d+)\.jpg", img)
-                if m:
-                    return f"{self.base_url}/actress{m.group(1)}.html"
-            return None
+                match = re.search(r"/(\d+)\.jpg", img)
+                if match:
+                    return f"{self.base_url}/actress{match.group(1)}.html"
+            raise SourceError(FailureReason.NOT_FOUND, detail=f"Minnano 检索「{name}」返回详情页，但无法确认演员 ID")
 
-        return self._pick_search_hit(html, name)
+        hits = self._pick_search_hits(html, name)
+        if len(hits) == 1:
+            return hits[0]
+        if len(hits) > 1:
+            raise SourceError(
+                FailureReason.NOT_FOUND,
+                detail=f"Minnano 网站检索「{name}」命中 {len(hits)} 个同名演员，结果不唯一",
+            )
+        raise SourceError(
+            FailureReason.NOT_FOUND, detail=f"映射表无标准姓名「{name}」；Minnano 网站检索也没有唯一匹配结果"
+        )
 
     def _search_url(self, name: str) -> str:
         return f"{self.base_url}/search_result.php?search_scope=actress&search_word={quote(name)}&search=Go"
@@ -75,19 +105,22 @@ class MinnanoActorCrawler(ActorCrawler):
         """探测检索入口: 首页可达不代表 ``search_result.php`` 可达, 后者处于挑战保护."""
         return await self.client.check(self._search_url("あ"), cookies=self.cookies)
 
-    def _pick_search_hit(self, html: Selector, name: str) -> str | None:
-        """行标题与查找名 (去掉注记括号后) 相等才算命中; 确认不了返回 None."""
+    def _pick_search_hits(self, html: Selector, name: str) -> list[str]:
+        """只收集主名与展示名精确相等的演员; 多个同名结果必须拒绝刮削."""
         if not name.strip():
-            return None
+            return []
         rows = html.xpath('//table[contains(@class,"tbllist") and contains(@class,"actress")]//tr[td]')
+        hits: list[str] = []
         for row in rows:
             title = extract_text(row, './/h2[contains(@class,"ttl")]/a/text()')
             href = extract_text(row, './/h2[contains(@class,"ttl")]/a/@href')
             if not title or not href or not _ACTRESS_HREF_RE.search(href):
                 continue
             if is_same_name(_strip_annotations(title), name):
-                return urljoin(self.base_url + "/", href.split("?", 1)[0])
-        return None
+                url = urljoin(self.base_url + "/", href.split("?", 1)[0])
+                if url not in hits:
+                    hits.append(url)
+        return hits
 
     async def _scrape(self, url: str) -> ActorMetadata | None:
         text = await self.client.get_html(url, cookies=self.cookies)

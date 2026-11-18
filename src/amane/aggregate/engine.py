@@ -73,7 +73,7 @@ def compile_priority(
     prefer: Mapping[MetadataField, Sequence[SourceName]],
     exclude: Mapping[MetadataField, Sequence[SourceName]] | None = None,
 ) -> defaultdict[MetadataField, list[str]]:
-    """content_routes[type] 是资格真值: 链上只会出现 route 内的站.
+    """content_routes[route] 是资格真值: 链上只会出现 route 内的站.
 
     prefer 与 route 求交后前置, 其余 route 站点保序接上. exclude 从该字段链上剔除;
     同一站同时出现在 prefer 与 exclude 时以 exclude 为准. 未覆盖字段直接使用 route.

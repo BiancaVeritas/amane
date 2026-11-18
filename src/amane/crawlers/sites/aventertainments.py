@@ -1,8 +1,8 @@
 """AV Entertainments DVD/Blu-ray catalog crawler.
 
-Searches the site's DVD catalog by product number. A work may have separate DVD
-and Blu-ray product IDs; the Blu-ray detail page is preferred, with a complete
-DVD-page fallback. Jacket is the single-image poster; Bigcover is the wide cover.
+Searches the site's DVD catalog by the supplied product number and requires an
+exact normalized number match; DVD and Blu-ray sibling IDs are not interchangeable.
+Jacket is the single-image poster; Bigcover is the wide cover.
 """
 
 from __future__ import annotations
@@ -34,27 +34,9 @@ def _text(value: object) -> str:
     return value.strip() if isinstance(value, str) else ""
 
 
-def _number_key(value: str) -> str:
-    """Normalize AVE's DVD and BD product numbers to one work identity."""
-    compact = re.sub(r"[^A-Z0-9]", "", value.upper())
-    return re.sub(r"BD(?=\d)", "", compact)
-
-
-def _is_bd_number(number: str) -> bool:
-    return re.search(r"BD-?\d+$", number.upper()) is not None
-
-
-def _search_terms(number: str) -> list[str]:
-    """Try the exact number and its DVD/BD sibling spelling without duplicates."""
-    raw = number.strip().upper()
-    terms = [raw]
-    match = re.fullmatch(r"([A-Z0-9]+?)(BD)?-?(\d+)", raw)
-    if match:
-        prefix, bd, digits = match.groups()
-        sibling = f"{prefix}{'' if bd else 'BD'}-{digits}"
-        if sibling not in terms:
-            terms.append(sibling)
-    return terms
+def _search_number_key(value: str) -> str:
+    """搜索结果只忽略大小写和连字符; 不把 DVD/BD 兄弟商品号视为同一检索号."""
+    return value.casefold().replace("-", "")
 
 
 def _jsonld_video(html: Selector) -> dict:
@@ -183,6 +165,33 @@ def _metadata_from_page(url: str, text: str) -> MediaMetadata | None:
     studio = _label_value(html, "スタジオ") or None
     series = _label_value(html, "シリーズ") or None
 
+    # AVE 的剧照完整列表位于“この作品のシーン”弹窗容器中; 预览区通常只展示其中一部分.
+    # 先读取弹窗内全部大图, 页面未提供弹窗时再回退到详情页预览区.
+    screenshot_nodes = html.xpath('//*[@id="sscontainerppv123"]//img[@src]/@src').getall()
+    if not screenshot_nodes:
+        screenshot_nodes = html.xpath(
+            '//*[contains(concat(" ", normalize-space(@class), " "), " gallery-block ")'
+            ' and contains(concat(" ", normalize-space(@class), " "), " grid-gallery ")]//img[@src]/@src'
+        ).getall()
+    extrafanart: list[str] = []
+    seen_screenshots: set[str] = set()
+    for raw_image_url in screenshot_nodes:
+        raw_image_url = _text(raw_image_url)
+        image_url = (
+            urljoin("https://imgs02.aventertainments.com/", raw_image_url)
+            if raw_image_url.startswith("/")
+            else urljoin(url, raw_image_url)
+        )
+        parsed_image_url = urlparse(image_url)
+        if (
+            parsed_image_url.netloc.casefold() not in {"imgs02.aventertainments.com", "www.aventertainments.com"}
+            or "/screenshot/" not in parsed_image_url.path.casefold()
+            or image_url in seen_screenshots
+        ):
+            continue
+        seen_screenshots.add(image_url)
+        extrafanart.append(image_url)
+
     # Confirmed mapping: Jacket = original poster; Bigcover = double-page cover.
     return MediaMetadata(
         number=number,
@@ -197,30 +206,13 @@ def _metadata_from_page(url: str, text: str) -> MediaMetadata | None:
         poster_urls=[jacket] if jacket else [],
         original_poster_urls=[jacket] if jacket else [],
         cover_urls=[bigcover] if bigcover else [],
+        extrafanart=extrafanart,
         double_page_poster_urls=[jacket] if jacket and bigcover else [],
         double_page_original_poster_urls=[jacket] if jacket and bigcover else [],
         double_page_cover_urls=[bigcover] if jacket and bigcover else [],
         external_id=(parse_qs(urlparse(url).query).get("pro") or [None])[0],
         source_url=url,
     )
-
-
-def _version_links(url: str, text: str) -> tuple[str | None, str | None]:
-    html = Selector(text=text)
-    blu_ray: str | None = None
-    dvd: str | None = None
-    for anchor in html.xpath('//*[contains(concat(" ", normalize-space(@class), " "), " tab-area ")]//a[@href]'):
-        href = urljoin(url, _text(anchor.xpath("./@href").get()))
-        label_parts = (
-            _text(anchor.xpath("normalize-space(string(.))").get()),
-            _text(anchor.xpath("./@data-tippy").get()),
-        )
-        label = " ".join(part for part in label_parts if part).casefold()
-        if "blu-ray" in label or "blu ray" in label or "ブルーレイ" in label:
-            blu_ray = href
-        elif re.search(r"\bdvd\b", label):
-            dvd = href
-    return blu_ray, dvd
 
 
 def _detail_links(text: str, base_url: str) -> list[str]:
@@ -249,7 +241,6 @@ def _image_bytes_valid(data: bytes) -> bool:
 class AVEntertainmentsCrawler(Crawler):
     def __init__(self, client: HttpClient, config: SiteConfig | None = None):
         super().__init__(client, config)
-        self._search_dvd_fallback: str | None = None
         self._search_detail_pages: dict[str, str] = {}
 
     @classmethod
@@ -262,29 +253,32 @@ class AVEntertainmentsCrawler(Crawler):
 
     async def _search(self, query: SearchQuery, options: FetchOptions | None = None) -> str | None:
         del options
-        self._search_dvd_fallback = None
         self._search_detail_pages = {}
-        target = _number_key(query.number)
-        candidate_urls: list[str] = []
-        for term in _search_terms(query.number):
-            params = urlencode({"lang": "2", "cat": "29", "keyword": term, "searchby": "keyword", "page": "1"})
-            search_url = f"{self.base_url.rstrip('/')}{_SEARCH_PATH}?{params}"
-            try:
-                page = await self.client.get_html(
-                    search_url,
-                    cookies=self.cookies,
-                    headers={**self.headers, "Referer": f"{self.base_url.rstrip('/')}/"},
-                )
-            except RequestError as exc:
-                if exc.http_status == 404:
-                    continue
-                raise
-            for candidate in _detail_links(page, search_url):
-                if candidate not in candidate_urls:
-                    candidate_urls.append(candidate)
+        # AVE 使用通用映射层传入的检索番号; 不再自行生成 DVD/BD 撞库搜索词。
+        term = query.number.strip()
+        if not term:
+            return None
+        target_keys = {_search_number_key(term)}
 
-        matched: list[tuple[int, str]] = []
-        for candidate in candidate_urls[:10]:
+        params = urlencode({"lang": "2", "cat": "29", "keyword": term, "searchby": "keyword", "page": "1"})
+        search_url = f"{self.base_url.rstrip('/')}{_SEARCH_PATH}?{params}"
+        try:
+            page = await self.client.get_html(
+                search_url,
+                cookies=self.cookies,
+                headers={**self.headers, "Referer": f"{self.base_url.rstrip('/')}/"},
+            )
+        except RequestError as exc:
+            if exc.http_status == 404:
+                return None
+            raise
+
+        candidates = _detail_links(page, search_url)
+        if not candidates:
+            return None
+
+        matched: list[str] = []
+        for candidate in candidates[:10]:
             try:
                 detail_html = await self.client.get_html(
                     candidate,
@@ -297,14 +291,14 @@ class AVEntertainmentsCrawler(Crawler):
                 raise
             self._search_detail_pages[candidate] = detail_html
             metadata = _metadata_from_page(candidate, detail_html)
-            if metadata is None or _number_key(metadata.number) != target:
+            if metadata is None or _search_number_key(metadata.number) not in target_keys:
                 continue
-            is_bd = _is_bd_number(metadata.number)
-            matched.append((0 if is_bd else 1, candidate))
-        self._search_dvd_fallback = next((candidate for priority, candidate in matched if priority == 1), None)
-        if not matched:
-            return None
-        return min(matched, key=lambda item: item[0])[1]
+            matched.append(candidate)
+
+        # 仅匹配通用映射层提供的检索番号; 不执行站内番号变体回退.
+        if matched:
+            return matched[0]
+        return None
 
     async def _scrape(self, url: str, options: FetchOptions | None = None) -> MediaMetadata | None:
         del options
@@ -320,57 +314,20 @@ class AVEntertainmentsCrawler(Crawler):
                 if exc.http_status == 404:
                     return None
                 raise
-        bd_url, dvd_url = _version_links(url, initial_html)
-        initial = _metadata_from_page(url, initial_html)
-        if initial is None:
+        metadata = _metadata_from_page(url, initial_html)
+        if metadata is None or not metadata.title or not metadata.poster_urls or not metadata.cover_urls:
             return None
-
-        # If the current page itself is BD, use it as the preferred candidate even
-        # when the version tabs are absent. Otherwise prefer the explicit BD tab.
-        work_key = _number_key(initial.number)
-        current_is_bd = _is_bd_number(initial.number)
-        ordered: list[str] = []
-        preferred_bd = bd_url or (url if current_is_bd else None)
-        preferred_dvd = dvd_url or (url if not current_is_bd else None) or self._search_dvd_fallback
-        for candidate in (preferred_bd, preferred_dvd):
-            if candidate and candidate not in ordered:
-                ordered.append(candidate)
-
-        for candidate in ordered:
-            page = self._search_detail_pages.pop(candidate, None)
-            if page is None and candidate == url:
-                page = initial_html
-            if page is None:
-                try:
-                    page = await self.client.get_html(
-                        candidate,
-                        cookies=self.cookies,
-                        headers={**self.headers, "Referer": url},
-                    )
-                except RequestError as exc:
-                    if exc.http_status == 404:
-                        continue
-                    raise
-            metadata = _metadata_from_page(candidate, page)
-            if (
-                metadata is None
-                or _number_key(metadata.number) != work_key
-                or not metadata.title
-                or not metadata.poster_urls
-                or not metadata.cover_urls
-            ):
-                continue
-            image_urls = (*metadata.poster_urls, *metadata.cover_urls)
-            checks = await asyncio.gather(
-                *(
-                    self.client.get_bytes(
-                        image_url,
-                        headers={**self.headers, "Referer": candidate},
-                    )
-                    for image_url in image_urls
-                ),
-                return_exceptions=True,
-            )
-            if all(isinstance(data, bytes) and _image_bytes_valid(data) for data in checks):
-                return metadata
-        return None
+        image_urls = (*metadata.poster_urls, *metadata.cover_urls)
+        checks = await asyncio.gather(
+            *(
+                self.client.get_bytes(
+                    image_url,
+                    headers={**self.headers, "Referer": url},
+                )
+                for image_url in image_urls
+            ),
+            return_exceptions=True,
+        )
+        if not all(isinstance(data, bytes) and _image_bytes_valid(data) for data in checks):
+            return None
+        return metadata

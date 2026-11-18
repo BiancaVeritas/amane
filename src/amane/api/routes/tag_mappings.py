@@ -5,7 +5,7 @@ from aiolimiter import AsyncLimiter
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import JSONResponse
 from httpx2 import AsyncClient, Timeout
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, StrictBool
 from pydantic_ai.direct import model_request
 from pydantic_ai.messages import ModelRequest, SystemPromptPart, UserPromptPart
 
@@ -25,7 +25,7 @@ class MappingUpdate(BaseModel):
 async def list_mappings(
     runtime: RuntimeDep,
     repo: RepoDep,
-    status: Literal["all", "pending", "mapped"] = "pending",
+    status: Literal["all", "pending", "mapped", "archived"] = "pending",
     language: Literal["all", "ja", "en", "zh", "other"] = "all",
     frequency: Literal["all", "high"] = "all",
     search: str = "",
@@ -51,6 +51,20 @@ async def list_mappings(
     return {"items": [item.__dict__ for item in items], "total": total, "stats": runtime.tag_mappings.counts()}
 
 
+@router.get("/state")
+async def get_mapping_state(runtime: RuntimeDep):
+    return {"enabled": runtime.tag_mappings.enabled}
+
+
+class MappingStateUpdate(BaseModel):
+    enabled: StrictBool
+
+
+@router.put("/state")
+async def update_mapping_state(req: MappingStateUpdate, runtime: RuntimeDep):
+    return {"enabled": runtime.tag_mappings.set_enabled(req.enabled)}
+
+
 @router.put("")
 async def save_mapping(req: MappingUpdate, runtime: RuntimeDep):
     try:
@@ -60,10 +74,33 @@ async def save_mapping(req: MappingUpdate, runtime: RuntimeDep):
     return item.__dict__
 
 
-@router.delete("/{original:path}", status_code=204)
-async def delete_mapping(original: str, runtime: RuntimeDep):
-    if not runtime.tag_mappings.delete(original):
-        raise HTTPException(404, "标签不存在")
+class MappingSelection(BaseModel):
+    originals: list[str] = Field(min_length=1, max_length=200)
+
+
+@router.put("/{original:path}/archive")
+async def archive_mapping(original: str, runtime: RuntimeDep):
+    if not runtime.tag_mappings.archive(original):
+        raise HTTPException(409, "词条不存在或已有中文译名，不能归档")
+    return {"archived": True}
+
+
+@router.put("/{original:path}/restore")
+async def restore_mapping(original: str, runtime: RuntimeDep):
+    if not runtime.tag_mappings.restore(original):
+        raise HTTPException(404, "归档词条不存在")
+    return {"archived": False}
+
+
+@router.post("/archive")
+async def archive_mappings(req: MappingSelection, runtime: RuntimeDep):
+    archived, skipped = runtime.tag_mappings.archive_many(req.originals)
+    return {"archived": archived, "skipped": skipped}
+
+
+@router.post("/restore")
+async def restore_mappings(req: MappingSelection, runtime: RuntimeDep):
+    return {"restored": runtime.tag_mappings.restore_many(req.originals)}
 
 
 @router.get("/export")

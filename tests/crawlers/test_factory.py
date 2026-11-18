@@ -1,6 +1,6 @@
 """爬虫工厂测试"""
 
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Any, cast
 
 import pytest
 
@@ -87,3 +87,44 @@ async def test_theporndb_film_and_actor_are_distinct_instances(http_client):
     assert isinstance(film, ThePornDBCrawler)
     assert isinstance(actor, ThePornDBActorCrawler)
     assert film is not actor
+
+
+@pytest.mark.parametrize(
+    ("name", "filename"),
+    [
+        ("caribbeancompr", "caribbeancompr_heyzo_index.json"),
+        ("d2pass", "d2pass_heyzo_index.json"),
+        ("caribbeancom_index", "caribbeancom_index.json"),
+    ],
+)
+@pytest.mark.asyncio(loop_scope="function")
+async def test_number_mapping_crawlers_receive_mapping_path(http_client, tmp_path, name, filename):
+    factory = CrawlerFactory(http_client, data_dir=tmp_path)
+
+    crawler = await factory.get(name)
+
+    assert crawler is not None
+    mapping_path = cast(Any, crawler)._mapping_path
+    assert mapping_path == tmp_path / "mappings" / filename
+    assert mapping_path.is_file()
+    assert mapping_path.read_text(encoding="utf-8") == "{}\n"
+
+    cached = await factory.get(name)
+    assert cached is crawler
+
+
+@pytest.mark.asyncio(loop_scope="function")
+async def test_minnano_actor_crawler_receives_data_dir(http_client, tmp_path):
+    factory = CrawlerFactory(http_client, data_dir=tmp_path)
+
+    crawler = await factory.get_actor("minnano")
+
+    assert crawler is not None
+    actor_mappings = cast(Any, crawler)._actor_mappings
+    assert actor_mappings is not None
+    assert actor_mappings.directory == tmp_path / "mappings"
+    assert actor_mappings.file == tmp_path / "mappings" / "minnano_actress_map.json"
+    assert actor_mappings.file.is_file()
+
+    cached = await factory.get_actor("minnano")
+    assert cached is crawler

@@ -200,3 +200,46 @@ async def test_write_nfo_omits_cover_when_original_url_missing(tmp_path: Path):
     assert await write_nfo(metadata, nfo_path) is True
     root = ET.parse(nfo_path).getroot()
     assert root.find("cover") is None
+
+
+@pytest.mark.asyncio(loop_scope="function")
+async def test_write_nfo_respects_global_tag_mapping_switch(tmp_path: Path):
+    """NFO 按写入时的全局开关决定使用映射标签还是原文。"""
+    mapping_path = tmp_path / "tag_mappings.json"
+    mapping_path.write_text(
+        '{"version":1,"enabled":true,"entries":{"中出し":{"translation":"内射"}}}',
+        encoding="utf-8",
+    )
+    metadata = Metadata(number="TAG-SWITCH", tags=["中出し", "制服"])
+    nfo_path = tmp_path / "TAG-SWITCH.nfo"
+
+    assert await write_nfo(metadata, nfo_path, tag_mapping_path=mapping_path) is True
+    root = ET.parse(nfo_path).getroot()
+    assert [node.text for node in root.findall("genre")] == ["内射", "制服"]
+    assert [node.text for node in root.findall("tag")] == ["内射", "制服"]
+
+    mapping_path.write_text(
+        '{"version":1,"enabled":false,"entries":{"中出し":{"translation":"内射"}}}',
+        encoding="utf-8",
+    )
+    assert await write_nfo(metadata, nfo_path, tag_mapping_path=mapping_path) is True
+    root = ET.parse(nfo_path).getroot()
+    assert [node.text for node in root.findall("genre")] == ["中出し", "制服"]
+    assert [node.text for node in root.findall("tag")] == ["中出し", "制服"]
+
+
+@pytest.mark.asyncio(loop_scope="function")
+async def test_write_nfo_uses_original_tags_when_global_mapping_is_disabled(tmp_path: Path):
+    """关闭全局映射后，NFO 的 genre/tag 必须全部保留原文。"""
+    mapping_path = tmp_path / "tag_mappings.json"
+    mapping_path.write_text(
+        '{"version":1,"enabled":false,"entries":{"中出し":{"translation":"内射"}}}',
+        encoding="utf-8",
+    )
+    metadata = Metadata(number="TAG-SWITCH-OFF", tags=["中出し", "制服"])
+    nfo_path = tmp_path / "TAG-SWITCH-OFF.nfo"
+
+    assert await write_nfo(metadata, nfo_path, tag_mapping_path=mapping_path) is True
+    root = ET.parse(nfo_path).getroot()
+    assert [node.text for node in root.findall("genre")] == ["中出し", "制服"]
+    assert [node.text for node in root.findall("tag")] == ["中出し", "制服"]

@@ -197,7 +197,8 @@
       "scan_invalid": "Scan unwanted",
       "delete": "Delete",
       "semantic_index": "Semantic index",
-      "semantic_benchmark": "Benchmark"
+      "semantic_benchmark": "Benchmark",
+      "actor_push": "Push actors"
     },
     "cleanup": {
       "remove_missing_files": {
@@ -251,6 +252,10 @@
     "scrape": {
       "number": {
         "label": "Number"
+      },
+      "library_number": {
+        "label": "Library Number",
+        "description": "The number used for the local library record"
       },
       "media_id": {
         "label": "File ID",

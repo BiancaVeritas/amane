@@ -77,6 +77,7 @@
         "description": "Set priority for specific fields. Other sites in the type route are still requested",
         "options": {
           "title": "Title",
+          "original_title": "Original Title",
           "actors": "Actors",
           "tags": "Tags",
           "release": "Release Date",
@@ -86,6 +87,7 @@
           "studio": "Studio",
           "publisher": "Publisher",
           "plot": "Plot",
+          "original_plot": "Original Plot",
           "poster_urls": "Poster",
           "cover_urls": "Cover",
           "trailer_urls": "Trailer",
@@ -129,7 +131,8 @@
             "caribbeancom": "Caribbeancom",
             "caribbeancompr": "Caribbeancompr",
             "pacopacomama": "Pacopacomama",
-            "tokyo_hot": "Tokyo-Hot"
+            "tokyo_hot": "Tokyo-Hot",
+            "caribbeancom_index": "Caribbeancom Index"
           },
           "$": {
             "options": {
@@ -169,7 +172,8 @@
               "caribbeancompr": "Caribbeancompr",
               "pacopacomama": "Pacopacomama",
               "tokyo_hot": "Tokyo-Hot",
-              "d2pass": "d2pass"
+              "d2pass": "d2pass",
+              "caribbeancom_index": "Caribbeancom Index"
             }
           }
         }
@@ -179,6 +183,7 @@
         "description": "Sites a field must not use",
         "options": {
           "title": "Title",
+          "original_title": "Original Title",
           "actors": "Actors",
           "tags": "Tags",
           "release": "Release Date",
@@ -188,6 +193,7 @@
           "studio": "Studio",
           "publisher": "Publisher",
           "plot": "Plot",
+          "original_plot": "Original Plot",
           "poster_urls": "Poster",
           "cover_urls": "Cover",
           "trailer_urls": "Trailer",
@@ -231,7 +237,8 @@
             "caribbeancom": "Caribbeancom",
             "caribbeancompr": "Caribbeancompr",
             "pacopacomama": "Pacopacomama",
-            "tokyo_hot": "Tokyo-Hot"
+            "tokyo_hot": "Tokyo-Hot",
+            "caribbeancom_index": "Caribbeancom Index"
           },
           "$": {
             "options": {
@@ -271,7 +278,8 @@
               "caribbeancompr": "Caribbeancompr",
               "pacopacomama": "Pacopacomama",
               "tokyo_hot": "Tokyo-Hot",
-              "d2pass": "d2pass"
+              "d2pass": "d2pass",
+              "caribbeancom_index": "Caribbeancom Index"
             }
           }
         }
@@ -335,7 +343,8 @@
           "r18dev": "r18dev",
           "theporndb": "theporndb",
           "wikipedia": "wikipedia",
-          "xcity": "xcity"
+          "xcity": "xcity",
+          "caribbeancom_index": "Caribbeancom Index"
         },
         "$": {
           "base_url": {
@@ -437,12 +446,13 @@
         "description": "Sources and default priority by content type",
         "options": {
           "censored": "Censored",
-          "uncensored": "Uncensored",
           "chinese": "Chinese",
           "western": "Western",
           "fc2": "FC2",
           "amateur": "Amateur",
-          "hentai": "Hentai"
+          "hentai": "Hentai",
+          "uncensored_dvd": "Uncensored DVD",
+          "uncensored_streaming": "Uncensored streaming"
         },
         "$": {
           "options": {
@@ -481,7 +491,8 @@
             "caribbeancom": "Caribbeancom",
             "caribbeancompr": "Caribbeancompr",
             "pacopacomama": "Pacopacomama",
-            "tokyo_hot": "Tokyo-Hot"
+            "tokyo_hot": "Tokyo-Hot",
+            "caribbeancom_index": "Caribbeancom Index"
           },
           "$": {
             "options": {
@@ -521,10 +532,18 @@
               "caribbeancompr": "Caribbeancompr",
               "pacopacomama": "Pacopacomama",
               "tokyo_hot": "Tokyo-Hot",
-              "d2pass": "d2pass"
+              "d2pass": "d2pass",
+              "caribbeancom_index": "Caribbeancom Index"
             }
           }
         }
+      },
+      "uncensored_streaming_number_rules": {
+        "label": "Uncensored streaming number rules",
+        "description": "One regular expression per line; full-number matching, case-insensitive."
+      },
+      "number_mapping_rules": {
+        "label": "Number Mapping Rules"
       }
     },
     "network": {

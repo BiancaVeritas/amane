@@ -5,6 +5,7 @@ import sys
 import threading
 import time
 from pathlib import Path
+from types import SimpleNamespace
 from typing import cast
 
 import pytest
@@ -22,6 +23,7 @@ from amane.db.repository import Repository
 from amane.enums import LibraryAutomation
 from amane.events import EventBus
 from amane.library import LibraryScan
+from amane.parsing import ContentType
 from amane.scheduler.service import WatcherService
 from amane.scheduler.watcher import DEBOUNCE_SECONDS, FileWatcher, _Handler
 from amane.utils.path import path_is_under
@@ -642,6 +644,190 @@ class TestWatcherService:
         assert await repo.list_tasks() == []
 
     @pytest.mark.asyncio(loop_scope="function")
+    async def test_on_file_found_western_identity_match_skips_scrape(
+        self, service, repo: Repository, tmp_path: Path, monkeypatch
+    ):
+        """WESTERN 本地身份命中时恢复关联，不创建自动刮削任务。"""
+        lib = await repo.create_library(name="t", path=str(tmp_path), automation=LibraryAutomation.SCRAPE)
+        assert lib.id is not None
+
+        test_file = tmp_path / "western-test.mp4"
+        test_file.write_bytes(b"\x00" * 100)
+
+        parsed = SimpleNamespace(
+            content_type=ContentType.WESTERN,
+            number="WESTERN-TEST-001",
+        )
+        calls = []
+
+        monkeypatch.setattr(
+            "amane.scheduler.service.parse_file_info",
+            lambda _: parsed,
+        )
+
+        async def matched(repo_arg, media):
+            calls.append(media.path)
+            return True
+
+        monkeypatch.setattr(
+            "amane.scheduler.service.refresh_media_association",
+            matched,
+        )
+
+        await service._on_file_found(test_file, lib.id)
+
+        assert calls == [str(test_file)]
+        assert await repo.list_tasks() == []
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_on_file_found_western_identity_miss_creates_scrape_task(
+        self, service, repo: Repository, tmp_path: Path, monkeypatch
+    ):
+        """WESTERN 本地身份未命中时，普通视频允许创建自动刮削任务。"""
+        lib = await repo.create_library(name="t", path=str(tmp_path), automation=LibraryAutomation.SCRAPE)
+        assert lib.id is not None
+
+        test_file = tmp_path / "western-test.mp4"
+        test_file.write_bytes(b"\x00" * 100)
+
+        parsed = SimpleNamespace(
+            content_type=ContentType.WESTERN,
+            number="WESTERN-TEST-001",
+        )
+        calls = []
+
+        monkeypatch.setattr(
+            "amane.scheduler.service.parse_file_info",
+            lambda _: parsed,
+        )
+
+        async def not_matched(repo_arg, media):
+            calls.append(media.path)
+            return False
+
+        monkeypatch.setattr(
+            "amane.scheduler.service.refresh_media_association",
+            not_matched,
+        )
+
+        await service._on_file_found(test_file, lib.id)
+
+        assert calls == [str(test_file)]
+        tasks = await repo.list_tasks()
+        assert len(tasks) == 1
+        assert tasks[0].type.value == "scrape"
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_on_file_found_western_strm_identity_miss_creates_scrape_task(
+        self, service, repo: Repository, tmp_path: Path, monkeypatch
+    ):
+        """WESTERN STRM 身份未命中时创建自动刮削任务。"""
+        lib = await repo.create_library(name="t", path=str(tmp_path), automation=LibraryAutomation.SCRAPE)
+        assert lib.id is not None
+
+        test_file = tmp_path / "western-test.strm"
+        test_file.write_text("115-file-id", encoding="utf-8")
+
+        parsed = SimpleNamespace(
+            content_type=ContentType.WESTERN,
+            number="WESTERN-TEST-001",
+        )
+        calls = []
+
+        monkeypatch.setattr(
+            "amane.scheduler.service.parse_file_info",
+            lambda _: parsed,
+        )
+
+        async def not_matched(repo_arg, media):
+            calls.append(media.path)
+            return False
+
+        monkeypatch.setattr(
+            "amane.scheduler.service.refresh_media_association",
+            not_matched,
+        )
+
+        await service._on_file_found(test_file, lib.id)
+
+        assert calls == [str(test_file)]
+        tasks = await repo.list_tasks()
+        assert len(tasks) == 1
+        assert tasks[0].type.value == "scrape"
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_on_file_found_western_refresh_miss_does_not_scrape(
+        self, service, repo: Repository, tmp_path: Path, monkeypatch
+    ):
+        """WESTERN REFRESH 身份未命中时保持待处理，不创建刮削任务。"""
+        lib = await repo.create_library(name="t", path=str(tmp_path), automation=LibraryAutomation.REFRESH)
+        assert lib.id is not None
+
+        test_file = tmp_path / "western-test.mp4"
+        test_file.write_bytes(b"\x00" * 100)
+
+        parsed = SimpleNamespace(
+            content_type=ContentType.WESTERN,
+            number="WESTERN-TEST-001",
+        )
+        calls = []
+
+        monkeypatch.setattr(
+            "amane.scheduler.service.parse_file_info",
+            lambda _: parsed,
+        )
+
+        async def not_matched(repo_arg, media):
+            calls.append(media.path)
+            return False
+
+        monkeypatch.setattr(
+            "amane.scheduler.service.refresh_media_association",
+            not_matched,
+        )
+
+        await service._on_file_found(test_file, lib.id)
+
+        assert calls == [str(test_file)]
+        assert await repo.list_tasks() == []
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_on_file_found_western_without_number_skips_identity_check(
+        self, service, repo: Repository, tmp_path: Path, monkeypatch
+    ):
+        """WESTERN 文件没有解析出番号时，不执行身份预检查，也不创建任务。"""
+        lib = await repo.create_library(name="t", path=str(tmp_path), automation=LibraryAutomation.SCRAPE)
+        assert lib.id is not None
+
+        test_file = tmp_path / "western-no-number.mp4"
+        test_file.write_bytes(b"\x00" * 100)
+
+        parsed = SimpleNamespace(
+            content_type=ContentType.WESTERN,
+            number=None,
+        )
+        calls = []
+
+        monkeypatch.setattr(
+            "amane.scheduler.service.parse_file_info",
+            lambda _: parsed,
+        )
+
+        async def should_not_run(repo_arg, media):
+            calls.append(media.path)
+            return False
+
+        monkeypatch.setattr(
+            "amane.scheduler.service.refresh_media_association",
+            should_not_run,
+        )
+
+        await service._on_file_found(test_file, lib.id)
+
+        assert calls == []
+        assert await repo.list_tasks() == []
+
+    @pytest.mark.asyncio(loop_scope="function")
     async def test_debounce_loop_flushes_ready_files(self, service, repo: Repository, bus, tmp_path: Path):
         """验证 debounce 循环处理通过 debounce 窗口的文件"""
         await repo.create_library(name="t", path=str(tmp_path), automation=LibraryAutomation.SCRAPE)
@@ -786,6 +972,174 @@ class TestWatcherService:
 
         media = await repo.get_media_file_by_path(str(dest))
         assert media is not None
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_on_file_moved_western_identity_match_skips_scrape(
+        self, service, repo: Repository, tmp_path: Path, monkeypatch
+    ):
+        """WESTERN 文件移动后身份命中，不创建刮削任务，并使用新路径预检查。"""
+        lib = await repo.create_library(name="t", path=str(tmp_path), automation=LibraryAutomation.SCRAPE)
+        assert lib.id is not None
+
+        src = tmp_path / "old.mp4"
+        dest = tmp_path / "new.mp4"
+        src.write_bytes(b"\x00" * 100)
+
+        media = await repo.create_media_file(library_id=lib.id, path=str(src))
+        assert media.id is not None
+
+        parsed = SimpleNamespace(
+            content_type=ContentType.WESTERN,
+            number="WESTERN-TEST-001",
+        )
+        calls = []
+
+        monkeypatch.setattr(
+            "amane.scheduler.service.parse_file_info",
+            lambda _: parsed,
+        )
+
+        async def matched(repo_arg, updated):
+            calls.append(updated.path)
+            return True
+
+        monkeypatch.setattr(
+            "amane.scheduler.service.refresh_media_association",
+            matched,
+        )
+
+        await service._on_file_moved(src, dest, lib.id)
+
+        assert calls == [str(dest)]
+        assert await repo.list_tasks() == []
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_on_file_moved_western_identity_miss_creates_scrape_task(
+        self, service, repo: Repository, tmp_path: Path, monkeypatch
+    ):
+        """WESTERN 文件移动后身份未命中，SCRAPE 模式创建刮削任务。"""
+        lib = await repo.create_library(name="t", path=str(tmp_path), automation=LibraryAutomation.SCRAPE)
+        assert lib.id is not None
+
+        src = tmp_path / "old.mp4"
+        dest = tmp_path / "new.mp4"
+        src.write_bytes(b"\x00" * 100)
+
+        media = await repo.create_media_file(library_id=lib.id, path=str(src))
+        assert media.id is not None
+
+        parsed = SimpleNamespace(
+            content_type=ContentType.WESTERN,
+            number="WESTERN-TEST-001",
+        )
+        calls = []
+
+        monkeypatch.setattr(
+            "amane.scheduler.service.parse_file_info",
+            lambda _: parsed,
+        )
+
+        async def not_matched(repo_arg, updated):
+            calls.append(updated.path)
+            return False
+
+        monkeypatch.setattr(
+            "amane.scheduler.service.refresh_media_association",
+            not_matched,
+        )
+
+        await service._on_file_moved(src, dest, lib.id)
+
+        assert calls == [str(dest)]
+        tasks = await repo.list_tasks()
+        assert len(tasks) == 1
+        assert tasks[0].type.value == "scrape"
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_on_file_moved_western_strm_identity_miss_creates_scrape_task(
+        self, service, repo: Repository, tmp_path: Path, monkeypatch
+    ):
+        """WESTERN STRM 移动后身份未命中时创建自动刮削任务。"""
+        lib = await repo.create_library(name="t", path=str(tmp_path), automation=LibraryAutomation.SCRAPE)
+        assert lib.id is not None
+
+        src = tmp_path / "old.strm"
+        dest = tmp_path / "new.strm"
+        src.write_text("115-file-id", encoding="utf-8")
+
+        media = await repo.create_media_file(library_id=lib.id, path=str(src))
+        assert media.id is not None
+
+        parsed = SimpleNamespace(
+            content_type=ContentType.WESTERN,
+            number="WESTERN-TEST-001",
+        )
+        calls = []
+
+        monkeypatch.setattr(
+            "amane.scheduler.service.parse_file_info",
+            lambda _: parsed,
+        )
+
+        async def not_matched(repo_arg, updated):
+            calls.append(updated.path)
+            return False
+
+        monkeypatch.setattr(
+            "amane.scheduler.service.refresh_media_association",
+            not_matched,
+        )
+
+        await service._on_file_moved(src, dest, lib.id)
+
+        assert calls == [str(dest)]
+        tasks = await repo.list_tasks()
+        assert len(tasks) == 1
+        assert tasks[0].type.value == "scrape"
+
+    @pytest.mark.parametrize(
+        "content_type",
+        [ContentType.CENSORED, ContentType.UNCENSORED],
+    )
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_on_file_moved_non_western_scrape_does_not_precheck_or_scrape(
+        self, service, repo: Repository, tmp_path: Path, monkeypatch, content_type: ContentType
+    ):
+        """非 WESTERN 文件移动保持旧行为，不执行身份预检查，也不创建刮削任务。"""
+        lib = await repo.create_library(name="t", path=str(tmp_path), automation=LibraryAutomation.SCRAPE)
+        assert lib.id is not None
+
+        src = tmp_path / "old.mp4"
+        dest = tmp_path / "new.mp4"
+        src.write_bytes(b"\x00" * 100)
+
+        media = await repo.create_media_file(library_id=lib.id, path=str(src))
+        assert media.id is not None
+
+        parsed = SimpleNamespace(
+            content_type=content_type,
+            number="MIDV-123",
+        )
+        calls = []
+
+        monkeypatch.setattr(
+            "amane.scheduler.service.parse_file_info",
+            lambda _: parsed,
+        )
+
+        async def should_not_run(repo_arg, updated):
+            calls.append(updated.path)
+            return False
+
+        monkeypatch.setattr(
+            "amane.scheduler.service.refresh_media_association",
+            should_not_run,
+        )
+
+        await service._on_file_moved(src, dest, lib.id)
+
+        assert calls == []
+        assert await repo.list_tasks() == []
 
     @pytest.mark.asyncio(loop_scope="function")
     async def test_add_library_hot(self, service, repo: Repository, tmp_path: Path):

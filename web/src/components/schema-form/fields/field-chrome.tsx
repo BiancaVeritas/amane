@@ -1,5 +1,6 @@
-import { Group, Input, Stack, Text } from "@mantine/core";
+import { Button, Code, Group, Input, Modal, Stack, Text } from "@mantine/core";
 import type * as React from "react";
+import { useState } from "react";
 import { useNarrowViewport } from "@/hooks/use-narrow-viewport";
 import type { FieldVariant } from "../schema";
 import classes from "./field-chrome.module.css";
@@ -49,6 +50,8 @@ export function FieldChrome({
   error,
 }: FieldChromeProps) {
   const narrow = useNarrowViewport();
+  const [numberMappingHelpOpen, setNumberMappingHelpOpen] = useState(false);
+  const isNumberMappingRules = label === "番号映射规则" || label === "Number Mapping Rules";
 
   if (variant === "bare") {
     return (
@@ -101,15 +104,107 @@ export function FieldChrome({
   return (
     <Stack gap="xs" py="xs">
       <Stack gap={2}>
-        <Input.Label htmlFor={htmlFor} size="sm" fw={500}>
-          {label}
-        </Input.Label>
-        {description && (
+        <Group gap="xs" align="center">
+          <Input.Label htmlFor={htmlFor} size="sm" fw={500}>
+            {label}
+          </Input.Label>
+          {isNumberMappingRules && (
+            <Button
+              size="compact-xs"
+              variant="subtle"
+              onClick={() => setNumberMappingHelpOpen(true)}
+            >
+              规则说明
+            </Button>
+          )}
+        </Group>
+        {description && !isNumberMappingRules && (
           <Text size="xs" c="dimmed">
             {description}
           </Text>
         )}
       </Stack>
+      {isNumberMappingRules && (
+        <Modal
+          opened={numberMappingHelpOpen}
+          onClose={() => setNumberMappingHelpOpen(false)}
+          title="番号映射规则说明"
+          size="xl"
+          centered
+        >
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: narrow ? "minmax(0, 1fr)" : "repeat(2, minmax(0, 1fr))",
+              gap: "var(--mantine-spacing-lg)",
+            }}
+          >
+            <div>
+              <Stack gap="sm">
+                <Text fw={700}>左侧：匹配正则表达式</Text>
+                <Text size="sm" c="dimmed">
+                  左边用于判断原番号是否符合规则。建议使用 ^ 和 $
+                  限定完整番号，避免只匹配到番号的一部分。
+                </Text>
+                <Text size="sm">
+                  <Code>^</Code> 匹配字符串开头；<Code>$</Code> 匹配字符串结尾。
+                </Text>
+                <Text size="sm">
+                  <Code>()</Code>{" "}
+                  捕获一段内容，供右侧替换表达式引用；从左到右依次编号为第1组、第2组……
+                </Text>
+                <Text size="sm">
+                  <Code>[0-9]+</Code> 匹配一个或多个数字；<Code>[A-Z]+</Code>{" "}
+                  匹配一个或多个英文字母。
+                </Text>
+                <Text size="sm">
+                  <Code>-</Code> 匹配短横线；<Code>\.</Code>{" "}
+                  匹配普通点号（点号在正则中有特殊含义，需要转义）。
+                </Text>
+                <Text fw={600} size="sm">
+                  示例
+                </Text>
+                <Code block>^(RED)-([0-9]+)$</Code>
+                <Text size="sm" c="dimmed">
+                  匹配 RED-163，捕获组1为 RED，捕获组2为 163。不会匹配 PRED-163，也不会匹配
+                  RED-163-extra。
+                </Text>
+              </Stack>
+            </div>
+            <div>
+              <Stack gap="sm">
+                <Text fw={700}>右侧：替换表达式</Text>
+                <Text size="sm" c="dimmed">
+                  右边用于生成实际发送给来源网站检索的新番号，可以组合固定文字和左侧捕获的内容。
+                </Text>
+                <Text size="sm">
+                  <Code>\g&lt;1&gt;</Code> 引用左侧第1个捕获组；<Code>\g&lt;2&gt;</Code>{" "}
+                  引用第2个捕获组，以此类推。
+                </Text>
+                <Text size="sm">直接输入的字母、数字和符号会作为固定文本保留。</Text>
+                <Text fw={600} size="sm">
+                  示例1：删除短横线
+                </Text>
+                <Code block>^(RED)-([0-9]+)$ =&gt; RED\g&lt;2&gt;</Code>
+                <Text size="sm" c="dimmed">
+                  RED-163 → RED163
+                </Text>
+                <Text fw={600} size="sm">
+                  示例2：更换系列前缀
+                </Text>
+                <Code block>^(RED)-([0-9]+)$ =&gt; PRED-\g&lt;2&gt;</Code>
+                <Text size="sm" c="dimmed">
+                  RED-163 → PRED-163
+                </Text>
+              </Stack>
+            </div>
+          </div>
+          <Text size="xs" c="dimmed" mt="lg">
+            规则按列表顺序执行，第一条匹配成功后停止；没有匹配时保留原番号。每行格式为：匹配正则表达式
+            =&gt; 替换表达式。
+          </Text>
+        </Modal>
+      )}
       {children}
       {error && <Input.Error size="xs">{error}</Input.Error>}
     </Stack>

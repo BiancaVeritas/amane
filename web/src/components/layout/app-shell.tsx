@@ -117,6 +117,7 @@ function NavItemLink({ item, onNavigate }: { item: NavItem; onNavigate?: () => v
   const { pathname } = useLocation();
   const navigate = useNavigate();
   const listDefaults = useUIStore((state) => state.listDefaults);
+  const metaSort = useUIStore((state) => state.metaSort);
   const Icon = item.icon;
   const shell = {
     label: t(item.labelKey),
@@ -136,7 +137,16 @@ function NavItemLink({ item, onNavigate }: { item: NavItem; onNavigate?: () => v
           navItemClick(
             event,
             onNavigate,
-            () => void navigate({ to: "/meta", search: listDefaults.meta ?? {} }),
+            () =>
+              void navigate({
+                to: "/meta",
+                search: {
+                  ...listDefaults.meta,
+                  // 侧栏默认参数可以保留筛选/视图, 但不能覆盖用户最近一次选择的排序.
+                  sort_by: metaSort.sort_by,
+                  order: metaSort.order,
+                },
+              }),
           )
         }
         {...shell}
@@ -458,6 +468,20 @@ export function AppShellLayout(): ReactNode {
           to="/tag-mappings"
           label="标签中文映射"
           leftSection={<IconTags size={18} />}
+          onClick={closeMobile}
+        />
+        <NavLink
+          component={Link}
+          to="/number-mappings"
+          label="番号映射管理"
+          leftSection={<IconListDetails size={18} />}
+          onClick={closeMobile}
+        />
+        <NavLink
+          component={Link}
+          to="/actor-mappings"
+          label="演员映射管理"
+          leftSection={<IconListDetails size={18} />}
           onClick={closeMobile}
         />
         <NavLink

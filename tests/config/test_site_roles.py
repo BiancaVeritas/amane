@@ -28,8 +28,19 @@ class TestSiteCapabilitySchema:
 
     def test_film_content_routes_value_items_enum(self):
         schema = ScrapingConfig.model_json_schema()
-        props = schema["properties"]["content_routes"]["additionalProperties"]
+        route_schema = schema["properties"]["content_routes"]
+        props = route_schema["additionalProperties"]
         assert set(props["items"]["enum"]) == set(FILM_METADATA_SITES)
+        assert set(route_schema["propertyNames"]["enum"]) == {
+            "censored",
+            "uncensored_dvd",
+            "uncensored_streaming",
+            "chinese",
+            "western",
+            "fc2",
+            "amateur",
+            "hentai",
+        }
         assert props.get("x-ordered") is True
         assert SiteName.MINNANO not in props["items"]["enum"]
         assert SiteName.WIKIPEDIA not in props["items"]["enum"]

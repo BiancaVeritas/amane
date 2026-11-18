@@ -957,6 +957,8 @@ function TitleDetailPage() {
             >
               <FanartStrip
                 images={item.extrafanart ?? []}
+                maxVisible={12}
+                expandInModal
                 imageSources={item.image_sources ?? {}}
               />
             </FieldBlock>

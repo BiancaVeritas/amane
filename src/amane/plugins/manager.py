@@ -204,8 +204,9 @@ class PluginManager:
         Missing namespaced third-party IDs are warnings when ``require_available`` is false.
         """
         known = {descriptor.id: descriptor for descriptor in self.descriptors()}
-        for content_type, route in hot.scraping.content_routes.items():
-            field = f"scraping.content_routes.{content_type}"
+        for route_key, route in hot.scraping.content_routes.items():
+            content_type = "uncensored" if route_key in {"uncensored_dvd", "uncensored_streaming"} else route_key
+            field = f"scraping.content_routes.{route_key}"
             for source_id in route:
                 descriptor = self._descriptor_for_route(
                     str(source_id), known, require_available=require_available, field=field

@@ -1,6 +1,6 @@
-from sqlmodel import col, select
+from sqlmodel import col, delete, select, update
 
-from ..models import OshashSubmission
+from ..models import OshashSubmission, OshashSubmissionStatus
 from .base import RepositoryMixinBase
 
 
@@ -18,7 +18,11 @@ class OshashRepoMixin(RepositoryMixinBase):
             if existing.first() is None:
                 session.add(
                     OshashSubmission(
-                        theporndb_uuid=theporndb_uuid, oshash=oshash, duration=duration, title=title, path=path
+                        theporndb_uuid=theporndb_uuid,
+                        oshash=oshash,
+                        duration=duration,
+                        title=title,
+                        path=path,
                     )
                 )
                 await session.commit()
@@ -40,27 +44,109 @@ class OshashRepoMixin(RepositoryMixinBase):
         async with self._session() as session:
             return await session.get(OshashSubmission, submission_id)
 
-    async def finish_oshash_submission(self, submission_id: int, *, error: str | None) -> None:
+    async def claim_oshash_submission(self, submission_id: int) -> bool:
+        """Atomically claim a pending row for manual submission."""
         async with self._session() as session:
-            row = await session.get(OshashSubmission, submission_id)
-            if row is None:
-                return
-            if error is None:
-                await session.delete(row)
-            else:
-                row.last_error = error[:2000]
-                session.add(row)
+            result = await session.exec(
+                update(OshashSubmission)
+                .where(
+                    col(OshashSubmission.id) == submission_id,
+                    col(OshashSubmission.status) == OshashSubmissionStatus.PENDING,
+                )
+                .values(
+                    status=OshashSubmissionStatus.SUBMITTING,
+                    last_error=None,
+                )
+            )
             await session.commit()
+            return result.rowcount == 1
+
+    async def finish_oshash_submission(
+        self,
+        submission_id: int,
+        *,
+        error: str | None,
+        uncertain: bool = False,
+    ) -> bool:
+        """Finish only a row currently claimed by this submission attempt."""
+        async with self._session() as session:
+            if error is None:
+                result = await session.exec(
+                    delete(OshashSubmission).where(
+                        col(OshashSubmission.id) == submission_id,
+                        col(OshashSubmission.status) == OshashSubmissionStatus.SUBMITTING,
+                    )
+                )
+            else:
+                result = await session.exec(
+                    update(OshashSubmission)
+                    .where(
+                        col(OshashSubmission.id) == submission_id,
+                        col(OshashSubmission.status) == OshashSubmissionStatus.SUBMITTING,
+                    )
+                    .values(
+                        status=(OshashSubmissionStatus.UNCERTAIN if uncertain else OshashSubmissionStatus.PENDING),
+                        last_error=error[:2000],
+                    )
+                )
+            await session.commit()
+            return result.rowcount == 1
+
+    async def recover_oshash_submissions(self) -> int:
+        """Mark interrupted submissions uncertain after an application restart."""
+        async with self._session() as session:
+            result = await session.exec(
+                update(OshashSubmission)
+                .where(col(OshashSubmission.status) == OshashSubmissionStatus.SUBMITTING)
+                .values(
+                    status=OshashSubmissionStatus.UNCERTAIN,
+                    last_error="应用程序重启时提交请求尚未完成，结果待确认",
+                )
+            )
+            await session.commit()
+            return result.rowcount
+
+    async def confirm_oshash_submission_accepted(self, submission_id: int) -> bool:
+        """Remove an uncertain row after the user confirms it was accepted."""
+        async with self._session() as session:
+            result = await session.exec(
+                delete(OshashSubmission).where(
+                    col(OshashSubmission.id) == submission_id,
+                    col(OshashSubmission.status) == OshashSubmissionStatus.UNCERTAIN,
+                )
+            )
+            await session.commit()
+            return result.rowcount == 1
+
+    async def retry_uncertain_oshash_submission(self, submission_id: int) -> bool:
+        """Return an uncertain row to pending after the user confirms it was not accepted."""
+        async with self._session() as session:
+            result = await session.exec(
+                update(OshashSubmission)
+                .where(
+                    col(OshashSubmission.id) == submission_id,
+                    col(OshashSubmission.status) == OshashSubmissionStatus.UNCERTAIN,
+                )
+                .values(
+                    status=OshashSubmissionStatus.PENDING,
+                    last_error=None,
+                )
+            )
+            await session.commit()
+            return result.rowcount == 1
 
     async def delete_oshash_submissions(self, submission_ids: list[int]) -> int:
-        """Delete only the explicitly selected pending submission rows."""
+        """Delete only explicitly selected pending submission rows."""
         ids = list(dict.fromkeys(submission_ids))
         if not ids:
             return 0
+
         async with self._session() as session:
-            rows = await session.exec(select(OshashSubmission).where(col(OshashSubmission.id).in_(ids)))
-            found = list(rows.all())
-            for row in found:
-                await session.delete(row)
+            result = await session.exec(
+                delete(OshashSubmission).where(
+                    col(OshashSubmission.id).in_(ids),
+                    col(OshashSubmission.status) == OshashSubmissionStatus.PENDING,
+                )
+            )
             await session.commit()
-            return len(found)
+            return result.rowcount

@@ -1,4 +1,4 @@
-import { ActionIcon, Box, Group, Loader, Portal, Text } from "@mantine/core";
+import { ActionIcon, Box, Group, Loader, Modal, Portal, SimpleGrid, Text } from "@mantine/core";
 import { useDisclosure, useHotkeys } from "@mantine/hooks";
 import { IconChevronLeft, IconChevronRight, IconX } from "@tabler/icons-react";
 import { useTranslation } from "react-i18next";
@@ -259,13 +259,15 @@ export function FanartLightbox({
 
 interface ThumbStripProps {
   images: string[];
-  /** Visible thumb limit; remainder shown as +N (still opens lightbox). Default: all. */
+  /** Visible thumb limit; remainder shown as +N. Default: all. */
   maxVisible?: number;
   thumbStyle?: CSSProperties;
   /** Called after opening lightbox; use to stopPropagation from parent selectors. */
   onThumbClick?: (e: MouseEvent) => void;
   empty?: ReactNode;
   imageSources?: Record<string, string>;
+  /** When true, +N opens a full gallery grid; thumbnail clicks keep opening the lightbox directly. */
+  expandInModal?: boolean;
 }
 
 /** Thumbnail strip that opens FanartLightbox on click. */
@@ -276,9 +278,13 @@ export function FanartStrip({
   onThumbClick,
   empty = null,
   imageSources,
+  expandInModal = false,
 }: ThumbStripProps) {
+  const { t } = useTranslation("metadata");
   const [opened, { open, close }] = useDisclosure(false);
   const [start, setStart] = useState(0);
+  const [galleryOpened, setGalleryOpened] = useState(false);
+  const [galleryLightboxIndex, setGalleryLightboxIndex] = useState<number | null>(null);
 
   if (images.length === 0) return empty;
 
@@ -338,7 +344,15 @@ export function FanartStrip({
           <Box
             component="button"
             type="button"
-            onClick={(e) => openAt(shown.length, e)}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (expandInModal) {
+                onThumbClick?.(e);
+                setGalleryOpened(true);
+              } else {
+                openAt(shown.length, e);
+              }
+            }}
             style={{
               padding: "0 8px",
               height: size.height ?? 64,
@@ -359,6 +373,56 @@ export function FanartStrip({
           images={images}
           initialIndex={start}
           onClose={close}
+          imageSources={imageSources}
+        />
+      )}
+      {expandInModal && rest > 0 && (
+        <Modal
+          opened={galleryOpened}
+          onClose={() => setGalleryOpened(false)}
+          title={`${t("detail.fields.extrafanart")} (${images.length})`}
+          size="min(1100px, 94vw)"
+          centered
+          overlayProps={{ backgroundOpacity: 0.72, blur: 2 }}
+          styles={{ body: { maxHeight: "75vh", overflowY: "auto" } }}
+        >
+          <SimpleGrid cols={{ base: 2, xs: 3, sm: 4, md: 5 }} spacing="sm">
+            {images.map((url, i) => (
+              <Box
+                key={`${url}-${i}`}
+                component="button"
+                type="button"
+                onClick={() => setGalleryLightboxIndex(i)}
+                style={{
+                  padding: 0,
+                  border: 0,
+                  background: "transparent",
+                  cursor: "zoom-in",
+                  lineHeight: 0,
+                }}
+              >
+                <ProxyImage
+                  src={proxyImageUrl(url, imageSources?.[url]) ?? url}
+                  alt={`fanart-gallery-${i}`}
+                  referrerPolicy="no-referrer"
+                  style={{
+                    width: "100%",
+                    aspectRatio: "16 / 9",
+                    objectFit: "cover",
+                    borderRadius: "var(--mantine-radius-sm)",
+                  }}
+                  placeholder={<Box style={{ width: "100%", aspectRatio: "16 / 9" }} />}
+                />
+              </Box>
+            ))}
+          </SimpleGrid>
+        </Modal>
+      )}
+      {galleryLightboxIndex != null && (
+        <FanartLightbox
+          images={images}
+          initialIndex={galleryLightboxIndex}
+          onClose={() => setGalleryLightboxIndex(null)}
           imageSources={imageSources}
         />
       )}

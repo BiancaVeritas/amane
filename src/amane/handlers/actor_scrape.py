@@ -229,7 +229,8 @@ async def _fetch_site(
 
     async def _by_lookup_name() -> ActorMetadata | None:
         last_error: SourceError | None = None
-        for name in names:
+        lookup_names = names[:1] if getattr(crawler, "primary_name_only", False) else names
+        for name in lookup_names:
             try:
                 meta = await crawler.fetch(name)
             except SourceError as exc:

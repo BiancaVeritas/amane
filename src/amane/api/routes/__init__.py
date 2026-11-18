@@ -1,5 +1,6 @@
 from fastapi import APIRouter
 
+from .actor_mappings import router as actor_mappings_router
 from .actors import router as actors_router
 from .agent import router as agent_router
 from .agent_agui import router as agent_agui_router
@@ -15,6 +16,7 @@ from .libraries import router as libraries_router
 from .media import router as media_router
 from .metadata import router as metadata_router
 from .network import router as network_router
+from .number_mappings import router as number_mappings_router
 from .oshash_submissions import router as oshash_submissions_router
 from .playback import router as playback_router
 from .plugins import router as plugins_router
@@ -54,6 +56,8 @@ router.include_router(schedules_router)
 router.include_router(system_router)
 router.include_router(tasks_router)
 router.include_router(tag_mappings_router)
+router.include_router(number_mappings_router)
+router.include_router(actor_mappings_router)
 router.include_router(tools_router)
 router.include_router(libraries_router)
 router.include_router(webhooks_router)

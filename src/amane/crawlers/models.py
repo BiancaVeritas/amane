@@ -21,9 +21,13 @@ class SearchQuery:
     content_type: ContentType | None = None
     # WESTERN 手动指定或重新刮削时的 ThePornDB UUID.
     theporndb_uuid: str | None = None
+    # 仅自动刮削允许来源按预定义规则尝试番号变体; 手动指定番号保持精确查询.
+    allow_number_variants: bool = True
     # 前序聚合结果 (已定值单源标量 + 第一段已抓到的图片地址), 只读; 仅 ``SourceTrait.NEEDS_PARTIAL`` 来源非空.
     # 为 ``None`` 当且仅当本次来源不在第二段; 单源路由下是空对象而非 ``None``.
     partial_result: AggregatedMetadata | None = None
+    # 原始刮削身份番号; 与可能经过设置映射规则改写的搜索番号分离.
+    original_number: str | None = None
 
 
 @dataclass

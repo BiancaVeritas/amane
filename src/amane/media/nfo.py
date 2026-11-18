@@ -123,7 +123,8 @@ async def write_nfo(metadata: Metadata, nfo_path: Path, *, tag_mapping_path: Pat
                 try:
                     mapping_data = json.loads(tag_mapping_path.read_text(encoding="utf-8"))
                     entries = mapping_data.get("entries", {})
-                    tags = list(dict.fromkeys(entries.get(tag, {}).get("translation") or tag for tag in tags))
+                    if mapping_data.get("enabled", True):
+                        tags = list(dict.fromkeys(entries.get(tag, {}).get("translation") or tag for tag in tags))
                 except OSError, ValueError, TypeError:
                     logger.warning(
                         "tag mapping dictionary could not be read; writing original tags", path=str(tag_mapping_path)

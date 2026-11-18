@@ -1,19 +1,23 @@
 """tests for amane.handlers._common -- handler 间共享单元."""
 
 from pathlib import Path
+from types import SimpleNamespace
 from typing import TYPE_CHECKING
 
 import pytest
 
 from amane.db import MediaFileStatus
+from amane.db.models import MediaIdentityType
 from amane.handlers._common import (
     ensure_oshash,
     finalize_media_file,
     refresh_external_subtitle,
+    refresh_media_association,
     register_media_file,
     scan_library,
 )
 from amane.library import LibraryFileKind, LibraryHit, LibraryScan
+from amane.parsing import ContentType
 
 if TYPE_CHECKING:
     from amane.db.repository import Repository
@@ -172,6 +176,151 @@ class TestFinalizeMediaFile:
         updated = await repo.get_media_file(media.id)
         assert updated is not None
         assert updated.status == MediaFileStatus.SCRAPED
+
+
+class TestRefreshMediaAssociation:
+    """WESTERN 本地身份预检查：只读核对身份，命中后恢复关联。"""
+
+    @pytest.mark.asyncio
+    async def test_matches_oshash_among_same_number_candidates(
+        self, repo: Repository, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        number = "Lancelotstylesevolution.26.10.16"
+        first = await repo.upsert_western_metadata("scene-first", number)
+        second = await repo.upsert_western_metadata("scene-second", number)
+        assert first.id is not None
+        assert second.id is not None
+
+        await repo.register_media_identity(second.id, MediaIdentityType.LOCAL_OSHASH, "matched-hash")
+
+        video = tmp_path / "video.mkv"
+        video.touch()
+        media = await repo.create_media_file(library_id=1, path=str(video))
+        assert media.id is not None
+
+        monkeypatch.setattr(
+            "amane.handlers._common.parse_file_info",
+            lambda path: SimpleNamespace(
+                number=number,
+                content_type=ContentType.WESTERN,
+            ),
+        )
+
+        async def fake_existing_disk_path(path: Path) -> Path:
+            return video
+
+        async def fake_compute_oshash(path: Path) -> str:
+            return "matched-hash"
+
+        monkeypatch.setattr(
+            "amane.handlers._common.existing_disk_path",
+            fake_existing_disk_path,
+        )
+        monkeypatch.setattr(
+            "amane.handlers._common.compute_oshash",
+            fake_compute_oshash,
+        )
+
+        assert await refresh_media_association(repo, media) is True
+
+        stored = await repo.get_media_file(media.id)
+        assert stored is not None
+        assert stored.metadata_id == second.id
+        assert stored.status == MediaFileStatus.SCRAPED
+        assert stored.oshash is None
+
+    @pytest.mark.asyncio
+    async def test_does_not_match_identity_from_another_number(
+        self, repo: Repository, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        number = "Lancelotstylesevolution.26.10.16"
+        other_number = "Lancelotstylesevolution.26.10.17"
+
+        other = await repo.upsert_western_metadata("scene-other", other_number)
+        assert other.id is not None
+
+        await repo.register_media_identity(other.id, MediaIdentityType.LOCAL_OSHASH, "same-hash")
+
+        video = tmp_path / "video.mkv"
+        video.touch()
+        media = await repo.create_media_file(library_id=1, path=str(video))
+        assert media.id is not None
+
+        monkeypatch.setattr(
+            "amane.handlers._common.parse_file_info",
+            lambda path: SimpleNamespace(
+                number=number,
+                content_type=ContentType.WESTERN,
+            ),
+        )
+
+        async def fake_existing_disk_path(path: Path) -> Path:
+            return video
+
+        async def fake_compute_oshash(path: Path) -> str:
+            return "same-hash"
+
+        monkeypatch.setattr(
+            "amane.handlers._common.existing_disk_path",
+            fake_existing_disk_path,
+        )
+        monkeypatch.setattr(
+            "amane.handlers._common.compute_oshash",
+            fake_compute_oshash,
+        )
+
+        assert await refresh_media_association(repo, media) is False
+
+        stored = await repo.get_media_file(media.id)
+        assert stored is not None
+        assert stored.metadata_id is None
+        assert stored.oshash is None
+
+    @pytest.mark.asyncio
+    async def test_strm_matches_115_id_without_computing_oshash(
+        self, repo: Repository, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        number = "Lancelotstylesevolution.26.10.16"
+        metadata = await repo.upsert_western_metadata("scene-strm", number)
+        assert metadata.id is not None
+
+        await repo.register_media_identity(metadata.id, MediaIdentityType.FILE_115_ID, "115-file-id")
+
+        strm = tmp_path / "Lancelot-styles-evolution.26.10.16.strm"
+        strm.write_text("https://example.invalid/video", encoding="utf-8")
+        media = await repo.create_media_file(library_id=1, path=str(strm))
+        assert media.id is not None
+
+        monkeypatch.setattr(
+            "amane.handlers._common.parse_file_info",
+            lambda path: SimpleNamespace(
+                number=number,
+                content_type=ContentType.WESTERN,
+            ),
+        )
+
+        async def fake_read_115_id(path: Path) -> str:
+            return "115-file-id"
+
+        def unexpected_oshash(*args, **kwargs):
+            raise AssertionError("STRM 不应计算 OSHASH")
+
+        monkeypatch.setattr(
+            "amane.handlers._common.read_litepan_115_file_id",
+            fake_read_115_id,
+        )
+        monkeypatch.setattr(
+            "amane.handlers._common.compute_oshash",
+            unexpected_oshash,
+        )
+
+        assert await refresh_media_association(repo, media) is True
+
+        stored = await repo.get_media_file(media.id)
+        assert stored is not None
+        assert stored.metadata_id == metadata.id
+        assert stored.status == MediaFileStatus.SCRAPED
+        assert stored.oshash is None
 
 
 class TestExternalSubtitle:

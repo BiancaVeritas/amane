@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ActorMappingsRouteImport } from './routes/actor-mappings'
 import { Route as ActorsRouteImport } from './routes/actors'
 import { Route as CatalogRouteImport } from './routes/catalog'
 import { Route as ClientRouteImport } from './routes/client'
@@ -19,12 +20,13 @@ import { Route as LogsRouteImport } from './routes/logs'
 import { Route as ManualRouteImport } from './routes/manual'
 import { Route as MetaRouteImport } from './routes/meta'
 import { Route as NetworkRouteImport } from './routes/network'
+import { Route as NumberMappingsRouteImport } from './routes/number-mappings'
+import { Route as OshashSubmissionsRouteImport } from './routes/oshash-submissions'
 import { Route as PluginsRouteImport } from './routes/plugins'
 import { Route as SavedQueriesRouteImport } from './routes/saved-queries'
 import { Route as SchedulesRouteImport } from './routes/schedules'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as TagMappingsRouteImport } from './routes/tag-mappings'
-import { Route as OshashSubmissionsRouteImport } from './routes/oshash-submissions'
 import { Route as TasksRouteImport } from './routes/tasks'
 import { Route as ActorsIndexRouteImport } from './routes/actors.index'
 import { Route as ActorsActorIdRouteImport } from './routes/actors.$actorId'
@@ -43,6 +45,11 @@ import { Route as CatalogKindFacetIdRouteImport } from './routes/catalog.$kind_.
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ActorMappingsRoute = ActorMappingsRouteImport.update({
+  id: '/actor-mappings',
+  path: '/actor-mappings',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ActorsRoute = ActorsRouteImport.update({
@@ -90,6 +97,16 @@ const NetworkRoute = NetworkRouteImport.update({
   path: '/network',
   getParentRoute: () => rootRouteImport,
 } as any)
+const NumberMappingsRoute = NumberMappingsRouteImport.update({
+  id: '/number-mappings',
+  path: '/number-mappings',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const OshashSubmissionsRoute = OshashSubmissionsRouteImport.update({
+  id: '/oshash-submissions',
+  path: '/oshash-submissions',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const PluginsRoute = PluginsRouteImport.update({
   id: '/plugins',
   path: '/plugins',
@@ -113,11 +130,6 @@ const SettingsRoute = SettingsRouteImport.update({
 const TagMappingsRoute = TagMappingsRouteImport.update({
   id: '/tag-mappings',
   path: '/tag-mappings',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const OshashSubmissionsRoute = OshashSubmissionsRouteImport.update({
-  id: '/oshash-submissions',
-  path: '/oshash-submissions',
   getParentRoute: () => rootRouteImport,
 } as any)
 const TasksRoute = TasksRouteImport.update({
@@ -193,6 +205,7 @@ const CatalogKindFacetIdRoute = CatalogKindFacetIdRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/actor-mappings': typeof ActorMappingsRoute
   '/actors': typeof ActorsRouteWithChildren
   '/catalog': typeof CatalogRouteWithChildren
   '/client': typeof ClientRoute
@@ -202,12 +215,13 @@ export interface FileRoutesByFullPath {
   '/manual': typeof ManualRoute
   '/meta': typeof MetaRouteWithChildren
   '/network': typeof NetworkRoute
+  '/number-mappings': typeof NumberMappingsRoute
+  '/oshash-submissions': typeof OshashSubmissionsRoute
   '/plugins': typeof PluginsRoute
   '/saved-queries': typeof SavedQueriesRouteWithChildren
   '/schedules': typeof SchedulesRoute
   '/settings': typeof SettingsRoute
   '/tag-mappings': typeof TagMappingsRoute
-  '/oshash-submissions': typeof OshashSubmissionsRoute
   '/tasks': typeof TasksRoute
   '/actors/$actorId': typeof ActorsActorIdRoute
   '/catalog/$kind': typeof CatalogKindRoute
@@ -225,15 +239,17 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/actor-mappings': typeof ActorMappingsRoute
   '/client': typeof ClientRoute
   '/logs': typeof LogsRoute
   '/manual': typeof ManualRoute
   '/network': typeof NetworkRoute
+  '/number-mappings': typeof NumberMappingsRoute
+  '/oshash-submissions': typeof OshashSubmissionsRoute
   '/plugins': typeof PluginsRoute
   '/schedules': typeof SchedulesRoute
   '/settings': typeof SettingsRoute
   '/tag-mappings': typeof TagMappingsRoute
-  '/oshash-submissions': typeof OshashSubmissionsRoute
   '/tasks': typeof TasksRoute
   '/actors/$actorId': typeof ActorsActorIdRoute
   '/catalog/$kind': typeof CatalogKindRoute
@@ -252,6 +268,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/actor-mappings': typeof ActorMappingsRoute
   '/actors': typeof ActorsRouteWithChildren
   '/catalog': typeof CatalogRouteWithChildren
   '/client': typeof ClientRoute
@@ -261,12 +278,13 @@ export interface FileRoutesById {
   '/manual': typeof ManualRoute
   '/meta': typeof MetaRouteWithChildren
   '/network': typeof NetworkRoute
+  '/number-mappings': typeof NumberMappingsRoute
+  '/oshash-submissions': typeof OshashSubmissionsRoute
   '/plugins': typeof PluginsRoute
   '/saved-queries': typeof SavedQueriesRouteWithChildren
   '/schedules': typeof SchedulesRoute
   '/settings': typeof SettingsRoute
   '/tag-mappings': typeof TagMappingsRoute
-  '/oshash-submissions': typeof OshashSubmissionsRoute
   '/tasks': typeof TasksRoute
   '/actors/$actorId': typeof ActorsActorIdRoute
   '/catalog/$kind': typeof CatalogKindRoute
@@ -286,6 +304,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/actor-mappings'
     | '/actors'
     | '/catalog'
     | '/client'
@@ -295,12 +314,13 @@ export interface FileRouteTypes {
     | '/manual'
     | '/meta'
     | '/network'
+    | '/number-mappings'
+    | '/oshash-submissions'
     | '/plugins'
     | '/saved-queries'
     | '/schedules'
     | '/settings'
     | '/tag-mappings'
-    | '/oshash-submissions'
     | '/tasks'
     | '/actors/$actorId'
     | '/catalog/$kind'
@@ -318,15 +338,17 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/actor-mappings'
     | '/client'
     | '/logs'
     | '/manual'
     | '/network'
+    | '/number-mappings'
+    | '/oshash-submissions'
     | '/plugins'
     | '/schedules'
     | '/settings'
     | '/tag-mappings'
-    | '/oshash-submissions'
     | '/tasks'
     | '/actors/$actorId'
     | '/catalog/$kind'
@@ -344,6 +366,7 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
+    | '/actor-mappings'
     | '/actors'
     | '/catalog'
     | '/client'
@@ -353,12 +376,13 @@ export interface FileRouteTypes {
     | '/manual'
     | '/meta'
     | '/network'
+    | '/number-mappings'
+    | '/oshash-submissions'
     | '/plugins'
     | '/saved-queries'
     | '/schedules'
     | '/settings'
     | '/tag-mappings'
-    | '/oshash-submissions'
     | '/tasks'
     | '/actors/$actorId'
     | '/catalog/$kind'
@@ -377,6 +401,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  ActorMappingsRoute: typeof ActorMappingsRoute
   ActorsRoute: typeof ActorsRouteWithChildren
   CatalogRoute: typeof CatalogRouteWithChildren
   ClientRoute: typeof ClientRoute
@@ -386,12 +411,13 @@ export interface RootRouteChildren {
   ManualRoute: typeof ManualRoute
   MetaRoute: typeof MetaRouteWithChildren
   NetworkRoute: typeof NetworkRoute
+  NumberMappingsRoute: typeof NumberMappingsRoute
+  OshashSubmissionsRoute: typeof OshashSubmissionsRoute
   PluginsRoute: typeof PluginsRoute
   SavedQueriesRoute: typeof SavedQueriesRouteWithChildren
   SchedulesRoute: typeof SchedulesRoute
   SettingsRoute: typeof SettingsRoute
   TagMappingsRoute: typeof TagMappingsRoute
-  OshashSubmissionsRoute: typeof OshashSubmissionsRoute
   TasksRoute: typeof TasksRoute
 }
 
@@ -402,6 +428,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/actor-mappings': {
+      id: '/actor-mappings'
+      path: '/actor-mappings'
+      fullPath: '/actor-mappings'
+      preLoaderRoute: typeof ActorMappingsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/actors': {
@@ -467,6 +500,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof NetworkRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/number-mappings': {
+      id: '/number-mappings'
+      path: '/number-mappings'
+      fullPath: '/number-mappings'
+      preLoaderRoute: typeof NumberMappingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/oshash-submissions': {
+      id: '/oshash-submissions'
+      path: '/oshash-submissions'
+      fullPath: '/oshash-submissions'
+      preLoaderRoute: typeof OshashSubmissionsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/plugins': {
       id: '/plugins'
       path: '/plugins'
@@ -500,13 +547,6 @@ declare module '@tanstack/react-router' {
       path: '/tag-mappings'
       fullPath: '/tag-mappings'
       preLoaderRoute: typeof TagMappingsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/oshash-submissions': {
-      id: '/oshash-submissions'
-      path: '/oshash-submissions'
-      fullPath: '/oshash-submissions'
-      preLoaderRoute: typeof OshashSubmissionsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/tasks': {
@@ -692,6 +732,7 @@ const SavedQueriesRouteWithChildren = SavedQueriesRoute._addFileChildren(
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  ActorMappingsRoute: ActorMappingsRoute,
   ActorsRoute: ActorsRouteWithChildren,
   CatalogRoute: CatalogRouteWithChildren,
   ClientRoute: ClientRoute,
@@ -701,12 +742,13 @@ const rootRouteChildren: RootRouteChildren = {
   ManualRoute: ManualRoute,
   MetaRoute: MetaRouteWithChildren,
   NetworkRoute: NetworkRoute,
+  NumberMappingsRoute: NumberMappingsRoute,
+  OshashSubmissionsRoute: OshashSubmissionsRoute,
   PluginsRoute: PluginsRoute,
   SavedQueriesRoute: SavedQueriesRouteWithChildren,
   SchedulesRoute: SchedulesRoute,
   SettingsRoute: SettingsRoute,
   TagMappingsRoute: TagMappingsRoute,
-  OshashSubmissionsRoute: OshashSubmissionsRoute,
   TasksRoute: TasksRoute,
 }
 export const routeTree = rootRouteImport

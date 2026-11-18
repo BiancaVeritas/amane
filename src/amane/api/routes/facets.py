@@ -54,16 +54,67 @@ async def list_facets(
     # 传了参数就要求该分类支持收藏, 与取值无关; 静默忽略会让调用方以为筛选生效.
     if favorite is not None and kind not in FAVORITE_FACET_KINDS:
         raise HTTPException(status_code=400, detail="该分类不支持收藏")
-    items, total = await repo.list_facets(
-        kind, search=search, favorite=favorite, offset=offset, limit=limit, sort_by=sort_by, order=order
-    )
-    responses = [_facet_response(i) for i in items]
-    if kind == FacetKind.TAG:
-        responses = [
-            response.model_copy(update={"name": runtime.tag_mappings.map_tags([response.name])[0]})
-            for response in responses
-        ]
-    return FacetListResponse(items=responses, total=total)
+    if kind != FacetKind.TAG:
+        items, total = await repo.list_facets(
+            kind, search=search, favorite=favorite, offset=offset, limit=limit, sort_by=sort_by, order=order
+        )
+        return FacetListResponse(items=[_facet_response(item) for item in items], total=total)
+
+    # 标签先映射再搜索、分组和分页，确保搜索 CCC 能找到 AAA/BBB。
+    all_items: list[FacetItem] = []
+    cursor = 0
+    while True:
+        page, total_raw = await repo.list_facets(
+            kind,
+            offset=cursor,
+            limit=1000,
+            sort_by=FacetSortField.NAME,
+            order=SortOrder.ASC,
+        )
+        all_items.extend(page)
+        cursor += len(page)
+        if not page or cursor >= total_raw:
+            break
+
+    groups: dict[str, list[FacetItem]] = {}
+    for item in all_items:
+        display = runtime.tag_mappings.display_name(item.name)
+        if search and search.casefold() not in display.casefold() and search.casefold() not in item.name.casefold():
+            continue
+        groups.setdefault(display, []).append(item)
+    if favorite is not None:
+        groups = {
+            display: members
+            for display, members in groups.items()
+            if any(member.is_favorite for member in members) is favorite
+        }
+
+    # 同一影片可能同时拥有 AAA 和 BBB，按 metadata_id 集合去重后再计数。
+    display_by_tag_id = {member.id: display for display, members in groups.items() for member in members}
+    counts_by_display: dict[str, set[int]] = {}
+    all_group_ids = [member.id for members in groups.values() for member in members]
+    for tag_id, metadata_id in await repo.list_tag_metadata_links(all_group_ids):
+        display = display_by_tag_id.get(tag_id)
+        if display is not None:
+            counts_by_display.setdefault(display, set()).add(metadata_id)
+
+    responses: list[FacetResponse] = []
+    for display, members in groups.items():
+        representative = min(members, key=lambda member: member.id)
+        responses.append(
+            FacetResponse(
+                id=representative.id,
+                name=display,
+                count=len(counts_by_display.get(display, set())),
+                is_favorite=any(member.is_favorite for member in members),
+            )
+        )
+    if sort_by == FacetSortField.COUNT:
+        responses.sort(key=lambda item: (item.count, item.name.casefold()), reverse=order == SortOrder.DESC)
+    else:
+        responses.sort(key=lambda item: item.name.casefold(), reverse=order == SortOrder.DESC)
+    total = len(responses)
+    return FacetListResponse(items=responses[offset : offset + limit], total=total)
 
 
 @router.get("/{kind}/rules")

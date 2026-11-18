@@ -132,6 +132,7 @@ async def start_app(config: ConfigManager | None = None) -> AppSession:
     # 向量 sidecar, 不纳入 Alembic; 删除该文件即清空索引. 惰性建立连接, 未使用语义检索时不创建文件.
     embeddings = EmbeddingStore(cold.data_dir / "embeddings.db")
     repo = Repository(engine, embeddings=embeddings)
+    await repo.recover_oshash_submissions()
 
     # 会话级只读引擎, 不纳入 Alembic; dsn 变更经 _rebuild() 重建
     r18_db = build_r18_db(hot.r18)

@@ -1,4 +1,6 @@
+import re
 from collections.abc import Iterable, Sequence
+from datetime import date
 from pathlib import Path
 from typing import TYPE_CHECKING, Protocol
 
@@ -15,6 +17,8 @@ from ..observability.models import SiteOutcomeKind
 from ..parsing import ContentType
 from ..plugins.models import SourceDescriptor, SourceTrait
 from ..utils.litepan_strm import read_litepan_115_file_id
+from ..utils.oshash import compute_oshash
+from ..utils.threads import existing_disk_path
 from ._common import ensure_oshash, finalize_media_file
 from .models import ActorScrapePayload, CacheKind, OrganizePayload, ScrapePayload, ScrapeResult
 from .protocol import FollowupTask, TaskHandler, TaskResult
@@ -61,6 +65,41 @@ class CrawlerFactoryLike(Protocol):
     async def get_crawlers(self, names: Iterable[str]) -> dict[str, CrawlerLike]: ...
 
 
+def _scrape_route_key(content_type: ContentType, number: str, streaming_rules: Sequence[str]) -> str:
+    """无码按解析后的完整番号选择刮削路由; 未命中流媒体规则时默认进入 DVD."""
+    if content_type != ContentType.UNCENSORED:
+        return str(content_type)
+    if any(re.fullmatch(rule, number, flags=re.IGNORECASE) for rule in streaming_rules):
+        return "uncensored_streaming"
+    return "uncensored_dvd"
+
+
+def _map_search_number(number: str, rules: Sequence[str]) -> str:
+    """按用户配置顺序执行第一条完整匹配的番号映射; 不命中则保持原番号."""
+    for rule in rules:
+        pattern, replacement = (part.strip() for part in rule.split("=>", 1))
+        if re.fullmatch(pattern, number, flags=re.IGNORECASE):
+            # Mapping rules are commonly entered through JSON/config editors,
+            # where capture references are stored with escaped backslashes.
+            replacement = replacement.replace("\\\\", "\\")
+            return re.sub(pattern, replacement, number, count=1, flags=re.IGNORECASE)
+    return number
+
+
+def _release_from_local_number(number: str, file_path: str | None) -> str | None:
+    """Caribbean 系列的 MMDDYY-NNN 号码可携带发行日期; 优先文件名, 再用查询番号."""
+    candidates = [Path(file_path).name if file_path else "", number]
+    for value in candidates:
+        match = re.search(r"(?<!\d)(\d{6})-\d{3}(?!\d)", value)
+        if not match:
+            continue
+        try:
+            return date.strptime(match.group(1), "%m%d%y").isoformat()
+        except ValueError:
+            continue
+    return None
+
+
 class ScrapeHandler(TaskHandler[ScrapePayload, ScrapeResult]):
     """不移动库内文件; 库目录落盘由 ORGANIZE 负责."""
 
@@ -90,7 +129,11 @@ class ScrapeHandler(TaskHandler[ScrapePayload, ScrapeResult]):
         self._file_hash_sources = frozenset(d.id for d in catalog if SourceTrait.USES_FILE_HASH in d.traits)
 
     async def handle(self, payload: ScrapePayload) -> TaskResult[ScrapeResult]:
-        bind_contextvars(number=payload.number)
+        match_number = payload.number
+        library_number = payload.library_number or match_number
+        if payload.content_type == ContentType.WESTERN and payload.library_number is not None:
+            return TaskResult(success=False, error="WESTERN 不支持独立片库番号")
+        bind_contextvars(number=match_number, library_number=library_number)
 
         content_type = payload.content_type
         progress_total = len(SCALAR_FIELDS) + _PROGRESS_POST_STEPS
@@ -114,25 +157,32 @@ class ScrapeHandler(TaskHandler[ScrapePayload, ScrapeResult]):
                 return TaskResult(success=False, error="手动指定的 ThePornDB UUID 与目标 Metadata 的身份不一致")
         elif content_type == ContentType.WESTERN and payload.theporndb_uuid:
             identity_metadata = await self._repo.get_metadata_by_theporndb_uuid(payload.theporndb_uuid)
-        else:
-            identity_metadata = await self._repo.get_metadata_by_number(payload.number, content_type=content_type)
+        elif content_type != ContentType.WESTERN:
+            identity_metadata = await self._repo.get_metadata_by_number(library_number, content_type=content_type)
 
         # 当前文件先读取出来; WESTERN 可由 OSHASH 定位, 不能仅凭番号确定.
         file = None
         if payload.media_file_id:
             file = await self._repo.get_media_file(media_id=payload.media_file_id)
-        if identity_metadata is None and file is not None and file.oshash:
-            identity_metadata = await self._repo.get_metadata_by_oshash(file.oshash)
+        western_candidate_ids: list[int] = []
+        if content_type == ContentType.WESTERN:
+            western_candidates = await self._repo.list_western_metadata_by_number(match_number)
+            western_candidate_ids = [item.id for item in western_candidates if item.id is not None]
 
         existing_locks = set(identity_metadata.locked_fields or []) if identity_metadata else set()
         poster_locked = "poster_urls" in existing_locks
         cover_locked = "cover_urls" in existing_locks or "thumb_urls" in existing_locks
 
-        # 校验 content_type 路由; 无资格站点则失败.
-        route = self._config.scraping.content_routes.get(content_type)
+        # 业务内容类型与执行路由分离; 无码根据完整番号规则分流, 未命中默认进入 DVD.
+        route_key = _scrape_route_key(
+            content_type,
+            match_number,
+            self._config.scraping.uncensored_streaming_number_rules,
+        )
+        route = self._config.scraping.content_routes.get(route_key)
         if not route:
-            rec.warning("no eligible crawlers for content type", content_type=content_type)
-            return TaskResult(success=False, error=f"内容类型 {content_type} 没有可用来源")
+            rec.warning("no eligible crawlers for scrape route", route=route_key, content_type=content_type)
+            return TaskResult(success=False, error=f"刮削路由 {route_key} 没有可用来源")
         if content_type == ContentType.WESTERN and str(SiteName.THEPORNDB) not in {str(site) for site in route}:
             return TaskResult(
                 success=False, error="WESTERN 作品身份依赖 ThePornDB UUID，请在欧美来源路由中启用 ThePornDB"
@@ -144,7 +194,7 @@ class ScrapeHandler(TaskHandler[ScrapePayload, ScrapeResult]):
             and payload.metadata_id is None
         ):
             return TaskResult(success=False, error="WESTERN 刮削需要媒体文件 OSHASH 或手动指定 ThePornDB UUID")
-        rec.info("scraping started", content_type=str(content_type), crawlers=route)
+        rec.info("scraping started", content_type=str(content_type), route=route_key, crawlers=route)
         rec.update_summary(eligible_sites=[str(s) for s in route])
 
         crawlers = await self._factory.get_crawlers(route)
@@ -157,8 +207,10 @@ class ScrapeHandler(TaskHandler[ScrapePayload, ScrapeResult]):
         if payload.content_type == ContentType.WESTERN and file is not None:
             file_115_id = await read_litepan_115_file_id(Path(file.path))
             if file_115_id:
-                file_115_metadata = await self._repo.get_metadata_by_identity(
-                    MediaIdentityType.FILE_115_ID, file_115_id
+                file_115_metadata = await self._repo.get_metadata_by_identity_in_candidates(
+                    western_candidate_ids,
+                    MediaIdentityType.FILE_115_ID,
+                    file_115_id,
                 )
                 if file_115_metadata is not None:
                     if identity_metadata is not None and identity_metadata.id != file_115_metadata.id:
@@ -169,25 +221,52 @@ class ScrapeHandler(TaskHandler[ScrapePayload, ScrapeResult]):
                     identity_metadata = identity_metadata or file_115_metadata
 
         # 仅当本次可用来源声明需要指纹时计算 oshash.
-        file_hash = file.oshash if file else None
-        if file is not None and file_hash is None and any(name in self._file_hash_sources for name in crawlers):
-            file_hash = await ensure_oshash(self._repo, file)
+        file_hash = None
+        if file is not None:
+            is_strm = Path(file.path).suffix.casefold() == ".strm"
+            if content_type == ContentType.WESTERN:
+                if not is_strm:
+                    file_hash = file.oshash
+                    if file_hash is None and any(name in self._file_hash_sources for name in crawlers):
+                        disk = await existing_disk_path(Path(file.path))
+                        if disk is not None:
+                            file_hash = await compute_oshash(disk)
+            else:
+                file_hash = file.oshash
+                if file_hash is None and any(name in self._file_hash_sources for name in crawlers):
+                    file_hash = await ensure_oshash(self._repo, file)
 
-        # 重新刮削始终取得一个已关联文件的 OSHASH (即使 Metadata 已有 ThePornDB UUID).
-        # 只取一个指纹, 不批量提交多个文件 hash.
-        if payload.content_type == ContentType.WESTERN and payload.metadata_id is not None and file_hash is None:
+        # 重新刮削时允许从已关联的普通视频文件回退取得 OSHASH。
+        # STRM 不使用其他文件的 OSHASH 代替自身身份。
+        if (
+            payload.content_type == ContentType.WESTERN
+            and payload.metadata_id is not None
+            and file_hash is None
+            and (file is None or Path(file.path).suffix.casefold() != ".strm")
+        ):
             linked_files = await self._repo.get_media_by_metadata_id(payload.metadata_id)
             for linked_file in linked_files:
-                linked_hash = linked_file.oshash or await ensure_oshash(self._repo, linked_file)
+                if Path(linked_file.path).suffix.casefold() == ".strm":
+                    continue
+
+                linked_hash = linked_file.oshash
+                if linked_hash is None:
+                    disk = await existing_disk_path(Path(linked_file.path))
+                    if disk is not None:
+                        linked_hash = await compute_oshash(disk)
+
                 if linked_hash:
                     file_hash = linked_hash
                     if file is None:
                         file = linked_file
                     break
 
-        # OSHASH → Metadata 关系来自已入库 MediaFile.metadata_id; 不受 raw-cache 开关影响.
+        # OSHASH → Metadata 关系只在当前番号的 WESTERN 候选范围内查询.
         oshash_matches = (
-            await self._repo.get_metadata_by_oshash_matches(file_hash)
+            await self._repo.get_metadata_by_oshash_matches_in_candidates(
+                western_candidate_ids,
+                file_hash,
+            )
             if payload.content_type == ContentType.WESTERN and file_hash
             else []
         )
@@ -214,7 +293,7 @@ class ScrapeHandler(TaskHandler[ScrapePayload, ScrapeResult]):
                 if (
                     candidate is not None
                     and candidate.id is not None
-                    and candidate.number.casefold() == payload.number.casefold()
+                    and candidate.number.casefold() == library_number.casefold()
                     and oshash_metadata is not None
                     and oshash_metadata.id == candidate.id
                 ):
@@ -224,28 +303,32 @@ class ScrapeHandler(TaskHandler[ScrapePayload, ScrapeResult]):
             elif payload.theporndb_uuid:
                 db_data = await self._repo.get_metadata_by_theporndb_uuid(payload.theporndb_uuid)
             else:
-                db_data = await self._repo.get_metadata_by_number(payload.number, content_type=payload.content_type)
+                db_data = await self._repo.get_metadata_by_number(library_number, content_type=payload.content_type)
         if db_data is not None and db_data.raw:
             rec.write_raw_cache(db_data.raw)
 
         theporndb_uuid = payload.theporndb_uuid
-        if theporndb_uuid is None and identity_metadata is not None:
-            theporndb_uuid = identity_metadata.theporndb_uuid
-        if theporndb_uuid is None and oshash_metadata is not None:
-            theporndb_uuid = oshash_metadata.theporndb_uuid
-        if theporndb_uuid is None and db_data is not None:
-            theporndb_uuid = db_data.theporndb_uuid
         linked_theporndb_uuid = oshash_metadata.theporndb_uuid if oshash_metadata is not None else None
         if theporndb_uuid and linked_theporndb_uuid and theporndb_uuid.casefold() != linked_theporndb_uuid.casefold():
             return TaskResult(
                 success=False, error="当前文件 OSHASH 已关联到另一条 WESTERN 作品, 拒绝跨 ThePornDB UUID 绑定"
             )
+        search_number = match_number
+        if (
+            payload.allow_number_variants
+            and content_type != ContentType.WESTERN
+            and route_key != "uncensored_streaming"
+        ):
+            search_number = _map_search_number(match_number, self._config.scraping.number_mapping_rules)
+
         q = SearchQuery(
-            payload.number,
+            search_number,
             file.path if file else None,
             file_hash,
             payload.content_type,
             theporndb_uuid=theporndb_uuid,
+            allow_number_variants=payload.allow_number_variants,
+            original_number=match_number,
         )
 
         field_priority = compile_priority(
@@ -260,8 +343,8 @@ class ScrapeHandler(TaskHandler[ScrapePayload, ScrapeResult]):
             await self.report_progress(current, progress_total, message)
 
         # 出站: 执行获取图 (execute_graph), 声明依赖的来源在第二段; 按 use_cache 复用 raw 快照.
-        if payload.content_type == ContentType.UNCENSORED:
-            # 无码来源是单番号→单官网关系：严格按用户配置顺序逐站尝试，首个有效结果即停止。
+        if route_key == "uncensored_streaming":
+            # 无码流媒体按用户配置顺序逐站尝试, 首个有效结果即停止.
             # 不使用字段聚合并发，避免后续站点在前一站已成功时仍被请求。
             sequential_failed: list[str] = []
             sequential_queried: list[str] = []
@@ -284,12 +367,40 @@ class ScrapeHandler(TaskHandler[ScrapePayload, ScrapeResult]):
                 sequential_failed.extend(one.failed_sites)
                 if one.raw:
                     result = one
+                    # Caribbeancompr 映射命中后, D2Pass 只作为发行日期补充源;
+                    # 其余字段绝不合并. 映射未命中时, 下一个循环项仍可用 D2Pass 提供完整元数据.
+                    if str(site) == str(SiteName.CARIBBEANCOMPR) and str(SiteName.D2PASS) in crawlers:
+                        d2pass = crawlers[str(SiteName.D2PASS)]
+                        date_result = await aggregate(
+                            q,
+                            {str(SiteName.D2PASS): d2pass},
+                            compile_priority([str(SiteName.D2PASS)], {}, self._config.scraping.field_blacklist),
+                            field_language,
+                            None,
+                            on_progress=_on_fetch_progress,
+                            multi_lang_sites=self._multi_language_sources,
+                        )
+                        sequential_queried.extend(date_result.sites_queried)
+                        sequential_failed.extend(date_result.failed_sites)
+                        if not result.metadata.release and date_result.metadata.release:
+                            result.metadata.release = date_result.metadata.release
+                            result.field_sources["release"] = str(SiteName.D2PASS)
+                        if date_result.raw:
+                            result.raw.update(date_result.raw)
+                    if (
+                        str(site) in {str(SiteName.CARIBBEANCOMPR), str(SiteName.CARIBBEANCOM)}
+                        and not result.metadata.release
+                    ):
+                        fallback_release = _release_from_local_number(match_number, file.path if file else None)
+                        if fallback_release:
+                            result.metadata.release = fallback_release
+                            result.field_sources["release"] = str(site)
                     break
             if result is None:
                 from ..aggregate.models import AggregatedMetadata, AggregateResult
 
                 result = AggregateResult(
-                    metadata=AggregatedMetadata(number=payload.number),
+                    metadata=AggregatedMetadata(number=library_number),
                     field_sources={},
                     failed_sites=list(dict.fromkeys(sequential_failed)),
                     sites_queried=list(dict.fromkeys(sequential_queried)),
@@ -320,7 +431,7 @@ class ScrapeHandler(TaskHandler[ScrapePayload, ScrapeResult]):
             # 失败也要能回答"为什么刮不到": 站点明细随失败结果落库.
             return TaskResult(
                 success=False,
-                error=f"未找到 {payload.number} 的元数据",
+                error=f"未找到匹配番号 {match_number} 的元数据",
                 result=ScrapeResult(
                     field_sources=result.field_sources,
                     failed_sites=list(result.failed_sites),
@@ -473,7 +584,7 @@ class ScrapeHandler(TaskHandler[ScrapePayload, ScrapeResult]):
                 )
         else:
             meta = await self._repo.upsert_metadata(
-                number=payload.number,
+                number=library_number,
                 content_type=payload.content_type,
                 merge_raw=use_metadata_cache,
                 **metadata_fields,

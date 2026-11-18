@@ -159,6 +159,7 @@ class TaskWorkerResponse(BaseModel):
 
 class ScrapeRequest(BaseModel):
     number: str | None = Field(default=None)
+    library_number: str | None = Field(default=None, description="手动指定刮削的最终片库番号；未提供时沿用 number")
     media_id: int | None = Field(default=None, description="MediaFile ID. 通常仅用于内部提交任务，手动提交无需指定")
     theporndb_uuid: str | None = Field(default=None, description="WESTERN 手动指定的 ThePornDB UUID")
     content_type: ContentType | None = Field(
@@ -168,6 +169,14 @@ class ScrapeRequest(BaseModel):
         default_factory=lambda: {CacheKind.metadata, CacheKind.trans},
         description="启用的缓存种类 (metadata: 复用 DB per-site 快照; trans: 复用译文). 空集 = 全部强制刷新",
     )
+
+    @field_validator("library_number", mode="before")
+    @classmethod
+    def _normalize_library_number(cls, value: object) -> object:
+        if isinstance(value, str):
+            stripped = value.strip()
+            return stripped or None
+        return value
 
     @field_validator("theporndb_uuid", mode="before")
     @classmethod
@@ -207,9 +216,11 @@ class ScrapeRequest(BaseModel):
             if self.number is not None:
                 return ScrapePayload(
                     number=self.number,
+                    library_number=self.library_number,
                     content_type=self.content_type or infer_content_type(self.number),
                     media_file_id=self.media_id,
                     theporndb_uuid=self.theporndb_uuid,
+                    allow_number_variants=False,
                     use_cache=self.use_cache,
                 )
             parsed = parse_file_info(media.path)
@@ -224,8 +235,10 @@ class ScrapeRequest(BaseModel):
         assert self.number is not None
         return ScrapePayload(
             number=self.number,
+            library_number=self.library_number,
             content_type=self.content_type or infer_content_type(self.number),
             theporndb_uuid=self.theporndb_uuid,
+            allow_number_variants=False,
             use_cache=self.use_cache,
         )
 

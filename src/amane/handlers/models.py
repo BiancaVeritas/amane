@@ -117,11 +117,14 @@ class RefreshResult(BaseModel):
 
 class ScrapePayload(BaseModel):
     number: str
+    library_number: str | None = None
     content_type: ContentType = ContentType.CENSORED
     media_file_id: int | None = None
     # 重新刮削以 Metadata ID 锁定原作品; 手动兜底可直接指定 ThePornDB UUID.
     metadata_id: int | None = None
     theporndb_uuid: str | None = None
+    # 自动刮削可启用来源专属番号变体; 手动指定番号时关闭.
+    allow_number_variants: bool = True
     use_cache: set[CacheKind] = {CacheKind.metadata, CacheKind.trans}
 
 

@@ -36,6 +36,8 @@ from ..handlers import (
 )
 from ..library import InventoryStore
 from ..llm import TranslationCache, TranslationCoalescer, build_translator
+from ..mappings.actor_store import ActorMappingStore
+from ..mappings.store import NumberMappingStore
 from ..media.watermarks import user_watermark_dir
 from ..net.browser import BrowserPool
 from ..net.http import RateLimiters, WebClient, site_proxy_overrides
@@ -240,6 +242,8 @@ class AppRuntime:
     library_locks: LibraryTaskLocks = field(default_factory=LibraryTaskLocks)
     inventory_store: InventoryStore = field(default_factory=InventoryStore)
     tag_mappings: TagMappingStore = field(init=False)
+    number_mappings: NumberMappingStore = field(init=False)
+    actor_mappings: ActorMappingStore = field(init=False)
     semantic: SemanticService | None = None
     browser: BrowserPool | None = None
     r18_handle: R18Handle | None = None
@@ -259,6 +263,10 @@ class AppRuntime:
             self.r18_handle = R18Handle(self.r18_db)
         self._browser_key = self._current_browser_key()
         self.tag_mappings = TagMappingStore(self.config.cold.data_dir)
+        mapping_seed_dir = Path(__file__).resolve().parents[1] / "crawlers" / "sites"
+        self.number_mappings = NumberMappingStore(self.config.cold.data_dir, mapping_seed_dir)
+        actor_mapping_seed = Path(__file__).resolve().parents[1] / "resources" / "minnano_actress_map.json"
+        self.actor_mappings = ActorMappingStore(self.config.cold.data_dir, actor_mapping_seed)
         if self.semantic is None:
             self.semantic = SemanticService(
                 self.repo, self.resource_store, self.config.cold.data_dir, self.config.hot.semantic

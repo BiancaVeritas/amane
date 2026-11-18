@@ -11,8 +11,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import numpy as np
-from CoreML import MLDictionaryFeatureProvider, MLModel, MLModelConfiguration, MLMultiArray  # ty: ignore[unresolved-import]
-from Foundation import NSURL  # ty: ignore[unresolved-import]
+from CoreML import MLDictionaryFeatureProvider, MLModel, MLModelConfiguration, MLMultiArray  # ty: ignore[unresolved-import]  # pyright: ignore[reportMissingImports]
+from Foundation import NSURL  # ty: ignore[unresolved-import]  # pyright: ignore[reportMissingImports]
 
 from .encoder import encode_text, load_tokenizer, normalize, preprocess_image
 

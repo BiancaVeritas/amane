@@ -28,7 +28,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
 
 
 def generate_operation_id(route: APIRoute) -> str:
-    """使用路由函数名, 避免 FastAPI 默认的冗长 operation ID."""
+    """优先保留稳定的路由函数名作为 operation ID."""
     return route.name
 
 
