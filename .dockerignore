@@ -50,7 +50,11 @@ compose.yaml
 docs
 tests
 scripts
-resources
+# resources/ 下只有 mapping_table/minnano_actress_map.json 进包 (pyproject 的 force-include),
+# 其余是本地同步用的原料, 排除掉以免膨胀构建上下文.
+resources/mapping_table/mapping_actor.xml
+resources/mapping_table/mapping_info.xml
+resources/zhconv
 openapi.json
 **/.npm
 **/pnpm-store

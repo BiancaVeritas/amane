@@ -18,6 +18,8 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
 
 COPY pyproject.toml uv.lock README.md ./
 COPY src ./src
+# pyproject 的 force-include 会从 resources/ 取文件打进轮子, 少这一层 uv sync 会 FileNotFoundError.
+COPY resources/mapping_table/minnano_actress_map.json ./resources/mapping_table/
 RUN uv sync --no-dev --frozen --no-editable
 
 # --- 最终镜像 ---
