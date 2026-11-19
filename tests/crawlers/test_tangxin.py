@@ -382,3 +382,38 @@ async def test_scrape_strips_actor_from_title_and_number() -> None:
     expected = "淫荡的家庭护士 体验40度的肉棒 骑乘榨精精液灌穴"
     assert meta.title == expected
     assert meta.number == expected
+
+
+class TestTangxinRejectsNumberShaped:
+    """糖心没有番号体系, 番号形态的输入不该交给它.
+
+    拿番号问糖心必然命中不了; 更糟的是索引比对按字覆盖率算, 番号里的字母数字会撞上
+    一条标题碰巧含这些字符的无关作品, 把元数据写歪. 因此这类输入直接跳过.
+    """
+
+    @pytest.mark.parametrize(
+        ("number", "path"),
+        [
+            ("heydouga-4037-1002", None),
+            ("Heydouga-4037-1002", None),
+            ("MIDV-123", None),
+            ("n1234", None),
+            ("FC2-PPV-1234567", None),
+            ("010115-001", None),
+            ("MIDV-123", r"D:\test\糖心\a.mp4"),
+            ("中文标题", r"D:\test\JAV\a.mp4"),
+        ],
+    )
+    def test_number_shaped_is_rejected(self, number: str, path: str | None) -> None:
+        assert _looks_like_tangxin(path, number) is False
+
+    @pytest.mark.parametrize(
+        ("number", "path"),
+        [
+            ("淫荡的家庭护士 体验40度的肉棒", None),
+            ("13 糖心网红UP主偷情一束光约会成为人妻的前女友", None),
+            ("中文标题", r"D:\test\糖心\a.mp4"),
+        ],
+    )
+    def test_chinese_title_is_accepted(self, number: str, path: str | None) -> None:
+        assert _looks_like_tangxin(path, number) is True

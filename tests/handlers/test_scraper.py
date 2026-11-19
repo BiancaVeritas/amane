@@ -2895,3 +2895,50 @@ class TestReuseChineseEntry:
         stored = await repo.get_metadata_by_number("Heydouga-4037-1002")
         assert stored is not None, "番号必须以 Heydouga-x-y 入库"
         assert stored.number == "Heydouga-4037-1002"
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_entry_with_different_content_type_still_reused(self, repo: Repository, resource_store):
+        """库内条目的类型与本次判断不同时, 仍要复用.
+
+        类型是从文件名推断的, 可能判错, 也可能后来被改 (heydouga-4037-1002 被判成
+        uncensored, 而库里那条是 censored). 按番号 + 类型查库会落空, 「库里有就跳过」
+        就失效了 —— 字段早就在库里, 与走哪条路由无关.
+
+        非 WESTERN 的番号是全局唯一 (``ix_metadata_number_non_western``), 因此不带类型
+        查不会有歧义.
+        """
+
+        class _AnyCrawler(Crawler):
+            calls: ClassVar[list[str]] = []
+
+            @classmethod
+            def profile(cls) -> CrawlerProfile:
+                return CrawlerProfile(name="aventertainments", base_url="https://www.aventertainments.com")
+
+            async def _search(self, query, options=None) -> str | None:
+                _AnyCrawler.calls.append(query.number)
+                return "https://www.aventertainments.com/x"
+
+            async def _scrape(self, url, options=None) -> MediaMetadata | None:
+                return MediaMetadata.model_validate({"number": "x", "title": "from network"})
+
+        seeded = await repo.upsert_metadata(
+            number="MIDV-123",
+            content_type=ContentType.CENSORED,
+            title="库里的标题",
+            raw={"javdb": {"number": "MIDV-123", "title": "库里的标题"}},
+        )
+        assert seeded.id is not None
+
+        h = ScrapeHandler(
+            repo=repo,
+            factory=FakeFactory({"aventertainments": _AnyCrawler(client=None)}),
+            resource_store=resource_store,
+            pipeline_config=HotSettings(),
+        )
+        result = await h.handle(ScrapePayload(number="MIDV-123", content_type=ContentType.UNCENSORED))
+
+        assert result.success is True
+        assert _AnyCrawler.calls == [], "类型不同也要复用库内条目"
+        assert result.result is not None
+        assert result.result.metadata_id == seeded.id

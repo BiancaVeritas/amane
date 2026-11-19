@@ -602,7 +602,11 @@ class ScrapeHandler(TaskHandler[ScrapePayload, ScrapeResult]):
             elif payload.theporndb_uuid:
                 db_data = await self._repo.get_metadata_by_theporndb_uuid(payload.theporndb_uuid)
             else:
-                db_data = await self._repo.get_metadata_by_number(payload.number, content_type=payload.content_type)
+                # 按番号查库**不带类型过滤**: 番号在非 WESTERN 里是全局唯一的
+                # (``ix_metadata_number_non_western``), 而类型可能判错或随后被改 ——
+                # 同一个番号判成 UNCCENSORED 而库里存成 CENSORED 时, 带类型查会落空,
+                # 「库里有就跳过」就失效了. 复用不受类型影响: 字段早就在库里, 与走哪条路由无关.
+                db_data = await self._repo.get_metadata_by_number(payload.number)
                 if db_data is None and payload.content_type == ContentType.CHINESE:
                     # 国产原创站 (糖心) 落库的 number 是站点标题, 与文件名解析出的 number
                     # 永远不相等 —— 后者带着域名与「Up主」前缀, 还少了【】标签, 空白数量也不同.

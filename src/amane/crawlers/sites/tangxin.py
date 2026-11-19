@@ -21,6 +21,7 @@ from parsel import Selector
 
 from ...enums import SiteName
 from ...observability import current
+from ...utils.language import has_han
 from ..base import Crawler, CrawlerProfile
 from ..models import FetchOptions, MediaMetadata, SearchQuery, film_actors
 
@@ -150,16 +151,43 @@ _EMPTY_PLOT_MARKERS = frozenset({"当前暂无简介", "暂无简介", "暂无�
 #: 认定为本站内容的字样: 库路径或文件名里带它才算.
 _TANGXIN_MARKERS = ("糖心", "tangxin")
 
+#: 番号形态: 只由字母、数字与分隔符组成, 且至少含一段数字.
+#:
+#: 覆盖面比枚举各种站内写法更宽: ``ABC-123`` / ``FC2-PPV-1234567`` / ``n1234`` /
+#: ``010115-001`` / ``heydouga-4037-1002`` 全都命中. 枚举写法必然漏 (heydouga 就是
+#: 「字母-数字-数字」两段, 单段规则抓不到).
+_NUMBER_SHAPED_RE = re.compile(r"^(?=.*\d)[A-Za-z0-9][A-Za-z0-9._-]*$")
+
+
+def _is_number_shaped(value: str) -> bool:
+    """这个搜索词看起来是番号而不是标题.
+
+    判据是「不含汉字 + 含数字 + 只有字母数字与分隔符」. 中文标题无论怎么拆分都带汉字,
+    所以这条不会误伤糖心自己的内容; 反过来, 任何带数字的纯 ASCII 串都当番号, 不放过
+    糖心没有的写法.
+    """
+    text = value.strip()
+    if not text or has_han(text):
+        return False
+    return bool(_NUMBER_SHAPED_RE.fullmatch(text))
+
 
 def _looks_like_tangxin(file_path: str | None, number: str) -> bool:
     """这个搜索词是否属于糖心的内容.
 
-    有文件路径时只看路径 (库目录名或文件名带「糖心」): 库里其他中文片不该被本站认领,
-    否则一条不相干的标题碰巧命中索引就会把元数据写歪.
+    两道门槛:
 
-    没有路径时一律放行: 手动搜索是用户主动要查, 拦下来等于让人搜不到 —— 那种场景下
+    1. **只接中文标题**: 番号形态的输入一律跳过. 糖心没有番号体系, 拿番号问它必然命中不了,
+       而索引比对是按字覆盖率算的, 番号里的字母数字会撞上无关作品的标题 —— 那种误命中比
+       搜不到更糟.
+    2. **有文件路径时只看路径**: 库目录名或文件名带「糖心」才算本站内容, 否则库里任何一条
+       中文标题都会被拿去糖心索引里比对, 碰巧命中就把元数据写歪.
+
+    没有路径时不做第 2 道: 手动搜索是用户主动要查, 拦下来等于让人搜不到 —— 那种场景下
     用户已经用搜索结果证明了自己的意图, 由他挑选哪一条.
     """
+    if _is_number_shaped(number):
+        return False
     if not file_path:
         return True
     haystack = file_path.casefold()
