@@ -2223,14 +2223,10 @@ class TestGenericFallback:
             return None
 
         async def _scrape(self, url, options=None) -> MediaMetadata | None:
-            return MediaMetadata.model_validate(
-                {"number": "020616_348", "title": "From generic", "source_url": url}
-            )
+            return MediaMetadata.model_validate({"number": "020616_348", "title": "From generic", "source_url": url})
 
     @pytest.mark.asyncio(loop_scope="function")
-    async def test_url_without_dedicated_crawler_falls_back_to_generic(
-        self, repo: Repository, resource_store
-    ):
+    async def test_url_without_dedicated_crawler_falls_back_to_generic(self, repo: Repository, resource_store):
         """域名没有专属爬虫时, 通用解析照样能读出来.
 
         以前这种地址直接返回空, 用户看到「各来源都没有找到结果」;
@@ -2312,6 +2308,19 @@ class TestPreviewFallsBackToAllRoutes:
         async def _scrape(self, url, options=None) -> MediaMetadata | None:
             return None
 
+    class _Unrouted(Crawler):
+        """只在这个站命中; 它不在任何类型路由里."""
+
+        @classmethod
+        def profile(cls) -> CrawlerProfile:
+            return CrawlerProfile(name="tangxin", base_url="https://tangxinvlog.app")
+
+        async def _search(self, query, options=None) -> str | None:
+            return "https://tangxinvlog.app/v/6aef1a3558ccd9a2e6045645/"
+
+        async def _scrape(self, url, options=None) -> MediaMetadata | None:
+            return MediaMetadata.model_validate({"number": "淫荡的家庭护士", "title": "淫荡的家庭护士"})
+
     @pytest.fixture(autouse=True)
     def _reset(self):
         self._OnlyCensored.asked = []
@@ -2374,6 +2383,35 @@ class TestPreviewFallsBackToAllRoutes:
 
         assert [item["site"] for item in items] == ["aventertainments"]
         assert self._OnlyCensored.asked == []
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_site_outside_every_route_is_still_searched(self, repo: Repository, resource_store):
+        """不在任何路由里的已注册来源也要被问到.
+
+        老配置的 `content_routes` 是显式写死的, 不会跟着代码默认值走: 新增站点 (糖心) 明明
+        有爬虫, 用户却没把它编进任何类型路由. 按路由并集兜底遍历不到它, 手动搜索就永远搜不出
+        这个站的内容 —— 只有把范围扩到注册表本身才能覆盖.
+        """
+        hot = HotSettings()
+        # 两条路由都不含 tangxin.
+        hot.scraping.content_routes[ContentType.CHINESE] = ["aventertainments"]
+        hot.scraping.content_routes[ContentType.CENSORED] = ["javbus"]
+        h = ScrapeHandler(
+            repo=repo,
+            factory=FakeFactory(
+                {
+                    "aventertainments": self._NeverHits(client=None),
+                    "javbus": self._NeverHits(client=None),
+                    "tangxin": self._Unrouted(client=None),
+                }
+            ),
+            resource_store=resource_store,
+            pipeline_config=hot,
+        )
+
+        items = await h.preview("淫荡的家庭护士", ContentType.CHINESE)
+
+        assert [item["site"] for item in items] == ["tangxin"]
 
 
 class TestPreferredSiteOutsideRoute:
@@ -2501,8 +2539,6 @@ class TestPreferredSiteOutsideRoute:
         assert _NeverHitsCensored.asked == 0
 
 
-
-
 class TestOrganizeWithoutMediaFileId:
     """按番号或手动搜索刮削时也要联动整理.
 
@@ -2560,3 +2596,270 @@ class TestOrganizeWithoutMediaFileId:
         organize = [f for f in result.followups if f.task_type is TaskType.ORGANIZE]
         assert len(organize) == 1
         assert media.id in organize[0].payload["media_file_ids"]
+
+
+class TestReuseLibraryEntry:
+    """片库里已经刮过的条目直接复用, 不再联网.
+
+    用户的原话是「让片库里有的直接走片库信息, 不要再进行刮削, 没有的再刮削」.
+    判据取 ``raw`` 非空: 那才是「这部片刮过」的证据, 只看「有条目」会把等着补全的
+    半成品也短路掉.
+    """
+
+    class _CountingCrawler(Crawler):
+        """记录被问过几次; 有缓存时应当一次都不问."""
+
+        calls: ClassVar[list[str]] = []
+
+        @classmethod
+        def profile(cls) -> CrawlerProfile:
+            return CrawlerProfile(name="javdb", base_url="https://javdb.com")
+
+        async def _search(self, query, options=None) -> str | None:
+            self.calls.append(query.number)
+            return "https://javdb.com/v/abc"
+
+        async def _scrape(self, url, options=None) -> MediaMetadata | None:
+            return MediaMetadata.model_validate({"number": "MIDV-123", "title": "from network"})
+
+    @pytest.fixture(autouse=True)
+    def _reset(self):
+        self._CountingCrawler.calls = []
+        yield
+
+    def _handler(self, repo: Repository, resource_store) -> ScrapeHandler:
+        return ScrapeHandler(
+            repo=repo,
+            factory=FakeFactory({"javdb": self._CountingCrawler(client=None)}),
+            resource_store=resource_store,
+            pipeline_config=HotSettings(),
+        )
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_scraped_entry_is_reused_without_network(self, repo: Repository, resource_store):
+        seeded = await repo.upsert_metadata(
+            number="MIDV-123",
+            content_type=ContentType.CENSORED,
+            title="库里的标题",
+            tags=["keep"],
+            raw={"javdb": {"number": "MIDV-123", "title": "库里的标题"}},
+            field_sources={"title": "javdb"},
+        )
+        assert seeded.id is not None
+
+        result = await self._handler(repo, resource_store).handle(
+            ScrapePayload(number="MIDV-123", content_type=ContentType.CENSORED)
+        )
+
+        assert result.success is True
+        assert self._CountingCrawler.calls == [], "库里有条目时不该再问任何来源"
+        assert result.result is not None
+        assert result.result.metadata_id == seeded.id
+
+        updated = await repo.get_metadata_by_number("MIDV-123")
+        assert updated is not None
+        assert updated.title == "库里的标题"
+        assert updated.tags == ["keep"]
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_entry_without_raw_still_scrapes(self, repo: Repository, resource_store):
+        """只填了番号的半成品不算「库里已有」, 仍要联网补全."""
+        await repo.upsert_metadata(number="MIDV-123", content_type=ContentType.CENSORED, title="半成品")
+
+        result = await self._handler(repo, resource_store).handle(
+            ScrapePayload(number="MIDV-123", content_type=ContentType.CENSORED)
+        )
+
+        assert result.success is True
+        assert self._CountingCrawler.calls, "没有 raw 快照时必须真的去刮"
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_manual_scrape_bypasses_reuse(self, repo: Repository, resource_store):
+        """手动搜索是「按我选的来源重写一遍」, 不能被库里的旧值挡住."""
+        await repo.upsert_metadata(
+            number="MIDV-123",
+            content_type=ContentType.CENSORED,
+            title="库里的标题",
+            raw={"javdb": {"number": "MIDV-123", "title": "库里的标题"}},
+        )
+
+        result = await self._handler(repo, resource_store).handle(
+            ScrapePayload(number="MIDV-123", content_type=ContentType.CENSORED, manual=True)
+        )
+
+        assert result.success is True
+        assert self._CountingCrawler.calls, "手动刮削必须联网"
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_force_refresh_bypasses_reuse(self, repo: Repository, resource_store):
+        """use_cache 不含 metadata 就是强制刷新, 同样不能复用."""
+        await repo.upsert_metadata(
+            number="MIDV-123",
+            content_type=ContentType.CENSORED,
+            title="库里的标题",
+            raw={"javdb": {"number": "MIDV-123", "title": "库里的标题"}},
+        )
+
+        result = await self._handler(repo, resource_store).handle(
+            ScrapePayload(number="MIDV-123", content_type=ContentType.CENSORED, use_cache=set())
+        )
+
+        assert result.success is True
+        assert self._CountingCrawler.calls, "强制刷新必须联网"
+
+
+class TestReuseOrganizePriority:
+    """复用库内条目时, 派生的整理要排到所有刮削之前.
+
+    这类整理不联网, 是整条链里最快、最不依赖外部的一环; 与普通刮削同档会排在几十个
+    联网任务之后, 用户要等很久才看到文件落盘.
+    """
+
+    class _Crawler(Crawler):
+        calls: ClassVar[list[str]] = []
+
+        @classmethod
+        def profile(cls) -> CrawlerProfile:
+            return CrawlerProfile(name="javdb", base_url="https://javdb.com")
+
+        async def _search(self, query, options=None) -> str | None:
+            self.calls.append(query.number)
+            return "https://javdb.com/v/abc"
+
+        async def _scrape(self, url, options=None) -> MediaMetadata | None:
+            return MediaMetadata.model_validate({"number": "MIDV-123", "title": "from network"})
+
+    @pytest.fixture(autouse=True)
+    def _reset(self):
+        self._Crawler.calls = []
+        yield
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_reuse_organize_priority_is_higher_than_normal_followup(self, repo: Repository, resource_store):
+        seeded = await repo.upsert_metadata(
+            number="MIDV-123",
+            content_type=ContentType.CENSORED,
+            title="库里的标题",
+            raw={"javdb": {"number": "MIDV-123", "title": "库里的标题"}},
+        )
+        assert seeded.id is not None
+
+        library = await repo.create_library(name="L", path="/media")
+        await repo.update_library(library.id, auto_organize=True)
+        media = await repo.create_media_file(library_id=library.id, path="/media/MIDV-123.mp4")
+
+        h = ScrapeHandler(
+            repo=repo,
+            factory=FakeFactory({"javdb": self._Crawler(client=None)}),
+            resource_store=resource_store,
+            pipeline_config=HotSettings(),
+        )
+        result = await h.handle(
+            ScrapePayload(number="MIDV-123", content_type=ContentType.CENSORED, media_file_id=media.id)
+        )
+
+        assert result.success is True
+        assert self._Crawler.calls == []
+        organize = [f for f in result.followups if f.task_type is TaskType.ORGANIZE]
+        assert organize, "复用路径也要派发整理, 否则文件停在未整理"
+        assert all(f.priority == 2 for f in organize)
+
+
+class TestReuseChineseEntry:
+    """国产原创站的 number 是站点标题, 与文件名解析出的 number 不相等.
+
+    糖心落库的是「【黑丝淫穴】上门家政女仆…」, 而文件名给出的是
+    「489155.COM@糖心VLOGUP主黑丝淫穴上门家政女仆…」. 按番号查永远落空, 复用分支进不去,
+    于是每次重刮都当成新片重新联网 —— 日本番号两边一致, 所以那边看着正常.
+    """
+
+    class _Crawler(Crawler):
+        calls: ClassVar[list[str]] = []
+
+        @classmethod
+        def profile(cls) -> CrawlerProfile:
+            return CrawlerProfile(name="tangxin", base_url="https://tangxinvlog.app")
+
+        async def _search(self, query, options=None) -> str | None:
+            self.calls.append(query.number)
+            return "https://tangxinvlog.app/v/6adae766189d6ebc4f0ec91e/"
+
+        async def _scrape(self, url, options=None) -> MediaMetadata | None:
+            return MediaMetadata.model_validate({"number": "x", "title": "from network"})
+
+    @pytest.fixture(autouse=True)
+    def _reset(self):
+        self._Crawler.calls = []
+        yield
+
+    def _handler(self, repo: Repository, resource_store) -> ScrapeHandler:
+        return ScrapeHandler(
+            repo=repo,
+            factory=FakeFactory({"tangxin": self._Crawler(client=None)}),
+            resource_store=resource_store,
+            pipeline_config=HotSettings(),
+        )
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_file_name_form_matches_stored_site_title(self, repo: Repository, resource_store):
+        stored_title = "【黑丝淫穴】上门家政女仆黑丝淫穴诱惑  骚穴被业主肉棒塞满打桩内射"
+        await repo.upsert_metadata(
+            number=stored_title,
+            content_type=ContentType.CHINESE,
+            title=stored_title,
+            raw={"tangxin": {"number": stored_title, "title": stored_title}},
+        )
+
+        # 文件名解析出的形态: 带域名与 Up主 前缀, 无【】标签, 空格也少一个.
+        result = await self._handler(repo, resource_store).handle(
+            ScrapePayload(
+                number="489155.COM@糖心VLOGUP主黑丝淫穴上门家政女仆黑丝淫穴诱惑骚穴被业主肉棒塞满打桩内射",
+                content_type=ContentType.CHINESE,
+            )
+        )
+
+        assert result.success is True
+        assert self._Crawler.calls == [], "库里有同一条目时不该再联网"
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_unrelated_chinese_title_still_scrapes(self, repo: Repository, resource_store):
+        """指纹比对不能把不相干的条目认成同一条."""
+        await repo.upsert_metadata(
+            number="完全不同的标题",
+            content_type=ContentType.CHINESE,
+            title="完全不同的标题",
+            raw={"tangxin": {"number": "x", "title": "完全不同的标题"}},
+        )
+
+        result = await self._handler(repo, resource_store).handle(
+            ScrapePayload(number="另一部片的标题", content_type=ContentType.CHINESE)
+        )
+
+        assert result.success is True
+        assert self._Crawler.calls, "对不上时必须联网"
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_prefixed_file_name_matches_stored_title(self, repo: Repository, resource_store):
+        """文件名带站点前缀时也要认得出库内条目.
+
+        用户从下载器拿到的名字常是「13 糖心网红UP主偷情一束光约会成为人妻的前女友」,
+        而库里存的是站点标题「约会成为人妻的前女友」. 前缀是下载器 / 发帖人加的, 剥不干净
+        就会认成新片, 每次重刮都联网.
+        """
+        stored = "约会成为人妻的前女友！熟人操起来就是舒服！"
+        await repo.upsert_metadata(
+            number=stored,
+            content_type=ContentType.CHINESE,
+            title=stored,
+            raw={"tangxin": {"number": stored, "title": stored}},
+        )
+
+        result = await self._handler(repo, resource_store).handle(
+            ScrapePayload(
+                number="13 糖心网红UP主偷情一束光约会成为人妻的前女友！熟人操起来就是舒服！",
+                content_type=ContentType.CHINESE,
+            )
+        )
+
+        assert result.success is True
+        assert self._Crawler.calls == [], "带前缀的文件名也该复用库内条目"

@@ -50,7 +50,9 @@ ORGANIZE 只读取范围内的 `MediaFile` 行: 缺省为该库全部索引, 显
 
 ## 站点级复用
 
-SCRAPE **没有**「缓存命中即整体跳过爬取」的快速返回 — 完全不联网的纯整理由 ORGANIZE 承担. 它总是进入聚合, 但当 `CacheKind.metadata ∈ use_cache` 时把 `Metadata.raw` 作为 `cache` 传入, 请求某站前按 `cache_key` (`site` 或 `site:lang`) 查快照, 命中即还原并跳过爬虫调用, 未命中的站点按获取图请求. 不含 `metadata` 时全部站点强制重爬; 不含 `trans` 时跳过译文缓存读取 (仍写入), 见 [llm.md](llm.md). 复用与新结果统一写入 `fetched`; 写回时以库内 `raw` 为基础, 本次结果按站点覆盖既有快照, 本次未取得的站点 (移出类型路由 / 未安装 / 禁用) 保留. 不含 `metadata` 时 `raw` 仍由本次结果整体替换. 快照含非法字段时降级为正常 fetch.
+SCRAPE 有两级复用. **整体跳过**: `db_data` 有 `raw` 且非手动 / 非指定地址 / `metadata` ∈ `use_cache` 时完全不进聚合, 直接关联文件并派发后继 (整理用更高优先级 `_REUSE_ORGANIZE_PRIORITY`, 让它插到所有刮削之前); 判据见 `handlers/scrape.py::_reusable_entry`. **站点级**: 进入聚合时把 `Metadata.raw` 作为 `cache` 传入, 请求某站前按 `cache_key` (`site` 或 `site:lang`) 查快照, 命中即还原并跳过爬虫调用, 未命中的站点按获取图请求. 不含 `metadata` 时全部站点强制重爬; 不含 `trans` 时跳过译文缓存读取 (仍写入), 见 [llm.md](llm.md). 复用与新结果统一写入 `fetched`; 写回时以库内 `raw` 为基础, 本次结果按站点覆盖既有快照, 本次未取得的站点 (移出类型路由 / 未安装 / 禁用) 保留. 不含 `metadata` 时 `raw` 仍由本次结果整体替换. 快照含非法字段时降级为正常 fetch.
+
+**按番号找条目**: 没有番号体系的来源 (糖心) 落库的 `number` 是站点标题, 而文件名解析出的 number 是另一段文字 (多出 `13 糖心网红UP主` 前缀 / 少了 `【】` 标签 / 空白数量不同). 按番号查找因此必须补一次 `db/models.py::title_fingerprint` 比对 (库内标题指纹是待查串的子串即算同一条, 见 `db/repos/metadata.py::get_metadata_by_title_fingerprint`), 否则这类条目永远认不出来, 每次重刮都联网.
 
 ## 字段级多源聚合
 

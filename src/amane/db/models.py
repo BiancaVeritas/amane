@@ -258,7 +258,6 @@ class ScrapedFilename(SQLModel, table=True):
     created_at: datetime = Field(default_factory=_utcnow)
 
 
-
 class _VrProperty(property):
     """``Metadata.vr`` 的实现, 只允许实例访问.
 
@@ -425,6 +424,16 @@ def metadata_number_predicate(number: str) -> ColumnElement[bool]:
     ``ix_metadata_number_non_western`` 另行保证. WESTERN 同番号允许多条, 调用方不得仅凭此谓词确定作品身份.
     """
     return col(Metadata.number).collate("NOCASE") == number
+
+
+def title_fingerprint(title: str) -> str:
+    """标题指纹: 只保留字母数字并小写.
+
+    用于比较「同一部片在不同来源下的两种标题写法」. 没有番号体系的来源 (糖心) 把站点标题
+    当番号存, 而文件名解析出的是另一段文字 —— 少了 ``【黑丝淫穴】`` 这类方括号标签, 空白
+    数量也不同. 剥掉标点与空白后两边才可比.
+    """
+    return "".join(ch for ch in title.casefold() if ch.isalnum())
 
 
 class Task(SQLModel, table=True):

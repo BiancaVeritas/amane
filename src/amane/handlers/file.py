@@ -370,7 +370,13 @@ async def commit_organized_media_file(
     occupant = await repo.get_media_file_by_path(str(placed))
     if occupant is None or occupant.id == media.id:
         moved = path_key(str(placed)) != path_key(media.path)
-        updated = await repo.update_media_file(media.id, path=str(placed))
+        # 番号是路径的函数, 改名后必须跟着重算.
+        #
+        # 整理会把文件名改成站点标题 (糖心这类没有番号体系的来源尤其明显: 原名带着
+        # 「13 糖心网红UP主…」这类前缀, 整理后只剩标题本身). 只改 path 不重算 number,
+        # 那一列就永久停在旧值上; 后续按番号找条目 (刮削复用、关联文件) 全部落空.
+        parsed_number = parse_file_info(str(placed)).number
+        updated = await repo.update_media_file(media.id, path=str(placed), number=parsed_number)
         if updated is not None and moved:
             # 只有真的换了位置才登记: 文件本来就在目标路径上 (重复整理 / 原地模式无改名)
             # 不该留下一条「原名 = 新名」的记录, 那会让文件记录变成整理次数的流水账.

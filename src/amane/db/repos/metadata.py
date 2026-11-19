@@ -34,6 +34,7 @@ from ..models import (
     has_subtitle_predicate,
     metadata_number_predicate,
     metadata_vr_predicate,
+    title_fingerprint,
 )
 from ..repo_types import (
     MetadataFields,
@@ -55,6 +56,12 @@ from .facet_helpers import (
 )
 
 logger = structlog.get_logger()
+
+#: 按标题指纹找条目时, 库内标题至少要有这么长.
+#:
+#: 判据是「库内标题的指纹出现在待查串里」, 太短的标题会碰巧成为别的标题的一部分
+#: (「女仆」「中出」这类词在中文标题里遍地都是). 中文标题里 6 个字母数字已足够区分.
+_MIN_TITLE_FINGERPRINT = 6
 
 
 def _normalize_text_fields(fields: MetadataFields) -> MetadataFields:
@@ -206,10 +213,17 @@ class MetadataRepoMixin(RepositoryMixinBase):
         if id_subquery_sql is not None:
             conditions.append(col(Metadata.id).in_(text(id_subquery_sql)))
         if keyword:
-            search_pattern = f"%{keyword}%"
-            conditions.append(
-                or_(col(Metadata.number).ilike(search_pattern), col(Metadata.title).ilike(search_pattern))
-            )
+            # 按空白拆词, 每个词各自命中即可: 整串当子串比会把「多一个空格」当成搜不到.
+            #
+            # 标题里的空白是站点随手写的, 同一部片在文件名与站点标题之间常差一两个空格
+            # (``淫穴诱惑 骚穴`` 与 ``淫穴诱惑  骚穴``). 整串 LIKE 要求连续匹配, 这种差异
+            # 直接让结果为空 —— 用户看到的是「明明在库里却搜不出来」.
+            #
+            # 拆词后取 AND: 多词仍要求全部出现, 只是不再要求它们紧挨着. 单个词时行为与
+            # 整串相同.
+            for token in keyword.split():
+                pattern = f"%{token}%"
+                conditions.append(or_(col(Metadata.number).ilike(pattern), col(Metadata.title).ilike(pattern)))
         for link_metadata_id, facet_column, facet_ids, any_of in (
             (col(MetadataActor.metadata_id), col(MetadataActor.actor_id), actor_ids, False),
             (col(MetadataDirector.metadata_id), col(MetadataDirector.director_id), director_ids, False),
@@ -304,7 +318,7 @@ class MetadataRepoMixin(RepositoryMixinBase):
                 actor_ids=actor_ids,
                 director_ids=director_ids,
                 tag_ids=tag_ids,
-            tag_any_ids=tag_any_ids,
+                tag_any_ids=tag_any_ids,
                 studio_ids=studio_ids,
                 publisher_ids=publisher_ids,
                 series_ids=series_ids,
@@ -367,7 +381,7 @@ class MetadataRepoMixin(RepositoryMixinBase):
                 actor_ids=actor_ids,
                 director_ids=director_ids,
                 tag_ids=tag_ids,
-            tag_any_ids=tag_any_ids,
+                tag_any_ids=tag_any_ids,
                 studio_ids=studio_ids,
                 publisher_ids=publisher_ids,
                 series_ids=series_ids,
@@ -416,6 +430,42 @@ class MetadataRepoMixin(RepositoryMixinBase):
             result = await session.exec(stmt)
             rows = result.all()
             return rows[0] if len(rows) == 1 else None
+
+    async def get_metadata_by_title_fingerprint(
+        self, fingerprint: str, *, content_type: ContentType | None = None
+    ) -> Metadata | None:
+        """按「标题指纹」定位条目: 只保留字母数字并小写后, 库内标题是待查串的子串.
+
+        没有番号体系的来源 (糖心) 落库的 ``number`` 就是站点标题, 而文件名解析出的 number
+        是另一段文字: 少了 ``【黑丝淫穴】`` 这类方括号标签, 或多了 ``13 糖心网红UP主`` 这类
+        前缀, 空白数量也不同. 两者永远不相等, 按番号查必然落空.
+
+        判据取**包含**而非相等: 文件名是用户 / 下载器起的, 站点标题是站点定的, 前者常把
+        站点标题整段包住, 再挂一段自己的前缀. 要求库内标题完整出现在待查串里, 既容得下这段
+        前缀, 又不会把「另一部片的标题碰巧是它的一部分」认进来.
+
+        指纹剥离的字符集没有上界, SQL 里穷举不现实, 所以只取该类型的 id 与标题两列回来比:
+        候选集限定在一种内容类型内, 读的是单列文本, 比整行 ORM 对象轻得多. 命中多条时返回
+        None —— 标题不是唯一键, 认错条目比不认更糟.
+        """
+        if not fingerprint:
+            return None
+        async with self._session() as session:
+            stmt = select(col(Metadata.id), col(Metadata.title))
+            if content_type is not None:
+                stmt = stmt.where(Metadata.content_type == content_type)
+            rows = (await session.exec(stmt)).all()
+        matched = [
+            row_id
+            for row_id, title in rows
+            if title
+            and (candidate := title_fingerprint(title))
+            and len(candidate) >= _MIN_TITLE_FINGERPRINT
+            and candidate in fingerprint
+        ]
+        if len(matched) != 1:
+            return None
+        return await self.get_metadata(matched[0])
 
     async def get_metadata_by_theporndb_uuid(self, theporndb_uuid: str) -> Metadata | None:
         """按 WESTERN ThePornDB UUID 定位作品; ThePornDB UUID 是外部作品身份."""
@@ -766,21 +816,13 @@ class MetadataRepoMixin(RepositoryMixinBase):
         键序看着像没变. 这里自己序列化再整列回写, 顺序由字典本身决定.
         """
         async with self._session() as session:
-            row = (
-                await session.exec(
-                    select(col(Metadata.source_urls)).where(col(Metadata.id) == metadata_id)
-                )
-            ).first()
+            row = (await session.exec(select(col(Metadata.source_urls)).where(col(Metadata.id) == metadata_id))).first()
             urls = dict(row or {})
             if site not in urls:
                 return False
             ordered = {site: urls[site]}
             ordered.update({k: v for k, v in urls.items() if k != site})
-            await session.exec(
-                sqla_update(Metadata)
-                .where(col(Metadata.id) == metadata_id)
-                .values(source_urls=ordered)
-            )
+            await session.exec(sqla_update(Metadata).where(col(Metadata.id) == metadata_id).values(source_urls=ordered))
             await session.commit()
             return True
 

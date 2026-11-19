@@ -953,6 +953,32 @@ class TestMetadataRepo:
         assert items[0].number == "ABC-001"
 
     @pytest.mark.asyncio(loop_scope="function")
+    async def test_list_metadata_keyword_tolerates_extra_spaces(self, repo: Repository):
+        """多词关键字按词匹配, 不要求这些词在标题里紧挨着.
+
+        标题里的空白是站点随手写的, 同一部片在文件名与站点标题之间常差一两个空格.
+        整串当子串比会把这种差异当成「搜不到」, 用户看到的是明明在库里却搜不出来.
+        """
+        await repo.upsert_metadata(
+            number="【黑丝淫穴】上门家政女仆黑丝淫穴诱惑  骚穴被业主肉棒塞满打桩内射",
+            title="【黑丝淫穴】上门家政女仆黑丝淫穴诱惑  骚穴被业主肉棒塞满打桩内射",
+        )
+        await repo.upsert_metadata(number="OTHER-001", title="无关条目")
+
+        # 单空格的关键字要能命中双空格的那条.
+        items, total = await repo.list_metadata(keyword="上门家政女仆黑丝淫穴诱惑 骚穴被业主肉棒塞满打桩内射")
+        assert total == 1
+        assert items[0].number.startswith("【黑丝淫穴】")
+
+        # 词序打乱也能命中: 匹配的是「这些词都出现」, 不是「按这个顺序连续出现」.
+        items, total = await repo.list_metadata(keyword="骚穴 上门家政女仆")
+        assert total == 1
+
+        # 缺词仍然搜不到: 不能退化成任一命中.
+        items, total = await repo.list_metadata(keyword="上门家政女仆 根本不存在的词")
+        assert total == 0
+
+    @pytest.mark.asyncio(loop_scope="function")
     async def test_list_metadata_pagination(self, repo: Repository):
         for i in range(5):
             await repo.upsert_metadata(number=f"NUM-{i:03d}", title=f"Title {i}")

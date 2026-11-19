@@ -20,6 +20,7 @@ from amane.handlers.models import ORGANIZE_CONFLICT_LIMIT
 from amane.library import DeleteOutcome, InventoryStore, LibraryScan, scan_inventory
 from amane.media import apply_cover_watermarks_from_info
 from amane.observability.models import OrganizeConflict, OrganizeConflictReason
+from amane.parsing import ContentType
 
 if TYPE_CHECKING:
     from amane.db.repository import Repository
@@ -1312,6 +1313,44 @@ async def test_commit_organized_media_file(repo: Repository, tmp_path: Path, cas
     kept = await repo.get_media_file(media.id)
     assert kept is not None
     assert kept.path == str(src)
+
+
+@pytest.mark.asyncio(loop_scope="function")
+async def test_commit_organized_media_file_recomputes_number(repo: Repository, tmp_path: Path) -> None:
+    """整理改名后必须重算 ``number``: 番号是路径的函数.
+
+    糖心这类没有番号体系的来源尤其明显: 原名带着「13 糖心网红UP主…」这类前缀, 整理后
+    只剩站点标题. 只改 path 不重算 number, 那一列就永久停在旧值上, 后续按番号找条目
+    (刮削复用、关联文件) 全部落空 —— 表现就是「库里明明有, 却每次都重新刮一遍」.
+    """
+    lib_root = tmp_path / "lib"
+    lib_root.mkdir()
+    lib = await repo.create_library(name="t", path=str(lib_root), write_nfo=False)
+    assert lib.id is not None
+    meta = await repo.upsert_metadata(number="MIDV-123", content_type=ContentType.CENSORED)
+    assert meta.id is not None
+
+    # 原名带一段不会出现在新名里的前缀, 这样 number 是否重算一眼可见.
+    src = lib_root / "incoming" / "junk-prefix MIDV-123.mp4"
+    src.parent.mkdir()
+    src.write_bytes(b"v")
+    media = await repo.create_media_file(
+        lib.id,
+        path=str(src),
+        number="junk-prefix MIDV-123",
+        status=MediaFileStatus.SCRAPED,
+        metadata_id=meta.id,
+    )
+    assert media.id is not None
+
+    placed = lib_root / "MIDV-123" / "MIDV-123.mp4"
+    placed.parent.mkdir()
+    await commit_organized_media_file(repo, media, placed, lib_root)
+
+    updated = await repo.get_media_file(media.id)
+    assert updated is not None
+    assert updated.path == str(placed)
+    assert updated.number == "MIDV-123", "改名后 number 必须跟着路径重算"
 
 
 @pytest.mark.asyncio(loop_scope="function")

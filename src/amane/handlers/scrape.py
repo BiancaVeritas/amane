@@ -20,7 +20,8 @@ from ..aggregate import (
 from ..crawlers.base import Crawler
 from ..crawlers.models import FetchOptions, MediaMetadata, SearchQuery
 from ..crawlers.site_roles import FILM_METADATA_SITES, builtin_descriptors
-from ..db.models import MediaFileStatus, MediaIdentityType, TaskType
+from ..crawlers.sites.tangxin import clean_search_title
+from ..db.models import MediaFileStatus, MediaIdentityType, Metadata, TaskType, title_fingerprint
 from ..db.repo_types import WriteMode
 from ..enums import ActorGender, MetadataField, SiteName
 from ..media import materialize_images
@@ -55,6 +56,13 @@ _SITE_NAMES = frozenset(site.value for site in SiteName)
 #: 同档时调度按创建时间先到先执行, 刚派生的后继会排到几十个待刮任务之后 ——
 #: 一部片刮完却不能立刻补演员、落盘. 提高一级让链条紧接着走.
 _FOLLOWUP_PRIORITY = 1
+
+#: 复用库内条目时派生的整理: 再高一级, 排到所有刮削之前.
+#:
+#: 这类任务不联网 —— 元数据已经在库里躺着, 缺的只是把文件按模板落到库路径. 一批刮削
+#: 排队时, 它们若和普通刮削同档, 用户要等前面几十个联网任务跑完才看到文件被整理好;
+#: 而它们恰恰是整条链里最快、最不依赖外部的一环, 没有理由排队.
+_REUSE_ORGANIZE_PRIORITY = 2
 
 #: 通用解析命中时用的来源名. 不是真实站点, 只在预览列表里标明「这条来自通用解析」.
 _GENERIC_SITE = "generic"
@@ -94,6 +102,28 @@ class CrawlerFactoryLike(Protocol):
     async def get_generic(self) -> CrawlerLike:
         """通用页面解析器; 站点没有专属爬虫时用它兜底."""
         ...
+
+
+def _reusable_entry(payload: ScrapePayload, db_data: Metadata | None) -> Metadata | None:
+    """库内条目已经刮削过时就返回它, 让本次刮削完全不联网.
+
+    判据是 ``raw`` 非空 —— 那才是「这部片已经刮过」的证据: 它按站点存着上次取回的快照.
+    只看「有条目」或「有标题」都太松: 手动建的条目、只填了番号的条目同样有标题, 但它们
+    还等着刮削补全, 短路掉会让用户点了刮削却什么也没补上.
+
+    几种情形必须继续联网, 不能被这里短路:
+
+    - ``manual``: 用户手动搜索后点的那一条, 意图就是「按我选的来源重新写一遍」.
+    - ``source_url`` / ``append_sources``: 指定了要抓的地址, 或要补来源链接.
+    - ``use_cache`` 不含 ``metadata``: 显式要求强制刷新.
+    """
+    if db_data is None:
+        return None
+    if payload.manual or payload.append_sources or payload.source_url:
+        return None
+    if CacheKind.metadata not in payload.use_cache:
+        return None
+    return db_data if db_data.raw and db_data.title else None
 
 
 def _searchable_title(title: str | None) -> str | None:
@@ -252,7 +282,7 @@ class ScrapeHandler(TaskHandler[ScrapePayload, ScrapeResult]):
         return await self._preview_number(url, content_type)
 
     async def _preview_number(self, term: str, content_type: ContentType) -> list[dict]:
-        """拿一个搜索词问各来源; 先问当前类型路由, 一条都没命中再扩大到全部路由.
+        """拿一个搜索词问各来源; 先问当前类型路由, 一条都没命中再问**全部已注册来源**.
 
         ``term`` 通常是番号; 番号对不上时也接受去标点的标题 —— 各站自己的搜索逻辑决定能否命中.
 
@@ -260,27 +290,40 @@ class ScrapeHandler(TaskHandler[ScrapePayload, ScrapeResult]):
         而它在 javbus 这类有码站也有条目), 只看当前路由会把明明存在的资料报成「搜不到」.
         先查当前路由是为了结果更贴题; 一条都没有时再问其余来源, 让用户自己挑.
 
-        中文标题同样走全路由: 它有可能是国产站的内容被别的类型路由收录 (糖心这类原创站的
-        标题也出现在有码站), 按类型一刀切会把存在的资料藏起来. 代价是日系站会 404/403 一轮,
-        但并发发起, 慢的是最慢那一个而不是全部之和.
+        兜底范围是**注册表里全部影片来源**, 不是配置里的路由并集: 用户没把某站编进任何类型
+        路由时, 按路由兜底根本遍历不到它 —— 站明明有爬虫, 手动搜索却永远搜不出来. 糖心这类
+        新增站尤其明显: 默认路由里有它, 但老配置里 `content_routes` 是显式写死的, 不会跟着
+        代码默认值走, 于是「全路由」名不副实.
+
+        兜底是**一轮并发**而不是逐条路由串行: 串行时总耗时是各路由之和 (实测能到 80 秒),
+        并发后只等最慢的那一个.
         """
         route = list(self._config.scraping.content_routes.get(content_type) or [])
-        if not route:
-            return []
-        found = await self._search_route(term, content_type, route)
-        if found:
-            return found
+        tried: set[str] = set()
+        if route:
+            found = await self._search_route(term, content_type, route)
+            if found:
+                return found
+            tried.update(str(site) for site in route)
 
-        # 全路由兜底: 换掉 content_type 也换候选站, 因为各站对类型有自己的判断.
+        # 其余来源: 其余类型路由在前, 不在任何路由里的已注册来源在后, 一次全部发出去.
+        #
+        # 顺序只影响展示, 不影响耗时 —— 各站互不依赖, 分成多轮 await 纯属把并发拆碎.
+        pending: list[SiteName | str] = []
         for other_type, other_route in self._config.scraping.content_routes.items():
             if other_type is content_type or not other_route:
                 continue
-            hits = await self._search_route(term, other_type, list(other_route))
-            if hits:
-                return hits
-        return []
+            pending.extend(site for site in other_route if str(site) not in tried)
+            tried.update(str(site) for site in other_route)
+        untried = [site for site in FILM_METADATA_SITES if str(site) not in tried]
+        if untried:
+            current().info("search falls back to unrouted sites", sites=[str(site) for site in untried])
+        pending.extend(untried)
+        if not pending:
+            return []
+        return await self._search_route(term, content_type, pending)
 
-    async def _search_route(self, term: str, content_type: ContentType, route: Sequence[SiteName]) -> list[dict]:
+    async def _search_route(self, term: str, content_type: ContentType, route: Sequence[SiteName | str]) -> list[dict]:
         """在给定站点集合上搜一个词, 返回命中的候选.
 
         并发问各站: 它们互不依赖, 串行时总耗时是各站之和 (一次预览十几秒里有八秒花在四个
@@ -560,8 +603,23 @@ class ScrapeHandler(TaskHandler[ScrapePayload, ScrapeResult]):
                 db_data = await self._repo.get_metadata_by_theporndb_uuid(payload.theporndb_uuid)
             else:
                 db_data = await self._repo.get_metadata_by_number(payload.number, content_type=payload.content_type)
+                if db_data is None and payload.content_type == ContentType.CHINESE:
+                    # 国产原创站 (糖心) 落库的 number 是站点标题, 与文件名解析出的 number
+                    # 永远不相等 —— 后者带着域名与「Up主」前缀, 还少了【】标签, 空白数量也不同.
+                    # 按番号查必然落空, 「库里有就复用」对它们形同虚设.
+                    #
+                    # 两边都先按糖心的标题口径剥一遍 (去域名 / Up主 / 站名 / 标点), 再取指纹比.
+                    db_data = await self._repo.get_metadata_by_title_fingerprint(
+                        title_fingerprint(clean_search_title(payload.number)),
+                        content_type=payload.content_type,
+                    )
         if db_data is not None and db_data.raw:
             rec.write_raw_cache(db_data.raw)
+
+        # 库内已有可用条目: 直接用它, 本次不再联网.
+        reusable = _reusable_entry(payload, db_data)
+        if reusable is not None:
+            return await self._reuse_library_entry(payload, reusable, file, route, progress_total)
 
         theporndb_uuid = payload.theporndb_uuid
         if theporndb_uuid is None and identity_metadata is not None:
@@ -902,6 +960,52 @@ class ScrapeHandler(TaskHandler[ScrapePayload, ScrapeResult]):
             followups=[*actor_followups, *organize_followups],
         )
 
+    async def _reuse_library_entry(
+        self,
+        payload: ScrapePayload,
+        entry: Metadata,
+        file: MediaFile | None,
+        route: Sequence[SiteName | str],
+        progress_total: int,
+    ) -> TaskResult[ScrapeResult]:
+        """库内已有可用条目: 关联文件与派发后继, 不请求任何来源.
+
+        与正常路径的区别只有一处 —— 没有聚合, 因此没有 ``raw`` 与 ``field_sources`` 的更新,
+        这两份数据保持库里原样. 图片同样不重新物化: 它们在上一次刮削时已经落过盘, 这里再跑
+        一遍只会重复下载同一批地址.
+
+        ``field_sources`` 仍按库里的值回填, 任务详情才能显示「这些字段来自哪家」.
+        """
+        rec = current()
+        rec.info("reuse library entry, skip scraping", metadata_id=entry.id, number=entry.number)
+        assert entry.id is not None
+
+        # 文件关联与后继派发与正常路径一致: 复用不等于「什么都不做」, 文件仍要落到已刮削
+        # 状态并接着整理, 否则它会一直停在待整理.
+        if payload.content_type != ContentType.WESTERN:
+            await finalize_media_file(self._repo, payload.media_file_id, entry.id)
+            await self._adopt_number_files(entry.number, entry.id, payload.media_file_id)
+
+        actor_followups = await self._actor_scrape_followups(entry.actors, payload.content_type)
+        # 复用路径不联网, 整理也没有外部依赖: 排到所有刮削之前, 让文件立刻落盘,
+        # 不必等排队中的几十个联网任务跑完.
+        organize_followups = await self._auto_organize_followups(
+            payload, file, entry.id, priority=_REUSE_ORGANIZE_PRIORITY
+        )
+        await self.report_progress(progress_total, progress_total, "done")
+
+        field_sources = dict(entry.field_sources or {})
+        return TaskResult(
+            success=True,
+            result=ScrapeResult(
+                metadata_id=entry.id,
+                field_sources=field_sources,
+                failed_sites=[],
+                outcomes=[],
+            ),
+            followups=[*actor_followups, *organize_followups],
+        )
+
     def failure_result(self, payload: ScrapePayload) -> ScrapeResult | None:
         """抓取之后崩掉时, 站点明细仍要能回答"为什么刮不到"."""
         outcomes = current().site_outcomes(include_unqueried=True)
@@ -943,7 +1047,12 @@ class ScrapeHandler(TaskHandler[ScrapePayload, ScrapeResult]):
         return adopted
 
     async def _auto_organize_followups(
-        self, payload: ScrapePayload, file: MediaFile | None, metadata_id: int
+        self,
+        payload: ScrapePayload,
+        file: MediaFile | None,
+        metadata_id: int,
+        *,
+        priority: int = _FOLLOWUP_PRIORITY,
     ) -> list[FollowupTask]:
         """库开启自动整理时为本次刮削涉及的文件描述 ORGANIZE 后继.
 
@@ -954,9 +1063,9 @@ class ScrapeHandler(TaskHandler[ScrapePayload, ScrapeResult]):
         路径刮完一律不落盘, 文件永远停在「已刮削未整理」. 现在两种入口都算: 给了文件就整理那
         一条, 没给就按这次的 ``metadata_id`` 找出挂着的全部文件.
 
-        ``priority=0``: 与影片任务同档. 早先排最低 (-1), 结果是只要还有刮削排队,
-        整理就一直轮不上 —— 每个刮削都派发一条整理, 而刮削一批要几十分钟,
-        文件长时间停在「已刮削未落盘」.
+        ``priority`` 缺省比刮削高一级: 同档时按创建时间排序, 刚派生的后继会排在几十个待刮
+        任务之后, 一部片刮完要等整批刮完才落盘. 复用库内条目时调用方传更高的档, 让这类
+        不联网的整理直接插到队首.
 
         整段 ``except`` 只为不让已写库的刮削任务转为 FAILED; 这一支不可达于任何预期输入, 出现即模型或
         数据库有问题, 按异常记日志. 此时整理不会发生, 该文件停在「已刮削未落盘」, 与完成事务失败同属不覆盖窗口.
@@ -986,9 +1095,7 @@ class ScrapeHandler(TaskHandler[ScrapePayload, ScrapeResult]):
                     key=f"organize:{candidate.id}",
                     task_type=TaskType.ORGANIZE,
                     payload=organize.model_dump(mode="json"),
-                    # 比刮削高一级: 同档时按创建时间排序, 刚派生的后继会排在几十个待刮任务之后,
-                    # 一部片刮完要等整批刮完才落盘.
-                    priority=_FOLLOWUP_PRIORITY,
+                    priority=priority,
                 )
             )
         return followups
