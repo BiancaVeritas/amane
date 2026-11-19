@@ -326,12 +326,19 @@ def canonical_number(number: str | None) -> str | None:
 
     东京热 (K/N + 4 位数字) 一律小写: 站点详情页把番号写成 ``N1199``, 而落盘与用户预期
     都是 ``n1199``; 两套写法并存会让同一部作品在库里与文件名上看起来不是一个.
+    heydouga 统一写成 ``Heydouga-<系列>-<作品>``: 用户与站点都可能写成全小写或全大写,
+    站内序列号的写法是首字母大写, 三套写法在库里并存会让同一部作品看起来不是一个.
     其余番号保持原样 —— 大小写是站点标识的一部分, 改了会与别的来源对不上.
     """
     if not number:
         return number
     if len(number) == 5 and number[0].upper() in {"K", "N"} and number[1:].isdigit():
         return number.lower()
+    if m := re.fullmatch(r"(?i)heydouga[-_]?(\d{2,4})[-_](\d{1,4})", number):
+        return f"Heydouga-{m[1]}-{m[2]}"
+    # 只有系列号、没有作品号时同样归一: 通用前缀规则会把它整段转大写.
+    if m := re.fullmatch(r"(?i)heydouga[-_]?(\d{2,4})", number):
+        return f"Heydouga-{m[1]}"
     return number
 
 
@@ -641,10 +648,11 @@ def _match(basename: str, escape_strings: list[str], *, generic: bool) -> tuple[
         if m := re.search(r"HEYZO\d{3,}", hz):
             return m.group().replace("HEYZO", "HEYZO-"), ContentType.UNCENSORED
     # heydouga 番号由系列号与作品号两段组成 (heydouga-4037-1002); 通用的字母前缀规则只取到第一段.
+    # 写法统一为 ``Heydouga-x-y``, 与 ``canonical_number`` 同一口径.
     if "HEYDOUGA" in c:
         hd = re.sub(r"[-_. ]+", "-", c)
         if m := re.search(r"HEYDOUGA-?(\d{2,4})-(\d{1,4})", hd):
-            return f"HEYDOUGA-{m[1]}-{m[2]}", ContentType.UNCENSORED
+            return f"Heydouga-{m[1]}-{m[2]}", ContentType.UNCENSORED
     if m := re.search(r"(H4610|C0930|H0930)-[A-Z]+\d{4,}", c):
         return m.group(), ContentType.UNCENSORED
     # kin8 归欧美链 (theporndb 为第一源); 该类型表示路由归属, 与马赛克标记正交.

@@ -171,12 +171,12 @@ CASES: list[object] = [
     _Case(
         "/media/heydouga-4037-1002-4K.mp4",
         definition="4k",
-        number="HEYDOUGA-4037-1002",
+        number="Heydouga-4037-1002",
         content_type=ContentType.UNCENSORED,
     ),
-    _Case("/media/heydouga4037-1002.mp4", number="HEYDOUGA-4037-1002", content_type=ContentType.UNCENSORED),
-    _Case("/media/heydouga_4037_1002-CD1.mp4", cd=1, number="HEYDOUGA-4037-1002", content_type=ContentType.UNCENSORED),
-    _Case("/media/heydouga-4037.mp4", number="HEYDOUGA-4037", content_type=ContentType.UNCENSORED),
+    _Case("/media/heydouga4037-1002.mp4", number="Heydouga-4037-1002", content_type=ContentType.UNCENSORED),
+    _Case("/media/heydouga_4037_1002-CD1.mp4", cd=1, number="Heydouga-4037-1002", content_type=ContentType.UNCENSORED),
+    _Case("/media/heydouga-4037.mp4", number="Heydouga-4037", content_type=ContentType.UNCENSORED),
     _Case("/media/S2MBD-006.mp4", number="S2MBD-006", content_type=ContentType.UNCENSORED),
     _Case("/media/SMBD-005.mp4", number="SMBD-005", content_type=ContentType.UNCENSORED),
     _Case("/media/gachig256.mp4", number="GACHIG-256", content_type=ContentType.UNCENSORED),
@@ -434,12 +434,8 @@ def test_western_dated_known_studio_keeps_canonical_name() -> None:
         ("GL894-GiorgioGrandi.26.04.05-C-4K.mp4", "GiorgioGrandi.26.04.05"),
     ],
 )
-def test_western_dated_number_ignores_prefix_before_last_hyphen(
-    filename: str, expected: str
-) -> None:
+def test_western_dated_number_ignores_prefix_before_last_hyphen(filename: str, expected: str) -> None:
     assert parse_file_info(filename).number == expected
-
-
 
 
 INFER_CONTENT_TYPE_CASES: list[tuple[str, str | None, ContentType]] = [
@@ -543,7 +539,7 @@ EXTRACT_NUMBER_CASES: list[tuple[str, str | None]] = [
     ("SSIS-456 FHD", "SSIS-456"),
     ("FC2-PPV-1234567 新作", "FC2-1234567"),
     ("HEYZO-1234", "HEYZO-1234"),
-    ("heydouga-4037-1002 4K", "HEYDOUGA-4037-1002"),
+    ("heydouga-4037-1002 4K", "Heydouga-4037-1002"),
     ("T38-068 新作", "T38-068"),
     ("[4K] R18-292 妹の爆乳は一見にしかず", "R18-292"),
     ("[4K] T38-068 标题", "T38-068"),
@@ -713,6 +709,14 @@ def test_uncensored_bd_series_do_not_match_longer_unrelated_prefixes() -> None:
         ("K0794", "k0794"),
         ("N1199", "n1199"),
         ("n0687", "n0687"),
+        # heydouga 统一写成首字母大写: 用户与站点都可能全小写或全大写.
+        ("heydouga-4037-1002", "Heydouga-4037-1002"),
+        ("Heydouga-4037-1002", "Heydouga-4037-1002"),
+        ("HEYDOUGA-4037-1002", "Heydouga-4037-1002"),
+        ("heydouga_4037_1002", "Heydouga-4037-1002"),
+        ("heydouga4037-1002", "Heydouga-4037-1002"),
+        # 缺作品号的不算 heydouga 番号, 保持原样.
+        ("heydouga", "heydouga"),
         # 其余番号保持原样: 大小写是站点标识的一部分.
         ("ABP-123", "ABP-123"),
         ("FC2-1229755", "FC2-1229755"),

@@ -48,7 +48,7 @@ CrawlerFactory (缓存实例)
 | 按 `media_id` 同时填写 `number` | submission 字符串 | **不会.** 空白 `number` 视为未填写, 回退到只按路径解析. |
 | RSS 自动入队 | `extract_number` | **会** (与路径同一套已知形态); 未命中则没有番号, **不会**把标题原文当番号. 源上设置了 `number_pattern` 时只采用该正则, 见 [feeds.md](feeds.md) |
 
-落库 `Metadata.number` 也是这份 payload 原样 (UNIQUE 忽略大小写, 保留首次写入的大小写), 因此补刮 / RESCRAPE 可能再次把无横线手填号送入爬虫.
+落库 `Metadata.number` 是这份 payload 经 `parsing/file_info.py::canonical_number` 归一后的值: 东京热 `K`/`N` 族转小写, `Heydouga-<系列>[-<作品>]` 转首字母大写, 其余原样 (UNIQUE 忽略大小写, 保留首次写入的大小写). 归一发生在写库处而非 payload 本身, 因此补刮 / RESCRAPE 仍可能再次把无横线手填号送入爬虫.
 
 ## 检索命中
 

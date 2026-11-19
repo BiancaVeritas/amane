@@ -890,7 +890,10 @@ class ScrapeHandler(TaskHandler[ScrapePayload, ScrapeResult]):
             # 糖心没有番号: 标题即唯一标识. 聚合层的 number 恒等于 payload.number (文件名,
             # 带演员名前缀), 而糖心抓到的 title 已剥掉演员名. 只有标题确实来自糖心时才用
             # title 当 number, 其它站照旧用 payload 的番号, 避免站点格式差异改变唯一标识.
-            number = payload.number
+            #
+            # 其余番号经 canonical_number 归一: 手填的番号原样进 payload, 不经它就会把
+            # 用户随手写的小写 (``heydouga-4037-1002``) 当成另一个番号入库.
+            number = canonical_number(payload.number) or payload.number
             if result.field_sources.get("title") == "tangxin" and result.metadata.title:
                 number = result.metadata.title
             meta = await self._repo.upsert_metadata(

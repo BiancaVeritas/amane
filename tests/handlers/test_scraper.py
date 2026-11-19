@@ -2863,3 +2863,35 @@ class TestReuseChineseEntry:
 
         assert result.success is True
         assert self._Crawler.calls == [], "带前缀的文件名也该复用库内条目"
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_heydouga_number_stored_canonical_case(self, repo: Repository, resource_store):
+        """手填的 heydouga 番号落库时必须归一为 ``Heydouga-x-y``.
+
+        用户与站点都可能全小写或全大写, 而站内序列号的写法是首字母大写.
+        手填番号原样进 payload, 不归一就会把同一部作品存成多种写法.
+        """
+
+        class _HeydougaCrawler(Crawler):
+            @classmethod
+            def profile(cls) -> CrawlerProfile:
+                return CrawlerProfile(name="aventertainments", base_url="https://www.aventertainments.com")
+
+            async def _search(self, query, options=None) -> str | None:
+                return "https://www.aventertainments.com/x"
+
+            async def _scrape(self, url, options=None) -> MediaMetadata | None:
+                return MediaMetadata.model_validate({"number": "x", "title": "heydouga title"})
+
+        h = ScrapeHandler(
+            repo=repo,
+            factory=FakeFactory({"aventertainments": _HeydougaCrawler(client=None)}),
+            resource_store=resource_store,
+            pipeline_config=HotSettings(),
+        )
+        result = await h.handle(ScrapePayload(number="heydouga-4037-1002", content_type=ContentType.UNCENSORED))
+
+        assert result.success is True
+        stored = await repo.get_metadata_by_number("Heydouga-4037-1002")
+        assert stored is not None, "番号必须以 Heydouga-x-y 入库"
+        assert stored.number == "Heydouga-4037-1002"
