@@ -22,6 +22,7 @@ if TYPE_CHECKING:
 
     from ..aggregate import CrawlerLike
     from ..config import SiteConfig
+    from ..llm.protocol import Translator
     from .connectivity import ConnectivityProbe
     from .http import HttpClient
     from .r18dev import R18Database
@@ -93,6 +94,7 @@ class CrawlerFactory:
         self._plugin_configs = plugin_configs or {}
         self._instances: dict[str, Crawler | FilmSourceProvider] = {}
         self._actor_instances: dict[str, ActorCrawler] = {}
+        self._actor_translator: Translator | None = None
 
     async def get(self, name: str) -> Crawler | FilmSourceProvider | None:
         """内置来源与插件来源共用一份实例缓存; 分派只在此处, 下游只依赖结构性协议."""
@@ -173,6 +175,13 @@ class CrawlerFactory:
                 result[name] = crawler
         return result
 
+    def set_actor_translator(self, translator: Translator | None) -> None:
+        self._actor_translator = translator
+        crawler = self._actor_instances.get("theporndb")
+        setter = getattr(crawler, "set_translator", None)
+        if callable(setter):
+            setter(translator)
+
     async def get_actor(self, name: str) -> ActorCrawler | None:
         if name in self._actor_instances:
             return self._actor_instances[name]
@@ -191,6 +200,12 @@ class CrawlerFactory:
                 config=site_config,
                 data_dir=self._data_dir,
                 repo_url=self._gfriends_repo,
+            )
+        elif name == "theporndb":
+            instance = actor_cls(
+                client=client,
+                config=site_config,
+                translator=self._actor_translator,
             )
         elif name == "minnano":
             instance = actor_cls(client=client, config=site_config, data_dir=self._data_dir)

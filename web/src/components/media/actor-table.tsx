@@ -57,6 +57,7 @@ import { extractErrorMessage } from "@/lib/api-error";
 import { confirm } from "@/lib/confirm";
 import { USER_TAG_FACET_LIST } from "@/lib/facets";
 import { exhaustiveRecord } from "@/lib/exhaustive";
+import { ACTOR_GENDERS } from "@/lib/actors/browse";
 import { ageFromBirthday } from "@/lib/format-birthday";
 import { proxyImageUrl } from "@/lib/utils";
 import { ClearPersonNotice } from "@/components/media/clear-person-notice";
@@ -119,6 +120,7 @@ type MetadataKey = ParseKeys<"metadata">;
 
 const GENDER_I18N_KEY = exhaustiveRecord<ActorGender>()({
   female: "browse.person.genderFemale",
+  transgender_female: "browse.person.genderTransgenderFemale",
   male: "browse.person.genderMale",
   unknown: "browse.person.genderUnknown",
 } as const satisfies Record<ActorGender, MetadataKey>);
@@ -491,7 +493,7 @@ export function ActorTable({
                 </Button>
               </Menu.Target>
               <Menu.Dropdown>
-                {(["female", "male", "unknown"] as const).map((g) => (
+                {ACTOR_GENDERS.map((g) => (
                   <Menu.Item key={g} onClick={() => void handleBatchGender(g)}>
                     {t(GENDER_I18N_KEY[g])}
                   </Menu.Item>

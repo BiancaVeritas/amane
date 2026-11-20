@@ -135,6 +135,7 @@ function RangeTextInputs({
 
 const GENDER_I18N = {
   female: "browse.person.genderFemale",
+  transgender_female: "browse.person.genderTransgenderFemale",
   male: "browse.person.genderMale",
   unknown: "browse.person.genderUnknown",
 } as const;

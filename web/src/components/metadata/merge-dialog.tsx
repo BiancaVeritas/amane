@@ -34,6 +34,8 @@ const TEXT_FIELDS = [
   "title",
   "original_title",
   "actors",
+  "actor_birthplace",
+  "actor_overview",
   "studio",
   "publisher",
   "release",

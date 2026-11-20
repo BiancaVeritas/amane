@@ -149,10 +149,13 @@ export function ActorEditDialog({
             description={t("actors.genderHint")}
             value={draft.gender}
             onChange={(v) => {
-              if (v === "female" || v === "male" || v === "unknown") patchDraft({ gender: v });
+              if (v === "female" || v === "transgender_female" || v === "male" || v === "unknown") {
+                patchDraft({ gender: v });
+              }
             }}
             data={[
               { value: "female", label: t("browse.person.genderFemale") },
+              { value: "transgender_female", label: t("browse.person.genderTransgenderFemale") },
               { value: "male", label: t("browse.person.genderMale") },
               { value: "unknown", label: t("browse.person.genderUnknown") },
             ]}

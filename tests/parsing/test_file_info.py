@@ -411,6 +411,9 @@ def test_western_dated_known_studio_keeps_canonical_name() -> None:
     [
         ("GL894-GiorgioGrandi.24.04.18.mp4", "GiorgioGrandi.24.04.18"),
         ("GL894-GiorgioGrandi.26.04.05-C-4K.mp4", "GiorgioGrandi.26.04.05"),
+        ("GL864-Evil Angel.26.11.27.mp4", "Evil Angel.26.11.27"),
+        ("ABC-XYZ-Evil Angel.26.11.27.mp4", "Evil Angel.26.11.27"),
+        ("Evil Angel.26.11.27.mp4", "Evil Angel.26.11.27"),
     ],
 )
 def test_western_dated_number_ignores_prefix_before_last_hyphen(filename: str, expected: str) -> None:

@@ -105,11 +105,20 @@ class TestExtractAllTexts:
 @pytest.mark.parametrize(
     ("number", "expected"),
     [
-        # 片商名折叠大小写与非字母数字; alternate 是同番号的另一种年份写法
-        ("Blacked.26.03.29", ("blacked", "2026-03-29", "Blacked.2026.03.29")),
-        ("Blacked.2026.03.29", ("blacked", "2026-03-29", "Blacked.26.03.29")),
-        ("blacked-26-03-29", ("blacked", "2026-03-29", "blacked-2026-03-29")),
-        ("X-art.18.06.26", ("xart", "2018-06-26", "X-art.2018.06.26")),
+        # 片商名只忽略大小写, 空格与标点完整保留; alternate 是同番号的另一种年份写法
+        ("Blacked.26.03.29", ("blacked", "2026-03-29", "Blacked.2026.03.29", "Blacked")),
+        ("Blacked.2026.03.29", ("blacked", "2026-03-29", "Blacked.26.03.29", "Blacked")),
+        ("blacked-26-03-29", ("blacked", "2026-03-29", "blacked-2026-03-29", "blacked")),
+        ("X-art.18.06.26", ("x-art", "2018-06-26", "X-art.2018.06.26", "X-art")),
+        (
+            "Lancelot Styles evolution.26.10.09",
+            (
+                "lancelot styles evolution",
+                "2026-10-09",
+                "Lancelot Styles evolution.2026.10.09",
+                "Lancelot Styles evolution",
+            ),
+        ),
         # 非日期号与非法日期不作日期号解析
         ("SSIS-497", None),
         ("300MIUM-1000", None),
@@ -119,13 +128,13 @@ class TestExtractAllTexts:
         ("", None),
     ],
 )
-def test_parse_western_number(number: str, expected: tuple[str, str, str] | None) -> None:
+def test_parse_western_number(number: str, expected: tuple[str, str, str, str] | None) -> None:
     result = parse_western_number(number)
     if expected is None:
         assert result is None
         return
     assert result is not None
-    assert (result.studio, result.date, result.alternate) == expected
+    assert (result.studio, result.date, result.alternate, result.studio_name) == expected
 
 
 @pytest.mark.parametrize(
@@ -143,10 +152,15 @@ def test_parse_western_number(number: str, expected: tuple[str, str, str] | None
         ("FC2PPV4203531", "fc2_4203531", True),
         ("FC2-PPV-4203531", "FC2-PPV-4203532", False),
         ("FC2-4203531", "4203531", False),
-        # 欧美日期号: 年份 2 位与 4 位同番号; 片商或发布日期不同则不是
+        # 欧美日期号: 只忽略片商大小写, 空格与标点必须一致; 年份 2 位与 4 位仍视为同番号
         ("Blacked.26.03.29", "Blacked.2026.03.29", True),
+        ("Blacked.26.03.29", "blacked.2026.03.29", True),
         ("Blacked.26.03.29", "Blacked.2026.03.24", False),
         ("Blacked.26.03.29", "BlackedRaw.2026.03.29", False),
+        ("Lancelot Styles evolution.26.10.09", "lancelot styles evolution.2026.10.09", True),
+        ("Lancelot Styles evolution.26.10.09", "LancelotStylesEvolution.2026.10.09", False),
+        ("X-art.18.06.26", "X-art.2018.06.26", True),
+        ("X-art.18.06.26", "Xart.2018.06.26", False),
         # ``_`` 与 ``-`` 是两部片
         ("010115_001", "010115-001", False),
         ("", "ABF-355", False),
@@ -162,8 +176,13 @@ NUMBER_MATCH_CASES: list[tuple[str, str, NumberMatch]] = [
     # 折叠后相等
     ("ABF355", "ABF-355", NumberMatch.EXACT),
     ("Heyzo-3607", "HEYZO3607", NumberMatch.EXACT),
-    # 欧美日期号: 年份 2 位与 4 位同番号
+    # 欧美日期号: 只忽略片商大小写, 空格与标点必须一致
     ("Blacked.2026.03.29", "Blacked.26.03.29", NumberMatch.EXACT),
+    ("Blacked.2026.03.29", "blacked.26.03.29", NumberMatch.EXACT),
+    ("Lancelot Styles evolution.2026.10.09", "lancelot styles evolution.26.10.09", NumberMatch.EXACT),
+    ("Lancelot Styles evolution.2026.10.09", "LancelotStylesEvolution.26.10.09", NumberMatch.NONE),
+    ("X-art.2018.06.26", "X-art.18.06.26", NumberMatch.EXACT),
+    ("X-art.2018.06.26", "Xart.18.06.26", NumberMatch.NONE),
     # FC2: 官方电子市场写带 PPV 的写法, 索引站多写不带的写法, 商品 ID 相同即同一部
     ("FC2-PPV-4203531", "FC2-4203531", NumberMatch.EXACT),
     ("FC2-PPV-4203531", "FC2PPV4203531", NumberMatch.EXACT),

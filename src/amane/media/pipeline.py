@@ -107,6 +107,8 @@ async def materialize_images(
     """
     kinds = set(config.scraping.download_resources)
     image_sources = image_sources or {}
+    # 欧美不使用封面裁剪生成海报，其他分类保持原有裁剪规则.
+    can_crop_poster = content_type != ContentType.WESTERN and (config.scraping.crop_poster or force_crop_poster)
 
     # 下载封面资源.
     cover_ok: set[str] = set()
@@ -123,11 +125,13 @@ async def materialize_images(
                     if res and not preserve_cover_resource:
                         await _maybe_upscale(store, res, config, data_dir)
 
-    # 下载海报; 候选偏矮则从封面裁剪.
+    # 下载来源海报; 是否下载与是否裁剪相互独立.
     poster_ok: set[str] = set()
     poster_candidate_local: Path | None = None
     result_poster_urls = list(poster_urls)
-    if DownloadableResource.poster in kinds or force_crop_poster:
+    download_poster = DownloadableResource.poster in kinds or force_crop_poster
+
+    if download_poster:
         for url in poster_urls:
             local = await store.acquire(url, client, source=image_sources.get(url))
             if local:
@@ -135,51 +139,52 @@ async def materialize_images(
                 if poster_candidate_local is None:
                     poster_candidate_local = local
 
-        # 裁剪需要封面本地文件; 若未选封面下载, 为裁剪临时 acquire 首个封面.
-        if cover_local is None and cover_urls and (config.scraping.crop_poster or force_crop_poster):
-            for url in cover_urls:
-                local = (
-                    await store.cached_path(url)
-                    if preserve_cover_resource
-                    else await store.acquire(url, client, source=image_sources.get(url))
-                )
-                if local:
-                    cover_local, cover_src = local, url
-                    break
-
-        cover_size = probe_size(cover_local) if cover_local else None
-        cand_size = probe_size(poster_candidate_local) if poster_candidate_local else None
-
-        if (
-            (config.scraping.crop_poster or force_crop_poster)
-            and should_crop_poster(cover_size, cand_size, skip_ratio=config.scraping.poster_crop_skip_ratio)
-            and cover_local
-        ):
-            ratio = (
-                config.scraping.uncensored_poster_ratio
-                if content_type == ContentType.UNCENSORED
-                else config.scraping.poster_ratio
+    # 裁剪需要封面本地文件; 即使未启用封面下载, 也为裁剪获取封面.
+    if can_crop_poster and cover_local is None and cover_urls:
+        for url in cover_urls:
+            local = (
+                await store.cached_path(url)
+                if preserve_cover_resource
+                else await store.acquire(url, client, source=image_sources.get(url))
             )
-            args = f"{ratio:.4f}"
-            local_cover = cover_local
+            if local:
+                cover_local, cover_src = local, url
+                break
 
-            async def crop_producer(dest: Path) -> bool:
-                return crop_poster(local_cover, dest, poster_ratio=ratio, jpeg_quality=config.scraping.jpeg_quality)
+    cover_size = probe_size(cover_local) if cover_local else None
+    cand_size = probe_size(poster_candidate_local) if poster_candidate_local else None
 
-            crop_res = await store.acquire_derived(cover_src or "", "crop", args, crop_producer)
-            if crop_res:
-                await _maybe_upscale(store, crop_res, config, data_dir)
-                result_poster_urls = [_internal_url(store, crop_res.url)]
-            else:
-                result_poster_urls = _success_first(poster_urls, poster_ok)
-        else:
+    if (
+        can_crop_poster
+        and should_crop_poster(cover_size, cand_size, skip_ratio=config.scraping.poster_crop_skip_ratio)
+        and cover_local
+    ):
+        ratio = (
+            config.scraping.uncensored_poster_ratio
+            if content_type == ContentType.UNCENSORED
+            else config.scraping.poster_ratio
+        )
+        args = f"{ratio:.4f}"
+        local_cover = cover_local
+
+        async def crop_producer(dest: Path) -> bool:
+            return crop_poster(local_cover, dest, poster_ratio=ratio, jpeg_quality=config.scraping.jpeg_quality)
+
+        crop_res = await store.acquire_derived(cover_src or "", "crop", args, crop_producer)
+        if crop_res:
+            await _maybe_upscale(store, crop_res, config, data_dir)
+            # 裁剪结果只覆盖海报 URL, 不改动原海报 URL.
+            result_poster_urls = [_internal_url(store, crop_res.url)]
+        elif download_poster:
             result_poster_urls = _success_first(poster_urls, poster_ok)
-            if poster_candidate_local:
-                for url in poster_urls:
-                    res = await store.get_by_url(url)
-                    if res:
-                        await _maybe_upscale(store, res, config, data_dir)
-                        break
+    elif download_poster:
+        result_poster_urls = _success_first(poster_urls, poster_ok)
+        if poster_candidate_local:
+            for url in poster_urls:
+                res = await store.get_by_url(url)
+                if res:
+                    await _maybe_upscale(store, res, config, data_dir)
+                    break
 
     # 下载预告片.
     trailer_ok: set[str] = set()

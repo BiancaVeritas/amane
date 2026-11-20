@@ -326,7 +326,7 @@ def _profile_updates(
     overview_lines: list[str] = []
     values = [
         ("别名", "、".join(dict.fromkeys(a.strip() for a in aliases if a.strip()))),
-        ("性别", {"female": "女", "male": "男"}.get(str(actor.gender), "")),
+        ("性别", {"female": "女", "transgender_female": "跨性别女性", "male": "男"}.get(str(actor.gender), "")),
         ("生日", actor.birthday or ""),
         ("出生地", actor.birthplace or ""),
         ("身高", f"{actor.height} cm" if actor.height else ""),

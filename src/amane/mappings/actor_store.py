@@ -20,7 +20,7 @@ class ActorMappingStore:
         self.file = self.directory / "minnano_actress_map.json"
         self._lock = threading.RLock()
         self._lookup_stamp: int | None = None
-        self._lookup_index: dict[str, builtins.list[str]] = {}
+        self._lookup_index: dict[str, list[str]] = {}
         seed_available = seed_path is not None and seed_path.is_file()
         if not self.file.exists():
             seed = self._read_seed(seed_path) if seed_path is not None and seed_path.is_file() else {}
@@ -63,7 +63,7 @@ class ActorMappingStore:
             raise ValueError(f"{identifier}: 标准姓名不能为空")
         if not isinstance(aliases, list) or any(not isinstance(a, str) for a in aliases):
             raise ValueError(f"{identifier}: aliases 必须是字符串数组")
-        clean: builtins.list[str] = []
+        clean: list[str] = []
         for alias in aliases:
             alias = alias.strip()
             if alias and alias != name.strip() and alias not in clean:
@@ -171,7 +171,7 @@ class ActorMappingStore:
         with self._lock:
             stamp = self.file.stat().st_mtime_ns
             if stamp != self._lookup_stamp:
-                index: dict[str, builtins.list[str]] = {}
+                index: dict[str, list[str]] = {}
                 for identifier, item in self.list().items():
                     index.setdefault(item["name"], []).append(identifier)
                 self._lookup_index = index
@@ -241,9 +241,9 @@ class ActorMappingStore:
         normalized = [(str(identifier), self._validate(str(identifier), value)) for identifier, value in rows]
         with self._lock:
             current = self.list()
-            added: builtins.list[str] = []
-            conflicts: builtins.list[dict[str, Any]] = []
-            blocked: builtins.list[tuple[str, dict[str, Any]]] = []
+            added: list[str] = []
+            conflicts: list[dict[str, Any]] = []
+            blocked: list[tuple[str, dict[str, Any]]] = []
             for identifier, value in normalized:
                 candidate = {"id": identifier, **value}
                 prior = next(

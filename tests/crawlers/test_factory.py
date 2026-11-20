@@ -128,3 +128,28 @@ async def test_minnano_actor_crawler_receives_data_dir(http_client, tmp_path):
 
     cached = await factory.get_actor("minnano")
     assert cached is crawler
+
+
+@pytest.mark.asyncio(loop_scope="function")
+async def test_theporndb_actor_receives_actor_translator(http_client):
+    from amane.crawlers.actor.sites.theporndb import ThePornDBActorCrawler
+    from amane.enums import Language, MetadataField
+
+    class StubTranslator:
+        async def translate(
+            self, text: str, target: Language, field: MetadataField, *, use_cache: bool = True
+        ) -> str | None:
+            return None
+
+        async def translate_actor(self, text: str, field: MetadataField, *, use_cache: bool = True) -> str | None:
+            return None
+
+    factory = CrawlerFactory(http_client)
+    translator = StubTranslator()
+
+    factory.set_actor_translator(translator)
+
+    actor = await factory.get_actor("theporndb")
+
+    assert isinstance(actor, ThePornDBActorCrawler)
+    assert actor._translator is translator

@@ -38,7 +38,7 @@ async def test_write_nfo_has_required_fields(tmp_path: Path, metadata: Metadata)
     assert ok is True
     assert nfo_path.exists()
     content = nfo_path.read_text(encoding="utf-8")
-    assert "<title>MIDV-123 Test Title</title>" in content
+    assert "<title>Test Title</title>" in content
     assert "<originaltitle>MIDV-123 Original Test Title</originaltitle>" in content
     assert "<sorttitle>MIDV-123 Original Test Title</sorttitle>" in content
     assert "<originalplot>Original plot</originalplot>" in content
@@ -51,7 +51,7 @@ async def test_write_nfo_has_required_fields(tmp_path: Path, metadata: Metadata)
     assert "<name>Actor A</name>" in content
     assert "<studio>Studio X</studio>" in content
     assert "<genre>Drama</genre>" in content
-    assert "<director>Director Z</director>" not in content
+    assert "<director>Director Z</director>" in content
     assert "<outline>" not in content
     assert "<javbusid>" not in content
     assert "<dmmid>" not in content
@@ -107,25 +107,7 @@ async def test_write_nfo_uses_original_poster_and_keeps_cover(tmp_path: Path):
 
 
 @pytest.mark.asyncio(loop_scope="function")
-async def test_write_nfo_omits_poster_when_original_url_missing(tmp_path: Path):
-    """没有原始海报地址时不以封面或内部裁剪 URL 冒充 poster."""
-    metadata = Metadata(
-        number="POSTER-2",
-        poster_urls=["/api/resources/internal-cropped-poster"],
-        cover_urls=["https://source.example/cover.jpg"],
-        original_cover_urls=["https://source.example/cover.jpg"],
-    )
-    nfo_path = tmp_path / "POSTER-2.nfo"
-
-    assert await write_nfo(metadata, nfo_path) is True
-
-    root = ET.parse(nfo_path).getroot()
-    assert root.find("poster") is None
-    assert root.findtext("cover") == "https://source.example/cover.jpg"
-
-
-@pytest.mark.asyncio(loop_scope="function")
-async def test_write_nfo_exports_western_theporndbid_uuid_at_the_end(tmp_path: Path):
+async def test_write_nfo_exports_western_theporndb_source_url_at_the_end(tmp_path: Path):
     metadata = Metadata(
         number="WESTERN-001",
         content_type=ContentType.WESTERN,
@@ -135,6 +117,10 @@ async def test_write_nfo_exports_western_theporndbid_uuid_at_the_end(tmp_path: P
         original_cover_urls=["https://source.example/cover.jpg"],
         trailer_urls=["https://source.example/trailer.mp4"],
         external_ids={"other_source": "external-123", "theporndb": "duplicate-uuid"},
+        source_urls={
+            "other_source": "https://other.example/video/123",
+            "theporndb": "https://theporndb.net/scenes/96842b9f-0405-481b-a44a-1c7fb5b0370c",
+        },
     )
     nfo_path = tmp_path / "WESTERN-001.nfo"
 
@@ -143,9 +129,11 @@ async def test_write_nfo_exports_western_theporndbid_uuid_at_the_end(tmp_path: P
     content = nfo_path.read_text(encoding="utf-8")
     root = ET.fromstring(content)
     assert root.find("uniqueid") is None
-    assert root.findtext("theporndbid") == metadata.theporndb_uuid
-    assert root.findtext("othersourceid") is None
-    assert root.findtext("other_sourceid") == "external-123"
+    assert root.findtext("theporndbid") == metadata.source_urls["theporndb"]
+    assert root.findtext("theporndbid") != metadata.theporndb_uuid
+    assert root.findtext("other_sourceid") == metadata.source_urls["other_source"]
+    assert "external-123" not in content
+    assert "duplicate-uuid" not in content
     assert content.index("<poster>") < content.index("<cover>")
     assert content.index("<cover>") < content.index("<trailer>")
     assert content.index("<trailer>") < content.index("<other_sourceid>")

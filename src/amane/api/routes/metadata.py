@@ -373,7 +373,7 @@ async def get_metadata(metadata_id: int, repo: RepoDep, runtime: RuntimeDep) -> 
 async def update_metadata(
     metadata_id: int, req: PartialMetadata, repo: RepoDep, runtime: RuntimeDep
 ) -> MetadataResponse:
-    updates = cast("MetadataFields", {k: v for k, v in req.model_dump().items() if v is not None})
+    updates = cast("MetadataFields", req.model_dump(exclude_unset=True))
     if not updates:
         raise HTTPException(status_code=422, detail="没有需要修改的字段")
     if "release" in updates:

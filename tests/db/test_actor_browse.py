@@ -18,7 +18,15 @@ if TYPE_CHECKING:
 async def _seed_filter_actors(repo: Repository) -> dict[str, int]:
     """准备字段筛选用例演员, 返回 name→id."""
     await repo.upsert_metadata(
-        number="ACT-FLT-1", actors=["FltTall", "FltShort", "FltNullMetric", "FltAliasOnly", "FltMale"]
+        number="ACT-FLT-1",
+        actors=[
+            "FltTall",
+            "FltShort",
+            "FltNullMetric",
+            "FltAliasOnly",
+            "FltMale",
+            "FltTransgender",
+        ],
     )
     actors, _ = await repo.list_facets(FacetKind.ACTOR)
     by_name = {a.name: a.id for a in actors if a.id is not None and a.name.startswith("Flt")}
@@ -63,6 +71,10 @@ async def _seed_filter_actors(repo: Repository) -> dict[str, int]:
     male.height = 175
     male.birthday = "1988-12-01"
     await repo.save_actor(male)
+    transgender = await repo.get_actor(by_name["FltTransgender"])
+    assert transgender is not None
+    transgender.gender = ActorGender.TRANSGENDER_FEMALE
+    await repo.save_actor(transgender)
 
     return {k: v for k, v in by_name.items() if v is not None}
 
@@ -118,6 +130,35 @@ async def test_browse_actors_field_filters(repo: Repository) -> None:
         assert got == expect_names, params
         if params.height_min is not None or params.height_max is not None:
             assert ids["FltNullMetric"] not in {i.id for i in items}
+
+
+@pytest.mark.asyncio(loop_scope="function")
+async def test_browse_actors_transgender_female_filter(repo: Repository) -> None:
+    await _seed_filter_actors(repo)
+
+    transgender_items, _ = await repo.browse_actors(
+        ActorBrowseParams(gender=[ActorGender.TRANSGENDER_FEMALE], limit=200)
+    )
+    transgender_names = {i.name for i in transgender_items if i.name.startswith("Flt")}
+    assert transgender_names == {"FltTransgender"}
+
+    female_items, _ = await repo.browse_actors(ActorBrowseParams(gender=[ActorGender.FEMALE], limit=200))
+    female_names = {i.name for i in female_items if i.name.startswith("Flt")}
+    assert "FltTransgender" not in female_names
+
+    mixed_items, _ = await repo.browse_actors(
+        ActorBrowseParams(
+            gender=[ActorGender.FEMALE, ActorGender.TRANSGENDER_FEMALE],
+            limit=200,
+        )
+    )
+    mixed_names = {i.name for i in mixed_items if i.name.startswith("Flt")}
+    assert mixed_names == {
+        "FltTall",
+        "FltShort",
+        "FltNullMetric",
+        "FltTransgender",
+    }
 
 
 @pytest.mark.asyncio(loop_scope="function")

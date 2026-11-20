@@ -1243,6 +1243,12 @@ ACTRESS_CASES: tuple[_ActressCase, ...] = (
     _ActressCase("排除明确男性", ["F", "M", "U"], {"F": ActorGender.FEMALE, "M": ActorGender.MALE}, ["F", "U"]),
     _ActressCase("全是男性", ["M1", "M2"], {"M1": ActorGender.MALE, "M2": ActorGender.MALE}, []),
     _ActressCase(
+        "保留跨性别女性",
+        ["F", "T", "M"],
+        {"F": ActorGender.FEMALE, "T": ActorGender.TRANSGENDER_FEMALE, "M": ActorGender.MALE},
+        ["F", "T"],
+    ),
+    _ActressCase(
         "保序",
         ["M", "F1", "F2"],
         {"M": ActorGender.MALE, "F1": ActorGender.FEMALE, "F2": ActorGender.FEMALE},

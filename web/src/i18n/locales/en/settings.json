@@ -1,6 +1,7 @@
 {
   "title": "Settings",
   "tabs": {
+    "nfo_output": "NFO Output",
     "scraping": "Movie Scraping",
     "actor_scraping": "Actor Scraping",
     "agent": "Agent",
@@ -33,6 +34,49 @@
     "exitApp": "Exit app"
   },
   "fields": {
+    "nfo_output": {
+      "basic_info": {
+        "label": "Basic Information",
+        "number": { "label": "Number" },
+        "title": { "label": "Title" },
+        "original_title": { "label": "Original Title" },
+        "source_links": { "label": "Source Links" }
+      },
+      "plot_release": {
+        "label": "Plot and Release Information",
+        "plot": { "label": "Plot" },
+        "original_plot": { "label": "Original Plot" },
+        "release": { "label": "Release Date" },
+        "runtime": { "label": "Runtime" },
+        "mpaa": { "label": "Certification" }
+      },
+      "people": {
+        "label": "People and Production",
+        "actors": { "label": "Actors" },
+        "female": { "label": "Female" },
+        "transgender_female": { "label": "Transgender Female" },
+        "male": { "label": "Male" },
+        "director": { "label": "Director" },
+        "studio": { "label": "Studio" },
+        "publisher": { "label": "Publisher" }
+      },
+      "categories": {
+        "label": "Categories and Series",
+        "genre": { "label": "Genre" },
+        "tag": { "label": "Tag" },
+        "series": { "label": "Series" }
+      },
+      "images": {
+        "label": "Images and Video",
+        "poster": { "label": "Poster" },
+        "cover": { "label": "Cover" },
+        "trailer": { "label": "Trailer" }
+      },
+      "ratings": {
+        "label": "Ratings",
+        "rating": { "label": "Rating" }
+      }
+    },
     "scraping": {
       "download_resources": {
         "label": "Download on scrape",
@@ -108,6 +152,7 @@
             "fc2ppvdb": "fc2ppvdb",
             "freejavbt": "freejavbt",
             "getchu": "getchu",
+            "hanime1": "Hanime1",
             "gfriends": "gfriends",
             "giga": "giga",
             "iqqtv": "iqqtv",
@@ -148,6 +193,7 @@
               "fc2ppvdb": "fc2ppvdb",
               "freejavbt": "freejavbt",
               "getchu": "getchu",
+              "hanime1": "Hanime1",
               "gfriends": "gfriends",
               "giga": "giga",
               "iqqtv": "iqqtv",
@@ -214,6 +260,7 @@
             "fc2ppvdb": "fc2ppvdb",
             "freejavbt": "freejavbt",
             "getchu": "getchu",
+            "hanime1": "Hanime1",
             "gfriends": "gfriends",
             "giga": "giga",
             "iqqtv": "iqqtv",
@@ -254,6 +301,7 @@
               "fc2ppvdb": "fc2ppvdb",
               "freejavbt": "freejavbt",
               "getchu": "getchu",
+              "hanime1": "Hanime1",
               "gfriends": "gfriends",
               "giga": "giga",
               "iqqtv": "iqqtv",
@@ -328,6 +376,7 @@
           "fc2ppvdb": "fc2ppvdb",
           "freejavbt": "freejavbt",
           "getchu": "getchu",
+          "hanime1": "Hanime1",
           "gfriends": "gfriends",
           "giga": "giga",
           "iqqtv": "iqqtv",
@@ -468,6 +517,7 @@
             "fc2ppvdb": "fc2ppvdb",
             "freejavbt": "freejavbt",
             "getchu": "getchu",
+            "hanime1": "Hanime1",
             "gfriends": "gfriends",
             "giga": "giga",
             "iqqtv": "iqqtv",
@@ -508,6 +558,7 @@
               "fc2ppvdb": "fc2ppvdb",
               "freejavbt": "freejavbt",
               "getchu": "getchu",
+              "hanime1": "Hanime1",
               "gfriends": "gfriends",
               "giga": "giga",
               "iqqtv": "iqqtv",
@@ -728,6 +779,8 @@
             "title": "Title",
             "original_title": "Original Title",
             "actors": "Actors",
+            "actor_birthplace": "Birthplace",
+            "actor_overview": "Overview",
             "tags": "Tags",
             "release": "Release Date",
             "runtime": "Runtime",

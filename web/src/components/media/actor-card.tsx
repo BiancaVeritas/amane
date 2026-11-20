@@ -1,5 +1,11 @@
 import { AspectRatio, Box, Card, Center, Group, Stack, Text } from "@mantine/core";
-import { IconCalendar, IconGenderFemale, IconGenderMale, IconMovie } from "@tabler/icons-react";
+import {
+  IconCalendar,
+  IconGenderFemale,
+  IconGenderMale,
+  IconGenderTransgender,
+  IconMovie,
+} from "@tabler/icons-react";
 import { Link } from "@tanstack/react-router";
 import { memo, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -25,6 +31,11 @@ const GENDER_CHIP = {
     color: "var(--mantine-color-blue-3)",
     label: "browse.person.genderMale",
   },
+  transgender_female: {
+    Icon: IconGenderTransgender,
+    color: "var(--mantine-color-grape-3)",
+    label: "browse.person.genderTransgenderFemale",
+  },
 } as const;
 
 export const ActorCard = memo(function ActorCard({ item }: ActorCardProps) {
@@ -43,7 +54,9 @@ export const ActorCard = memo(function ActorCard({ item }: ActorCardProps) {
     (v): v is string => Boolean(v),
   );
   const genderChip =
-    item.gender === "female" || item.gender === "male" ? GENDER_CHIP[item.gender] : null;
+    item.gender === "female" || item.gender === "transgender_female" || item.gender === "male"
+      ? GENDER_CHIP[item.gender]
+      : null;
 
   return (
     <Link

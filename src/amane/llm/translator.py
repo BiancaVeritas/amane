@@ -44,6 +44,14 @@ _LANG_NAME: dict[Language, str] = {
 _FIELD_HINT: dict[MetadataField, str] = {
     MetadataField.TITLE: "这是一部影片的标题, 翻译应简洁自然, 保留专有名词与番号.",
     MetadataField.PLOT: "这是一部影片的简介, 完整通顺地翻译全部内容.",
+    MetadataField.ACTOR_BIRTHPLACE: (
+        "这是演员的出生地. 请翻译为简体中文地名, 国家或地区名称放在城市名称之前. "
+        "保留原文地名的准确含义, 不要添加解释或其他信息."
+    ),
+    MetadataField.ACTOR_OVERVIEW: (
+        "这是演员的个人简介. 请完整、准确、自然地翻译为简体中文, "
+        "保留原文中的事实、人物信息和语气, 不要删减或自行补充内容."
+    ),
 }
 
 TARGET_LANG_PLACEHOLDER = "{target_lang}"
@@ -51,7 +59,16 @@ TARGET_LANG_PLACEHOLDER = "{target_lang}"
 
 _DEFAULT_SYSTEM_PROMPT = f"你是专业的影视元数据翻译. 将用户提供的文本翻译为{TARGET_LANG_PLACEHOLDER}."
 
+_ACTOR_SYSTEM_PROMPT = "你是专业的演员资料翻译. 将用户提供的文本翻译为简体中文."
+
 _OUTPUT_CONSTRAINT = "只输出译文本身, 不要解释、不要引号、不要附加任何内容."
+
+_ACTOR_FIELDS = frozenset(
+    {
+        MetadataField.ACTOR_BIRTHPLACE,
+        MetadataField.ACTOR_OVERVIEW,
+    }
+)
 
 
 def build_system_prompt(
@@ -75,6 +92,15 @@ def build_system_prompt(
         parts.append(_render_placeholders(hint, target))
     parts.append(_OUTPUT_CONSTRAINT)
     return " ".join(parts)
+
+
+def build_actor_system_prompt(field: MetadataField) -> str:
+    """组装演员专用提示词, 不继承影片翻译的任何用户自定义提示词."""
+    if field not in _ACTOR_FIELDS:
+        raise ValueError(f"Unsupported actor translation field: {field}")
+
+    hint = _FIELD_HINT[field]
+    return f"{_ACTOR_SYSTEM_PROMPT} {hint} {_OUTPUT_CONSTRAINT}"
 
 
 def _render_placeholders(template: str, target: Language) -> str:
@@ -133,6 +159,32 @@ class LLMTranslator:
             return converted if converted != text else None
 
         return None
+
+    async def translate_actor(self, text: str, field: MetadataField, *, use_cache: bool = True) -> str | None:
+        """演员专用翻译: 固定简体中文, 不受影片翻译配置影响."""
+        if field not in _ACTOR_FIELDS:
+            raise ValueError(f"Unsupported actor translation field: {field}")
+
+        text = text.strip()
+        if not text:
+            return None
+
+        target = Language.ZH_CN
+
+        if needs_llm_translation(text, target):
+            system = build_actor_system_prompt(field)
+            # 与普通翻译共用缓存、请求合并器和限速器, 但提示词及缓存键独立.
+            return await self._coalescer.run(
+                (text, target, field, system),
+                lambda: self._translate_llm(text, target, field, system, use_cache=use_cache),
+            )
+
+        # 原文已经是简体中文时不重复翻译; 繁体中文转换为简体中文.
+        locale = _ZHCONV_LOCALE[target]
+        if zhconv.issimp(text, full=True):
+            return None
+        converted = zhconv.convert(text, locale)
+        return converted if converted != text else None
 
     async def _translate_llm(
         self, text: str, target: Language, field: MetadataField, system_prompt: str, *, use_cache: bool

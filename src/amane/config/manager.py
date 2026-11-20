@@ -7,11 +7,12 @@ import tomllib
 from copy import copy
 from enum import StrEnum
 from pathlib import Path
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, cast
 from urllib.parse import urlsplit
 
 import tomli_w
 from pydantic import BaseModel, Field, ValidationInfo, field_validator, model_validator
+from pydantic.config import JsonDict
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy.engine import make_url
 
@@ -57,6 +58,16 @@ LANG_METADATA_FIELD_SET: frozenset[MetadataField] = frozenset(
     }
 )
 
+FIELD_ROUTING_METADATA_FIELDS: list[str] = [
+    field.value
+    for field in MetadataField
+    if field
+    not in {
+        MetadataField.ACTOR_BIRTHPLACE,
+        MetadataField.ACTOR_OVERVIEW,
+    }
+]
+
 # json_schema_extra 需要 JsonValue 兼容类型, 使用 list[Any] 避免 pyright invariance 问题
 _SITES_WITH_API_TOKEN: list[Any] = [SiteName.THEPORNDB]
 # 当前只有维基消费该字段, 因此只在该站点卡片展示; 其它来源要使用时去掉此项即可.
@@ -90,6 +101,7 @@ _DEFAULT_CONTENT_ROUTES: dict[str, list[SiteName]] = {
         SiteName.AVSOX,
         SiteName.AVBASE,
         SiteName.JAVBUS,
+        SiteName.HANIME1,
     ],
     _UNCENSORED_DVD_ROUTE: [
         SiteName.AVENTERTAINMENTS,
@@ -110,7 +122,7 @@ _DEFAULT_CONTENT_ROUTES: dict[str, list[SiteName]] = {
     ContentType.WESTERN.value: [SiteName.THEPORNDB],
     ContentType.FC2.value: [SiteName.FC2],
     ContentType.AMATEUR.value: [SiteName.MGSTAGE, SiteName.DMM],
-    ContentType.HENTAI.value: [SiteName.GETCHU, SiteName.DMM],
+    ContentType.HENTAI.value: [SiteName.DMM, SiteName.HANIME1],
 }
 _DEFAULT_UNCENSORED_STREAMING_NUMBER_RULES = [
     r"[0-9]{6}[-_][0-9]{2,3}",
@@ -376,6 +388,7 @@ class ScrapingConfig(BaseModel):
         default_factory=dict,
         json_schema_extra=kv(
             {
+                "propertyNames": cast(JsonDict, {"type": "string", "enum": FIELD_ROUTING_METADATA_FIELDS}),
                 "v-default": [],
                 **{f"v-{k}": v for k, v in site_list_value_schema(FILM_METADATA_SITES, ordered=True).items()},
             }
@@ -387,6 +400,7 @@ class ScrapingConfig(BaseModel):
         default_factory=dict,
         json_schema_extra=kv(
             {
+                "propertyNames": cast(JsonDict, {"type": "string", "enum": FIELD_ROUTING_METADATA_FIELDS}),
                 "v-default": [],
                 **{f"v-{k}": v for k, v in site_list_value_schema(FILM_METADATA_SITES, ordered=False).items()},
             }
@@ -855,6 +869,70 @@ class SemanticConfig(BaseModel):
     auto_maintain: bool = Field(default=False, description="条目图片变化后立即增量索引; 打开时视觉模型常驻")
 
 
+class NfoBasicInfoConfig(BaseModel):
+    """NFO 基础信息输出选项."""
+
+    number: bool = Field(default=True, description="番号")
+    title: bool = Field(default=True, description="标题")
+    original_title: bool = Field(default=True, description="原标题")
+    source_links: bool = Field(default=True, description="来源链接")
+
+
+class NfoPlotReleaseConfig(BaseModel):
+    """NFO 剧情与发行信息输出选项."""
+
+    plot: bool = Field(default=True, description="剧情")
+    original_plot: bool = Field(default=True, description="原剧情")
+    release: bool = Field(default=True, description="发行日期")
+    runtime: bool = Field(default=True, description="时长")
+    mpaa: bool = Field(default=True, description="分级")
+
+
+class NfoPeopleConfig(BaseModel):
+    """NFO 人员与制作信息输出选项."""
+
+    actors: bool = Field(default=True, description="演员")
+    female: bool = Field(default=False, description="女性")
+    transgender_female: bool = Field(default=False, description="跨性别女性")
+    male: bool = Field(default=False, description="男性")
+    director: bool = Field(default=True, description="导演")
+    studio: bool = Field(default=True, description="制作商")
+    publisher: bool = Field(default=True, description="发行商")
+
+
+class NfoCategoriesConfig(BaseModel):
+    """NFO 分类与系列输出选项."""
+
+    genre: bool = Field(default=True, description="分类")
+    tag: bool = Field(default=True, description="类型")
+    series: bool = Field(default=True, description="系列")
+
+
+class NfoImagesConfig(BaseModel):
+    """NFO 图片与视频输出选项."""
+
+    poster: bool = Field(default=True, description="海报")
+    cover: bool = Field(default=True, description="封面")
+    trailer: bool = Field(default=True, description="预告片")
+
+
+class NfoRatingsConfig(BaseModel):
+    """NFO 评分输出选项."""
+
+    rating: bool = Field(default=True, description="评分")
+
+
+class NfoOutputConfig(BaseModel):
+    """NFO 输出字段配置."""
+
+    basic_info: NfoBasicInfoConfig = Field(default_factory=NfoBasicInfoConfig, title="基础信息")
+    plot_release: NfoPlotReleaseConfig = Field(default_factory=NfoPlotReleaseConfig, title="剧情与发行信息")
+    people: NfoPeopleConfig = Field(default_factory=NfoPeopleConfig, title="人员与制作信息")
+    categories: NfoCategoriesConfig = Field(default_factory=NfoCategoriesConfig, title="分类与系列")
+    images: NfoImagesConfig = Field(default_factory=NfoImagesConfig, title="图片与视频")
+    ratings: NfoRatingsConfig = Field(default_factory=NfoRatingsConfig, title="评分")
+
+
 class HotSettings(BaseModel):
     """运行时可更新, 持久化到 TOML. extra=forbid, 未知字段须校验失败."""
 
@@ -902,6 +980,7 @@ class HotSettings(BaseModel):
         browser.setdefault("timeout", timeout)
         return data
 
+    nfo_output: NfoOutputConfig = Field(default_factory=NfoOutputConfig)
     scraping: ScrapingConfig = ScrapingConfig()
     media_server: MediaServerConfig = MediaServerConfig()
     actor_scraping: ActorScrapingConfig = ActorScrapingConfig()

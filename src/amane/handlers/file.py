@@ -1,3 +1,4 @@
+import re
 import shutil
 from collections.abc import Sequence
 from dataclasses import dataclass, field
@@ -9,7 +10,7 @@ import structlog
 from ..config import HotSettings, WatermarkConfig
 from ..db.models import Library, MediaFile
 from ..db.repo_types import MediaFileUpdates
-from ..enums import ActorGender, DownloadableResource, LinkMode
+from ..enums import ActorGender, DownloadableResource, LinkMode, SiteName
 from ..library import MEDIA_EXTENSIONS, LibraryFileKind, LibraryScan, ancestor_dirs, prune_empty_dirs
 from ..library.rules import is_in_trash
 from ..media import ResourceStore, apply_cover_watermarks_from_info, crop_poster
@@ -54,6 +55,26 @@ if TYPE_CHECKING:
     from ..net.http import WebClient
 
 logger = structlog.get_logger()
+
+
+def _uses_western_image_flow(metadata: Metadata, config: HotSettings | None) -> bool:
+    if metadata.content_type == ContentType.WESTERN:
+        return True
+
+    if metadata.content_type != ContentType.UNCENSORED or config is None:
+        return False
+
+    is_streaming = any(
+        re.fullmatch(rule, metadata.number, flags=re.IGNORECASE)
+        for rule in config.scraping.uncensored_streaming_number_rules
+    )
+    if not is_streaming:
+        return False
+
+    image_urls = [*metadata.original_cover_urls, *metadata.original_poster_urls]
+    sources = {metadata.image_sources.get(url) for url in image_urls if url and metadata.image_sources.get(url)}
+
+    return bool(sources) and str(SiteName.TOKYO_HOT) not in sources
 
 
 @dataclass
@@ -106,6 +127,7 @@ async def execute_file_operations(
         logger.warning("organize target state unknown", source=str(source_path), dest=str(dest), error=check.error)
         return FileOperationsResult(outcome=PlaceOutcome.FAILED, error=check.error)
 
+    image_content_type = ContentType.WESTERN if _uses_western_image_flow(metadata, config) else metadata.content_type
     # 下载图片; 水印打在库路径副本上, 不能修改 Resource 原图.
     if web_client and download_images:
         logger.debug("downloading images via store", number=metadata.number)
@@ -118,7 +140,7 @@ async def execute_file_operations(
             config,
             kinds,
             file_info=file_info,
-            content_type=metadata.content_type,
+            content_type=image_content_type,
             watermark_dir=watermark_dir,
         )
 
@@ -163,7 +185,13 @@ async def execute_file_operations(
 
     # 写入 NFO.
     if org_result.outcome is PlaceOutcome.PLACED and org_result.dest and write_nfo:
-        await write_nfo_file(metadata, paths.nfo, tag_mapping_path=tag_mapping_path)
+        await write_nfo_file(
+            metadata,
+            paths.nfo,
+            tag_mapping_path=tag_mapping_path,
+            nfo_output=config.nfo_output if config is not None else None,
+            actor_genders=actor_genders,
+        )
 
     # 字幕按模板落到 video_dest 侧.
     subtitle_conflicts: list[SubtitleConflict] = []
@@ -363,7 +391,12 @@ def _place_library_images(
         if poster_local is not None:
             paths.poster.parent.mkdir(parents=True, exist_ok=True)
             _copy_into_library(poster_local, paths.poster)
-        elif thumb_local is not None and config is not None and config.scraping.crop_poster:
+        elif (
+            thumb_local is not None
+            and config is not None
+            and config.scraping.crop_poster
+            and content_type != ContentType.WESTERN
+        ):
             paths.poster.parent.mkdir(parents=True, exist_ok=True)
             crop_poster(
                 paths.thumb,

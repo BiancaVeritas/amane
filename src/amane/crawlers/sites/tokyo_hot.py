@@ -134,7 +134,7 @@ class TokyoHotCrawler(Crawler):
         actors = _label_values(html, "出演者")
         play_tags = _label_values(html, "プレイ内容")
         tags = _dedupe([*play_tags, *_label_values(html, "タグ")])
-        series_names = _dedupe([*_label_values(html, "シリーズ"), *_label_values(html, "レーベル")])
+        series_names = _dedupe(_label_values(html, "レーベル"))
 
         release_raw = _label_text(html, "配信開始日")
         release = normalize_calendar_date(release_raw.replace("/", "-") if release_raw else None)
@@ -168,8 +168,7 @@ class TokyoHotCrawler(Crawler):
             tags=tags,
             series=series_names[0] if series_names else None,
             series_names=series_names,
-            poster_urls=[jacket_url] if jacket_url else [],
-            original_poster_urls=[jacket_url] if jacket_url else [],
+            cover_urls=[jacket_url] if jacket_url else [],
             extrafanart=extrafanart,
             trailer_urls=[trailer_url] if trailer_url else [],
             source_url=url,

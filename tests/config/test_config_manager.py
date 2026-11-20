@@ -166,6 +166,20 @@ class TestHotSettings:
         with pytest.raises(ValidationError, match=r"less than or equal to 10"):
             HotSettings(worker=WorkerConfig(poll_interval=11.0))
 
+    def test_nfo_output_defaults(self):
+        """旧配置没有 nfo_output 时，使用 NFO 输出默认设置。"""
+        cfg = HotSettings.model_validate({})
+
+        assert cfg.nfo_output.basic_info.number is True
+        assert cfg.nfo_output.basic_info.title is True
+        assert cfg.nfo_output.basic_info.original_title is True
+        assert cfg.nfo_output.basic_info.source_links is True
+
+        assert cfg.nfo_output.people.actors is True
+        assert cfg.nfo_output.people.female is False
+        assert cfg.nfo_output.people.transgender_female is False
+        assert cfg.nfo_output.people.male is False
+
 
 class TestScrapingDownloadResources:
     """download_resources 旧字段迁移."""
@@ -417,7 +431,7 @@ class TestScrapingPriorityMigration:
         routes = ScrapingConfig().content_routes
         assert routes[ContentType.AMATEUR][0] == SiteName.MGSTAGE
         assert routes[ContentType.CHINESE] == []
-        assert routes[ContentType.HENTAI] == [SiteName.GETCHU, SiteName.DMM]
+        assert routes[ContentType.HENTAI] == [SiteName.DMM, SiteName.HANIME1]
         assert routes[ContentType.WESTERN] == [SiteName.THEPORNDB]
         assert routes["uncensored_dvd"] == [SiteName.AVENTERTAINMENTS, SiteName.CARIBBEANCOM_INDEX, SiteName.AVSOX]
         assert routes["uncensored_streaming"][0] == SiteName.TENMUSUME
@@ -592,8 +606,26 @@ class TestConfigManagerUpdate:
         assert mgr.hot.scraping.crop_poster is False
 
     def test_persists_to_toml(self, mgr: ConfigManager):
-        """更新会写入 TOML 文件"""
-        mgr.update({"network": {"proxy": "socks5://127.0.0.1:7890"}})
+        """更新会写入 TOML 文件，并且 NFO 输出选项能够重新加载。"""
+        mgr.update(
+            {
+                "network": {"proxy": "socks5://127.0.0.1:7890"},
+                "nfo_output": {
+                    "basic_info": {
+                        "number": False,
+                        "source_links": False,
+                    },
+                    "people": {
+                        "actors": False,
+                        "female": True,
+                        "transgender_female": True,
+                    },
+                    "categories": {
+                        "genre": False,
+                    },
+                },
+            }
+        )
 
         config_path = mgr.cold.config_path
         assert config_path.exists()
@@ -602,6 +634,28 @@ class TestConfigManagerUpdate:
             data = tomllib.load(f)
 
         assert data["network"]["proxy"] == "socks5://127.0.0.1:7890"
+
+        assert data["nfo_output"]["basic_info"]["number"] is False
+        assert data["nfo_output"]["basic_info"]["source_links"] is False
+        assert data["nfo_output"]["people"]["actors"] is False
+        assert data["nfo_output"]["people"]["female"] is True
+        assert data["nfo_output"]["people"]["transgender_female"] is True
+        assert data["nfo_output"]["categories"]["genre"] is False
+
+        # 重新加载配置，验证保存的选项能够恢复。
+        reloaded = ConfigManager.with_cold(mgr.cold)
+
+        assert reloaded.hot.nfo_output.basic_info.number is False
+        assert reloaded.hot.nfo_output.basic_info.source_links is False
+        assert reloaded.hot.nfo_output.people.actors is False
+        assert reloaded.hot.nfo_output.people.female is True
+        assert reloaded.hot.nfo_output.people.transgender_female is True
+        assert reloaded.hot.nfo_output.categories.genre is False
+
+        # 未修改的选项仍然保留默认值。
+        assert reloaded.hot.nfo_output.basic_info.title is True
+        assert reloaded.hot.nfo_output.people.male is False
+        assert reloaded.hot.nfo_output.categories.tag is True
 
     def test_unknown_section_ignored(self, mgr: ConfigManager):
         """未知 section 被 Pydantic extra=forbid 拒绝"""

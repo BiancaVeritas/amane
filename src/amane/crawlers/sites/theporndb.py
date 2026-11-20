@@ -1,4 +1,5 @@
 from typing import Any, override
+from urllib.parse import urlencode
 
 from ...enums import ActorGender, SiteName
 from ...net.connectivity import ConnectivityOutcome, SkipReason, assess_response
@@ -7,11 +8,12 @@ from ...parsing.file_info import ContentType
 from ...plugins.models import SourceTrait
 from ..base import Crawler, CrawlerProfile
 from ..models import FetchOptions, FilmActor, MediaMetadata, SearchQuery
-from ..parsing import fold_number, fold_studio, is_same_number, parse_western_number
+from ..parsing import fold_number, fold_studio, fold_western_studio, is_same_number, parse_western_number
 from .kin8 import movie_id as kin8_movie_id
 
 _PERFORMER_GENDER: dict[str, ActorGender] = {
     "FEMALE": ActorGender.FEMALE,
+    "TRANSGENDER FEMALE": ActorGender.TRANSGENDER_FEMALE,
     "MALE": ActorGender.MALE,
 }
 
@@ -140,16 +142,68 @@ class ThePornDBCrawler(Crawler):
             return None
 
         if query.content_type == ContentType.WESTERN:
-            # 恢复原有番号检索: 唯一结果本身足以确定作品, 不强制要求 OSHASH.
-            search_data = await self.client.post_json(
-                gql_url,
-                json={"query": _SEARCH_QUERY, "variables": {"term": query.number}},
-                headers=headers,
-            )
-            search_results = _gql_field(search_data, "searchScene")
-            scenes = (
-                [item for item in search_results if isinstance(item, dict)] if isinstance(search_results, list) else []
-            )
+            western = parse_western_number(query.number)
+
+            if western is not None:
+                # 欧美日期番号：复用手动搜索的 REST 条件，先按片商和日期获取候选 ID。
+                params = urlencode(
+                    {
+                        "site": western.studio_name,
+                        "date": western.date,
+                        "per_page": 50,
+                        "page": 1,
+                        "orderBy": "most_relevant",
+                    }
+                )
+                rest_data = await self.client.get_json(
+                    f"https://api.theporndb.net/scenes?{params}",
+                    headers=headers,
+                )
+                rest_results = rest_data.get("data") if isinstance(rest_data, dict) else None
+
+                # REST 只提供候选 ID；通过原有 GraphQL 查询获取完整 Scene 数据。
+                scene_ids = (
+                    list(
+                        dict.fromkeys(
+                            str(item["id"]) for item in rest_results if isinstance(item, dict) and item.get("id")
+                        )
+                    )
+                    if isinstance(rest_results, list)
+                    else []
+                )
+
+                scenes: list[dict[str, Any]] = []
+                for scene_id in scene_ids:
+                    detail_data = await self.client.post_json(
+                        gql_url,
+                        json={"query": _FIND_BY_ID_QUERY, "variables": {"id": scene_id}},
+                        headers=headers,
+                    )
+                    scene = _gql_field(detail_data, "findScene")
+                    if isinstance(scene, dict) and str(scene.get("id") or "").casefold() == scene_id.casefold():
+                        scenes.append(scene)
+
+                # 保留原有片商和发布日期校验。
+                scenes = [
+                    scene
+                    for scene in scenes
+                    if _scene_date(scene) == western.date
+                    and fold_western_studio(_scene_studio(scene)) == western.studio
+                ]
+            else:
+                # 无法解析日期番号时，保留原有完整番号搜索作为回退。
+                search_data = await self.client.post_json(
+                    gql_url,
+                    json={"query": _SEARCH_QUERY, "variables": {"term": query.number}},
+                    headers=headers,
+                )
+                search_results = _gql_field(search_data, "searchScene")
+                scenes = (
+                    [item for item in search_results if isinstance(item, dict)]
+                    if isinstance(search_results, list)
+                    else []
+                )
+
             if len(scenes) == 1:
                 return scenes[0]
 
@@ -243,7 +297,7 @@ class ThePornDBCrawler(Crawler):
             name = perf.get("name") or pa.get("as", "")
             if not name:
                 continue
-            gender = _PERFORMER_GENDER.get(str(perf.get("gender") or ""))
+            gender = _PERFORMER_GENDER.get(str(perf.get("gender") or "").strip().upper().replace("_", " "))
             actors.append(FilmActor(name=name, gender=gender or ActorGender.UNKNOWN))
 
         tags = [t.get("name", "") for t in (scene.get("tags") or []) if t.get("name")]
@@ -281,7 +335,7 @@ def pick_scene(results: object, number: str) -> dict[str, Any] | None:
         hits = [
             scene
             for scene in scenes
-            if _scene_date(scene) == western.date and fold_studio(_scene_studio(scene)) == western.studio
+            if _scene_date(scene) == western.date and fold_western_studio(_scene_studio(scene)) == western.studio
         ]
         return hits[0] if len(hits) == 1 else None
 
@@ -320,7 +374,7 @@ def pick_fingerprint_scene(results: object, number: str | None = None) -> dict[s
         hits = [
             scene
             for scene in scenes
-            if _scene_date(scene) == western.date and fold_studio(_scene_studio(scene)) == western.studio
+            if _scene_date(scene) == western.date and fold_western_studio(_scene_studio(scene)) == western.studio
         ]
 
     by_id: dict[str, dict[str, Any]] = {}

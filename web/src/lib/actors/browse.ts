@@ -12,6 +12,7 @@ export type ActorListQuery = NonNullable<ListActorsData["query"]>;
 
 export const ACTOR_GENDERS = [
   "female",
+  "transgender_female",
   "male",
   "unknown",
 ] as const satisfies readonly ActorGender[];

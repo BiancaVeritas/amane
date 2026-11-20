@@ -36,31 +36,6 @@ if TYPE_CHECKING:
 _PROGRESS_POST_STEPS = 2
 
 
-def _prepare_image_content_type(content_type: ContentType, metadata: AggregatedMetadata) -> ContentType:
-    """无码仅在同一个来源明确提供原海报与双页封面时走日本双页裁剪流程."""
-    if content_type != ContentType.UNCENSORED:
-        return content_type
-
-    if (
-        metadata.double_page_poster_urls
-        and metadata.double_page_original_poster_urls
-        and metadata.double_page_cover_urls
-    ):
-        # 强制使用同一个来源的成对图片, 防止聚合后的跨来源 URL 错配.
-        metadata.poster_urls = list(metadata.double_page_poster_urls)
-        metadata.original_poster_urls = list(metadata.double_page_original_poster_urls)
-        metadata.cover_urls = list(metadata.double_page_cover_urls)
-        return ContentType.UNCENSORED
-
-    # 没有同源的完整双页组合, 一律按单图处理. poster_urls 可能只是
-    # cover 的派生尺寸, 不能单独作为双页结构证据. 单图海报由内部裁剪生成;
-    # 不把封面反向写入原海报 URL, 以保留有码来源明确的空值.
-    cover_urls = list(metadata.cover_urls or metadata.poster_urls)
-    metadata.cover_urls = cover_urls
-    metadata.poster_urls = []
-    return ContentType.WESTERN
-
-
 class CrawlerFactoryLike(Protocol):
     async def get_crawlers(self, names: Iterable[str]) -> dict[str, CrawlerLike]: ...
 
@@ -321,6 +296,24 @@ class ScrapeHandler(TaskHandler[ScrapePayload, ScrapeResult]):
         ):
             search_number = _map_search_number(match_number, self._config.scraping.number_mapping_rules)
 
+        # Hanime1 单独取得本地文件路径，不改变其他来源共用的 file_path.
+        hanime1_file_path = None
+        if str(SiteName.HANIME1) in crawlers:
+            linked_files = [file] if file is not None else []
+            if payload.metadata_id is not None:
+                linked_files.extend(await self._repo.get_media_by_metadata_id(payload.metadata_id))
+
+            checked_paths: set[str] = set()
+            for linked_file in linked_files:
+                if linked_file.path in checked_paths:
+                    continue
+                checked_paths.add(linked_file.path)
+
+                disk_path = await existing_disk_path(Path(linked_file.path))
+                if disk_path is not None and disk_path.is_file():
+                    hanime1_file_path = str(disk_path)
+                    break
+
         q = SearchQuery(
             search_number,
             file.path if file else None,
@@ -329,6 +322,7 @@ class ScrapeHandler(TaskHandler[ScrapePayload, ScrapeResult]):
             theporndb_uuid=theporndb_uuid,
             allow_number_variants=payload.allow_number_variants,
             original_number=match_number,
+            hanime1_file_path=hanime1_file_path,
         )
 
         field_priority = compile_priority(
@@ -349,6 +343,7 @@ class ScrapeHandler(TaskHandler[ScrapePayload, ScrapeResult]):
             sequential_failed: list[str] = []
             sequential_queried: list[str] = []
             result = None
+            selected_streaming_site: str | None = None
             for site in route:
                 crawler = crawlers.get(str(site))
                 if crawler is None:
@@ -366,6 +361,7 @@ class ScrapeHandler(TaskHandler[ScrapePayload, ScrapeResult]):
                 sequential_queried.extend(one.sites_queried)
                 sequential_failed.extend(one.failed_sites)
                 if one.raw:
+                    selected_streaming_site = str(site)
                     result = one
                     # Caribbeancompr 映射命中后, D2Pass 只作为发行日期补充源;
                     # 其余字段绝不合并. 映射未命中时, 下一个循环项仍可用 D2Pass 提供完整元数据.
@@ -446,26 +442,32 @@ class ScrapeHandler(TaskHandler[ScrapePayload, ScrapeResult]):
         result.metadata.original_title = result.metadata.title
         result.metadata.original_plot = result.metadata.plot
 
-        # WESTERN (包括识别失败后的 WESTERN 回退) 保留原文, 其余类型按现有配置翻译.
-        if self._translator is not None and payload.content_type != ContentType.WESTERN:
-            await self._translate_metadata(result.metadata, field_language, CacheKind.trans in payload.use_cache)
-
-        # WESTERN 只有封面源: 未锁定时每次刮削都反向填充原海报 URL, 当前海报走内部裁剪资源.
-        western = payload.content_type == ContentType.WESTERN
-        if western:
-            western_cover_urls = (
-                list(identity_metadata.original_cover_urls)
-                if cover_locked and identity_metadata
-                else list(result.metadata.cover_urls)
+        # WESTERN 标题保留原文, 剧情仍按全局翻译配置处理.
+        if self._translator is not None:
+            await self._translate_metadata(
+                result.metadata,
+                field_language,
+                CacheKind.trans in payload.use_cache,
+                skip_title=payload.content_type == ContentType.WESTERN,
             )
-            result.metadata.original_poster_urls = western_cover_urls
-            result.metadata.poster_urls = []
 
-        # 无码单图改走欧美式对齐; 双页仍使用无码独立裁剪比例.
-        image_content_type = _prepare_image_content_type(payload.content_type, result.metadata)
+        # WESTERN 只有封面源: 封面 URL 同步作为海报 URL 来源.
+        # 手动上传后的字段组由后续 AUTO 写入锁定机制保护.
+        western = payload.content_type == ContentType.WESTERN or (
+            route_key == "uncensored_streaming"
+            and selected_streaming_site is not None
+            and selected_streaming_site != str(SiteName.TOKYO_HOT)
+        )
+        if western:
+            western_cover_urls = list(result.metadata.cover_urls)
+            result.metadata.original_poster_urls = western_cover_urls
+            result.metadata.poster_urls = western_cover_urls
+
+        # 图像处理模式由刮削路由决定, double_page_* 不参与裁剪路线判断.
+        image_content_type = ContentType.WESTERN if western else payload.content_type
 
         # 锁定类型在物化前直接沿用现有资源, 不触发重新下载 / 超分 / 派生覆盖.
-        original_poster_urls = list(result.metadata.original_poster_urls or [])
+        original_poster_urls = list(result.metadata.poster_urls or [])
         poster_input = [] if poster_locked else list(result.metadata.poster_urls)
         cover_input = [] if cover_locked else list(result.metadata.cover_urls)
         if cover_locked and identity_metadata is not None:
@@ -489,15 +491,12 @@ class ScrapeHandler(TaskHandler[ScrapePayload, ScrapeResult]):
                         **result.metadata.image_sources,
                         **(identity_metadata.image_sources if identity_metadata else {}),
                     },
-                    force_crop_poster=image_content_type == ContentType.WESTERN and not poster_locked,
                     preserve_cover_resource=cover_locked,
                 )
                 if not poster_locked:
                     poster_out = materialized.poster_urls
                     if cover_locked and not poster_out and identity_metadata is not None:
                         poster_out = list(identity_metadata.poster_urls)
-                if not cover_locked:
-                    cover_out = materialized.cover_urls
                 trailer_out = materialized.trailer_urls
             except Exception:
                 current().warning("image materialization failed, keeping raw urls", number=payload.number)
@@ -700,14 +699,19 @@ class ScrapeHandler(TaskHandler[ScrapePayload, ScrapeResult]):
             return []
 
     async def _translate_metadata(
-        self, metadata: AggregatedMetadata, field_language: FieldLanguage, use_cache: bool
+        self,
+        metadata: AggregatedMetadata,
+        field_language: FieldLanguage,
+        use_cache: bool,
+        *,
+        skip_title: bool = False,
     ) -> None:
         """就地翻译 ``llm.translate_fields`` 中的文本标量. 单字段失败不影响其余, 全程不抛.
         ``use_cache`` 为 False 时跳过译文缓存读取, 但仍刷新缓存.
         """
         assert self._translator is not None
         fields = self._config.llm.translate_fields
-        if MetadataField.TITLE in fields and metadata.title:
+        if not skip_title and MetadataField.TITLE in fields and metadata.title:
             translated = await self._translate_field(metadata.title, field_language, MetadataField.TITLE, use_cache)
             if translated:
                 metadata.title = translated

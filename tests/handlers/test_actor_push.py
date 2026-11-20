@@ -7,8 +7,11 @@ from typing import TYPE_CHECKING, Self
 import pytest
 
 from amane.config import HotSettings, MediaServerConfig
+from amane.db.models import Actor
 from amane.db.repo_types import WriteMode
+from amane.enums import ActorGender
 from amane.handlers import ActorPushHandler, ActorPushPayload
+from amane.handlers.actor_push import _profile_updates
 from amane.media import ResourceStore
 from amane.media_server import SEARCH_LIMIT, MediaPerson, MediaServerError
 
@@ -505,3 +508,24 @@ async def test_same_name_persons_all_update_once(repo: Repository, resource_stor
     assert result.result.matched == 2
     assert result.result.updated == 2
     assert [call[0] for call in client.updates] == ["p1", "p2"]
+
+
+@pytest.mark.parametrize(
+    ("gender", "expected"),
+    [
+        (ActorGender.FEMALE, "性别：女"),
+        (ActorGender.MALE, "性别：男"),
+        (ActorGender.TRANSGENDER_FEMALE, "性别：跨性别女性"),
+        (ActorGender.UNKNOWN, None),
+    ],
+)
+def test_actor_gender_is_written_to_person_overview(gender: ActorGender, expected: str | None) -> None:
+    actor = Actor(name="Alice", gender=gender)
+    person = _person("Alice")
+
+    updates = _profile_updates(actor, person)
+
+    if expected is None:
+        assert "Overview" not in updates
+    else:
+        assert updates["Overview"] == expected

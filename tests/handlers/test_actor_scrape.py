@@ -787,3 +787,50 @@ async def test_actor_scrape_reports_determinate_progress(repo: Repository, hot: 
     assert {total for _, total, _ in events} == {5}
     assert events[-1] == (5, 5, "saved")
     assert [current for current, _, _ in events] == sorted(current for current, _, _ in events)
+
+
+@pytest.mark.asyncio(loop_scope="function")
+async def test_actor_scrape_learned_transgender_female_skips_unsupported_deferred_sites(
+    repo: Repository, hot: HotSettings
+) -> None:
+    """第一段学到跨性别女性后, 不请求不支持该性别的暂缓站."""
+    hot.actor_scraping.profile_sites = [SiteName.THEPORNDB, SiteName.MINNANO]
+    hot.actor_scraping.image_sites = [SiteName.GFRIENDS]
+    actor_id = await _actor_id(repo, "TransgenderActor", gender=ActorGender.UNKNOWN)
+
+    theporndb = _FakeActorCrawler(
+        {
+            "TransgenderActor": ActorMetadata(
+                name="TransgenderActor",
+                gender=ActorGender.TRANSGENDER_FEMALE,
+                overview="bio",
+            )
+        }
+    )
+    minnano = _FakeActorCrawler({"TransgenderActor": ActorMetadata(birthday="1990-01-01")})
+    gfriends = _FakeActorCrawler(
+        {"TransgenderActor": ActorMetadata(image_urls=["https://img.example/transgender.jpg"])}
+    )
+
+    factory = _FakeFactory(
+        {
+            "theporndb": theporndb,
+            "minnano": minnano,
+            "gfriends": gfriends,
+        }
+    )
+    handler = ActorScrapeHandler(repo, factory, AsyncMock(), hot, web_client=None)
+
+    result = await handler.handle(ActorScrapePayload(actor_id=actor_id, use_cache=set()))
+
+    assert result.success
+    assert theporndb.calls == ["TransgenderActor"]
+    assert minnano.calls == []
+    assert gfriends.calls == []
+
+    saved = await repo.get_actor(actor_id)
+    assert saved is not None
+    assert saved.gender == ActorGender.TRANSGENDER_FEMALE
+    assert saved.overview == "bio"
+    assert saved.birthday is None
+    assert saved.image_urls == []

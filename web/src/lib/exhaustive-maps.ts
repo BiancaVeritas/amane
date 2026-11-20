@@ -228,6 +228,8 @@ export const METADATA_FIELDS = exhaustiveTuple<MetadataField>()(
   "plot",
   "original_plot",
   "actors",
+  "actor_birthplace",
+  "actor_overview",
   "directors",
   "tags",
   "series",

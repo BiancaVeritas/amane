@@ -18,6 +18,7 @@ class SiteName(StrEnum):
     GETCHU = "getchu"
     GFRIENDS = "gfriends"
     GIGA = "giga"
+    HANIME1 = "hanime1"
     IQQTV = "iqqtv"
     JAV321 = "jav321"
     JAVBUS = "javbus"
@@ -80,6 +81,7 @@ class ActorGender(StrEnum):
     """演员性别 - 用于展示与按站裁剪刮削源."""
 
     FEMALE = "female"
+    TRANSGENDER_FEMALE = "transgender_female"
     MALE = "male"
     UNKNOWN = "unknown"
 
@@ -146,6 +148,8 @@ class MetadataField(StrEnum):
     TRAILER_URLS = "trailer_urls"
     EXTRAFANART = "extrafanart"
     SCORE = "score"
+    ACTOR_BIRTHPLACE = "actor_birthplace"
+    ACTOR_OVERVIEW = "actor_overview"
 
 
 class ActorField(StrEnum):

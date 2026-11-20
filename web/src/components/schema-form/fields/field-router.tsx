@@ -52,6 +52,8 @@ interface FieldRouterProps {
    * be added when a use case appears.
    */
   variant?: FieldVariant;
+  /** Boolean field display mode. Defaults to the existing switch. */
+  booleanDisplay?: "switch" | "checkbox";
 }
 
 export function FieldRouter({
@@ -61,6 +63,7 @@ export function FieldRouter({
   i18nPath,
   i18nPrefix = "settings:fields",
   variant,
+  booleanDisplay = "switch",
 }: FieldRouterProps) {
   const effectiveI18nPath = i18nPath ?? name;
   const { label, description } = useSchemaI18n(effectiveI18nPath, schema, i18nPrefix);
@@ -96,7 +99,7 @@ export function FieldRouter({
 
   if (isBool(schema)) {
     devLog.info(TAG, `→ BoolField: ${name}`);
-    return <BoolField schema={schema} {...basic} />;
+    return <BoolField schema={schema} {...basic} booleanDisplay={booleanDisplay} />;
   }
 
   if (isEnum(schema)) {

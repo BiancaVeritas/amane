@@ -460,3 +460,64 @@ async def test_forced_translation_joins_in_flight_request(cache):
     assert users == ["Hello world"]
     assert await cache.get("Hello world", Language.ZH_CN, MetadataField.TITLE, _SYSTEM_ZH) == "新译文"
     await cache.close()
+
+
+# --- 演员资料专用翻译 ---
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "field,text",
+    [
+        (MetadataField.ACTOR_BIRTHPLACE, "Roanne, France"),
+        (MetadataField.ACTOR_OVERVIEW, "Test performer biography."),
+    ],
+)
+async def test_translate_actor_uses_independent_simplified_prompt(field, text):
+    """演员资料固定翻译为简体中文, 不受影片自定义提示词影响."""
+    model, calls = _recording_model("简体中文译文")
+    t = _translator(
+        model,
+        system_prompt="这是影片专用的自定义提示词.",
+        field_prompts={
+            MetadataField.ACTOR_BIRTHPLACE: "这是影片出生地字段提示词.",
+            MetadataField.ACTOR_OVERVIEW: "这是影片简介字段提示词.",
+        },
+    )
+
+    result = await t.translate_actor(text, field)
+
+    assert result == "简体中文译文"
+    assert len(calls) == 1
+
+    system, user = calls[0]
+    assert "简体中文" in system
+    assert "这是影片专用的自定义提示词." not in system
+    assert "这是影片出生地字段提示词." not in system
+    assert "这是影片简介字段提示词." not in system
+    assert user == text
+
+
+def test_actor_system_prompts_are_field_specific():
+    """出生地与演员简介使用各自独立的专用提示词."""
+    birthplace_prompt = translator_module.build_actor_system_prompt(MetadataField.ACTOR_BIRTHPLACE)
+    overview_prompt = translator_module.build_actor_system_prompt(MetadataField.ACTOR_OVERVIEW)
+
+    assert birthplace_prompt != overview_prompt
+    assert "简体中文" in birthplace_prompt
+    assert "简体中文" in overview_prompt
+
+
+@pytest.mark.asyncio
+async def test_translate_actor_handles_chinese_without_llm():
+    """演员资料已经是简体中文时不调用模型."""
+    model, calls = _recording_model()
+    t = _translator(model)
+
+    result = await t.translate_actor(
+        "法国",
+        MetadataField.ACTOR_BIRTHPLACE,
+    )
+
+    assert result is None
+    assert not calls

@@ -78,7 +78,7 @@ def test_number_normalization_and_runtime() -> None:
 @pytest.mark.asyncio
 async def test_search_uses_number_result_not_internal_product_id() -> None:
     client = _FakeClient()
-    crawler = TokyoHotCrawler(client)  # type: ignore[arg-type]
+    crawler = TokyoHotCrawler(client)  # type: ignore[arg-type]  # ty: ignore[invalid-argument-type]
     url = await crawler._search(SearchQuery(number="n0956"))
     assert url == "https://my.tokyo-hot.com/product/5770/?lang=ja"
     assert client.urls == ["https://my.tokyo-hot.com/product/?q=n0956&lang=ja"]
@@ -88,7 +88,7 @@ async def test_search_uses_number_result_not_internal_product_id() -> None:
 @pytest.mark.asyncio
 async def test_scrape_maps_multi_series_and_full_size_assets() -> None:
     client = _FakeClient()
-    crawler = TokyoHotCrawler(client)  # type: ignore[arg-type]
+    crawler = TokyoHotCrawler(client)  # type: ignore[arg-type]  # ty: ignore[invalid-argument-type]
     result = await crawler._scrape("https://my.tokyo-hot.com/product/5770/?lang=ja")
     assert result is not None
     assert result.number == "N0956"
@@ -101,11 +101,11 @@ async def test_scrape_maps_multi_series_and_full_size_assets() -> None:
     assert result.release == "2014-06-06"
     assert result.runtime == 109
     assert result.tags == ["中出し", "フェラ", "緊縛"]
-    assert result.series_names == ["問答無用姦", "AIリマスター", "東熱"]
-    assert result.series == "問答無用姦"
-    assert result.poster_urls == ["https://my.cdn.tokyo-hot.com/media/5770/jacket/n0956.jpg"]
-    assert result.original_poster_urls == result.poster_urls
-    assert result.cover_urls == []
+    assert result.series_names == ["東熱"]
+    assert result.series == "東熱"
+    assert result.poster_urls == []
+    assert result.original_poster_urls is None
+    assert result.cover_urls == ["https://my.cdn.tokyo-hot.com/media/5770/jacket/n0956.jpg"]
     assert result.extrafanart == [
         "https://my.cdn.tokyo-hot.com/media/5770/scap/0sample_001/640x480_wlimited.jpg",
         "https://my.cdn.tokyo-hot.com/media/5770/vcap/151/640x480_wlimited.jpg",

@@ -922,3 +922,24 @@ class TestActorUserTags:
         async with repo._session() as session:
             orphans = (await session.exec(select(ActorUserTag).where(col(ActorUserTag.actor_id) == source_id))).all()
             assert list(orphans) == []
+
+
+class TestActorBatchGender:
+    async def test_batch_set_transgender_female(self, repo: Repository) -> None:
+        await repo.upsert_metadata(
+            number="BAG-001",
+            actors=["TransgenderBatch"],
+        )
+        actor_id = await _facet_id(repo, FacetKind.ACTOR, "TransgenderBatch")
+
+        updated, missing = await repo.batch_set_actor_gender(
+            [actor_id, 999999],
+            ActorGender.TRANSGENDER_FEMALE,
+        )
+
+        assert updated == 1
+        assert missing == 1
+
+        saved = await repo.get_actor(actor_id)
+        assert saved is not None
+        assert saved.gender == ActorGender.TRANSGENDER_FEMALE

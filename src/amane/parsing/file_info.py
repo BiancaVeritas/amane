@@ -218,8 +218,8 @@ _DIGIT_PREFIX_CATALOG = re.compile(r"[A-Z]{1,4}\d{1,4}-\d{2,4}[A-Z]?")
 _DMM_CONCAT = re.compile(r"([A-Z]{2,})00(\d{3})")
 _TMA_NUMBER = re.compile(r"T\d{2}-?\d{3,}")
 _SIX_DIGIT_CATALOG = re.compile(r"(?<!\d)\d{6}[-_]\d{2,4}(?!\d)")
-_WESTERN_PROBE = re.compile(r"([A-Z0-9_]{2,})[-.]2?0?(\d{2}[-.]\d{2}[-.]\d{2})")
-_WESTERN_PARSE = re.compile(r"([A-Z0-9-]{2,})[-_.]2?0?(\d{2}[-.]\d{2}[-.]\d{2})")
+_WESTERN_PROBE = re.compile(r"([A-Z0-9_ ]{2,})[-.]2?0?(\d{2}[-.]\d{2}[-.]\d{2})")
+_WESTERN_PARSE = re.compile(r"([A-Z0-9 ]{2,})[-_.]2?0?(\d{2}[-.]\d{2}[-.]\d{2})")
 
 _ESCAPE_MARKERS = (
     "4K",
@@ -481,8 +481,8 @@ def _prepare(basename: str, escape_strings: list[str]) -> _Prepared:
     )
     dated = re.sub(r"[-_ .]CD\d{1,2}", "", dated)
     dated = re.sub(r"[-_ .][A-Z0-9]\.$", "", dated)
-    dated = dated.replace(" ", "-").strip("-_. ")
-    catalog = re.sub(r"\d{4}[-_.]\d{1,2}[-_.]\d{1,2}", "", dated)
+    dated = dated.strip("-_. ")
+    catalog = re.sub(r"\d{4}[-_.]\d{1,2}[-_.]\d{1,2}", "", dated.replace(" ", "-"))
     catalog = re.sub(r"[-\[]\d{2}[-_.]\d{2}[-_.]\d{2}]?", "", catalog)
     catalog = (
         catalog.replace("FC2-PPV", "FC2-").replace("FC2PPV", "FC2-").replace("--", "-").replace("GACHIPPV", "GACHI")
@@ -543,16 +543,16 @@ def _match(basename: str, escape_strings: list[str], *, generic: bool) -> tuple[
         result = _WESTERN_PARSE.findall(dated)
         if result:
             # 日期前最后一个短横线之前的内容属于文件名前缀, 不纳入片库番号.
-            normalized_studio = result[0][0].rsplit("-", 1)[-1].strip("-")
+            normalized_studio = result[0][0].strip()
             short_name = normalized_studio.lower()
             canonical_name = _WESTERN_NAMES.get(short_name)
             if canonical_name is not None:
                 # 已登记厂牌继续使用既有规范名称, 不改变厂牌规范化规则.
                 studio_name = canonical_name
             else:
-                # 匹配仍使用 _prepare 生成的大写文本; 仅保存时从原始文件名取厂牌大小写.
+                # 仅保存时从原始文件名取厂商大小写.
                 raw_match = re.search(_WESTERN_PARSE.pattern, basename, re.IGNORECASE)
-                raw_studio = raw_match.group(1).rsplit("-", 1)[-1].strip("-") if raw_match else normalized_studio
+                raw_studio = raw_match.group(1).strip() if raw_match else normalized_studio
                 studio_name = raw_studio.replace(".", "")
             number = studio_name + "." + result[0][1].replace("-", ".")
             return number, ContentType.WESTERN

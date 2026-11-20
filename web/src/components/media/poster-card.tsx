@@ -3,6 +3,7 @@ import {
   IconCalendar,
   IconGenderFemale,
   IconGenderMale,
+  IconGenderTransgender,
   IconStar,
   IconUser,
 } from "@tabler/icons-react";
@@ -151,7 +152,13 @@ export const PosterCard = memo(function PosterCard({
               if (!name) return <Box key={`empty-${index}`} />;
               const gender = item.actor_genders?.[name];
               const GenderIcon =
-                gender === "female" ? IconGenderFemale : gender === "male" ? IconGenderMale : null;
+                gender === "female"
+                  ? IconGenderFemale
+                  : gender === "male"
+                    ? IconGenderMale
+                    : gender === "transgender_female"
+                      ? IconGenderTransgender
+                      : null;
               return (
                 <Box
                   key={`${index}-${name}`}
@@ -181,7 +188,9 @@ export const PosterCard = memo(function PosterCard({
                         color={
                           gender === "female"
                             ? "var(--mantine-color-pink-5)"
-                            : "var(--mantine-color-blue-5)"
+                            : gender === "transgender_female"
+                              ? "var(--mantine-color-grape-6)"
+                              : "var(--mantine-color-blue-5)"
                         }
                       />
                     ) : null}

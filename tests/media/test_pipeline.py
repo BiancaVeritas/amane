@@ -145,6 +145,98 @@ async def test_no_poster_source_crops_from_thumb(resource_store: ResourceStore, 
 
 
 @pytest.mark.asyncio
+async def test_crop_runs_when_poster_download_disabled(resource_store: ResourceStore, tmp_path: Path):
+    """关闭来源海报下载时, 仍可从封面裁剪生成内部海报 URL."""
+    poster_url = "https://s/p.jpg"
+    cover_url = "https://s/t.jpg"
+    client = FakeClient(
+        {
+            cover_url: (800, 538),
+            poster_url: (300, 420),
+        }
+    )
+    cfg = HotSettings()
+    cfg.scraping.download_resources = [DownloadableResource.thumb]
+
+    out = await materialize_images(
+        [poster_url],
+        [cover_url],
+        [],
+        resource_store,
+        cast("WebClient", client),
+        cfg,
+        tmp_path,
+    )
+
+    assert poster_url not in client.downloaded
+    assert cover_url in client.downloaded
+    assert len(out.poster_urls) == 1
+    assert out.poster_urls[0].startswith(pipeline_mod.RESOURCE_URL_PREFIX)
+    assert out.cover_urls == [cover_url]
+
+
+@pytest.mark.asyncio
+async def test_source_poster_kept_when_crop_disabled(resource_store: ResourceStore, tmp_path: Path):
+    """关闭裁剪和来源海报下载时, 仍保留来源海报 URL."""
+    poster_url = "https://s/p.jpg"
+    cover_url = "https://s/t.jpg"
+    client = FakeClient(
+        {
+            cover_url: (800, 538),
+            poster_url: (300, 420),
+        }
+    )
+    cfg = HotSettings()
+    cfg.scraping.crop_poster = False
+    cfg.scraping.download_resources = [DownloadableResource.thumb]
+
+    out = await materialize_images(
+        [poster_url],
+        [cover_url],
+        [],
+        resource_store,
+        cast("WebClient", client),
+        cfg,
+        tmp_path,
+    )
+
+    assert poster_url not in client.downloaded
+    assert out.poster_urls == [poster_url]
+    assert out.cover_urls == [cover_url]
+
+
+@pytest.mark.asyncio
+async def test_western_never_crops_poster(resource_store: ResourceStore, tmp_path: Path):
+    """欧美模式不受全局裁剪开关影响, 始终保留来源海报 URL."""
+    poster_url = "https://s/p.jpg"
+    cover_url = "https://s/t.jpg"
+    client = FakeClient(
+        {
+            cover_url: (800, 538),
+            poster_url: (300, 420),
+        }
+    )
+    cfg = HotSettings()
+    cfg.scraping.crop_poster = True
+
+    out = await materialize_images(
+        [poster_url],
+        [cover_url],
+        [],
+        resource_store,
+        cast("WebClient", client),
+        cfg,
+        tmp_path,
+        content_type=ContentType.WESTERN,
+    )
+
+    assert out.poster_urls == [poster_url]
+    assert out.cover_urls == [cover_url]
+    assert poster_url in client.downloaded
+    assert not any(url.startswith(pipeline_mod.RESOURCE_URL_PREFIX) for url in out.poster_urls)
+
+
+@pytest.mark.asyncio
 async def test_trailer_downloaded_external_url(resource_store: ResourceStore, tmp_path: Path):
     client = FakeClient({"https://s/t.jpg": (800, 538)})
     settings = HotSettings()
@@ -277,7 +369,14 @@ async def test_concurrent_materialize_keeps_sr_result(
         # 重复下载的落库被 url UNIQUE 拒绝: 文件已覆盖, 记录没写成 — 正是本用例要暴露的路径.
         with contextlib.suppress(sqlalchemy.exc.IntegrityError):
             await materialize_images(
-                [], ["https://s/t.jpg"], [], resource_store, cast("WebClient", client), cfg, tmp_path
+                [],
+                ["https://s/t.jpg"],
+                [],
+                resource_store,
+                cast("WebClient", client),
+                cfg,
+                tmp_path,
+                content_type=ContentType.WESTERN,
             )
 
     async def first_download_started() -> bool:
@@ -544,6 +643,7 @@ async def test_unselected_kind_not_reordered(resource_store: ResourceStore, tmp_
         cast("WebClient", client),
         cfg,
         tmp_path,
+        content_type=ContentType.WESTERN,
     )
     assert out.poster_urls == ["https://s/p1.jpg", "https://s/p2.jpg"]
 

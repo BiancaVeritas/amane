@@ -129,11 +129,17 @@ class WesternNumber:
     studio: str
     date: str
     alternate: str = field(compare=False)
+    studio_name: str = field(default="", compare=False)
 
 
 def fold_studio(name: str) -> str:
-    """片商名折叠: 忽略大小写与非字母数字, 供番号与站内片商名比较."""
-    return "".join(ch for ch in unicodedata.normalize("NFKC", name).casefold() if ch.isalnum())
+    """通用片商名比较键: 忽略大小写、空格, 保留 NFKC 归一."""
+    return "".join(ch for ch in unicodedata.normalize("NFKC", name).casefold() if not ch.isspace())
+
+
+def fold_western_studio(name: str) -> str:
+    """欧美片商名比较键: 仅忽略大小写, 空格与其它字符均须完全一致."""
+    return name.casefold()
 
 
 def parse_western_number(number: str) -> WesternNumber | None:
@@ -153,7 +159,9 @@ def parse_western_number(number: str) -> WesternNumber | None:
     alternate = "".join(
         (match["studio"], match["sep0"], alternate_year, match["sep1"], match["month"], match["sep2"], match["day"])
     )
-    return WesternNumber(studio=fold_studio(match["studio"]), date=date, alternate=alternate)
+    return WesternNumber(
+        studio=fold_western_studio(match["studio"]), date=date, alternate=alternate, studio_name=match["studio"].strip()
+    )
 
 
 #: 番号开头的数字段 (素人系的系列代码, 如 ``390JAC-079`` 的 ``390``). 站点写不写它不一致:

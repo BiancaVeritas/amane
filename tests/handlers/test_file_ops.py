@@ -11,11 +11,11 @@ from structlog.testing import capture_logs
 
 from amane.config import HotSettings, WatermarkConfig
 from amane.db.models import MediaFile, Metadata
-from amane.enums import DownloadableResource
-from amane.handlers.file import _copy_into_library, execute_file_operations
+from amane.enums import DownloadableResource, SiteName
+from amane.handlers.file import _copy_into_library, _uses_western_image_flow, execute_file_operations
 from amane.media import ResourceStore
 from amane.organize import MoveMode, PlaceOutcome, ResolvedPaths
-from amane.parsing import parse_file_info
+from amane.parsing import ContentType, parse_file_info
 
 if TYPE_CHECKING:
     from amane.net.http import WebClient
@@ -54,6 +54,74 @@ def _paths(base: Path) -> ResolvedPaths:
         nfo=base / "MIDV-123" / "MIDV-123.nfo",
         trailer=base / "MIDV-123" / "trailer.mp4",
     )
+
+
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        (SiteName.PONDO, True),
+        (SiteName.TENMUSUME, True),
+        (SiteName.CARIBBEANCOM, True),
+        (SiteName.TOKYO_HOT, False),
+    ],
+)
+def test_uncensored_streaming_image_flow_by_actual_source(source: SiteName, expected: bool) -> None:
+    """无码流媒体按实际图片来源决定是否采用欧美图片流程."""
+    url = "https://example.com/cover.jpg"
+    metadata = Metadata(
+        number="HEYZO-1234",
+        content_type=ContentType.UNCENSORED,
+        original_cover_urls=[url],
+        image_sources={url: str(source)},
+    )
+
+    assert _uses_western_image_flow(metadata, HotSettings()) is expected
+
+
+def test_uncensored_dvd_keeps_original_image_flow() -> None:
+    """无码 DVD 不因图片来源而进入欧美图片流程."""
+    url = "https://example.com/cover.jpg"
+    metadata = Metadata(
+        number="RED-163",
+        content_type=ContentType.UNCENSORED,
+        original_cover_urls=[url],
+        image_sources={url: str(SiteName.PONDO)},
+    )
+
+    assert _uses_western_image_flow(metadata, HotSettings()) is False
+
+
+def test_censored_keeps_original_image_flow() -> None:
+    """日本有码不受无码流媒体分流规则影响."""
+    url = "https://example.com/cover.jpg"
+    metadata = Metadata(
+        number="MIDV-123",
+        content_type=ContentType.CENSORED,
+        original_cover_urls=[url],
+        image_sources={url: str(SiteName.PONDO)},
+    )
+
+    assert _uses_western_image_flow(metadata, HotSettings()) is False
+
+
+def test_western_always_uses_western_image_flow() -> None:
+    """欧美作品始终采用欧美图片流程."""
+    metadata = Metadata(
+        number="ABC-123",
+        content_type=ContentType.WESTERN,
+    )
+
+    assert _uses_western_image_flow(metadata, HotSettings()) is True
+
+
+def test_uncensored_streaming_without_image_source_keeps_original_flow() -> None:
+    """缺少真实图片来源记录时，不擅自推断为欧美图片流程."""
+    metadata = Metadata(
+        number="HEYZO-1234",
+        content_type=ContentType.UNCENSORED,
+    )
+
+    assert _uses_western_image_flow(metadata, HotSettings()) is False
 
 
 @pytest.mark.asyncio
@@ -243,6 +311,7 @@ async def test_missing_internal_resource_falls_back_to_crop(resource_store: Reso
     mf = MediaFile(path=str(src), library_id=1)
     meta = Metadata(
         number="MIDV-123",
+        content_type=ContentType.CENSORED,
         cover_urls=["https://s/t.jpg"],
         poster_urls=["/api/resources/deadbeefdeadbeef"],  # 不存在
     )
@@ -259,6 +328,41 @@ async def test_missing_internal_resource_falls_back_to_crop(resource_store: Reso
     )
     assert result.outcome is PlaceOutcome.PLACED
     assert paths.poster.exists()  # 裁剪回退
+
+
+@pytest.mark.asyncio
+async def test_western_missing_internal_poster_does_not_fall_back_to_crop(
+    resource_store: ResourceStore, tmp_path: Path
+):
+    """WESTERN 的内部海报 URL 不存在时, 不回退从封面裁剪."""
+    client = cast("WebClient", FakeClient())
+    src = tmp_path / "src" / "MIDV-123.mp4"
+    src.parent.mkdir(parents=True)
+    src.write_bytes(b"movie")
+
+    mf = MediaFile(path=str(src), library_id=1)
+    meta = Metadata(
+        number="MIDV-123",
+        content_type=ContentType.WESTERN,
+        cover_urls=["https://s/t.jpg"],
+        poster_urls=["/api/resources/deadbeefdeadbeef"],  # 不存在
+    )
+    paths = _paths(tmp_path / "out")
+
+    result = await execute_file_operations(
+        media_file=mf,
+        metadata=meta,
+        paths=paths,
+        move_mode=MoveMode.COPY,
+        resource_store=resource_store,
+        file_info=parse_file_info(src),
+        web_client=client,
+        config=HotSettings(),
+    )
+
+    assert result.outcome is PlaceOutcome.PLACED
+    assert paths.thumb.exists()
+    assert not paths.poster.exists()  # 欧美不允许回退裁剪
 
 
 @pytest.mark.parametrize("enabled", [False, True])

@@ -215,9 +215,9 @@ class NumberMappingStore:
         normalized = [(key, self._validate(source, key, value)) for key, value in rows]
         with self._lock:
             current = self.list(source)
-            added: builtins.list[str] = []
-            unchanged: builtins.list[str] = []
-            conflicts: builtins.list[dict[str, Any]] = []
+            added: list[str] = []
+            unchanged: list[str] = []
+            conflicts: list[dict[str, Any]] = []
             accepted_this_batch: dict[str, dict[str, Any]] = {}
             for key, value in normalized:
                 same_number = current.get(key)

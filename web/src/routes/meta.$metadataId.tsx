@@ -823,12 +823,16 @@ function TitleDetailPage() {
             )}
             {item.release && (
               <FieldBlock label={t("detail.fields.release")} lock={lockProps("release")}>
-                <Text size="sm">{item.release}</Text>
+                <Badge color="indigo" variant="light" size="sm" tt="none">
+                  {item.release}
+                </Badge>
               </FieldBlock>
             )}
             {runtime && (
               <FieldBlock label={t("detail.fields.runtime")} lock={lockProps("runtime")}>
-                <Text size="sm">{runtime}</Text>
+                <Badge color="teal" variant="light" size="sm" tt="none">
+                  {runtime}
+                </Badge>
               </FieldBlock>
             )}
             {item.score != null && (

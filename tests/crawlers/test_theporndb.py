@@ -30,6 +30,12 @@ _KIN8_CUTIE = _scene(
     studio="Kin8tengoku",
     scene_id="96842b9f-0405-481b-a44a-1c7fb5b0370c",
 )
+_KIN8_SPACE_VARIANT = _scene(
+    "0236",
+    title="Kin8 Cutie",
+    date="2010-05-27",
+    studio="Kin8 tengoku",
+)
 _KIN8_SHARED_HOUSE = _scene("4072", title="KIN8 Shared House", date="2025-07-31", studio="Kin8tengoku")
 _KIN8_0001 = _scene("0001", title="KIN8 First", date="2009-01-14", studio="Kin8tengoku")
 _OTHER_4072 = _scene("4072", title="Aiden Starr and Danny Wylde", date="2013-02-04", studio="Men In Pain")
@@ -48,6 +54,8 @@ PICK_SCENE_CASES: list[tuple[str, list[dict[str, Any]], dict[str, Any] | None]] 
     # kin8 番号带站前缀, TPDB 的 code 是站内 4 位补零 id
     ("KIN8-0236", [_KIN8_CUTIE], _KIN8_CUTIE),
     ("KIN8TENGOKU-0236", [_KIN8_CUTIE], _KIN8_CUTIE),
+    # Kin8 仍使用原有片商匹配规则
+    ("KIN8-0236", [_KIN8_SPACE_VARIANT], _KIN8_SPACE_VARIANT),
     # 大小写归并与去零后补零到 4 位同由该行覆盖; 越界拒绝见下一行, 其余宽度形态见 test_kin8.py
     ("kin8-001", [_KIN8_0001], _KIN8_0001),
     ("KIN8-10000", [_KIN8_0001], None),
@@ -65,6 +73,40 @@ PICK_SCENE_CASES: list[tuple[str, list[dict[str, Any]], dict[str, Any] | None]] 
 @pytest.mark.parametrize(("number", "results", "expected"), PICK_SCENE_CASES)
 def test_pick_scene(number: str, results: list[dict[str, Any]], expected: dict[str, Any] | None) -> None:
     assert pick_scene(results, number) == expected
+
+
+@pytest.mark.parametrize(
+    ("number", "studio", "date", "expected"),
+    [
+        ("Evil Angel.26.11.27", "Evil Angel", "2026-11-27", True),
+        ("EVIL ANGEL.26.11.27", "Evil Angel", "2026-11-27", True),
+        ("Evil Angel.26.11.27", "Angel", "2026-11-27", False),
+        ("Evil Angel.26.11.27", "Elegant Angel", "2026-11-27", False),
+        ("Evil Angel.26.11.27", "EvilAngel", "2026-11-27", False),
+        ("Evil Angel.26.11.27", "Evil Angel", "2025-11-27", False),
+        ("Evil Angel.26.11.27", "Evil Angel", "2026-11-28", False),
+        ("Evil Angel.26.11.27", "Evil Angel", "2026-12-27", False),
+        ("X-Art.26.11.27", "XArt", "2026-11-27", False),
+        # 欧美片商只忽略大小写，空格和标点必须完全一致
+        ("Lancelot Styles evolution.26.10.09", "lancelot styles evolution", "2026-10-09", True),
+        ("Lancelot Styles evolution.26.10.09", "LancelotStylesEvolution", "2026-10-09", False),
+        ("X-art.18.06.26", "X-ART", "2018-06-26", True),
+        ("X-art.18.06.26", "Xart", "2018-06-26", False),
+    ],
+)
+def test_western_studio_and_date_matching(
+    number: str,
+    studio: str,
+    date: str,
+    expected: bool,
+) -> None:
+    scene = _scene(
+        "test:scene",
+        title="Test",
+        date=date,
+        studio=studio,
+    )
+    assert (pick_scene([scene], number) is not None) is expected
 
 
 @pytest.mark.parametrize("results", [None, [], [None, {"code": None}]])
@@ -104,35 +146,111 @@ async def test_fetch(number: str, scenes: list[dict[str, Any]], expected: tuple[
 
 
 @pytest.mark.asyncio
-async def test_western_multiple_number_results_reject_unique_studio_and_date_without_hash() -> None:
-    """多条番号搜索结果即使片商和日期能筛出唯一候选，没有 OSHASH 也必须拒绝."""
+async def test_western_multiple_number_results_use_unique_studio_and_date_match() -> None:
+    """REST 按片商和日期搜索后，多个候选中只有一个通过现有片商和日期校验时可以采用。"""
     studio = "Lancelot Styles evolution"
-    other_date_a = _scene("lancelot:other-a", title="Other A", date="2026-09-10", studio=studio)
-    other_date_b = _scene("lancelot:other-b", title="Other B", date="2026-09-10", studio=studio)
-    exact = _scene("lancelot:exact", title="Exact", date="2026-10-09", studio=studio)
+    other_date_a = _scene(
+        "lancelot:other-a", title="Other A", date="2026-09-10", studio=studio, scene_id="scene-other-a"
+    )
+    other_date_b = _scene(
+        "lancelot:other-b", title="Other B", date="2026-09-10", studio=studio, scene_id="scene-other-b"
+    )
+    exact = _scene("lancelot:exact", title="Exact", date="2026-10-09", studio=studio, scene_id="scene-exact")
+
     web = AsyncMock()
-    web.post_json.return_value = {"data": {"searchScene": [other_date_a, exact, other_date_b]}}
+    web.get_json.return_value = {
+        "data": [
+            {"id": "scene-other-a"},
+            {"id": "scene-exact"},
+            {"id": "scene-other-b"},
+        ]
+    }
+    web.post_json.side_effect = [
+        {"data": {"findScene": other_date_a}},
+        {"data": {"findScene": exact}},
+        {"data": {"findScene": other_date_b}},
+    ]
     crawler = _crawler(web)
 
     metadata = await crawler.fetch(
-        SearchQuery(number="LancelotStylesEvolution.26.10.09", content_type=ContentType.WESTERN)
+        SearchQuery(number="Lancelot Styles evolution.26.10.09", content_type=ContentType.WESTERN)
+    )
+
+    assert metadata is not None
+    assert metadata.external_id == "scene-exact"
+    assert web.get_json.await_count == 1
+    assert web.post_json.await_count == 3
+    assert web.get_json.await_args.args[0].startswith("https://api.theporndb.net/scenes?")
+    assert "site=Lancelot+Styles+evolution" in web.get_json.await_args.args[0]
+    assert "date=2026-10-09" in web.get_json.await_args.args[0]
+
+
+@pytest.mark.asyncio
+async def test_western_multiple_number_results_reject_no_studio_and_date_match() -> None:
+    """候选没有片商和日期同时匹配的记录时，不应采用或进入 OSHASH。"""
+    studio = "Lancelot Styles evolution"
+    wrong_date = _scene(
+        "lancelot:wrong-date",
+        title="Wrong Date",
+        date="2026-09-10",
+        studio=studio,
+        scene_id="scene-wrong-date",
+    )
+    wrong_studio = _scene(
+        "lancelot:wrong-studio",
+        title="Wrong Studio",
+        date="2026-10-09",
+        studio="Other Studio",
+        scene_id="scene-wrong-studio",
+    )
+
+    web = AsyncMock()
+    web.get_json.return_value = {
+        "data": [
+            {"id": "scene-wrong-date"},
+            {"id": "scene-wrong-studio"},
+        ]
+    }
+    web.post_json.side_effect = [
+        {"data": {"findScene": wrong_date}},
+        {"data": {"findScene": wrong_studio}},
+    ]
+    crawler = _crawler(web)
+
+    metadata = await crawler.fetch(
+        SearchQuery(
+            number="LancelotStylesEvolution.26.10.09",
+            content_type=ContentType.WESTERN,
+            file_hash=_OSHASH,
+        )
     )
 
     assert metadata is None
-    assert web.post_json.await_count == 1
+    assert web.get_json.await_count == 1
+    assert web.post_json.await_count == 2
 
 
 @pytest.mark.asyncio
 async def test_western_multiple_same_date_results_without_hash_are_rejected() -> None:
-    """同片商同日期仍有多个候选时, 没有 OSHASH 不猜测."""
+    """同片商同日期仍有多个候选时，没有 OSHASH 不猜测。"""
     web = AsyncMock()
-    web.post_json.return_value = {"data": {"searchScene": [_BLACKED, _BLACKED_SAME_DAY]}}
+    web.get_json.return_value = {
+        "data": [
+            {"id": _BLACKED["id"]},
+            {"id": _BLACKED_SAME_DAY["id"]},
+        ]
+    }
+    web.post_json.side_effect = [
+        {"data": {"findScene": _BLACKED}},
+        {"data": {"findScene": _BLACKED_SAME_DAY}},
+    ]
     crawler = _crawler(web)
 
     metadata = await crawler.fetch(SearchQuery(number="Blacked.26.03.29", content_type=ContentType.WESTERN))
 
     assert metadata is None
-    assert web.post_json.await_count == 1
+    assert web.get_json.await_count == 1
+    assert web.post_json.await_count == 2
 
 
 @pytest.mark.asyncio
@@ -167,6 +285,13 @@ FINGERPRINT_SHAPES: list[tuple[object, dict[str, Any] | None]] = [
     ({}, None),
 ]
 
+FINGERPRINT_MISS_CASES: list[dict[str, Any]] = [
+    {"data": {"findScenesBySceneFingerprints": []}},
+    {"data": {"findScenesBySceneFingerprints": [[]]}},
+    {"data": {}},
+    {},
+]
+
 
 @pytest.mark.parametrize(("results", "expected"), FINGERPRINT_SHAPES)
 def test_pick_fingerprint_scene(results: object, expected: dict[str, Any] | None) -> None:
@@ -189,25 +314,34 @@ def test_pick_western_fingerprint_scene_filters_by_number_and_requires_unique_sc
 
 @pytest.mark.asyncio
 async def test_western_unique_number_result_does_not_require_oshash() -> None:
-    """番号检索恰好一条时直接刮削, 不要求 OSHASH."""
+    """REST 返回唯一候选时直接刮削，不要求 OSHASH。"""
     web = AsyncMock()
-    web.post_json.return_value = {"data": {"searchScene": [_BLACKED]}}
+    web.get_json.return_value = {"data": [{"id": _BLACKED["id"]}]}
+    web.post_json.return_value = {"data": {"findScene": _BLACKED}}
     crawler = _crawler(web)
 
     metadata = await crawler.fetch(SearchQuery(number="Blacked.26.03.29", content_type=ContentType.WESTERN))
 
     assert metadata is not None
     assert metadata.external_id == _BLACKED["id"]
+    assert web.get_json.await_count == 1
     assert web.post_json.await_count == 1
-    assert web.post_json.await_args.kwargs["json"]["variables"] == {"term": "Blacked.26.03.29"}
+    assert web.post_json.await_args.kwargs["json"]["variables"] == {"id": _BLACKED["id"]}
 
 
 @pytest.mark.asyncio
 async def test_western_multiple_number_results_use_oshash_to_disambiguate() -> None:
-    """番号有多个候选时, 仅 OSHASH 命中其中一条才允许刮削."""
+    """多个候选时，仅 OSHASH 唯一命中其中一条才允许刮削。"""
     web = AsyncMock()
+    web.get_json.return_value = {
+        "data": [
+            {"id": _BLACKED["id"]},
+            {"id": _BLACKED_SAME_DAY["id"]},
+        ]
+    }
     web.post_json.side_effect = [
-        {"data": {"searchScene": [_BLACKED, _BLACKED_SAME_DAY]}},
+        {"data": {"findScene": _BLACKED}},
+        {"data": {"findScene": _BLACKED_SAME_DAY}},
         {"data": {"findScenesBySceneFingerprints": [[_BLACKED]]}},
     ]
     crawler = _crawler(web)
@@ -218,9 +352,11 @@ async def test_western_multiple_number_results_use_oshash_to_disambiguate() -> N
 
     assert metadata is not None
     assert metadata.external_id == _BLACKED["id"]
-    assert web.post_json.await_count == 2
-    assert web.post_json.await_args_list[0].kwargs["json"]["variables"] == {"term": "Blacked.26.03.29"}
-    assert web.post_json.await_args_list[1].kwargs["json"]["variables"] == {
+    assert web.get_json.await_count == 1
+    assert web.post_json.await_count == 3
+    assert web.post_json.await_args_list[0].kwargs["json"]["variables"] == {"id": _BLACKED["id"]}
+    assert web.post_json.await_args_list[1].kwargs["json"]["variables"] == {"id": _BLACKED_SAME_DAY["id"]}
+    assert web.post_json.await_args_list[2].kwargs["json"]["variables"] == {
         "fingerprints": [[{"hash": _OSHASH, "algorithm": "OSHASH"}]]
     }
 
@@ -228,8 +364,15 @@ async def test_western_multiple_number_results_use_oshash_to_disambiguate() -> N
 @pytest.mark.asyncio
 async def test_western_oshash_disambiguates_same_number_candidates_by_scene_id() -> None:
     web = AsyncMock()
+    web.get_json.return_value = {
+        "data": [
+            {"id": _BLACKED["id"]},
+            {"id": _BLACKED_SAME_DAY["id"]},
+        ]
+    }
     web.post_json.side_effect = [
-        {"data": {"searchScene": [_BLACKED, _BLACKED_SAME_DAY]}},
+        {"data": {"findScene": _BLACKED}},
+        {"data": {"findScene": _BLACKED_SAME_DAY}},
         {"data": {"findScenesBySceneFingerprints": [[_BLACKED]]}},
     ]
     crawler = _crawler(web)
@@ -240,14 +383,23 @@ async def test_western_oshash_disambiguates_same_number_candidates_by_scene_id()
 
     assert metadata is not None
     assert metadata.external_id == _BLACKED["id"]
+    assert web.get_json.await_count == 1
+    assert web.post_json.await_count == 3
 
 
 @pytest.mark.asyncio
 async def test_western_oshash_matching_multiple_candidates_is_rejected() -> None:
-    """同一厂牌 + 日期的多个候选同时命中 OSHASH 时，必须拒绝刮削."""
+    """同一片商和日期的多个候选同时命中 OSHASH 时，必须拒绝刮削。"""
     web = AsyncMock()
+    web.get_json.return_value = {
+        "data": [
+            {"id": _BLACKED["id"]},
+            {"id": _BLACKED_SAME_DAY["id"]},
+        ]
+    }
     web.post_json.side_effect = [
-        {"data": {"searchScene": [_BLACKED, _BLACKED_SAME_DAY]}},
+        {"data": {"findScene": _BLACKED}},
+        {"data": {"findScene": _BLACKED_SAME_DAY}},
         {"data": {"findScenesBySceneFingerprints": [[_BLACKED, _BLACKED_SAME_DAY]]}},
     ]
     crawler = _crawler(web)
@@ -257,16 +409,24 @@ async def test_western_oshash_matching_multiple_candidates_is_rejected() -> None
     )
 
     assert metadata is None
-    assert web.post_json.await_count == 2
+    assert web.get_json.await_count == 1
+    assert web.post_json.await_count == 3
 
 
 @pytest.mark.asyncio
 async def test_western_oshash_duplicate_scene_id_counts_as_one_match() -> None:
-    """OSHASH 重复返回同一个 Scene ID 时，去重后仍是唯一命中."""
+    """OSHASH 重复返回同一个 Scene ID 时，去重后仍是唯一命中。"""
     duplicate_same_scene = dict(_BLACKED)
     web = AsyncMock()
+    web.get_json.return_value = {
+        "data": [
+            {"id": _BLACKED["id"]},
+            {"id": _BLACKED_SAME_DAY["id"]},
+        ]
+    }
     web.post_json.side_effect = [
-        {"data": {"searchScene": [_BLACKED, _BLACKED_SAME_DAY]}},
+        {"data": {"findScene": _BLACKED}},
+        {"data": {"findScene": _BLACKED_SAME_DAY}},
         {"data": {"findScenesBySceneFingerprints": [[_BLACKED, duplicate_same_scene]]}},
     ]
     crawler = _crawler(web)
@@ -277,40 +437,43 @@ async def test_western_oshash_duplicate_scene_id_counts_as_one_match() -> None:
 
     assert metadata is not None
     assert metadata.external_id == _BLACKED["id"]
-    assert web.post_json.await_count == 2
+    assert web.get_json.await_count == 1
+    assert web.post_json.await_count == 3
 
 
 @pytest.mark.asyncio
 async def test_western_zero_number_results_returns_not_found() -> None:
     web = AsyncMock()
-    web.post_json.return_value = {"data": {"searchScene": []}}
+    web.get_json.return_value = {"data": []}
     crawler = _crawler(web)
 
     metadata = await crawler.fetch(SearchQuery(number="Blacked.26.03.29", content_type=ContentType.WESTERN))
 
     assert metadata is None
-    assert web.post_json.await_count == 1
+    assert web.get_json.await_count == 1
+    assert web.post_json.await_count == 0
 
 
 @pytest.mark.asyncio
 async def test_western_multiple_number_results_without_oshash_are_rejected() -> None:
     web = AsyncMock()
-    web.post_json.return_value = {"data": {"searchScene": [_BLACKED, _BLACKED_SAME_DAY]}}
+    web.get_json.return_value = {
+        "data": [
+            {"id": _BLACKED["id"]},
+            {"id": _BLACKED_SAME_DAY["id"]},
+        ]
+    }
+    web.post_json.side_effect = [
+        {"data": {"findScene": _BLACKED}},
+        {"data": {"findScene": _BLACKED_SAME_DAY}},
+    ]
     crawler = _crawler(web)
 
     metadata = await crawler.fetch(SearchQuery(number="Blacked.26.03.29", content_type=ContentType.WESTERN))
 
     assert metadata is None
-    assert web.post_json.await_count == 1
-
-
-FINGERPRINT_MISS_CASES: list[dict[str, Any]] = [
-    {"data": {"findScenesBySceneFingerprints": [[]]}},
-    {"data": {"findScenesBySceneFingerprints": [None]}},
-    {"data": None},
-    # HTTP 200 但 GraphQL 层报错: 不能中断整次刮削
-    {"errors": [{"message": 'Cannot query field "findScenesBySceneFingerprints"'}]},
-]
+    assert web.get_json.await_count == 1
+    assert web.post_json.await_count == 2
 
 
 @pytest.mark.asyncio

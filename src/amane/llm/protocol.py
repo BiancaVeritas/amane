@@ -15,3 +15,7 @@ class Translator(Protocol):
         ``use_cache=False`` 时跳过缓存读取, 但仍回写以刷新缓存.
         """
         ...
+
+    async def translate_actor(self, text: str, field: MetadataField, *, use_cache: bool = True) -> str | None:
+        """演员资料专用翻译, 固定简体中文, 不受影片翻译配置影响."""
+        ...

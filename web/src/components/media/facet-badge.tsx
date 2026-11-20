@@ -43,7 +43,7 @@ export function FacetBadge({
   const color = KIND_COLOR[kind];
   // 名称字段统一保留数据本身的大小写；不得由 Badge 默认样式自动转成大写。
   const leftSection =
-    kind === "actor" && (gender === "female" || gender === "male") ? (
+    kind === "actor" && gender != null && gender !== "unknown" ? (
       <GenderMark gender={gender} size={12} />
     ) : undefined;
 

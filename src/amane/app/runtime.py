@@ -580,6 +580,8 @@ def build_handlers(
         cache=translation_cache,
         coalescer=translation_coalescer,
     )
+    factory.set_actor_translator(translator)
+
     if library_locks is None:
         library_locks = LibraryTaskLocks()
     # 缺省自建只服务精简构造 (测试); 生产必须传入 AppRuntime 的那一份, 否则扫描写进的清单

@@ -48,7 +48,7 @@ export type ActorField = 'gender' | 'birthday' | 'birthplace' | 'height' | 'bust
  *
  * 演员性别 - 用于展示与按站裁剪刮削源.
  */
-export type ActorGender = 'female' | 'male' | 'unknown';
+export type ActorGender = 'female' | 'transgender_female' | 'male' | 'unknown';
 
 /**
  * ActorGenderBatchRequest
@@ -1924,6 +1924,7 @@ export type HealthResponse = {
  * 运行时可更新, 持久化到 TOML. extra=forbid, 未知字段须校验失败.
  */
 export type HotSettings = {
+    nfo_output?: NfoOutputConfig;
     scraping?: ScrapingConfig;
     media_server?: MediaServerConfig;
     actor_scraping?: ActorScrapingConfig;
@@ -2957,7 +2958,7 @@ export type MetadataDetailResponse = {
 /**
  * MetadataField
  */
-export type MetadataField = 'title' | 'original_title' | 'plot' | 'original_plot' | 'actors' | 'directors' | 'tags' | 'series' | 'release' | 'runtime' | 'publisher' | 'studio' | 'poster_urls' | 'cover_urls' | 'trailer_urls' | 'extrafanart' | 'score';
+export type MetadataField = 'title' | 'original_title' | 'plot' | 'original_plot' | 'actors' | 'directors' | 'tags' | 'series' | 'release' | 'runtime' | 'publisher' | 'studio' | 'poster_urls' | 'cover_urls' | 'trailer_urls' | 'extrafanart' | 'score' | 'actor_birthplace' | 'actor_overview';
 
 /**
  * MetadataListResponse
@@ -3359,6 +3360,224 @@ export type NetworkConfig = {
      * Default Rate Limit
      */
     default_rate_limit?: number;
+};
+
+/**
+ * NfoBasicInfoConfig
+ *
+ * NFO 基础信息输出选项.
+ */
+export type NfoBasicInfoConfig = {
+    /**
+     * Number
+     *
+     * 番号
+     */
+    number?: boolean;
+    /**
+     * Title
+     *
+     * 标题
+     */
+    title?: boolean;
+    /**
+     * Original Title
+     *
+     * 原标题
+     */
+    original_title?: boolean;
+    /**
+     * Source Links
+     *
+     * 来源链接
+     */
+    source_links?: boolean;
+};
+
+/**
+ * NfoCategoriesConfig
+ *
+ * NFO 分类与系列输出选项.
+ */
+export type NfoCategoriesConfig = {
+    /**
+     * Genre
+     *
+     * 分类
+     */
+    genre?: boolean;
+    /**
+     * Tag
+     *
+     * 类型
+     */
+    tag?: boolean;
+    /**
+     * Series
+     *
+     * 系列
+     */
+    series?: boolean;
+};
+
+/**
+ * NfoImagesConfig
+ *
+ * NFO 图片与视频输出选项.
+ */
+export type NfoImagesConfig = {
+    /**
+     * Poster
+     *
+     * 海报
+     */
+    poster?: boolean;
+    /**
+     * Cover
+     *
+     * 封面
+     */
+    cover?: boolean;
+    /**
+     * Trailer
+     *
+     * 预告片
+     */
+    trailer?: boolean;
+};
+
+/**
+ * NfoOutputConfig
+ *
+ * NFO 输出字段配置.
+ */
+export type NfoOutputConfig = {
+    /**
+     * 基础信息
+     */
+    basic_info?: NfoBasicInfoConfig;
+    /**
+     * 剧情与发行信息
+     */
+    plot_release?: NfoPlotReleaseConfig;
+    /**
+     * 人员与制作信息
+     */
+    people?: NfoPeopleConfig;
+    /**
+     * 分类与系列
+     */
+    categories?: NfoCategoriesConfig;
+    /**
+     * 图片与视频
+     */
+    images?: NfoImagesConfig;
+    /**
+     * 评分
+     */
+    ratings?: NfoRatingsConfig;
+};
+
+/**
+ * NfoPeopleConfig
+ *
+ * NFO 人员与制作信息输出选项.
+ */
+export type NfoPeopleConfig = {
+    /**
+     * Actors
+     *
+     * 演员
+     */
+    actors?: boolean;
+    /**
+     * Female
+     *
+     * 女性
+     */
+    female?: boolean;
+    /**
+     * Transgender Female
+     *
+     * 跨性别女性
+     */
+    transgender_female?: boolean;
+    /**
+     * Male
+     *
+     * 男性
+     */
+    male?: boolean;
+    /**
+     * Director
+     *
+     * 导演
+     */
+    director?: boolean;
+    /**
+     * Studio
+     *
+     * 制作商
+     */
+    studio?: boolean;
+    /**
+     * Publisher
+     *
+     * 发行商
+     */
+    publisher?: boolean;
+};
+
+/**
+ * NfoPlotReleaseConfig
+ *
+ * NFO 剧情与发行信息输出选项.
+ */
+export type NfoPlotReleaseConfig = {
+    /**
+     * Plot
+     *
+     * 剧情
+     */
+    plot?: boolean;
+    /**
+     * Original Plot
+     *
+     * 原剧情
+     */
+    original_plot?: boolean;
+    /**
+     * Release
+     *
+     * 发行日期
+     */
+    release?: boolean;
+    /**
+     * Runtime
+     *
+     * 时长
+     */
+    runtime?: boolean;
+    /**
+     * Mpaa
+     *
+     * 分级
+     */
+    mpaa?: boolean;
+};
+
+/**
+ * NfoRatingsConfig
+ *
+ * NFO 评分输出选项.
+ */
+export type NfoRatingsConfig = {
+    /**
+     * Rating
+     *
+     * 评分
+     */
+    rating?: boolean;
 };
 
 /**
@@ -4540,7 +4759,7 @@ export type ScrapingConfig = {
      * Content Routes
      */
     content_routes?: {
-        [key: string]: Array<'airav' | 'avbase' | 'aventertainments' | 'avsox' | 'dahlia' | 'dmm' | 'faleno' | 'fc2' | 'fc2club' | 'fc2ppvdb' | 'freejavbt' | 'getchu' | 'giga' | 'iqqtv' | 'jav321' | 'javbus' | 'javdb' | 'javlibrary' | 'kin8' | 'mgstage' | 'official' | '1pondo' | 'pacopacomama' | 'caribbeancom' | 'caribbeancompr' | 'caribbeancom_index' | 'd2pass' | 'prestige' | 'r18dev' | '10musume' | 'tokyo_hot' | 'theporndb' | 'xcity'>;
+        [key: string]: Array<'airav' | 'avbase' | 'aventertainments' | 'avsox' | 'dahlia' | 'dmm' | 'faleno' | 'fc2' | 'fc2club' | 'fc2ppvdb' | 'freejavbt' | 'getchu' | 'giga' | 'hanime1' | 'iqqtv' | 'jav321' | 'javbus' | 'javdb' | 'javlibrary' | 'kin8' | 'mgstage' | 'official' | '1pondo' | 'pacopacomama' | 'caribbeancom' | 'caribbeancompr' | 'caribbeancom_index' | 'd2pass' | 'prestige' | 'r18dev' | '10musume' | 'tokyo_hot' | 'theporndb' | 'xcity'>;
     };
     /**
      * Uncensored Streaming Number Rules
@@ -4558,13 +4777,13 @@ export type ScrapingConfig = {
      * Field Priority
      */
     field_priority?: {
-        [key in MetadataField]?: Array<'airav' | 'avbase' | 'aventertainments' | 'avsox' | 'dahlia' | 'dmm' | 'faleno' | 'fc2' | 'fc2club' | 'fc2ppvdb' | 'freejavbt' | 'getchu' | 'giga' | 'iqqtv' | 'jav321' | 'javbus' | 'javdb' | 'javlibrary' | 'kin8' | 'mgstage' | 'official' | '1pondo' | 'pacopacomama' | 'caribbeancom' | 'caribbeancompr' | 'caribbeancom_index' | 'd2pass' | 'prestige' | 'r18dev' | '10musume' | 'tokyo_hot' | 'theporndb' | 'xcity'>;
+        [key: string]: Array<'airav' | 'avbase' | 'aventertainments' | 'avsox' | 'dahlia' | 'dmm' | 'faleno' | 'fc2' | 'fc2club' | 'fc2ppvdb' | 'freejavbt' | 'getchu' | 'giga' | 'hanime1' | 'iqqtv' | 'jav321' | 'javbus' | 'javdb' | 'javlibrary' | 'kin8' | 'mgstage' | 'official' | '1pondo' | 'pacopacomama' | 'caribbeancom' | 'caribbeancompr' | 'caribbeancom_index' | 'd2pass' | 'prestige' | 'r18dev' | '10musume' | 'tokyo_hot' | 'theporndb' | 'xcity'>;
     };
     /**
      * Field Blacklist
      */
     field_blacklist?: {
-        [key in MetadataField]?: Array<'airav' | 'avbase' | 'aventertainments' | 'avsox' | 'dahlia' | 'dmm' | 'faleno' | 'fc2' | 'fc2club' | 'fc2ppvdb' | 'freejavbt' | 'getchu' | 'giga' | 'iqqtv' | 'jav321' | 'javbus' | 'javdb' | 'javlibrary' | 'kin8' | 'mgstage' | 'official' | '1pondo' | 'pacopacomama' | 'caribbeancom' | 'caribbeancompr' | 'caribbeancom_index' | 'd2pass' | 'prestige' | 'r18dev' | '10musume' | 'tokyo_hot' | 'theporndb' | 'xcity'>;
+        [key: string]: Array<'airav' | 'avbase' | 'aventertainments' | 'avsox' | 'dahlia' | 'dmm' | 'faleno' | 'fc2' | 'fc2club' | 'fc2ppvdb' | 'freejavbt' | 'getchu' | 'giga' | 'hanime1' | 'iqqtv' | 'jav321' | 'javbus' | 'javdb' | 'javlibrary' | 'kin8' | 'mgstage' | 'official' | '1pondo' | 'pacopacomama' | 'caribbeancom' | 'caribbeancompr' | 'caribbeancom_index' | 'd2pass' | 'prestige' | 'r18dev' | '10musume' | 'tokyo_hot' | 'theporndb' | 'xcity'>;
     };
     /**
      * Field Language
@@ -4973,7 +5192,7 @@ export type SiteConfig = {
  *
  * 爬虫站点名称 (影片与演员源共用).
  */
-export type SiteName = 'airav' | 'avbase' | 'aventertainments' | 'avsox' | 'dahlia' | 'dmm' | 'faleno' | 'fc2' | 'fc2club' | 'fc2ppvdb' | 'freejavbt' | 'getchu' | 'gfriends' | 'giga' | 'iqqtv' | 'jav321' | 'javbus' | 'javdb' | 'javlibrary' | 'kin8' | 'mgstage' | 'minnano' | 'official' | '1pondo' | 'pacopacomama' | 'caribbeancom' | 'caribbeancompr' | 'caribbeancom_index' | 'd2pass' | 'prestige' | 'r18dev' | '10musume' | 'tokyo_hot' | 'theporndb' | 'tushy' | 'tushy_raw' | 'wikipedia' | 'xcity';
+export type SiteName = 'airav' | 'avbase' | 'aventertainments' | 'avsox' | 'dahlia' | 'dmm' | 'faleno' | 'fc2' | 'fc2club' | 'fc2ppvdb' | 'freejavbt' | 'getchu' | 'gfriends' | 'giga' | 'hanime1' | 'iqqtv' | 'jav321' | 'javbus' | 'javdb' | 'javlibrary' | 'kin8' | 'mgstage' | 'minnano' | 'official' | '1pondo' | 'pacopacomama' | 'caribbeancom' | 'caribbeancompr' | 'caribbeancom_index' | 'd2pass' | 'prestige' | 'r18dev' | '10musume' | 'tokyo_hot' | 'theporndb' | 'tushy' | 'tushy_raw' | 'wikipedia' | 'xcity';
 
 /**
  * SiteOutcomeKind

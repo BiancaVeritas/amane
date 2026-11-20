@@ -66,6 +66,7 @@ export const ActorGenderSchema = {
     type: 'string',
     enum: [
         'female',
+        'transgender_female',
         'male',
         'unknown'
     ],
@@ -3279,6 +3280,9 @@ export const HealthResponseSchema = {
 
 export const HotSettingsSchema = {
     properties: {
+        nfo_output: {
+            $ref: '#/components/schemas/NfoOutputConfig'
+        },
         scraping: {
             $ref: '#/components/schemas/ScrapingConfig',
             default: {
@@ -3302,15 +3306,16 @@ export const HotSettingsSchema = {
                         'mgstage',
                         'avsox',
                         'avbase',
-                        'javbus'
+                        'javbus',
+                        'hanime1'
                     ],
                     chinese: [],
                     fc2: [
                         'fc2'
                     ],
                     hentai: [
-                        'getchu',
-                        'dmm'
+                        'dmm',
+                        'hanime1'
                     ],
                     uncensored_dvd: [
                         'aventertainments',
@@ -3579,6 +3584,18 @@ export const HotSettingsSchema = {
                         use_proxy: true
                     },
                     giga: {
+                        cookie: {},
+                        languages: [
+                            'zh',
+                            'ja',
+                            'en'
+                        ],
+                        official_routes: {},
+                        rate_limit: 2,
+                        use_browser: 'auto',
+                        use_proxy: true
+                    },
+                    hanime1: {
                         cookie: {},
                         languages: [
                             'zh',
@@ -6010,7 +6027,9 @@ export const MetadataFieldSchema = {
         'cover_urls',
         'trailer_urls',
         'extrafanart',
-        'score'
+        'score',
+        'actor_birthplace',
+        'actor_overview'
     ],
     title: 'MetadataField'
 } as const;
@@ -6866,6 +6885,224 @@ export const NetworkConfigSchema = {
     },
     type: 'object',
     title: 'NetworkConfig'
+} as const;
+
+export const NfoBasicInfoConfigSchema = {
+    properties: {
+        number: {
+            type: 'boolean',
+            title: 'Number',
+            description: '番号',
+            default: true
+        },
+        title: {
+            type: 'boolean',
+            title: 'Title',
+            description: '标题',
+            default: true
+        },
+        original_title: {
+            type: 'boolean',
+            title: 'Original Title',
+            description: '原标题',
+            default: true
+        },
+        source_links: {
+            type: 'boolean',
+            title: 'Source Links',
+            description: '来源链接',
+            default: true
+        }
+    },
+    type: 'object',
+    title: 'NfoBasicInfoConfig',
+    description: 'NFO 基础信息输出选项.'
+} as const;
+
+export const NfoCategoriesConfigSchema = {
+    properties: {
+        genre: {
+            type: 'boolean',
+            title: 'Genre',
+            description: '分类',
+            default: true
+        },
+        tag: {
+            type: 'boolean',
+            title: 'Tag',
+            description: '类型',
+            default: true
+        },
+        series: {
+            type: 'boolean',
+            title: 'Series',
+            description: '系列',
+            default: true
+        }
+    },
+    type: 'object',
+    title: 'NfoCategoriesConfig',
+    description: 'NFO 分类与系列输出选项.'
+} as const;
+
+export const NfoImagesConfigSchema = {
+    properties: {
+        poster: {
+            type: 'boolean',
+            title: 'Poster',
+            description: '海报',
+            default: true
+        },
+        cover: {
+            type: 'boolean',
+            title: 'Cover',
+            description: '封面',
+            default: true
+        },
+        trailer: {
+            type: 'boolean',
+            title: 'Trailer',
+            description: '预告片',
+            default: true
+        }
+    },
+    type: 'object',
+    title: 'NfoImagesConfig',
+    description: 'NFO 图片与视频输出选项.'
+} as const;
+
+export const NfoOutputConfigSchema = {
+    properties: {
+        basic_info: {
+            $ref: '#/components/schemas/NfoBasicInfoConfig',
+            title: '基础信息'
+        },
+        plot_release: {
+            $ref: '#/components/schemas/NfoPlotReleaseConfig',
+            title: '剧情与发行信息'
+        },
+        people: {
+            $ref: '#/components/schemas/NfoPeopleConfig',
+            title: '人员与制作信息'
+        },
+        categories: {
+            $ref: '#/components/schemas/NfoCategoriesConfig',
+            title: '分类与系列'
+        },
+        images: {
+            $ref: '#/components/schemas/NfoImagesConfig',
+            title: '图片与视频'
+        },
+        ratings: {
+            $ref: '#/components/schemas/NfoRatingsConfig',
+            title: '评分'
+        }
+    },
+    type: 'object',
+    title: 'NfoOutputConfig',
+    description: 'NFO 输出字段配置.'
+} as const;
+
+export const NfoPeopleConfigSchema = {
+    properties: {
+        actors: {
+            type: 'boolean',
+            title: 'Actors',
+            description: '演员',
+            default: true
+        },
+        female: {
+            type: 'boolean',
+            title: 'Female',
+            description: '女性',
+            default: false
+        },
+        transgender_female: {
+            type: 'boolean',
+            title: 'Transgender Female',
+            description: '跨性别女性',
+            default: false
+        },
+        male: {
+            type: 'boolean',
+            title: 'Male',
+            description: '男性',
+            default: false
+        },
+        director: {
+            type: 'boolean',
+            title: 'Director',
+            description: '导演',
+            default: true
+        },
+        studio: {
+            type: 'boolean',
+            title: 'Studio',
+            description: '制作商',
+            default: true
+        },
+        publisher: {
+            type: 'boolean',
+            title: 'Publisher',
+            description: '发行商',
+            default: true
+        }
+    },
+    type: 'object',
+    title: 'NfoPeopleConfig',
+    description: 'NFO 人员与制作信息输出选项.'
+} as const;
+
+export const NfoPlotReleaseConfigSchema = {
+    properties: {
+        plot: {
+            type: 'boolean',
+            title: 'Plot',
+            description: '剧情',
+            default: true
+        },
+        original_plot: {
+            type: 'boolean',
+            title: 'Original Plot',
+            description: '原剧情',
+            default: true
+        },
+        release: {
+            type: 'boolean',
+            title: 'Release',
+            description: '发行日期',
+            default: true
+        },
+        runtime: {
+            type: 'boolean',
+            title: 'Runtime',
+            description: '时长',
+            default: true
+        },
+        mpaa: {
+            type: 'boolean',
+            title: 'Mpaa',
+            description: '分级',
+            default: true
+        }
+    },
+    type: 'object',
+    title: 'NfoPlotReleaseConfig',
+    description: 'NFO 剧情与发行信息输出选项.'
+} as const;
+
+export const NfoRatingsConfigSchema = {
+    properties: {
+        rating: {
+            type: 'boolean',
+            title: 'Rating',
+            description: '评分',
+            default: true
+        }
+    },
+    type: 'object',
+    title: 'NfoRatingsConfig',
+    description: 'NFO 评分输出选项.'
 } as const;
 
 export const OptionalPathTemplateDefaultsSchema = {
@@ -8783,6 +9020,7 @@ export const ScrapingConfigSchema = {
                         'freejavbt',
                         'getchu',
                         'giga',
+                        'hanime1',
                         'iqqtv',
                         'jav321',
                         'javbus',
@@ -8861,6 +9099,7 @@ export const ScrapingConfigSchema = {
                         'freejavbt',
                         'getchu',
                         'giga',
+                        'hanime1',
                         'iqqtv',
                         'jav321',
                         'javbus',
@@ -8888,7 +9127,26 @@ export const ScrapingConfigSchema = {
                 'x-ordered': true
             },
             propertyNames: {
-                $ref: '#/components/schemas/MetadataField'
+                type: 'string',
+                enum: [
+                    'title',
+                    'original_title',
+                    'plot',
+                    'original_plot',
+                    'actors',
+                    'directors',
+                    'tags',
+                    'series',
+                    'release',
+                    'runtime',
+                    'publisher',
+                    'studio',
+                    'poster_urls',
+                    'cover_urls',
+                    'trailer_urls',
+                    'extrafanart',
+                    'score'
+                ]
             },
             type: 'object',
             title: 'Field Priority'
@@ -8911,6 +9169,7 @@ export const ScrapingConfigSchema = {
                         'freejavbt',
                         'getchu',
                         'giga',
+                        'hanime1',
                         'iqqtv',
                         'jav321',
                         'javbus',
@@ -8937,7 +9196,26 @@ export const ScrapingConfigSchema = {
                 default: []
             },
             propertyNames: {
-                $ref: '#/components/schemas/MetadataField'
+                type: 'string',
+                enum: [
+                    'title',
+                    'original_title',
+                    'plot',
+                    'original_plot',
+                    'actors',
+                    'directors',
+                    'tags',
+                    'series',
+                    'release',
+                    'runtime',
+                    'publisher',
+                    'studio',
+                    'poster_urls',
+                    'cover_urls',
+                    'trailer_urls',
+                    'extrafanart',
+                    'score'
+                ]
             },
             type: 'object',
             title: 'Field Blacklist'
@@ -9598,6 +9876,7 @@ export const SiteNameSchema = {
         'getchu',
         'gfriends',
         'giga',
+        'hanime1',
         'iqqtv',
         'jav321',
         'javbus',

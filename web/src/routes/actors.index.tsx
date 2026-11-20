@@ -81,6 +81,7 @@ const ACTOR_SORT_I18N_KEY = exhaustiveRecord<ActorSortField>()({
 
 const GENDER_I18N = {
   female: "browse.person.genderFemale",
+  transgender_female: "browse.person.genderTransgenderFemale",
   male: "browse.person.genderMale",
   unknown: "browse.person.genderUnknown",
 } as const satisfies Record<ActorGender, ParseKeys<"metadata">>;

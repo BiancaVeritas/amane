@@ -1,5 +1,6 @@
 """/metadata HTTP 接线: 状态码、JSON 形状、422. 列表筛选/级联删除见 tests/db; 合并规则见 tests/aggregate."""
 
+from io import BytesIO
 from typing import TYPE_CHECKING
 
 import pytest
@@ -75,6 +76,8 @@ class TestMetadataHttp:
             title="Test",
             actors=["Mei", "MaleA"],
             actor_genders={"Mei": ActorGender.FEMALE},
+            plot="Original plot",
+            original_plot="Original original plot",
         )
         assert meta.id is not None
         media = await repo.create_media_file(library_id=1, path="/video/MIDV-001-C.mp4", number="ABC-001")
@@ -100,6 +103,15 @@ class TestMetadataHttp:
         assert ok.status_code == 200
         assert ok.json()["release"] == "2020-01-15"
         assert (await client.patch(f"metadata/{meta.id}", json={"release": "not-a-date"})).status_code == 422
+        cleared_plot = await client.patch(f"metadata/{meta.id}", json={"plot": None})
+        assert cleared_plot.status_code == 200
+        assert cleared_plot.json()["plot"] is None
+        assert cleared_plot.json()["original_plot"] == "Original original plot"
+
+        cleared_original_plot = await client.patch(f"metadata/{meta.id}", json={"original_plot": None})
+        assert cleared_original_plot.status_code == 200
+        assert cleared_original_plot.json()["plot"] is None
+        assert cleared_original_plot.json()["original_plot"] is None
 
         urls = await client.patch(
             f"metadata/{meta.id}",
@@ -296,6 +308,102 @@ class TestMetadataHttp:
         assert (
             await client.post("metadata/99999/crop-poster", json={"left": 0, "top": 0, "right": 10, "bottom": 10})
         ).status_code == 404
+
+    @pytest.mark.parametrize(
+        ("kind", "locked_field", "current_field", "original_field", "other_current_field", "other_original_field"),
+        [
+            (
+                "cover",
+                "cover_urls",
+                "cover_urls",
+                "original_cover_urls",
+                "poster_urls",
+                "original_poster_urls",
+            ),
+            (
+                "poster",
+                "poster_urls",
+                "poster_urls",
+                "original_poster_urls",
+                "cover_urls",
+                "original_cover_urls",
+            ),
+        ],
+    )
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_upload_image_locks_only_its_url_group(
+        self,
+        client: AsyncClient,
+        repo: Repository,
+        kind: str,
+        locked_field: str,
+        current_field: str,
+        original_field: str,
+        other_current_field: str,
+        other_original_field: str,
+    ):
+        source_cover = "https://source.example/cover.jpg"
+        source_poster = "https://source.example/poster.jpg"
+
+        meta = await repo.upsert_metadata(
+            number=f"UPLOAD-{kind.upper()}-LOCK",
+            cover_urls=[source_cover],
+            original_cover_urls=[source_cover],
+            poster_urls=[source_poster],
+            original_poster_urls=[source_poster],
+        )
+        assert meta.id is not None
+
+        image_buffer = BytesIO()
+        Image.new("RGB", (20, 20), "red").save(image_buffer, format="PNG")
+
+        response = await client.post(
+            f"metadata/{meta.id}/images/{kind}",
+            files={
+                "file": (
+                    "manual.png",
+                    image_buffer.getvalue(),
+                    "image/png",
+                )
+            },
+        )
+
+        assert response.status_code == 200
+        uploaded = response.json()
+
+        manual_url = uploaded[current_field][0]
+        assert manual_url.startswith("/api/resources/")
+        assert uploaded[original_field] == ([source_cover] if kind == "cover" else [source_poster])
+        assert locked_field in uploaded["locked_fields"]
+
+        other_locked_field = "poster_urls" if kind == "cover" else "cover_urls"
+        assert other_locked_field not in uploaded["locked_fields"]
+
+        # 模拟后续自动刮削更新四个 URL 字段.
+        await repo.update_metadata(
+            meta.id,
+            cover_urls=["https://new.example/cover.jpg"],
+            original_cover_urls=["https://new.example/original-cover.jpg"],
+            poster_urls=["https://new.example/poster.jpg"],
+            original_poster_urls=["https://new.example/original-poster.jpg"],
+        )
+
+        updated = await repo.get_metadata(meta.id)
+        assert updated is not None
+
+        # 手动上传的字段组及其原始 URL 均受到保护.
+        assert getattr(updated, current_field) == [manual_url]
+        assert getattr(updated, original_field) == ([source_cover] if kind == "cover" else [source_poster])
+
+        # 另一组没有锁定，仍然可以正常接受自动刮削更新.
+        assert getattr(updated, other_current_field) == (
+            ["https://new.example/poster.jpg"] if kind == "cover" else ["https://new.example/cover.jpg"]
+        )
+        assert getattr(updated, other_original_field) == (
+            ["https://new.example/original-poster.jpg"]
+            if kind == "cover"
+            else ["https://new.example/original-cover.jpg"]
+        )
 
     @pytest.mark.asyncio(loop_scope="function")
     async def test_locks_http(self, client: AsyncClient, repo: Repository):

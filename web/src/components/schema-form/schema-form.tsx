@@ -152,7 +152,7 @@ interface SchemaFormProps {
    * - `stack` (default): one field per row.
    * - `grid`: consecutive short scalars share a 2-col row on `sm+`.
    */
-  fieldLayout?: "stack" | "grid";
+  fieldLayout?: "stack" | "grid" | "checkbox-grid";
   /** Optional per-field actions rendered beside the field heading area.
    * The setter updates the field in the local form state (never persists directly).
    */
@@ -178,7 +178,7 @@ export function SchemaForm({
   const properties = useMemo(() => schema.properties ?? {}, [schema.properties]);
   const isCreate = mode === "create";
   const rows = useMemo(
-    () => layoutFieldRows(properties, fieldLayout === "grid"),
+    () => layoutFieldRows(properties, fieldLayout === "grid" || fieldLayout === "checkbox-grid"),
     [properties, fieldLayout],
   );
 
@@ -290,6 +290,38 @@ export function SchemaForm({
       }}
     </form.Subscribe>
   );
+
+  if (fieldLayout === "checkbox-grid") {
+    const fields = Object.entries(properties)
+      .filter(([, fieldSchema]) => typeof fieldSchema !== "boolean" && !isHidden(fieldSchema))
+      .map(([key, fieldSchema]) => (
+        <FieldRouter
+          key={key}
+          name={`${prefix}.${key}`}
+          schema={fieldSchema}
+          form={form}
+          i18nPrefix={i18nPrefix}
+          booleanDisplay="checkbox"
+        />
+      ));
+
+    return (
+      <Stack
+        component="form"
+        id={formId}
+        gap="md"
+        onSubmit={(e) => {
+          e.preventDefault();
+          form.handleSubmit();
+        }}
+      >
+        <SimpleGrid cols={{ base: 1, xs: 2, sm: 3, lg: 4 }} spacing="md" verticalSpacing="sm">
+          {fields}
+        </SimpleGrid>
+        {actions}
+      </Stack>
+    );
+  }
 
   const fieldBlocks: ReactNode[] = rows.map((row, rowIdx) => {
     const fields = row.map(({ key, schema: fieldSchema }) => {

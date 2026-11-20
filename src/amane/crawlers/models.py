@@ -28,6 +28,8 @@ class SearchQuery:
     partial_result: AggregatedMetadata | None = None
     # 原始刮削身份番号; 与可能经过设置映射规则改写的搜索番号分离.
     original_number: str | None = None
+    # Hanime1 专用本地文件路径，仅用于提取标题搜索词，不影响其他来源.
+    hanime1_file_path: str | None = None
 
 
 @dataclass

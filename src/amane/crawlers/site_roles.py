@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Sequence
-from typing import Any, cast, overload
+from typing import cast, overload
 
 from pydantic.config import JsonDict
 
@@ -81,9 +81,9 @@ def site_list_schema(sites: Sequence[SiteName], *, ordered: bool = True) -> Call
     return extra
 
 
-def site_list_value_schema(sites: Sequence[SiteName], *, ordered: bool = True) -> dict[str, Any]:
-    items: dict[str, Any] = {"type": "string", "enum": list(sites)}
-    out: dict[str, Any] = {"items": items}
+def site_list_value_schema(sites: Sequence[SiteName], *, ordered: bool = True) -> JsonDict:
+    items: JsonDict = {"type": "string", "enum": list(sites)}
+    out: JsonDict = {"items": items}
     if ordered:
         out["x-ordered"] = True
     return out

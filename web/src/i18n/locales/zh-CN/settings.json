@@ -1,6 +1,7 @@
 {
   "title": "设置",
   "tabs": {
+    "nfo_output": "NFO输出",
     "scraping": "影片刮削",
     "actor_scraping": "演员刮削",
     "agent": "智能体",
@@ -33,6 +34,49 @@
     "exitApp": "退出 APP"
   },
   "fields": {
+    "nfo_output": {
+      "basic_info": {
+        "label": "基础信息",
+        "number": { "label": "番号" },
+        "title": { "label": "标题" },
+        "original_title": { "label": "原标题" },
+        "source_links": { "label": "来源链接" }
+      },
+      "plot_release": {
+        "label": "剧情与发行信息",
+        "plot": { "label": "剧情" },
+        "original_plot": { "label": "原剧情" },
+        "release": { "label": "发行日期" },
+        "runtime": { "label": "时长" },
+        "mpaa": { "label": "分级" }
+      },
+      "people": {
+        "label": "人员与制作信息",
+        "actors": { "label": "演员" },
+        "female": { "label": "女性" },
+        "transgender_female": { "label": "跨性别女性" },
+        "male": { "label": "男性" },
+        "director": { "label": "导演" },
+        "studio": { "label": "制作商" },
+        "publisher": { "label": "发行商" }
+      },
+      "categories": {
+        "label": "分类与系列",
+        "genre": { "label": "分类" },
+        "tag": { "label": "类型" },
+        "series": { "label": "系列" }
+      },
+      "images": {
+        "label": "图片与视频",
+        "poster": { "label": "海报" },
+        "cover": { "label": "封面" },
+        "trailer": { "label": "预告片" }
+      },
+      "ratings": {
+        "label": "评分",
+        "rating": { "label": "评分" }
+      }
+    },
     "scraping": {
       "download_resources": {
         "label": "刮削时下载",
@@ -108,6 +152,7 @@
             "fc2ppvdb": "fc2ppvdb",
             "freejavbt": "freejavbt",
             "getchu": "getchu",
+            "hanime1": "Hanime1",
             "gfriends": "gfriends",
             "giga": "giga",
             "iqqtv": "iqqtv",
@@ -148,6 +193,7 @@
               "fc2ppvdb": "fc2ppvdb",
               "freejavbt": "freejavbt",
               "getchu": "getchu",
+              "hanime1": "Hanime1",
               "gfriends": "gfriends",
               "giga": "giga",
               "iqqtv": "iqqtv",
@@ -214,6 +260,7 @@
             "fc2ppvdb": "fc2ppvdb",
             "freejavbt": "freejavbt",
             "getchu": "getchu",
+            "hanime1": "Hanime1",
             "gfriends": "gfriends",
             "giga": "giga",
             "iqqtv": "iqqtv",
@@ -254,6 +301,7 @@
               "fc2ppvdb": "fc2ppvdb",
               "freejavbt": "freejavbt",
               "getchu": "getchu",
+              "hanime1": "Hanime1",
               "gfriends": "gfriends",
               "giga": "giga",
               "iqqtv": "iqqtv",
@@ -328,6 +376,7 @@
           "fc2ppvdb": "fc2ppvdb",
           "freejavbt": "freejavbt",
           "getchu": "getchu",
+          "hanime1": "Hanime1",
           "gfriends": "gfriends",
           "giga": "giga",
           "iqqtv": "iqqtv",
@@ -468,6 +517,7 @@
             "fc2ppvdb": "fc2ppvdb",
             "freejavbt": "freejavbt",
             "getchu": "getchu",
+            "hanime1": "Hanime1",
             "gfriends": "gfriends",
             "giga": "giga",
             "iqqtv": "iqqtv",
@@ -508,6 +558,7 @@
               "fc2ppvdb": "fc2ppvdb",
               "freejavbt": "freejavbt",
               "getchu": "getchu",
+              "hanime1": "Hanime1",
               "gfriends": "gfriends",
               "giga": "giga",
               "iqqtv": "iqqtv",
@@ -728,6 +779,8 @@
             "title": "标题",
             "original_title": "原标题",
             "actors": "演员",
+            "actor_birthplace": "出生地",
+            "actor_overview": "简介",
             "tags": "标签",
             "release": "发行日期",
             "runtime": "时长",
