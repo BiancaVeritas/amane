@@ -31,6 +31,7 @@ class ContentType(StrEnum):
     CHINESE = "chinese"
     WESTERN = "western"
     FC2 = "fc2"
+    HEYDOUGA = "heydouga"
     AMATEUR = "amateur"
     HENTAI = "hentai"
 
@@ -150,7 +151,6 @@ _UNCENSORED_PREFIXES = (
     "DRGBD-",
     "GACHI-",
     "GACHIG-",
-    "HEYDOUGA",
     "JAV-",
     "LAF-",
     "LAFBD-",
@@ -498,13 +498,18 @@ def max_definition(values: Iterable[str | None]) -> str | None:
 
 
 def summarize_file_phases(phases: Iterable[FilePhase], content_type: ContentType) -> FilePhaseSummary:
-    """``content_type`` 是条目类型: 有码取类型为有码, 无码取类型为无码或任一文件带无码标记; 其余按「任一文件具备」聚合."""
+    """``content_type`` 是条目类型.
+
+    有码 / 无码二选一: 无码的证据 (条目类型, 或任一文件的无码标记) 成立就不再是有码, 与
+    ``mosaic_nature`` 的「标记优先」同一口径. 其余按「任一文件具备」聚合.
+    """
     items = list(phases)
     mosaic_present = {phase["mosaic"] for phase in items if phase["mosaic"] is not None}
+    uncensored = content_type is ContentType.UNCENSORED or Mosaic.UNCENSORED in mosaic_present
     return FilePhaseSummary(
         has_subtitle=any(phase["has_subtitle"] for phase in items),
-        censored=content_type is ContentType.CENSORED,
-        uncensored=content_type is ContentType.UNCENSORED or Mosaic.UNCENSORED in mosaic_present,
+        censored=content_type is ContentType.CENSORED and not uncensored,
+        uncensored=uncensored,
         mosaics=tuple(mosaic for mosaic in MOSAIC_VALUES if mosaic in mosaic_present),
         # 没有任何文件时不伪造分辨率; 有文件但均未识别时默认显示 1080p.
         definition=max_definition(phase["definition"] for phase in items) if items else None,
@@ -647,12 +652,13 @@ def _match(basename: str, escape_strings: list[str], *, generic: bool) -> tuple[
             return m.group(), ContentType.UNCENSORED
         if m := re.search(r"HEYZO\d{3,}", hz):
             return m.group().replace("HEYZO", "HEYZO-"), ContentType.UNCENSORED
-    # heydouga 番号由系列号与作品号两段组成 (heydouga-4037-1002); 通用的字母前缀规则只取到第一段.
+    # heydouga 与 FC2 同类: 站名 + 数字自编号, 番号本身不说明有没有马赛克.
     # 写法统一为 ``Heydouga-x-y``, 与 ``canonical_number`` 同一口径.
+    # 站名可能被方括号 / 圆括号包住, 也可能写成 heydouga.com; 两者都只是站名的写法.
     if "HEYDOUGA" in c:
         hd = re.sub(r"[-_. ]+", "-", c)
-        if m := re.search(r"HEYDOUGA-?(\d{2,4})-(\d{1,4})", hd):
-            return f"Heydouga-{m[1]}-{m[2]}", ContentType.UNCENSORED
+        if m := re.search(r"HEYDOUGA[^0-9]*?(\d{2,4})-(\d{1,4})", hd):
+            return f"Heydouga-{m[1]}-{m[2]}", ContentType.HEYDOUGA
     if m := re.search(r"(H4610|C0930|H0930)-[A-Z]+\d{4,}", c):
         return m.group(), ContentType.UNCENSORED
     # kin8 归欧美链 (theporndb 为第一源); 该类型表示路由归属, 与马赛克标记正交.
@@ -738,6 +744,10 @@ def _type_of_catalog_id(number: str) -> ContentType:
     if re.match(r"n\d{4}", number) or re.search(r"[^.]+\.\d{2}\.\d{2}\.\d{2}", number):
         return ContentType.UNCENSORED
     upper = number.upper()
+    # heydouga 与 FC2 同类: 站内自编号, 番号不带马赛克信息. 排在 _UNCENSORED_PREFIXES 之前,
+    # 否则会被该表的 HEYDOUGA 项判成无码.
+    if upper.startswith("HEYDOUGA"):
+        return ContentType.HEYDOUGA
     if any(upper.startswith(prefix.upper()) for prefix in _UNCENSORED_PREFIXES):
         return ContentType.UNCENSORED
     if any(upper.startswith(prefix.upper()) for prefix in _CENSORED_PREFIXES):
@@ -839,7 +849,9 @@ def _detect_mosaic(basename: str) -> Mosaic | None:
         return Mosaic.CRACKED
     if re.search(r"流出|LEAKED", basename):
         return Mosaic.LEAKED
-    if re.search(r"無碼|无码|UNCENSORED", basename):
+    # 無修正 是日文站与压制组最常用的写法, 与 無碼 同义; 【無】 一类的方括号写法也收.
+    # 单独的「無」不收: 它会命中「無料」之类与马赛克无关的词.
+    if re.search(r"無碼|无码|無修正|无修正|UNCENSORED", basename) or re.search(r"[【\[(（]無[】\])）]", basename):
         return Mosaic.UNCENSORED
     return None
 

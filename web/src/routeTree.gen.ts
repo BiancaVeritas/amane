@@ -17,13 +17,13 @@ import { Route as FeedsRouteImport } from './routes/feeds'
 import { Route as LibrariesRouteImport } from './routes/libraries'
 import { Route as LogsRouteImport } from './routes/logs'
 import { Route as ManualRouteImport } from './routes/manual'
+import { Route as MappingsRouteImport } from './routes/mappings'
 import { Route as MetaRouteImport } from './routes/meta'
 import { Route as NetworkRouteImport } from './routes/network'
 import { Route as PluginsRouteImport } from './routes/plugins'
 import { Route as SavedQueriesRouteImport } from './routes/saved-queries'
 import { Route as SchedulesRouteImport } from './routes/schedules'
 import { Route as SettingsRouteImport } from './routes/settings'
-import { Route as TagMappingsRouteImport } from './routes/tag-mappings'
 import { Route as TasksRouteImport } from './routes/tasks'
 import { Route as ActorsIndexRouteImport } from './routes/actors.index'
 import { Route as ActorsActorIdRouteImport } from './routes/actors.$actorId'
@@ -79,6 +79,11 @@ const ManualRoute = ManualRouteImport.update({
   path: '/manual',
   getParentRoute: () => rootRouteImport,
 } as any)
+const MappingsRoute = MappingsRouteImport.update({
+  id: '/mappings',
+  path: '/mappings',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const MetaRoute = MetaRouteImport.update({
   id: '/meta',
   path: '/meta',
@@ -107,11 +112,6 @@ const SchedulesRoute = SchedulesRouteImport.update({
 const SettingsRoute = SettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const TagMappingsRoute = TagMappingsRouteImport.update({
-  id: '/tag-mappings',
-  path: '/tag-mappings',
   getParentRoute: () => rootRouteImport,
 } as any)
 const TasksRoute = TasksRouteImport.update({
@@ -194,13 +194,13 @@ export interface FileRoutesByFullPath {
   '/libraries': typeof LibrariesRouteWithChildren
   '/logs': typeof LogsRoute
   '/manual': typeof ManualRoute
+  '/mappings': typeof MappingsRoute
   '/meta': typeof MetaRouteWithChildren
   '/network': typeof NetworkRoute
   '/plugins': typeof PluginsRoute
   '/saved-queries': typeof SavedQueriesRouteWithChildren
   '/schedules': typeof SchedulesRoute
   '/settings': typeof SettingsRoute
-  '/tag-mappings': typeof TagMappingsRoute
   '/tasks': typeof TasksRoute
   '/actors/$actorId': typeof ActorsActorIdRoute
   '/catalog/$kind': typeof CatalogKindRoute
@@ -221,11 +221,11 @@ export interface FileRoutesByTo {
   '/client': typeof ClientRoute
   '/logs': typeof LogsRoute
   '/manual': typeof ManualRoute
+  '/mappings': typeof MappingsRoute
   '/network': typeof NetworkRoute
   '/plugins': typeof PluginsRoute
   '/schedules': typeof SchedulesRoute
   '/settings': typeof SettingsRoute
-  '/tag-mappings': typeof TagMappingsRoute
   '/tasks': typeof TasksRoute
   '/actors/$actorId': typeof ActorsActorIdRoute
   '/catalog/$kind': typeof CatalogKindRoute
@@ -251,13 +251,13 @@ export interface FileRoutesById {
   '/libraries': typeof LibrariesRouteWithChildren
   '/logs': typeof LogsRoute
   '/manual': typeof ManualRoute
+  '/mappings': typeof MappingsRoute
   '/meta': typeof MetaRouteWithChildren
   '/network': typeof NetworkRoute
   '/plugins': typeof PluginsRoute
   '/saved-queries': typeof SavedQueriesRouteWithChildren
   '/schedules': typeof SchedulesRoute
   '/settings': typeof SettingsRoute
-  '/tag-mappings': typeof TagMappingsRoute
   '/tasks': typeof TasksRoute
   '/actors/$actorId': typeof ActorsActorIdRoute
   '/catalog/$kind': typeof CatalogKindRoute
@@ -284,13 +284,13 @@ export interface FileRouteTypes {
     | '/libraries'
     | '/logs'
     | '/manual'
+    | '/mappings'
     | '/meta'
     | '/network'
     | '/plugins'
     | '/saved-queries'
     | '/schedules'
     | '/settings'
-    | '/tag-mappings'
     | '/tasks'
     | '/actors/$actorId'
     | '/catalog/$kind'
@@ -311,11 +311,11 @@ export interface FileRouteTypes {
     | '/client'
     | '/logs'
     | '/manual'
+    | '/mappings'
     | '/network'
     | '/plugins'
     | '/schedules'
     | '/settings'
-    | '/tag-mappings'
     | '/tasks'
     | '/actors/$actorId'
     | '/catalog/$kind'
@@ -340,13 +340,13 @@ export interface FileRouteTypes {
     | '/libraries'
     | '/logs'
     | '/manual'
+    | '/mappings'
     | '/meta'
     | '/network'
     | '/plugins'
     | '/saved-queries'
     | '/schedules'
     | '/settings'
-    | '/tag-mappings'
     | '/tasks'
     | '/actors/$actorId'
     | '/catalog/$kind'
@@ -372,13 +372,13 @@ export interface RootRouteChildren {
   LibrariesRoute: typeof LibrariesRouteWithChildren
   LogsRoute: typeof LogsRoute
   ManualRoute: typeof ManualRoute
+  MappingsRoute: typeof MappingsRoute
   MetaRoute: typeof MetaRouteWithChildren
   NetworkRoute: typeof NetworkRoute
   PluginsRoute: typeof PluginsRoute
   SavedQueriesRoute: typeof SavedQueriesRouteWithChildren
   SchedulesRoute: typeof SchedulesRoute
   SettingsRoute: typeof SettingsRoute
-  TagMappingsRoute: typeof TagMappingsRoute
   TasksRoute: typeof TasksRoute
 }
 
@@ -440,6 +440,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ManualRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/mappings': {
+      id: '/mappings'
+      path: '/mappings'
+      fullPath: '/mappings'
+      preLoaderRoute: typeof MappingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/meta': {
       id: '/meta'
       path: '/meta'
@@ -480,13 +487,6 @@ declare module '@tanstack/react-router' {
       path: '/settings'
       fullPath: '/settings'
       preLoaderRoute: typeof SettingsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/tag-mappings': {
-      id: '/tag-mappings'
-      path: '/tag-mappings'
-      fullPath: '/tag-mappings'
-      preLoaderRoute: typeof TagMappingsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/tasks': {
@@ -679,13 +679,13 @@ const rootRouteChildren: RootRouteChildren = {
   LibrariesRoute: LibrariesRouteWithChildren,
   LogsRoute: LogsRoute,
   ManualRoute: ManualRoute,
+  MappingsRoute: MappingsRoute,
   MetaRoute: MetaRouteWithChildren,
   NetworkRoute: NetworkRoute,
   PluginsRoute: PluginsRoute,
   SavedQueriesRoute: SavedQueriesRouteWithChildren,
   SchedulesRoute: SchedulesRoute,
   SettingsRoute: SettingsRoute,
-  TagMappingsRoute: TagMappingsRoute,
   TasksRoute: TasksRoute,
 }
 export const routeTree = rootRouteImport

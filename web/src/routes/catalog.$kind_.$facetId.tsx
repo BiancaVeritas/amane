@@ -10,10 +10,10 @@ import {
   Text,
   Title,
 } from "@mantine/core";
-import { IconAlertCircle, IconFilter } from "@tabler/icons-react";
+import { IconAlertCircle, IconFilter, IconPencil } from "@tabler/icons-react";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   getFacetOptions,
@@ -24,9 +24,14 @@ import type { FacetKind } from "@/client/types.gen";
 import { InfiniteScrollSentinel } from "@/components/common/infinite-scroll-sentinel";
 import { ActorCardGrid } from "@/components/media/actor-grid";
 import { FacetFavoriteStar } from "@/components/media/facet-favorite-star";
+import { NameMappingDialog } from "@/components/media/name-mapping-dialog";
 import { PosterGrid } from "@/components/media/poster-grid";
 import { isOneOf } from "@/lib/exhaustive";
-import { CATALOG_FACET_KINDS, FAVORITE_FACET_KINDS } from "@/lib/exhaustive-maps";
+import {
+  CATALOG_FACET_KINDS,
+  FAVORITE_FACET_KINDS,
+  MAPPING_FACET_KINDS,
+} from "@/lib/exhaustive-maps";
 import { FACET_FILTER_PARAM, metaSearchForFacet } from "@/lib/facets";
 import { nextOffsetPageParam } from "@/lib/infinite-list";
 
@@ -42,6 +47,7 @@ export const Route = createFileRoute("/catalog/$kind_/$facetId")({
 function FacetDetailPage() {
   const { kind: rawKind, facetId } = Route.useParams();
   const { t } = useTranslation(["metadata", "common"]);
+  const [mappingOpen, setMappingOpen] = useState(false);
 
   const id = Number(facetId);
   const validId = Number.isInteger(id) && id > 0;
@@ -113,12 +119,39 @@ function FacetDetailPage() {
             </Badge>
           )}
         </Group>
-        <Link to="/meta" search={metaSearchForFacet(kind, id)} style={{ textDecoration: "none" }}>
-          <Button variant="light" size="sm" leftSection={<IconFilter size={14} />} component="span">
-            {t("browse.filterInMeta")}
-          </Button>
-        </Link>
+        <Group gap="xs" align="center" wrap="wrap">
+          {/* 只有这四类有映射表; 导演与用户标签不显示入口. */}
+          {facet && isOneOf(MAPPING_FACET_KINDS, kind) && (
+            <Button
+              variant="light"
+              size="sm"
+              leftSection={<IconPencil size={14} />}
+              onClick={() => setMappingOpen(true)}
+            >
+              {t("mappings.detailButton")}
+            </Button>
+          )}
+          <Link to="/meta" search={metaSearchForFacet(kind, id)} style={{ textDecoration: "none" }}>
+            <Button
+              variant="light"
+              size="sm"
+              leftSection={<IconFilter size={14} />}
+              component="span"
+            >
+              {t("browse.filterInMeta")}
+            </Button>
+          </Link>
+        </Group>
       </Group>
+
+      {facet && isOneOf(MAPPING_FACET_KINDS, kind) && (
+        <NameMappingDialog
+          opened={mappingOpen}
+          onClose={() => setMappingOpen(false)}
+          kind={kind}
+          name={facet.name}
+        />
+      )}
 
       {showFilms && (
         <Stack gap="xs">

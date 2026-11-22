@@ -141,6 +141,18 @@ class HttpClient:
     ) -> Any:
         return await self._web.get_json(url, headers=headers, cookies=cookies)
 
+    async def post_text(
+        self,
+        url: str,
+        *,
+        data: Any | None = None,
+        json: Any | None = None,
+        headers: dict[str, str] | None = None,
+        cookies: dict[str, str] | None = None,
+    ) -> str:
+        """表单 / JSON POST 取文本正文. 永远直连: 这类接口不做 HTML 拦截启发式."""
+        return await self._web.post_text(url, data=data, json=json, headers=headers, cookies=cookies)
+
     async def get_bytes(self, url: str, *, headers: dict[str, str] | None = None) -> bytes:
         return await self._web.get_bytes(url, headers=headers)
 

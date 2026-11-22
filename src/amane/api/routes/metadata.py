@@ -22,6 +22,7 @@ from ...media.upload import StoredUpload, UploadRejected, store_upload
 from ...parsing import ContentType, summarize_file_phases
 from ...parsing import FilePhaseSummary as ParsedFilePhase
 from ...semantic import SemanticUnavailable
+from ...tags import MappingGroup, vendor_names
 from ...utils.collections import unique_ids
 from ...utils.dates import normalize_calendar_date
 from ...utils.model import to_resp
@@ -49,6 +50,7 @@ from ..models import (
     MetadataUserTagsResponse,
     PartialMetadata,
     SemanticHitInfo,
+    TagPair,
     UserTagResponse,
     to_media_file_response,
 )
@@ -73,7 +75,9 @@ async def build_metadata_responses(
     for m in items:
         summary = summaries.get(m.id) if m.id is not None else None
         # 列表项也要中文映射: 片库卡片直接显示这些标签.
-        response = to_resp(MetadataListItem, m).model_copy(update={"tags": runtime.tag_mappings.map_tags(m.tags)})
+        response = to_resp(MetadataListItem, m).model_copy(
+            update={"tags": runtime.mappings.tags.map_tags(m.tags), **_vendor_display(runtime, m)}
+        )
         if summary is not None:
             response = response.model_copy(
                 update={
@@ -83,6 +87,30 @@ async def build_metadata_responses(
             )
         responses.append(response)
     return responses
+
+
+def _vendor_display(runtime: RuntimeDep, metadata: Metadata) -> dict[str, object]:
+    """片商三件套的展示值 (已映射, 缺发行商时按制作商补齐).
+
+    原名仍留在库里: 搜索、筛选与去重一律按原名, 只有展示与 NFO 走这一份.
+    """
+    shown = vendor_names(metadata).translated(runtime.mappings.vendor_roots())
+    return {
+        "studio": shown.studio,
+        "publisher": shown.publisher,
+        "series": shown.series[0] if shown.series else None,
+        "series_names": shown.series,
+    }
+
+
+def _display_response(runtime: RuntimeDep, metadata: Metadata) -> MetadataResponse:
+    """条目的对外形态: 标签与片商三件套都换成展示值.
+
+    映射只改展示; 搜索、筛选与去重仍用库里的原名.
+    """
+    return to_resp(MetadataResponse, metadata).model_copy(
+        update={"tags": runtime.mappings.tags.map_tags(metadata.tags), **_vendor_display(runtime, metadata)}
+    )
 
 
 async def _split_merged_tag_ids(
@@ -102,7 +130,7 @@ async def _split_merged_tag_ids(
     rows, _ = await repo.list_facets(
         FacetKind.TAG, search=None, offset=0, limit=1000, sort_by=FacetSortField.NAME, order=SortOrder.ASC
     )
-    display_by_id = {row.id: runtime.tag_mappings.map_tags([row.name])[0] for row in rows}
+    display_by_id = {row.id: runtime.mappings.tags.map_tags([row.name])[0] for row in rows}
     ids_by_display: dict[str, list[int]] = {}
     for fid, display in display_by_id.items():
         ids_by_display.setdefault(display, []).append(fid)
@@ -207,7 +235,7 @@ def _actor_names_of(runtime, items) -> dict[str, str]:
     names: set[str] = set()
     for item in items:
         names.update(item.actors or [])
-    return runtime.actor_names.display_map(sorted(names)) if names else {}
+    return runtime.mappings.store(MappingGroup.ACTOR).display_map(sorted(names)) if names else {}
 
 
 async def _semantic_list(
@@ -345,7 +373,9 @@ async def batch_metadata_user_tags(req: MetadataUserTagsRequest, repo: RepoDep) 
 
 
 @router.post("/merge-entries")
-async def merge_metadata_entries(req: MetadataMergeEntriesRequest, repo: RepoDep) -> MetadataResponse:
+async def merge_metadata_entries(
+    req: MetadataMergeEntriesRequest, repo: RepoDep, runtime: RuntimeDep
+) -> MetadataResponse:
     """把来源条目的 raw 快照补入目标并删除来源: 目标字段不变, 关联记录迁入目标.
 
     ``rescrape`` 要求合并提交后再按目标番号入队 SCRAPE: 只有 raw 已落库, 复用快照的聚合
@@ -370,7 +400,7 @@ async def merge_metadata_entries(req: MetadataMergeEntriesRequest, repo: RepoDep
         source_ids=req.source_ids,
         rescrape_task_id=rescrape_task_id,
     )
-    return to_resp(MetadataResponse, metadata)
+    return _display_response(runtime, metadata)
 
 
 @router.get("/{metadata_id}")
@@ -392,10 +422,10 @@ async def get_metadata(metadata_id: int, repo: RepoDep, runtime: RuntimeDep) -> 
         series_id,
     ) = await repo.resolve_metadata_facet_ids(metadata)
     series_ids = await repo.resolve_metadata_series_ids(metadata)
-    tag_ids = runtime.tag_mappings.map_id_map(tag_ids)
-    mapped_tags = runtime.tag_mappings.map_tags(metadata.tags)
+    tag_ids = runtime.mappings.tags.map_id_map(tag_ids)
+    mapped_tags = runtime.mappings.tags.map_tags(metadata.tags)
     return MetadataDetailResponse(
-        metadata=to_resp(MetadataResponse, metadata).model_copy(
+        metadata=_display_response(runtime, metadata).model_copy(
             update={
                 "tags": mapped_tags,
                 "file_count": len(files),
@@ -410,11 +440,13 @@ async def get_metadata(metadata_id: int, repo: RepoDep, runtime: RuntimeDep) -> 
         comments=[to_resp(CommentResponse, c) for c in comments],
         actor_ids=actor_ids,
         actor_genders=actor_genders,
-        actor_display_names=runtime.actor_names.display_map(list(metadata.actors or [])),
+        actor_display_names=runtime.mappings.store(MappingGroup.ACTOR).display_map(list(metadata.actors or [])),
+        tags=[TagPair(raw=raw, shown=shown) for raw, shown in runtime.mappings.tags.map_tag_pairs(metadata.tags)],
         director_ids=director_ids,
         tag_ids=tag_ids,
         studio_id=studio_id,
-        publisher_id=publisher_id,
+        # 发行商按制作商补齐时没有自己的实体行, 用制作商的 id: 徽章仍能点进那道分类页.
+        publisher_id=publisher_id if metadata.publisher else studio_id,
         series_id=series_id,
         series_ids=series_ids,
     )
@@ -444,7 +476,7 @@ async def update_metadata(
     if metadata is None:
         raise HTTPException(status_code=404, detail="影片不存在")
     logger.info("metadata updated", metadata_id=metadata_id, fields=list(updates.keys()))
-    return to_resp(MetadataResponse, metadata).model_copy(update={"tags": runtime.tag_mappings.map_tags(metadata.tags)})
+    return _display_response(runtime, metadata)
 
 
 @router.put("/{metadata_id}/locks")
@@ -456,7 +488,7 @@ async def set_metadata_locks(
     if metadata is None:
         raise HTTPException(status_code=404, detail="影片不存在")
     logger.info("metadata locks updated", metadata_id=metadata_id, fields=[str(field) for field in req.fields])
-    return to_resp(MetadataResponse, metadata).model_copy(update={"tags": runtime.tag_mappings.map_tags(metadata.tags)})
+    return _display_response(runtime, metadata)
 
 
 @router.delete("/{metadata_id}", status_code=204)
@@ -514,7 +546,7 @@ async def crop_poster_from_thumb(
         source_url=source_url,
         poster_url=poster_url,
     )
-    return to_resp(MetadataResponse, updated).model_copy(update={"tags": runtime.tag_mappings.map_tags(updated.tags)})
+    return _display_response(runtime, updated)
 
 
 def _resource_url(store: ResourceStore, locator: str) -> str:
@@ -583,9 +615,7 @@ async def _admit(store: ResourceStore, pool: list[str], url: str, current: str |
     return [*out, url]
 
 
-async def _apply_thumb(
-    store: ResourceStore, repo: RepoDep, metadata_id: int, metadata: Metadata, url: str
-) -> MetadataResponse:
+async def _apply_thumb(store: ResourceStore, repo: RepoDep, metadata_id: int, metadata: Metadata, url: str) -> Metadata:
     """把 ``url`` 设为当前封面.
 
     ``thumb_candidates`` 是候选池: 选过的图按首次出现的顺序留在里面, 换图不重排, 所以
@@ -600,12 +630,12 @@ async def _apply_thumb(
         thumb_candidates=pool,
     )
     assert updated is not None
-    return to_resp(MetadataResponse, updated)
+    return updated
 
 
 async def _apply_poster(
     store: ResourceStore, repo: RepoDep, metadata_id: int, metadata: Metadata, url: str
-) -> MetadataResponse:
+) -> Metadata:
     """把 ``url`` 设为当前海报.
 
     海报没有候选池: 它由封面裁出 (一次只裁一张), 裁切对话框换的是**图源**而不是海报本身,
@@ -614,7 +644,7 @@ async def _apply_poster(
     del store, metadata
     updated = await repo.update_metadata(metadata_id, mode=WriteMode.MANUAL, poster_urls=[url])
     assert updated is not None
-    return to_resp(MetadataResponse, updated)
+    return updated
 
 
 async def _crop_source_to_poster(
@@ -660,7 +690,7 @@ async def upload_thumb(
     url = _resource_url(store, stored.url)
     updated = await _apply_thumb(store, repo, metadata_id, metadata, url)
     logger.info("thumb uploaded", metadata_id=metadata_id, url=url)
-    return updated.model_copy(update={"tags": runtime.tag_mappings.map_tags(updated.tags)})
+    return _display_response(runtime, updated)
 
 
 @router.post("/{metadata_id}/upload-poster")
@@ -685,7 +715,7 @@ async def upload_poster(
     url = await _crop_source_to_poster(stored.url, stored.path, ratio, store, runtime)
     updated = await _apply_poster(store, repo, metadata_id, metadata, url)
     logger.info("poster uploaded", metadata_id=metadata_id, url=url, ratio=ratio)
-    return updated.model_copy(update={"tags": runtime.tag_mappings.map_tags(updated.tags)})
+    return _display_response(runtime, updated)
 
 
 @router.post("/{metadata_id}/adopt-thumb")
@@ -715,7 +745,7 @@ async def adopt_thumb(
     # 外部 URL vs 内部地址), 会被当成新图追加, 池子越点越长.
     updated = await _apply_thumb(store, repo, metadata_id, metadata, source_url)
     logger.info("thumb adopted", metadata_id=metadata_id, source_url=source_url)
-    return updated.model_copy(update={"tags": runtime.tag_mappings.map_tags(updated.tags)})
+    return _display_response(runtime, updated)
 
 
 @router.post("/{metadata_id}/adopt-poster")
@@ -744,7 +774,7 @@ async def adopt_poster(
     url = await _crop_source_to_poster(resolved.locator, resolved.path, ratio, store, runtime)
     updated = await _apply_poster(store, repo, metadata_id, metadata, url)
     logger.info("poster adopted", metadata_id=metadata_id, source_url=source_url, ratio=ratio)
-    return updated.model_copy(update={"tags": runtime.tag_mappings.map_tags(updated.tags)})
+    return _display_response(runtime, updated)
 
 
 @router.delete("/{metadata_id}/images")
@@ -806,7 +836,7 @@ async def remove_image(
     await _purge_image(runtime, url)
 
     logger.info("image removed", metadata_id=metadata_id, url=url, target=target)
-    return to_resp(MetadataResponse, updated).model_copy(update={"tags": runtime.tag_mappings.map_tags(updated.tags)})
+    return _display_response(runtime, updated)
 
 
 async def _purge_image(runtime: RuntimeDep, url: str) -> None:
@@ -885,7 +915,7 @@ async def merge_metadata(metadata_id: int, req: MergeRequest, repo: RepoDep, run
     updated = await repo.update_metadata(metadata_id, mode=WriteMode.MANUAL, **cast("MetadataFields", updates))
     assert updated is not None
     logger.info("metadata merged", metadata_id=metadata_id, selections=req.selections)
-    return to_resp(MetadataResponse, updated).model_copy(update={"tags": runtime.tag_mappings.map_tags(updated.tags)})
+    return _display_response(runtime, updated)
 
 
 #: 站点域名片段 → 展示名. 顺序敏感: 更具体的域名放前面.

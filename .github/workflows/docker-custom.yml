@@ -1,11 +1,11 @@
-name: Publish custom Docker image
+name: Publish amane-promax Docker image
 
-# 仅用于本 fork 的 custom/* 分支: 构建修改版镜像并推到 GHCR.
+# 仅用于本 fork 的 amane-promax 分支: 构建修改版镜像并推到 GHCR.
 # 与上游 docker.yml 分开, 避免合并上游时冲突.
 on:
   push:
     branches:
-      - "custom/**"
+      - "amane-promax"
   workflow_dispatch:
 
 env:
@@ -22,7 +22,7 @@ jobs:
       - uses: actions/checkout@v7
 
       - name: Image name
-        run: echo "IMAGE=${REGISTRY}/$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')/amane" >> "$GITHUB_ENV"
+        run: echo "IMAGE=${REGISTRY}/$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')/amane-promax" >> "$GITHUB_ENV"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
@@ -39,11 +39,11 @@ jobs:
         uses: docker/metadata-action@v6
         with:
           images: ${{ env.IMAGE }}
-          # custom/v0.26.0 -> custom-v0.26.0; 固定别名 custom; 短 sha 便于回溯
+          # 分支 amane-promax -> 标签 amane-promax; latest 是固定别名; 短 sha 便于回溯
           tags: |
             type=ref,event=branch
-            type=raw,value=custom
-            type=sha,format=short,prefix=custom-
+            type=raw,value=latest
+            type=sha,format=short,prefix=sha-
 
       - name: Build and push
         uses: docker/build-push-action@v7

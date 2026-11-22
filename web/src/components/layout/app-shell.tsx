@@ -8,6 +8,7 @@ import {
   Menu,
   NavLink,
   ScrollArea,
+  SegmentedControl,
   Text,
   TextInput,
   Title,
@@ -44,7 +45,7 @@ import {
 } from "@tabler/icons-react";
 import { Link, Outlet, useLocation, useNavigate } from "@tanstack/react-router";
 import type { ParseKeys } from "i18next";
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { APP_SHELL_HEADER_HEIGHT } from "@/components/layout/app-shell-metrics";
 import { HintedActionIcon } from "@/components/common/hinted-action-icon";
@@ -53,7 +54,7 @@ import { APP_NAME, GITHUB_URL } from "@/lib/app";
 import { navItemClick } from "@/lib/nav-defaults";
 import { shellEnvironment } from "@/lib/shell";
 import { useConnectionStore } from "@/stores/connection";
-import { useUIStore } from "@/stores/ui";
+import { type ContentLang, useUIStore } from "@/stores/ui";
 
 type CommonKey = ParseKeys<"common">;
 
@@ -244,6 +245,34 @@ function ThemeToggle() {
   );
 }
 
+/**
+ * 元数据的展示语言滑块: 原文 ⇄ 中文.
+ *
+ * 只在影片 / 演员详情页出现 —— 它只影响详情页的展示, 常驻顶栏会占掉一台设备的位置,
+ * 而在列表页点它没有任何效果.
+ *
+ * 位置跟着「连接状态」那个绿点: 用户是从那里找到它的. 与界面语言 (`LanguageMenu`)
+ * 互不影响: 界面可以是中文而内容看原文.
+ */
+function ContentLangSwitch() {
+  const { t } = useTranslation("common");
+  const contentLang = useUIStore((s) => s.contentLang);
+  const setContentLang = useUIStore((s) => s.setContentLang);
+
+  return (
+    <SegmentedControl
+      size="xs"
+      value={contentLang}
+      onChange={(value) => setContentLang(value as ContentLang)}
+      // 原文在前: 与「原文 → 中文」的阅读顺序一致, 默认值仍是中文.
+      data={[
+        { label: t("contentLang.raw"), value: "raw" },
+        { label: t("contentLang.zh"), value: "zh" },
+      ]}
+    />
+  );
+}
+
 function LanguageMenu() {
   const { t, i18n } = useTranslation("common");
   const setLanguage = useUIStore((s) => s.setLanguage);
@@ -411,6 +440,15 @@ export function AppShellLayout(): ReactNode {
   const desktopCollapsed = useUIStore((s) => s.navbarCollapsed);
   const toggleDesktop = useUIStore((s) => s.toggleNavbar);
   const shell = shellEnvironment();
+  // 原文 / 中文滑块只在详情页出现: 列表页调它没有任何效果, 常驻只会占位置.
+  const { pathname } = useLocation();
+  const onDetailPage = /^\/(meta|actors)\/[^/]+/.test(pathname);
+  // 不记忆展示语言: 每进一次详情页都回到「中文」. 只在路径变化时重置, 所以同一页内
+  // 手动切换不会被打断.
+  const setContentLang = useUIStore((s) => s.setContentLang);
+  useEffect(() => {
+    if (/^\/(meta|actors)\/[^/]+/.test(pathname)) setContentLang("zh");
+  }, [pathname, setContentLang]);
 
   return (
     <AppShell
@@ -442,6 +480,7 @@ export function AppShellLayout(): ReactNode {
           <HeaderBrand />
           <HeaderSearch />
           <Group ml="auto" gap="xs" wrap="nowrap">
+            {onDetailPage && <ContentLangSwitch />}
             <ConnectionIndicator />
             <ThemeToggle />
             <LanguageMenu />
@@ -484,8 +523,8 @@ export function AppShellLayout(): ReactNode {
         />
         <NavLink
           component={Link}
-          to="/tag-mappings"
-          label="标签中文映射"
+          to="/mappings"
+          label={t("nav.mappings")}
           leftSection={<IconTags size={18} />}
           onClick={closeMobile}
         />

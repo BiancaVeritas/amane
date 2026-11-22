@@ -39,6 +39,7 @@
       "chinese": "国产",
       "western": "欧美",
       "fc2": "FC2",
+      "heydouga": "Heydouga",
       "amateur": "素人",
       "hentai": "动漫"
     },
@@ -91,7 +92,7 @@
       "actors": "演员",
       "tags": "标签",
       "plot": "剧情",
-      "originalPlot": "原剧情",
+      "originalPlot": "剧情",
       "trailer": "预告片",
       "poster": "海报",
       "thumb": "封面",
@@ -450,29 +451,83 @@
     "toggleLocked": "解锁字段",
     "toggleUnlocked": "锁定字段"
   },
-  "actorNameMapping": {
-    "button": "演员中文映射",
-    "title": "演员中文映射",
+  "mappings": {
+    "title": "映射表",
     "detailTitle": "中文映射",
     "detailButton": "中文映射",
     "detailHint": "只改页面显示：搜索、去重与刮削仍使用原始名。留空保存即删除这条映射。",
-    "hint": "只改页面显示：搜索、去重与刮削仍使用原始名。",
-    "search": "搜索演员",
-    "stats": "已映射 {{mapped}} / {{all}}",
+    "subtitle": "中文译名只影响展示：搜索、去重与刮削仍使用原始名。",
+    "tabs": {
+      "tag": "标签中文映射",
+      "actor": "演员中文映射",
+      "vendor": "片商中文映射"
+    },
+    "kinds": {
+      "tag": "标签",
+      "actor": "演员",
+      "studio": "制作商",
+      "publisher": "发行商",
+      "series": "系列"
+    },
+    "status": "词条状态",
+    "statuses": {
+      "pending": "待映射",
+      "mapped": "已映射",
+      "archived": "已归档",
+      "all": "全部词条"
+    },
+    "language": "原始语言",
+    "languages": {
+      "all": "全部语言",
+      "ja": "日文",
+      "en": "英文",
+      "zh": "中文",
+      "other": "其他"
+    },
+    "frequency": "使用频率",
+    "frequencies": {
+      "all": "全部频率",
+      "high": "高频（至少 5 次）"
+    },
+    "search": "搜索原文或中文译名",
+    "stats": {
+      "pending": "待映射 {{count}}",
+      "mapped": "已映射 {{count}}",
+      "archived": "已归档 {{count}}",
+      "all": "全部 {{count}}"
+    },
+    "sortedByUsage": "默认按使用次数从高到低排列",
+    "hint": "每页显示 30 个词条；勾选起点后按住 Shift 再勾选终点，可选择范围。每次最多选择 30 个词条请求翻译建议；建议只填入编辑框，必须逐条点击「确认保存」才会入库。",
     "original": "原始名",
-    "translation": "中文映射",
-    "placeholder": "留空表示不映射",
+    "translation": "中文译名",
+    "translationPlaceholder": "填写中文译名",
+    "usage": "次数",
+    "sources": "来源",
+    "languageColumn": "语言",
+    "actions": "操作",
     "save": "保存",
-    "clear": "删除这条映射",
-    "export": "导出映射",
-    "import": "导入映射",
-    "empty": "没有映射记录",
-    "pickActor": "选择演员加入映射",
-    "noCandidates": "没有可添加的演员",
-    "filterExisting": "筛选已登记",
+    "archive": "归档",
+    "restore": "还原",
+    "remove": "删除",
+    "selectAll": "选择全部当前页",
+    "select": "选择 {{name}}",
+    "empty": "没有符合条件的词条",
+    "total": "共 {{count}} 条",
+    "selected": "已选择 {{count}} 项",
+    "batchConfirm": "批量确认",
+    "batchArchive": "批量归档",
+    "batchRestore": "批量还原",
+    "suggest": "请求 LLM 建议（{{count}}）",
+    "import": "导入词典",
+    "export": "导出词典",
     "manual": "手动新增",
-    "manualHint": "不依赖索引里已有的演员: 自己填原始名和中文名",
-    "manualOriginal": "原始名",
-    "manualTranslation": "中文名"
+    "manualHint": "不依赖分类表里已有的名字：自己填原始名和中文名",
+    "manualTitle": "手动新增映射",
+    "noTranslation": "无需译名",
+    "cannotArchiveMapped": "已映射的词条不能归档, 请先清空中文译名",
+    "restricted": "该分类没有归档区",
+    "llmHint": "LLM 建议只填入编辑框，不会自动保存；列表打开时按分类表同步，并按引用次数排序。分类表里已经不存在（含引用数归零）的自动条目会连同译名一起删掉。",
+    "vendorHint": "制作商、发行商与系列共用一个表：同一个词只占一行，译名一次生效。发行商为空时按制作商补齐，系列不参与这条规则。",
+    "clearTranslation": "清空译名（变为未映射）"
   }
 }

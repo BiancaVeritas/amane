@@ -53,7 +53,7 @@ import { InfiniteScrollSentinel } from "@/components/common/infinite-scroll-sent
 import { SortMenu } from "@/components/common/sort-menu";
 import { ActorAvatarCropDialog } from "@/components/media/actor-avatar-crop-dialog";
 import { ActorEditDialog } from "@/components/media/actor-edit-dialog";
-import { ActorNameMappingEditor } from "@/components/media/actor-name-mapping-editor";
+import { NameMappingDialog } from "@/components/media/name-mapping-dialog";
 import { ActorUserTags } from "@/components/media/actor-user-tags";
 import { ClearPersonNotice } from "@/components/media/clear-person-notice";
 import { FanartLightbox } from "@/components/media/fanart-lightbox";
@@ -125,6 +125,8 @@ function ActorDetailPage() {
   const [cropOpen, setCropOpen] = useState(false);
   const actorWorksSort = useUIStore((state) => state.actorWorksSort);
   const setActorWorksSort = useUIStore((state) => state.setActorWorksSort);
+  // 展示语言在顶栏切换; 面包屑与出品列表的演员名也跟着它.
+  const contentLang = useUIStore((state) => state.contentLang);
   // 记下当前这条: 去别的模块处理完再点侧栏回演员页时, 直接回到这里而不是从头翻列表.
   const setLastActorId = useUIStore((state) => state.setLastActorId);
   useEffect(() => {
@@ -360,7 +362,7 @@ function ActorDetailPage() {
         </Anchor>
         {actor && (
           <Text size="sm" c="dimmed">
-            {actor.display_name ?? actor.name}
+            {contentLang === "raw" ? actor.name : (actor.display_name ?? actor.name)}
           </Text>
         )}
       </Breadcrumbs>
@@ -497,6 +499,11 @@ function ActorHero({
   const mediaServer = useMediaServerReady();
   const [mappingOpen, setMappingOpen] = useState(false);
   const [lightboxOpen, lightbox] = useDisclosure(false);
+  // 展示语言在顶栏切换, 这里只读.
+  const lang = useUIStore((s) => s.contentLang);
+  const showRaw = lang === "raw";
+  const displayName = showRaw ? actor.name : (actor.display_name ?? actor.name);
+  // 剪贴板与其它引用处仍用 HTML 里的原名, 这里只决定标题上写哪一个.
   const imageUrls = actor.image_urls ?? [];
   const primaryImage = imageUrls[0];
   const aliases = actor.aliases ?? [];
@@ -603,8 +610,10 @@ function ActorHero({
       <Stack gap="sm" style={{ flex: "1 1 20rem", minWidth: 0 }}>
         <Group gap="sm" align="center">
           <Title order={2}>
-            {/* 没有中文映射时 display_name 会和原名相同, 那就只写一次, 免得出现「名 (名)」. */}
-            {actor.display_name && actor.display_name !== actor.name ? (
+            {/* 标题保留「显示名 (原名)」: 演员页是要认人的地方, 括注的原名是核对身份的
+                依据, 切到原文模式才只写原名. 没有中文映射时 display_name 与原名相同,
+                那就只写一次, 免得出现「名 (名)」. */}
+            {!showRaw && actor.display_name && actor.display_name !== actor.name ? (
               <>
                 {actor.display_name}
                 <Text span size="lg" c="dimmed" fw={600}>
@@ -613,7 +622,7 @@ function ActorHero({
                 </Text>
               </>
             ) : (
-              actor.name
+              displayName
             )}
           </Title>
           <Badge size="lg" variant="light">
@@ -781,8 +790,9 @@ function ActorHero({
             leftSection={<IconUserEdit size={14} />}
             onClick={() => setMappingOpen(true)}
           >
-            {t("metadata:actorNameMapping.detailButton")}
+            {t("metadata:mappings.detailButton")}
           </Button>
+
           {/* 只同步这一个演员: 悬停给两种口径. 媒体服务器没配 API Key 时置灰并提示. */}
           <Tooltip label={mediaServer.reason} disabled={mediaServer.ready} withArrow>
             <Box>
@@ -869,9 +879,10 @@ function ActorHero({
         <FanartLightbox images={imageUrls} initialIndex={0} onClose={lightbox.close} />
       )}
 
-      <ActorNameMappingEditor
+      <NameMappingDialog
         opened={mappingOpen}
         onClose={() => setMappingOpen(false)}
+        kind="actor"
         name={actor.name}
       />
     </Group>

@@ -158,34 +158,6 @@ export const ActorLocksRequestSchema = {
     description: '整体替换锁定字段集合.'
 } as const;
 
-export const ActorNameUpdateSchema = {
-    properties: {
-        original: {
-            type: 'string',
-            maxLength: 300,
-            minLength: 1,
-            title: 'Original'
-        },
-        translation: {
-            anyOf: [
-                {
-                    type: 'string',
-                    maxLength: 300
-                },
-                {
-                    type: 'null'
-                }
-            ],
-            title: 'Translation'
-        }
-    },
-    type: 'object',
-    required: [
-        'original'
-    ],
-    title: 'ActorNameUpdate'
-} as const;
-
 export const ActorPushResultSchema = {
     properties: {
         type: {
@@ -1835,6 +1807,7 @@ export const ContentTypeSchema = {
         'chinese',
         'western',
         'fc2',
+        'heydouga',
         'amateur',
         'hentai'
     ],
@@ -3255,6 +3228,7 @@ export const HotSettingsSchema = {
                         'avsox'
                     ],
                     chinese: [
+                        'tangxin',
                         'iqqtv',
                         'javdb',
                         'airav',
@@ -3270,6 +3244,10 @@ export const HotSettingsSchema = {
                     hentai: [
                         'getchu',
                         'dmm',
+                        'javdb'
+                    ],
+                    heydouga: [
+                        'heydouga',
                         'javdb'
                     ],
                     uncensored: [
@@ -3547,6 +3525,19 @@ export const HotSettingsSchema = {
                         use_browser: 'auto',
                         use_proxy: true
                     },
+                    heydouga: {
+                        cookie: {},
+                        languages: [
+                            'zh',
+                            'ja',
+                            'en'
+                        ],
+                        official_routes: {},
+                        rate_limit: 2,
+                        tls_impersonate: true,
+                        use_browser: 'auto',
+                        use_proxy: true
+                    },
                     iqqtv: {
                         cookie: {},
                         languages: [
@@ -3704,6 +3695,19 @@ export const HotSettingsSchema = {
                         use_proxy: true
                     },
                     r18dev: {
+                        cookie: {},
+                        languages: [
+                            'zh',
+                            'ja',
+                            'en'
+                        ],
+                        official_routes: {},
+                        rate_limit: 2,
+                        tls_impersonate: true,
+                        use_browser: 'auto',
+                        use_proxy: true
+                    },
+                    tangxin: {
                         cookie: {},
                         languages: [
                             'zh',
@@ -5512,6 +5516,17 @@ export const ManufacturerSchema = {
     title: 'Manufacturer'
 } as const;
 
+export const MappingGroupSchema = {
+    type: 'string',
+    enum: [
+        'tag',
+        'actor',
+        'vendor'
+    ],
+    title: 'MappingGroup',
+    description: '页面上的滑动选项; 每项一张表, 各自独立对账与展示.'
+} as const;
+
 export const MappingUpdateSchema = {
     properties: {
         original: {
@@ -6077,6 +6092,14 @@ export const MetadataDetailResponseSchema = {
             type: 'object',
             title: 'Actor Display Names',
             description: '演员显示名映射 (原始名 → 中文名); 仅展示用'
+        },
+        tags: {
+            items: {
+                $ref: '#/components/schemas/TagPair'
+            },
+            type: 'array',
+            title: 'Tags',
+            description: '标签的 (原名, 展示名) 对照, 保序去重; 详情页据此在原文与译文间切换'
         },
         director_ids: {
             additionalProperties: {
@@ -9666,6 +9689,7 @@ export const ScrapingConfigSchema = {
                         'freejavbt',
                         'getchu',
                         'giga',
+                        'heydouga',
                         'iqqtv',
                         'jav321',
                         'javbus',
@@ -9681,6 +9705,7 @@ export const ScrapingConfigSchema = {
                         'caribbeancompr',
                         'prestige',
                         'r18dev',
+                        'tangxin',
                         '10musume',
                         'tokyo_hot',
                         'theporndb',
@@ -9716,6 +9741,7 @@ export const ScrapingConfigSchema = {
                         'freejavbt',
                         'getchu',
                         'giga',
+                        'heydouga',
                         'iqqtv',
                         'jav321',
                         'javbus',
@@ -9731,6 +9757,7 @@ export const ScrapingConfigSchema = {
                         'caribbeancompr',
                         'prestige',
                         'r18dev',
+                        'tangxin',
                         '10musume',
                         'tokyo_hot',
                         'theporndb',
@@ -9766,6 +9793,7 @@ export const ScrapingConfigSchema = {
                         'freejavbt',
                         'getchu',
                         'giga',
+                        'heydouga',
                         'iqqtv',
                         'jav321',
                         'javbus',
@@ -9781,6 +9809,7 @@ export const ScrapingConfigSchema = {
                         'caribbeancompr',
                         'prestige',
                         'r18dev',
+                        'tangxin',
                         '10musume',
                         'tokyo_hot',
                         'theporndb',
@@ -10459,6 +10488,7 @@ export const SiteNameSchema = {
         'getchu',
         'gfriends',
         'giga',
+        'heydouga',
         'iqqtv',
         'jav321',
         'javbus',
@@ -10475,6 +10505,7 @@ export const SiteNameSchema = {
         'caribbeancompr',
         'prestige',
         'r18dev',
+        'tangxin',
         '10musume',
         'tokyo_hot',
         'theporndb',
@@ -10759,6 +10790,26 @@ export const SuggestRequestSchema = {
         'originals'
     ],
     title: 'SuggestRequest'
+} as const;
+
+export const TagPairSchema = {
+    properties: {
+        raw: {
+            type: 'string',
+            title: 'Raw'
+        },
+        shown: {
+            type: 'string',
+            title: 'Shown'
+        }
+    },
+    type: 'object',
+    required: [
+        'raw',
+        'shown'
+    ],
+    title: 'TagPair',
+    description: '一个标签的两种写法: 库里存的原名, 与映射表给出的展示名.\n\n成对给出而不只给译文, 是因为详情页要能在两者之间切换; 只给译文时前端只能反查原名,\n而两个不同原名映射到同一译文 (``パイズリ`` 与 ``パイズリ顔射`` 都译作「乳交」) 时\n反查必然丢掉一个.'
 } as const;
 
 export const TaskBatchActionSchema = {

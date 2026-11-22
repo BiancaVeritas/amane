@@ -3,8 +3,8 @@
 import { type DefaultError, type InfiniteData, infiniteQueryOptions, queryOptions, type UseMutationOptions } from '@tanstack/react-query';
 
 import { client } from '../client.gen';
-import { adoptPoster, adoptThumb, batchActorGender, batchActorUserTags, batchClearActorPerson, batchDeleteMedia, batchDeleteMetadata, batchFacets, batchFeedItems, batchMetadataUserTags, batchSavedQueries, batchScrapeMetadata, batchSubmitTasks, batchTasks, browserBackends, callTool, cancelAguiTurn, checkConnectivity, clearActorPerson, clearScrapedFilenames, clouddriveNotify, createAgentSession, createComment, createFeed, createLibrary, createSavedQuery, createSchedule, createUserTags, cropActorAvatar, cropPosterFromThumb, deleteActorNameMapping, deleteAgentSession, deleteComment, deleteFacet, deleteFacetRule, deleteFeed, deleteLibrary, deleteMapping, deleteMedia, deleteMetadata, deleteSchedule, desktopInfo, expandCleanupSelection, exportActorNameMappings, exportMappings, generateAgentSessionTitle, getActor, getAgentGuide, getAgentTrace, getCleanupInventory, getCleanupInventoryNodes, getCleanupTrash, getConfig, getConfigSchema, getDbSchema, getFacet, getFeed, getLibrary, getMedia, getMetadata, getMetadataSchema, getPathTemplateSchema, getPlugin, getRelease, getSavedQuery, getSavedQueryResult, getSchedule, getScheduleSchema, getTask, getTaskChildren, getTaskLog, getTaskRecord, getTaskSchema, getTaskWorker, getToolCatalog, getToolDetail, healthCheck, imageInfo, importActorNameMappings, importMappings, installPlugin, listActorNameMappings, listActors, listAgentSessions, listAllFeedItems, listFacetRules, listFacets, listFeedItems, listFeeds, listFiles, listLibraries, listMappings, listMedia, listMetadata, listPlaybackSources, listPlaybackStreams, listPlugins, listSavedQueries, listSchedules, listScrapedFilenames, listTasks, mergeFacets, mergeMetadata, mergeMetadataEntries, type Options, pauseTaskWorker, playMetadata, playMetadataHlsPart, playMetadataPlaylist, playMetadataSubtitle, playStream, playStreamHlsPart, playStreamPlaylist, playStreamSubtitle, pollFeed, previewScrape, proxyImage, releaseSemantic, reloadPlugins, removeImage, renameFacet, restartServer, restoreMapping, resumeTaskWorker, saveActorNameMapping, saveMapping, scrapeActor, semanticDiagnostics, semanticStatus, serveResource, setActorLocks, setMetadataLocks, submitTask, suggestMappings, triggerSchedule, uninstallPlugin, updateActor, updateAgentSession, updateComment, updateConfig, updateFeed, updateLibrary, updateMedia, updateMetadata, updatePlugin, updateSavedQuery, updateSchedule, uploadPoster, uploadThumb } from '../sdk.gen';
-import type { AdoptPosterData, AdoptPosterError, AdoptPosterResponse, AdoptThumbData, AdoptThumbError, AdoptThumbResponse, BatchActorGenderData, BatchActorGenderError, BatchActorGenderResponse, BatchActorUserTagsData, BatchActorUserTagsError, BatchActorUserTagsResponse, BatchClearActorPersonData, BatchClearActorPersonError, BatchClearActorPersonResponse, BatchDeleteMediaData, BatchDeleteMediaError, BatchDeleteMediaResponse, BatchDeleteMetadataData, BatchDeleteMetadataError, BatchDeleteMetadataResponse, BatchFacetsData, BatchFacetsError, BatchFacetsResponse, BatchFeedItemsData, BatchFeedItemsError, BatchFeedItemsResponse, BatchMetadataUserTagsData, BatchMetadataUserTagsError, BatchMetadataUserTagsResponse, BatchSavedQueriesData, BatchSavedQueriesError, BatchSavedQueriesResponse, BatchScrapeMetadataData, BatchScrapeMetadataError, BatchScrapeMetadataResponse, BatchSubmitTasksData, BatchSubmitTasksError, BatchSubmitTasksResponse, BatchTasksData, BatchTasksError, BatchTasksResponse, BrowserBackendsData, BrowserBackendsResponse, CallToolData, CallToolError, CancelAguiTurnData, CancelAguiTurnError, CancelAguiTurnResponse, CheckConnectivityData, CheckConnectivityError, CheckConnectivityResponse, ClearActorPersonData, ClearActorPersonError, ClearActorPersonResponse, ClearScrapedFilenamesData, ClearScrapedFilenamesError, ClearScrapedFilenamesResponse, ClouddriveNotifyData, ClouddriveNotifyError, ClouddriveNotifyResponse, CreateAgentSessionData, CreateAgentSessionError, CreateAgentSessionResponse, CreateCommentData, CreateCommentError, CreateCommentResponse, CreateFeedData, CreateFeedError, CreateFeedResponse, CreateLibraryData, CreateLibraryError, CreateLibraryResponse, CreateSavedQueryData, CreateSavedQueryError, CreateSavedQueryResponse, CreateScheduleData, CreateScheduleError, CreateScheduleResponse, CreateUserTagsData, CreateUserTagsError, CreateUserTagsResponse, CropActorAvatarData, CropActorAvatarError, CropActorAvatarResponse, CropPosterFromThumbData, CropPosterFromThumbError, CropPosterFromThumbResponse, DeleteActorNameMappingData, DeleteActorNameMappingError, DeleteActorNameMappingResponse, DeleteAgentSessionData, DeleteAgentSessionError, DeleteAgentSessionResponse, DeleteCommentData, DeleteCommentError, DeleteCommentResponse, DeleteFacetData, DeleteFacetError, DeleteFacetResponse, DeleteFacetRuleData, DeleteFacetRuleError, DeleteFacetRuleResponse, DeleteFeedData, DeleteFeedError, DeleteFeedResponse, DeleteLibraryData, DeleteLibraryError, DeleteLibraryResponse, DeleteMappingData, DeleteMappingError, DeleteMappingResponse, DeleteMediaData, DeleteMediaError, DeleteMediaResponse, DeleteMetadataData, DeleteMetadataError, DeleteMetadataResponse, DeleteScheduleData, DeleteScheduleError, DeleteScheduleResponse, DesktopInfoData, DesktopInfoResponse, ExpandCleanupSelectionData, ExpandCleanupSelectionError, ExpandCleanupSelectionResponse, ExportActorNameMappingsData, ExportMappingsData, GenerateAgentSessionTitleData, GenerateAgentSessionTitleError, GenerateAgentSessionTitleResponse, GetActorData, GetActorError, GetActorResponse, GetAgentGuideData, GetAgentGuideResponse, GetAgentTraceData, GetAgentTraceError, GetAgentTraceResponse, GetCleanupInventoryData, GetCleanupInventoryError, GetCleanupInventoryNodesData, GetCleanupInventoryNodesError, GetCleanupInventoryNodesResponse, GetCleanupInventoryResponse, GetCleanupTrashData, GetCleanupTrashError, GetCleanupTrashResponse, GetConfigData, GetConfigResponse, GetConfigSchemaData, GetConfigSchemaResponse, GetDbSchemaData, GetDbSchemaResponse, GetFacetData, GetFacetError, GetFacetResponse, GetFeedData, GetFeedError, GetFeedResponse, GetLibraryData, GetLibraryError, GetLibraryResponse, GetMediaData, GetMediaError, GetMediaResponse, GetMetadataData, GetMetadataError, GetMetadataResponse, GetMetadataSchemaData, GetMetadataSchemaResponse, GetPathTemplateSchemaData, GetPathTemplateSchemaError, GetPathTemplateSchemaResponse, GetPluginData, GetPluginError, GetPluginResponse, GetReleaseData, GetReleaseResponse, GetSavedQueryData, GetSavedQueryError, GetSavedQueryResponse, GetSavedQueryResultData, GetSavedQueryResultError, GetSavedQueryResultResponse, GetScheduleData, GetScheduleError, GetScheduleResponse, GetScheduleSchemaData, GetScheduleSchemaResponse, GetTaskChildrenData, GetTaskChildrenError, GetTaskChildrenResponse, GetTaskData, GetTaskError, GetTaskLogData, GetTaskLogError, GetTaskLogResponse, GetTaskRecordData, GetTaskRecordError, GetTaskResponse, GetTaskSchemaData, GetTaskSchemaResponse, GetTaskWorkerData, GetTaskWorkerResponse, GetToolCatalogData, GetToolCatalogResponse, GetToolDetailData, GetToolDetailError, GetToolDetailResponse, HealthCheckData, HealthCheckResponse, ImageInfoData, ImageInfoError, ImageInfoResponse2, ImportActorNameMappingsData, ImportActorNameMappingsError, ImportActorNameMappingsResponse, ImportMappingsData, ImportMappingsError, InstallPluginData, InstallPluginError, InstallPluginResponse, ListActorNameMappingsData, ListActorNameMappingsError, ListActorNameMappingsResponse, ListActorsData, ListActorsError, ListActorsResponse, ListAgentSessionsData, ListAgentSessionsResponse, ListAllFeedItemsData, ListAllFeedItemsError, ListAllFeedItemsResponse, ListFacetRulesData, ListFacetRulesError, ListFacetRulesResponse, ListFacetsData, ListFacetsError, ListFacetsResponse, ListFeedItemsData, ListFeedItemsError, ListFeedItemsResponse, ListFeedsData, ListFeedsResponse, ListFilesData, ListFilesError, ListFilesResponse, ListLibrariesData, ListLibrariesResponse, ListMappingsData, ListMappingsError, ListMediaData, ListMediaError, ListMediaResponse, ListMetadataData, ListMetadataError, ListMetadataResponse, ListPlaybackSourcesData, ListPlaybackSourcesResponse, ListPlaybackStreamsData, ListPlaybackStreamsError, ListPlaybackStreamsResponse, ListPluginsData, ListPluginsResponse, ListSavedQueriesData, ListSavedQueriesError, ListSavedQueriesResponse, ListSchedulesData, ListSchedulesResponse, ListScrapedFilenamesData, ListScrapedFilenamesError, ListScrapedFilenamesResponse, ListTasksData, ListTasksError, ListTasksResponse, MergeFacetsData, MergeFacetsError, MergeFacetsResponse, MergeMetadataData, MergeMetadataEntriesData, MergeMetadataEntriesError, MergeMetadataEntriesResponse, MergeMetadataError, MergeMetadataResponse, PauseTaskWorkerData, PauseTaskWorkerResponse, PlayMetadataData, PlayMetadataError, PlayMetadataHlsPartData, PlayMetadataHlsPartError, PlayMetadataPlaylistData, PlayMetadataPlaylistError, PlayMetadataSubtitleData, PlayMetadataSubtitleError, PlayStreamData, PlayStreamError, PlayStreamHlsPartData, PlayStreamHlsPartError, PlayStreamPlaylistData, PlayStreamPlaylistError, PlayStreamSubtitleData, PlayStreamSubtitleError, PollFeedData, PollFeedError, PollFeedResponse, PreviewScrapeData, PreviewScrapeError, PreviewScrapeResponse, ProxyImageData, ProxyImageError, ReleaseSemanticData, ReleaseSemanticResponse, ReloadPluginsData, ReloadPluginsResponse, RemoveImageData, RemoveImageError, RemoveImageResponse, RenameFacetData, RenameFacetError, RenameFacetResponse, RestartServerData, RestoreMappingData, RestoreMappingError, ResumeTaskWorkerData, ResumeTaskWorkerResponse, SaveActorNameMappingData, SaveActorNameMappingError, SaveActorNameMappingResponse, SaveMappingData, SaveMappingError, ScrapeActorData, ScrapeActorError, ScrapeActorResponse, SemanticDiagnosticsData, SemanticDiagnosticsResponse2, SemanticStatusData, SemanticStatusResponse2, ServeResourceData, ServeResourceError, SetActorLocksData, SetActorLocksError, SetActorLocksResponse, SetMetadataLocksData, SetMetadataLocksError, SetMetadataLocksResponse, SubmitTaskData, SubmitTaskError, SubmitTaskResponse, SuggestMappingsData, SuggestMappingsError, TriggerScheduleData, TriggerScheduleError, TriggerScheduleResponse, UninstallPluginData, UninstallPluginError, UninstallPluginResponse, UpdateActorData, UpdateActorError, UpdateActorResponse, UpdateAgentSessionData, UpdateAgentSessionError, UpdateAgentSessionResponse, UpdateCommentData, UpdateCommentError, UpdateCommentResponse, UpdateConfigData, UpdateConfigError, UpdateConfigResponse, UpdateFeedData, UpdateFeedError, UpdateFeedResponse, UpdateLibraryData, UpdateLibraryError, UpdateLibraryResponse, UpdateMediaData, UpdateMediaError, UpdateMediaResponse, UpdateMetadataData, UpdateMetadataError, UpdateMetadataResponse, UpdatePluginData, UpdatePluginError, UpdatePluginResponse, UpdateSavedQueryData, UpdateSavedQueryError, UpdateSavedQueryResponse, UpdateScheduleData, UpdateScheduleError, UpdateScheduleResponse, UploadPosterData, UploadPosterError, UploadPosterResponse, UploadThumbData, UploadThumbError, UploadThumbResponse } from '../types.gen';
+import { adoptPoster, adoptThumb, batchActorGender, batchActorUserTags, batchClearActorPerson, batchDeleteMedia, batchDeleteMetadata, batchFacets, batchFeedItems, batchMetadataUserTags, batchSavedQueries, batchScrapeMetadata, batchSubmitTasks, batchTasks, browserBackends, callTool, cancelAguiTurn, checkConnectivity, clearActorPerson, clearScrapedFilenames, clouddriveNotify, createAgentSession, createComment, createFeed, createLibrary, createSavedQuery, createSchedule, createUserTags, cropActorAvatar, cropPosterFromThumb, deleteAgentSession, deleteComment, deleteFacet, deleteFacetRule, deleteFeed, deleteLibrary, deleteMapping, deleteMedia, deleteMetadata, deleteSchedule, desktopInfo, expandCleanupSelection, exportMappings, generateAgentSessionTitle, getActor, getAgentGuide, getAgentTrace, getCleanupInventory, getCleanupInventoryNodes, getCleanupTrash, getConfig, getConfigSchema, getDbSchema, getFacet, getFeed, getLibrary, getMedia, getMetadata, getMetadataSchema, getPathTemplateSchema, getPlugin, getRelease, getSavedQuery, getSavedQueryResult, getSchedule, getScheduleSchema, getTask, getTaskChildren, getTaskLog, getTaskRecord, getTaskSchema, getTaskWorker, getToolCatalog, getToolDetail, healthCheck, imageInfo, importMappings, installPlugin, listActors, listAgentSessions, listAllFeedItems, listFacetRules, listFacets, listFeedItems, listFeeds, listFiles, listLibraries, listMappingGroups, listMappings, listMedia, listMetadata, listPlaybackSources, listPlaybackStreams, listPlugins, listSavedQueries, listSchedules, listScrapedFilenames, listTasks, mergeFacets, mergeMetadata, mergeMetadataEntries, type Options, pauseTaskWorker, playMetadata, playMetadataHlsPart, playMetadataPlaylist, playMetadataSubtitle, playStream, playStreamHlsPart, playStreamPlaylist, playStreamSubtitle, pollFeed, previewScrape, proxyImage, releaseSemantic, reloadPlugins, removeImage, renameFacet, restartServer, restoreMapping, resumeTaskWorker, saveMapping, scrapeActor, semanticDiagnostics, semanticStatus, serveResource, setActorLocks, setMetadataLocks, submitTask, suggestMappings, triggerSchedule, uninstallPlugin, updateActor, updateAgentSession, updateComment, updateConfig, updateFeed, updateLibrary, updateMedia, updateMetadata, updatePlugin, updateSavedQuery, updateSchedule, uploadPoster, uploadThumb } from '../sdk.gen';
+import type { AdoptPosterData, AdoptPosterError, AdoptPosterResponse, AdoptThumbData, AdoptThumbError, AdoptThumbResponse, BatchActorGenderData, BatchActorGenderError, BatchActorGenderResponse, BatchActorUserTagsData, BatchActorUserTagsError, BatchActorUserTagsResponse, BatchClearActorPersonData, BatchClearActorPersonError, BatchClearActorPersonResponse, BatchDeleteMediaData, BatchDeleteMediaError, BatchDeleteMediaResponse, BatchDeleteMetadataData, BatchDeleteMetadataError, BatchDeleteMetadataResponse, BatchFacetsData, BatchFacetsError, BatchFacetsResponse, BatchFeedItemsData, BatchFeedItemsError, BatchFeedItemsResponse, BatchMetadataUserTagsData, BatchMetadataUserTagsError, BatchMetadataUserTagsResponse, BatchSavedQueriesData, BatchSavedQueriesError, BatchSavedQueriesResponse, BatchScrapeMetadataData, BatchScrapeMetadataError, BatchScrapeMetadataResponse, BatchSubmitTasksData, BatchSubmitTasksError, BatchSubmitTasksResponse, BatchTasksData, BatchTasksError, BatchTasksResponse, BrowserBackendsData, BrowserBackendsResponse, CallToolData, CallToolError, CancelAguiTurnData, CancelAguiTurnError, CancelAguiTurnResponse, CheckConnectivityData, CheckConnectivityError, CheckConnectivityResponse, ClearActorPersonData, ClearActorPersonError, ClearActorPersonResponse, ClearScrapedFilenamesData, ClearScrapedFilenamesError, ClearScrapedFilenamesResponse, ClouddriveNotifyData, ClouddriveNotifyError, ClouddriveNotifyResponse, CreateAgentSessionData, CreateAgentSessionError, CreateAgentSessionResponse, CreateCommentData, CreateCommentError, CreateCommentResponse, CreateFeedData, CreateFeedError, CreateFeedResponse, CreateLibraryData, CreateLibraryError, CreateLibraryResponse, CreateSavedQueryData, CreateSavedQueryError, CreateSavedQueryResponse, CreateScheduleData, CreateScheduleError, CreateScheduleResponse, CreateUserTagsData, CreateUserTagsError, CreateUserTagsResponse, CropActorAvatarData, CropActorAvatarError, CropActorAvatarResponse, CropPosterFromThumbData, CropPosterFromThumbError, CropPosterFromThumbResponse, DeleteAgentSessionData, DeleteAgentSessionError, DeleteAgentSessionResponse, DeleteCommentData, DeleteCommentError, DeleteCommentResponse, DeleteFacetData, DeleteFacetError, DeleteFacetResponse, DeleteFacetRuleData, DeleteFacetRuleError, DeleteFacetRuleResponse, DeleteFeedData, DeleteFeedError, DeleteFeedResponse, DeleteLibraryData, DeleteLibraryError, DeleteLibraryResponse, DeleteMappingData, DeleteMappingError, DeleteMappingResponse, DeleteMediaData, DeleteMediaError, DeleteMediaResponse, DeleteMetadataData, DeleteMetadataError, DeleteMetadataResponse, DeleteScheduleData, DeleteScheduleError, DeleteScheduleResponse, DesktopInfoData, DesktopInfoResponse, ExpandCleanupSelectionData, ExpandCleanupSelectionError, ExpandCleanupSelectionResponse, ExportMappingsData, ExportMappingsError, GenerateAgentSessionTitleData, GenerateAgentSessionTitleError, GenerateAgentSessionTitleResponse, GetActorData, GetActorError, GetActorResponse, GetAgentGuideData, GetAgentGuideResponse, GetAgentTraceData, GetAgentTraceError, GetAgentTraceResponse, GetCleanupInventoryData, GetCleanupInventoryError, GetCleanupInventoryNodesData, GetCleanupInventoryNodesError, GetCleanupInventoryNodesResponse, GetCleanupInventoryResponse, GetCleanupTrashData, GetCleanupTrashError, GetCleanupTrashResponse, GetConfigData, GetConfigResponse, GetConfigSchemaData, GetConfigSchemaResponse, GetDbSchemaData, GetDbSchemaResponse, GetFacetData, GetFacetError, GetFacetResponse, GetFeedData, GetFeedError, GetFeedResponse, GetLibraryData, GetLibraryError, GetLibraryResponse, GetMediaData, GetMediaError, GetMediaResponse, GetMetadataData, GetMetadataError, GetMetadataResponse, GetMetadataSchemaData, GetMetadataSchemaResponse, GetPathTemplateSchemaData, GetPathTemplateSchemaError, GetPathTemplateSchemaResponse, GetPluginData, GetPluginError, GetPluginResponse, GetReleaseData, GetReleaseResponse, GetSavedQueryData, GetSavedQueryError, GetSavedQueryResponse, GetSavedQueryResultData, GetSavedQueryResultError, GetSavedQueryResultResponse, GetScheduleData, GetScheduleError, GetScheduleResponse, GetScheduleSchemaData, GetScheduleSchemaResponse, GetTaskChildrenData, GetTaskChildrenError, GetTaskChildrenResponse, GetTaskData, GetTaskError, GetTaskLogData, GetTaskLogError, GetTaskLogResponse, GetTaskRecordData, GetTaskRecordError, GetTaskResponse, GetTaskSchemaData, GetTaskSchemaResponse, GetTaskWorkerData, GetTaskWorkerResponse, GetToolCatalogData, GetToolCatalogResponse, GetToolDetailData, GetToolDetailError, GetToolDetailResponse, HealthCheckData, HealthCheckResponse, ImageInfoData, ImageInfoError, ImageInfoResponse2, ImportMappingsData, ImportMappingsError, InstallPluginData, InstallPluginError, InstallPluginResponse, ListActorsData, ListActorsError, ListActorsResponse, ListAgentSessionsData, ListAgentSessionsResponse, ListAllFeedItemsData, ListAllFeedItemsError, ListAllFeedItemsResponse, ListFacetRulesData, ListFacetRulesError, ListFacetRulesResponse, ListFacetsData, ListFacetsError, ListFacetsResponse, ListFeedItemsData, ListFeedItemsError, ListFeedItemsResponse, ListFeedsData, ListFeedsResponse, ListFilesData, ListFilesError, ListFilesResponse, ListLibrariesData, ListLibrariesResponse, ListMappingGroupsData, ListMappingGroupsResponse, ListMappingsData, ListMappingsError, ListMediaData, ListMediaError, ListMediaResponse, ListMetadataData, ListMetadataError, ListMetadataResponse, ListPlaybackSourcesData, ListPlaybackSourcesResponse, ListPlaybackStreamsData, ListPlaybackStreamsError, ListPlaybackStreamsResponse, ListPluginsData, ListPluginsResponse, ListSavedQueriesData, ListSavedQueriesError, ListSavedQueriesResponse, ListSchedulesData, ListSchedulesResponse, ListScrapedFilenamesData, ListScrapedFilenamesError, ListScrapedFilenamesResponse, ListTasksData, ListTasksError, ListTasksResponse, MergeFacetsData, MergeFacetsError, MergeFacetsResponse, MergeMetadataData, MergeMetadataEntriesData, MergeMetadataEntriesError, MergeMetadataEntriesResponse, MergeMetadataError, MergeMetadataResponse, PauseTaskWorkerData, PauseTaskWorkerResponse, PlayMetadataData, PlayMetadataError, PlayMetadataHlsPartData, PlayMetadataHlsPartError, PlayMetadataPlaylistData, PlayMetadataPlaylistError, PlayMetadataSubtitleData, PlayMetadataSubtitleError, PlayStreamData, PlayStreamError, PlayStreamHlsPartData, PlayStreamHlsPartError, PlayStreamPlaylistData, PlayStreamPlaylistError, PlayStreamSubtitleData, PlayStreamSubtitleError, PollFeedData, PollFeedError, PollFeedResponse, PreviewScrapeData, PreviewScrapeError, PreviewScrapeResponse, ProxyImageData, ProxyImageError, ReleaseSemanticData, ReleaseSemanticResponse, ReloadPluginsData, ReloadPluginsResponse, RemoveImageData, RemoveImageError, RemoveImageResponse, RenameFacetData, RenameFacetError, RenameFacetResponse, RestartServerData, RestoreMappingData, RestoreMappingError, ResumeTaskWorkerData, ResumeTaskWorkerResponse, SaveMappingData, SaveMappingError, ScrapeActorData, ScrapeActorError, ScrapeActorResponse, SemanticDiagnosticsData, SemanticDiagnosticsResponse2, SemanticStatusData, SemanticStatusResponse2, ServeResourceData, ServeResourceError, SetActorLocksData, SetActorLocksError, SetActorLocksResponse, SetMetadataLocksData, SetMetadataLocksError, SetMetadataLocksResponse, SubmitTaskData, SubmitTaskError, SubmitTaskResponse, SuggestMappingsData, SuggestMappingsError, TriggerScheduleData, TriggerScheduleError, TriggerScheduleResponse, UninstallPluginData, UninstallPluginError, UninstallPluginResponse, UpdateActorData, UpdateActorError, UpdateActorResponse, UpdateAgentSessionData, UpdateAgentSessionError, UpdateAgentSessionResponse, UpdateCommentData, UpdateCommentError, UpdateCommentResponse, UpdateConfigData, UpdateConfigError, UpdateConfigResponse, UpdateFeedData, UpdateFeedError, UpdateFeedResponse, UpdateLibraryData, UpdateLibraryError, UpdateLibraryResponse, UpdateMediaData, UpdateMediaError, UpdateMediaResponse, UpdateMetadataData, UpdateMetadataError, UpdateMetadataResponse, UpdatePluginData, UpdatePluginError, UpdatePluginResponse, UpdateSavedQueryData, UpdateSavedQueryError, UpdateSavedQueryResponse, UpdateScheduleData, UpdateScheduleError, UpdateScheduleResponse, UploadPosterData, UploadPosterError, UploadPosterResponse, UploadThumbData, UploadThumbError, UploadThumbResponse } from '../types.gen';
 
 export type QueryKey<TOptions extends Options> = [
     Pick<TOptions, 'baseUrl' | 'body' | 'headers' | 'path' | 'query'> & {
@@ -2406,12 +2406,32 @@ export const getTaskRecordOptions = (options: Options<GetTaskRecordData>) => que
     queryKey: getTaskRecordQueryKey(options)
 });
 
-export const listMappingsQueryKey = (options?: Options<ListMappingsData>) => createQueryKey('listMappings', options);
+export const listMappingGroupsQueryKey = (options?: Options<ListMappingGroupsData>) => createQueryKey('listMappingGroups', options);
+
+/**
+ * List Mapping Groups
+ *
+ * 可维护的映射组; 前端据此渲染滑动选项与各组的分类范围, 不在前端硬编码名单.
+ */
+export const listMappingGroupsOptions = (options?: Options<ListMappingGroupsData>) => queryOptions<ListMappingGroupsResponse, DefaultError, ListMappingGroupsResponse, ReturnType<typeof listMappingGroupsQueryKey>>({
+    queryFn: async ({ queryKey, signal }) => {
+        const { data } = await listMappingGroups({
+            ...options,
+            ...queryKey[0],
+            signal,
+            throwOnError: true
+        });
+        return data;
+    },
+    queryKey: listMappingGroupsQueryKey(options)
+});
+
+export const listMappingsQueryKey = (options: Options<ListMappingsData>) => createQueryKey('listMappings', options);
 
 /**
  * List Mappings
  */
-export const listMappingsOptions = (options?: Options<ListMappingsData>) => queryOptions<unknown, ListMappingsError, unknown, ReturnType<typeof listMappingsQueryKey>>({
+export const listMappingsOptions = (options: Options<ListMappingsData>) => queryOptions<unknown, ListMappingsError, unknown, ReturnType<typeof listMappingsQueryKey>>({
     queryFn: async ({ queryKey, signal }) => {
         const { data } = await listMappings({
             ...options,
@@ -2424,12 +2444,12 @@ export const listMappingsOptions = (options?: Options<ListMappingsData>) => quer
     queryKey: listMappingsQueryKey(options)
 });
 
-export const listMappingsInfiniteQueryKey = (options?: Options<ListMappingsData>): QueryKey<Options<ListMappingsData>> => createQueryKey('listMappings', options, true);
+export const listMappingsInfiniteQueryKey = (options: Options<ListMappingsData>): QueryKey<Options<ListMappingsData>> => createQueryKey('listMappings', options, true);
 
 /**
  * List Mappings
  */
-export const listMappingsInfiniteOptions = (options?: Options<ListMappingsData>) => {
+export const listMappingsInfiniteOptions = (options: Options<ListMappingsData>) => {
     const opts = infiniteQueryOptions<unknown, ListMappingsError, InfiniteData<unknown>, QueryKey<Options<ListMappingsData>>, number | Pick<QueryKey<Options<ListMappingsData>>[0], 'body' | 'headers' | 'path' | 'query'>>(
     // @ts-ignore
     {
@@ -2474,7 +2494,9 @@ export const saveMappingMutation = (options?: Partial<Options<SaveMappingData>>)
 /**
  * Delete Mapping
  *
- * 归档词条: 不真删, 否则它会在下次 seed 时按标签表重建出来.
+ * 标签归档 (不真删), 其余两组真删.
+ *
+ * 标签不真删: 它会在下次对账时按分类表重建出来, 用户看到的就是「删了又回来」.
  */
 export const deleteMappingMutation = (options?: Partial<Options<DeleteMappingData>>): UseMutationOptions<DeleteMappingResponse, DeleteMappingError, Options<DeleteMappingData>> => {
     const mutationOptions: UseMutationOptions<DeleteMappingResponse, DeleteMappingError, Options<DeleteMappingData>> = {
@@ -2493,7 +2515,7 @@ export const deleteMappingMutation = (options?: Partial<Options<DeleteMappingDat
 /**
  * Restore Mapping
  *
- * 把归档的词条放回主列表.
+ * 把标签归档区的词条放回主列表.
  */
 export const restoreMappingMutation = (options?: Partial<Options<RestoreMappingData>>): UseMutationOptions<unknown, RestoreMappingError, Options<RestoreMappingData>> => {
     const mutationOptions: UseMutationOptions<unknown, RestoreMappingError, Options<RestoreMappingData>> = {
@@ -2509,12 +2531,12 @@ export const restoreMappingMutation = (options?: Partial<Options<RestoreMappingD
     return mutationOptions;
 };
 
-export const exportMappingsQueryKey = (options?: Options<ExportMappingsData>) => createQueryKey('exportMappings', options);
+export const exportMappingsQueryKey = (options: Options<ExportMappingsData>) => createQueryKey('exportMappings', options);
 
 /**
  * Export Mappings
  */
-export const exportMappingsOptions = (options?: Options<ExportMappingsData>) => queryOptions<unknown, DefaultError, unknown, ReturnType<typeof exportMappingsQueryKey>>({
+export const exportMappingsOptions = (options: Options<ExportMappingsData>) => queryOptions<unknown, ExportMappingsError, unknown, ReturnType<typeof exportMappingsQueryKey>>({
     queryFn: async ({ queryKey, signal }) => {
         const { data } = await exportMappings({
             ...options,
@@ -2553,123 +2575,6 @@ export const suggestMappingsMutation = (options?: Partial<Options<SuggestMapping
     const mutationOptions: UseMutationOptions<unknown, SuggestMappingsError, Options<SuggestMappingsData>> = {
         mutationFn: async (fnOptions) => {
             const { data } = await suggestMappings({
-                ...options,
-                ...fnOptions,
-                throwOnError: true
-            });
-            return data;
-        }
-    };
-    return mutationOptions;
-};
-
-export const listActorNameMappingsQueryKey = (options?: Options<ListActorNameMappingsData>) => createQueryKey('listActorNameMappings', options);
-
-/**
- * List Actor Name Mappings
- */
-export const listActorNameMappingsOptions = (options?: Options<ListActorNameMappingsData>) => queryOptions<ListActorNameMappingsResponse, ListActorNameMappingsError, ListActorNameMappingsResponse, ReturnType<typeof listActorNameMappingsQueryKey>>({
-    queryFn: async ({ queryKey, signal }) => {
-        const { data } = await listActorNameMappings({
-            ...options,
-            ...queryKey[0],
-            signal,
-            throwOnError: true
-        });
-        return data;
-    },
-    queryKey: listActorNameMappingsQueryKey(options)
-});
-
-export const listActorNameMappingsInfiniteQueryKey = (options?: Options<ListActorNameMappingsData>): QueryKey<Options<ListActorNameMappingsData>> => createQueryKey('listActorNameMappings', options, true);
-
-/**
- * List Actor Name Mappings
- */
-export const listActorNameMappingsInfiniteOptions = (options?: Options<ListActorNameMappingsData>) => {
-    const opts = infiniteQueryOptions<ListActorNameMappingsResponse, ListActorNameMappingsError, InfiniteData<ListActorNameMappingsResponse>, QueryKey<Options<ListActorNameMappingsData>>, number | Pick<QueryKey<Options<ListActorNameMappingsData>>[0], 'body' | 'headers' | 'path' | 'query'>>(
-    // @ts-ignore
-    {
-        queryFn: async ({ pageParam, queryKey, signal }) => {
-            // @ts-ignore
-            const page: Pick<QueryKey<Options<ListActorNameMappingsData>>[0], 'body' | 'headers' | 'path' | 'query'> = typeof pageParam === 'object' ? pageParam : {
-                query: {
-                    offset: pageParam
-                }
-            };
-            const params = createInfiniteParams(queryKey, page);
-            const { data } = await listActorNameMappings({
-                ...options,
-                ...params,
-                signal,
-                throwOnError: true
-            });
-            return data;
-        },
-        queryKey: listActorNameMappingsInfiniteQueryKey(options)
-    });
-    return opts as Omit<typeof opts, 'initialData'>;
-};
-
-/**
- * Save Actor Name Mapping
- */
-export const saveActorNameMappingMutation = (options?: Partial<Options<SaveActorNameMappingData>>): UseMutationOptions<SaveActorNameMappingResponse, SaveActorNameMappingError, Options<SaveActorNameMappingData>> => {
-    const mutationOptions: UseMutationOptions<SaveActorNameMappingResponse, SaveActorNameMappingError, Options<SaveActorNameMappingData>> = {
-        mutationFn: async (fnOptions) => {
-            const { data } = await saveActorNameMapping({
-                ...options,
-                ...fnOptions,
-                throwOnError: true
-            });
-            return data;
-        }
-    };
-    return mutationOptions;
-};
-
-/**
- * Delete Actor Name Mapping
- */
-export const deleteActorNameMappingMutation = (options?: Partial<Options<DeleteActorNameMappingData>>): UseMutationOptions<DeleteActorNameMappingResponse, DeleteActorNameMappingError, Options<DeleteActorNameMappingData>> => {
-    const mutationOptions: UseMutationOptions<DeleteActorNameMappingResponse, DeleteActorNameMappingError, Options<DeleteActorNameMappingData>> = {
-        mutationFn: async (fnOptions) => {
-            const { data } = await deleteActorNameMapping({
-                ...options,
-                ...fnOptions,
-                throwOnError: true
-            });
-            return data;
-        }
-    };
-    return mutationOptions;
-};
-
-export const exportActorNameMappingsQueryKey = (options?: Options<ExportActorNameMappingsData>) => createQueryKey('exportActorNameMappings', options);
-
-/**
- * Export Actor Name Mappings
- */
-export const exportActorNameMappingsOptions = (options?: Options<ExportActorNameMappingsData>) => queryOptions<unknown, DefaultError, unknown, ReturnType<typeof exportActorNameMappingsQueryKey>>({
-    queryFn: async ({ queryKey, signal }) => {
-        const { data } = await exportActorNameMappings({
-            ...options,
-            ...queryKey[0],
-            signal,
-            throwOnError: true
-        });
-        return data;
-    },
-    queryKey: exportActorNameMappingsQueryKey(options)
-});
-
-/**
- * Import Actor Name Mappings
- */
-export const importActorNameMappingsMutation = (options?: Partial<Options<ImportActorNameMappingsData>>): UseMutationOptions<ImportActorNameMappingsResponse, ImportActorNameMappingsError, Options<ImportActorNameMappingsData>> => {
-    const mutationOptions: UseMutationOptions<ImportActorNameMappingsResponse, ImportActorNameMappingsError, Options<ImportActorNameMappingsData>> = {
-        mutationFn: async (fnOptions) => {
-            const { data } = await importActorNameMappings({
                 ...options,
                 ...fnOptions,
                 throwOnError: true

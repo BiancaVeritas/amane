@@ -508,7 +508,7 @@ async def test_matches_person_renamed_to_display_name(
     client = _FakeClient([_person("波多野结衣")])
 
     handler = ActorPushHandler(
-        repo, resource_store, _hot(), client_factory=lambda _: client, actor_mapping_path=mapping
+        repo, resource_store, _hot(), client_factory=lambda _: client, mapping_dir=tmp_path
     )
     result = await handler.handle(ActorPushPayload())
 

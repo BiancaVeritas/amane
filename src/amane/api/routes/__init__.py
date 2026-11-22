@@ -1,6 +1,5 @@
 from fastapi import APIRouter
 
-from .actor_name_mappings import router as actor_name_mappings_router
 from .actors import router as actors_router
 from .agent import router as agent_router
 from .agent_agui import router as agent_agui_router
@@ -13,6 +12,7 @@ from .feeds import router as feeds_router
 from .files import router as files_router
 from .health import router as health_router
 from .libraries import router as libraries_router
+from .mappings import router as mappings_router
 from .media import router as media_router
 from .metadata import router as metadata_router
 from .network import router as network_router
@@ -23,7 +23,6 @@ from .saved_queries import router as saved_queries_router
 from .schedules import router as schedules_router
 from .semantic import router as semantic_router
 from .system import router as system_router
-from .tag_mappings import router as tag_mappings_router
 from .tasks import router as tasks_router
 from .tools import router as tools_router
 from .webhooks import router as webhooks_router
@@ -50,8 +49,7 @@ router.include_router(resources_router)
 router.include_router(schedules_router)
 router.include_router(system_router)
 router.include_router(tasks_router)
-router.include_router(tag_mappings_router)
-router.include_router(actor_name_mappings_router)
+router.include_router(mappings_router)
 router.include_router(tools_router)
 router.include_router(libraries_router)
 router.include_router(webhooks_router)

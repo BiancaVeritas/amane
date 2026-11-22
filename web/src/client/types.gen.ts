@@ -115,20 +115,6 @@ export type ActorLocksRequest = {
 };
 
 /**
- * ActorNameUpdate
- */
-export type ActorNameUpdate = {
-    /**
-     * Original
-     */
-    original: string;
-    /**
-     * Translation
-     */
-    translation?: string | null;
-};
-
-/**
  * ActorPushResult
  */
 export type ActorPushResult = {
@@ -1043,7 +1029,7 @@ export type ConnectivityStatus = 'ok' | 'failed' | 'skipped';
 /**
  * ContentType
  */
-export type ContentType = 'censored' | 'uncensored' | 'chinese' | 'western' | 'fc2' | 'amateur' | 'hentai';
+export type ContentType = 'censored' | 'uncensored' | 'chinese' | 'western' | 'fc2' | 'heydouga' | 'amateur' | 'hentai';
 
 /**
  * CropAlign
@@ -2659,6 +2645,13 @@ export type LoggingConfig = {
 export type Manufacturer = 'attackers' | 'befree' | 'bi' | 'bibian' | 'das' | 'ebody' | 'fitch' | 'hajime_kikaku' | 'honnaka' | 'hunter' | 'idea_pocket' | 'kawaii' | 'kirakira' | 'madonna' | 'miman' | 'mko_labo' | 'moodyz' | 'muku' | 'mvg' | 'nanpa_japan' | 'oppai' | 'opera' | 'premium_beauty' | 'rookie' | 's1' | 'tameikegoro' | 'tosatsu' | 'v' | 'wanz_factory';
 
 /**
+ * MappingGroup
+ *
+ * 页面上的滑动选项; 每项一张表, 各自独立对账与展示.
+ */
+export type MappingGroup = 'tag' | 'actor' | 'vendor';
+
+/**
  * MappingUpdate
  */
 export type MappingUpdate = {
@@ -2990,6 +2983,12 @@ export type MetadataDetailResponse = {
     actor_display_names?: {
         [key: string]: string;
     };
+    /**
+     * Tags
+     *
+     * 标签的 (原名, 展示名) 对照, 保序去重; 详情页据此在原文与译文间切换
+     */
+    tags?: Array<TagPair>;
     /**
      * Director Ids
      */
@@ -5038,19 +5037,19 @@ export type ScrapingConfig = {
      * Content Routes
      */
     content_routes?: {
-        [key in ContentType]?: Array<'airav' | 'avbase' | 'aventertainments' | 'avsox' | 'dahlia' | 'd2pass' | 'dmm' | 'faleno' | 'fc2' | 'fc2club' | 'fc2ppvdb' | 'freejavbt' | 'getchu' | 'giga' | 'iqqtv' | 'jav321' | 'javbus' | 'javdb' | 'javlibrary' | 'kin8' | 'mgstage' | 'muramura' | 'official' | '1pondo' | 'pacopacomama' | 'caribbeancom' | 'caribbeancompr' | 'prestige' | 'r18dev' | '10musume' | 'tokyo_hot' | 'theporndb' | 'xcity'>;
+        [key in ContentType]?: Array<'airav' | 'avbase' | 'aventertainments' | 'avsox' | 'dahlia' | 'd2pass' | 'dmm' | 'faleno' | 'fc2' | 'fc2club' | 'fc2ppvdb' | 'freejavbt' | 'getchu' | 'giga' | 'heydouga' | 'iqqtv' | 'jav321' | 'javbus' | 'javdb' | 'javlibrary' | 'kin8' | 'mgstage' | 'muramura' | 'official' | '1pondo' | 'pacopacomama' | 'caribbeancom' | 'caribbeancompr' | 'prestige' | 'r18dev' | 'tangxin' | '10musume' | 'tokyo_hot' | 'theporndb' | 'xcity'>;
     };
     /**
      * Field Priority
      */
     field_priority?: {
-        [key in MetadataField]?: Array<'airav' | 'avbase' | 'aventertainments' | 'avsox' | 'dahlia' | 'd2pass' | 'dmm' | 'faleno' | 'fc2' | 'fc2club' | 'fc2ppvdb' | 'freejavbt' | 'getchu' | 'giga' | 'iqqtv' | 'jav321' | 'javbus' | 'javdb' | 'javlibrary' | 'kin8' | 'mgstage' | 'muramura' | 'official' | '1pondo' | 'pacopacomama' | 'caribbeancom' | 'caribbeancompr' | 'prestige' | 'r18dev' | '10musume' | 'tokyo_hot' | 'theporndb' | 'xcity'>;
+        [key in MetadataField]?: Array<'airav' | 'avbase' | 'aventertainments' | 'avsox' | 'dahlia' | 'd2pass' | 'dmm' | 'faleno' | 'fc2' | 'fc2club' | 'fc2ppvdb' | 'freejavbt' | 'getchu' | 'giga' | 'heydouga' | 'iqqtv' | 'jav321' | 'javbus' | 'javdb' | 'javlibrary' | 'kin8' | 'mgstage' | 'muramura' | 'official' | '1pondo' | 'pacopacomama' | 'caribbeancom' | 'caribbeancompr' | 'prestige' | 'r18dev' | 'tangxin' | '10musume' | 'tokyo_hot' | 'theporndb' | 'xcity'>;
     };
     /**
      * Field Blacklist
      */
     field_blacklist?: {
-        [key in MetadataField]?: Array<'airav' | 'avbase' | 'aventertainments' | 'avsox' | 'dahlia' | 'd2pass' | 'dmm' | 'faleno' | 'fc2' | 'fc2club' | 'fc2ppvdb' | 'freejavbt' | 'getchu' | 'giga' | 'iqqtv' | 'jav321' | 'javbus' | 'javdb' | 'javlibrary' | 'kin8' | 'mgstage' | 'muramura' | 'official' | '1pondo' | 'pacopacomama' | 'caribbeancom' | 'caribbeancompr' | 'prestige' | 'r18dev' | '10musume' | 'tokyo_hot' | 'theporndb' | 'xcity'>;
+        [key in MetadataField]?: Array<'airav' | 'avbase' | 'aventertainments' | 'avsox' | 'dahlia' | 'd2pass' | 'dmm' | 'faleno' | 'fc2' | 'fc2club' | 'fc2ppvdb' | 'freejavbt' | 'getchu' | 'giga' | 'heydouga' | 'iqqtv' | 'jav321' | 'javbus' | 'javdb' | 'javlibrary' | 'kin8' | 'mgstage' | 'muramura' | 'official' | '1pondo' | 'pacopacomama' | 'caribbeancom' | 'caribbeancompr' | 'prestige' | 'r18dev' | 'tangxin' | '10musume' | 'tokyo_hot' | 'theporndb' | 'xcity'>;
     };
     /**
      * Field Language
@@ -5463,7 +5462,7 @@ export type SiteConfig = {
  *
  * 爬虫站点名称 (影片与演员源共用).
  */
-export type SiteName = 'airav' | 'avbase' | 'aventertainments' | 'avsox' | 'dahlia' | 'd2pass' | 'dmm' | 'faleno' | 'fc2' | 'fc2club' | 'fc2ppvdb' | 'freejavbt' | 'getchu' | 'gfriends' | 'giga' | 'iqqtv' | 'jav321' | 'javbus' | 'javdb' | 'javlibrary' | 'kin8' | 'mgstage' | 'minnano' | 'muramura' | 'official' | '1pondo' | 'pacopacomama' | 'caribbeancom' | 'caribbeancompr' | 'prestige' | 'r18dev' | '10musume' | 'tokyo_hot' | 'theporndb' | 'tushy' | 'tushy_raw' | 'wikipedia' | 'xcity';
+export type SiteName = 'airav' | 'avbase' | 'aventertainments' | 'avsox' | 'dahlia' | 'd2pass' | 'dmm' | 'faleno' | 'fc2' | 'fc2club' | 'fc2ppvdb' | 'freejavbt' | 'getchu' | 'gfriends' | 'giga' | 'heydouga' | 'iqqtv' | 'jav321' | 'javbus' | 'javdb' | 'javlibrary' | 'kin8' | 'mgstage' | 'minnano' | 'muramura' | 'official' | '1pondo' | 'pacopacomama' | 'caribbeancom' | 'caribbeancompr' | 'prestige' | 'r18dev' | 'tangxin' | '10musume' | 'tokyo_hot' | 'theporndb' | 'tushy' | 'tushy_raw' | 'wikipedia' | 'xcity';
 
 /**
  * SiteOutcomeKind
@@ -5614,6 +5613,26 @@ export type SuggestRequest = {
      * Originals
      */
     originals: Array<string>;
+};
+
+/**
+ * TagPair
+ *
+ * 一个标签的两种写法: 库里存的原名, 与映射表给出的展示名.
+ *
+ * 成对给出而不只给译文, 是因为详情页要能在两者之间切换; 只给译文时前端只能反查原名,
+ * 而两个不同原名映射到同一译文 (``パイズリ`` 与 ``パイズリ顔射`` 都译作「乳交」) 时
+ * 反查必然丢掉一个.
+ */
+export type TagPair = {
+    /**
+     * Raw
+     */
+    raw: string;
+    /**
+     * Shown
+     */
+    shown: string;
 };
 
 /**
@@ -10029,22 +10048,44 @@ export type GetTaskRecordResponses = {
     200: unknown;
 };
 
-export type ListMappingsData = {
+export type ListMappingGroupsData = {
     body?: never;
     path?: never;
+    query?: never;
+    url: '/api/mappings/groups';
+};
+
+export type ListMappingGroupsResponses = {
+    /**
+     * Response List Mapping Groups
+     *
+     * Successful Response
+     */
+    200: {
+        [key: string]: unknown;
+    };
+};
+
+export type ListMappingGroupsResponse = ListMappingGroupsResponses[keyof ListMappingGroupsResponses];
+
+export type ListMappingsData = {
+    body?: never;
+    path: {
+        group: MappingGroup;
+    };
     query?: {
         /**
          * Status
          */
-        status?: 'all' | 'pending' | 'mapped';
+        status?: string;
         /**
          * Language
          */
-        language?: 'all' | 'ja' | 'en' | 'zh' | 'other';
+        language?: string;
         /**
          * Frequency
          */
-        frequency?: 'all' | 'high';
+        frequency?: string;
         /**
          * Search
          */
@@ -10054,6 +10095,12 @@ export type ListMappingsData = {
          */
         archived?: boolean;
         /**
+         * Kind
+         *
+         * 片商组内按分类过滤: studio / publisher / series
+         */
+        kind?: string | null;
+        /**
          * Offset
          */
         offset?: number;
@@ -10062,7 +10109,7 @@ export type ListMappingsData = {
          */
         limit?: number;
     };
-    url: '/api/tag-mappings';
+    url: '/api/mappings/{group}';
 };
 
 export type ListMappingsErrors = {
@@ -10083,9 +10130,11 @@ export type ListMappingsResponses = {
 
 export type SaveMappingData = {
     body: MappingUpdate;
-    path?: never;
+    path: {
+        group: MappingGroup;
+    };
     query?: never;
-    url: '/api/tag-mappings';
+    url: '/api/mappings/{group}';
 };
 
 export type SaveMappingErrors = {
@@ -10107,13 +10156,14 @@ export type SaveMappingResponses = {
 export type DeleteMappingData = {
     body?: never;
     path: {
+        group: MappingGroup;
         /**
          * Original
          */
         original: string;
     };
     query?: never;
-    url: '/api/tag-mappings/{original}';
+    url: '/api/mappings/{group}/{original}';
 };
 
 export type DeleteMappingErrors = {
@@ -10137,13 +10187,14 @@ export type DeleteMappingResponse = DeleteMappingResponses[keyof DeleteMappingRe
 export type RestoreMappingData = {
     body?: never;
     path: {
+        group: MappingGroup;
         /**
          * Original
          */
         original: string;
     };
     query?: never;
-    url: '/api/tag-mappings/restore/{original}';
+    url: '/api/mappings/{group}/restore/{original}';
 };
 
 export type RestoreMappingErrors = {
@@ -10164,10 +10215,21 @@ export type RestoreMappingResponses = {
 
 export type ExportMappingsData = {
     body?: never;
-    path?: never;
+    path: {
+        group: MappingGroup;
+    };
     query?: never;
-    url: '/api/tag-mappings/export';
+    url: '/api/mappings/{group}/export';
 };
+
+export type ExportMappingsErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ExportMappingsError = ExportMappingsErrors[keyof ExportMappingsErrors];
 
 export type ExportMappingsResponses = {
     /**
@@ -10183,9 +10245,11 @@ export type ImportMappingsData = {
     body: {
         [key: string]: unknown;
     };
-    path?: never;
+    path: {
+        group: MappingGroup;
+    };
     query?: never;
-    url: '/api/tag-mappings/import';
+    url: '/api/mappings/{group}/import';
 };
 
 export type ImportMappingsErrors = {
@@ -10206,9 +10270,11 @@ export type ImportMappingsResponses = {
 
 export type SuggestMappingsData = {
     body: SuggestRequest;
-    path?: never;
+    path: {
+        group: MappingGroup;
+    };
     query?: never;
-    url: '/api/tag-mappings/suggest';
+    url: '/api/mappings/{group}/suggest';
 };
 
 export type SuggestMappingsErrors = {
@@ -10226,155 +10292,6 @@ export type SuggestMappingsResponses = {
      */
     200: unknown;
 };
-
-export type ListActorNameMappingsData = {
-    body?: never;
-    path?: never;
-    query?: {
-        /**
-         * Search
-         */
-        search?: string;
-        /**
-         * Offset
-         */
-        offset?: number;
-        /**
-         * Limit
-         */
-        limit?: number;
-    };
-    url: '/api/actor-name-mappings';
-};
-
-export type ListActorNameMappingsErrors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type ListActorNameMappingsError = ListActorNameMappingsErrors[keyof ListActorNameMappingsErrors];
-
-export type ListActorNameMappingsResponses = {
-    /**
-     * Response List Actor Name Mappings
-     *
-     * Successful Response
-     */
-    200: {
-        [key: string]: unknown;
-    };
-};
-
-export type ListActorNameMappingsResponse = ListActorNameMappingsResponses[keyof ListActorNameMappingsResponses];
-
-export type SaveActorNameMappingData = {
-    body: ActorNameUpdate;
-    path?: never;
-    query?: never;
-    url: '/api/actor-name-mappings';
-};
-
-export type SaveActorNameMappingErrors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type SaveActorNameMappingError = SaveActorNameMappingErrors[keyof SaveActorNameMappingErrors];
-
-export type SaveActorNameMappingResponses = {
-    /**
-     * Response Save Actor Name Mapping
-     *
-     * Successful Response
-     */
-    200: {
-        [key: string]: unknown;
-    };
-};
-
-export type SaveActorNameMappingResponse = SaveActorNameMappingResponses[keyof SaveActorNameMappingResponses];
-
-export type DeleteActorNameMappingData = {
-    body?: never;
-    path: {
-        /**
-         * Original
-         */
-        original: string;
-    };
-    query?: never;
-    url: '/api/actor-name-mappings/{original}';
-};
-
-export type DeleteActorNameMappingErrors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type DeleteActorNameMappingError = DeleteActorNameMappingErrors[keyof DeleteActorNameMappingErrors];
-
-export type DeleteActorNameMappingResponses = {
-    /**
-     * Successful Response
-     */
-    204: void;
-};
-
-export type DeleteActorNameMappingResponse = DeleteActorNameMappingResponses[keyof DeleteActorNameMappingResponses];
-
-export type ExportActorNameMappingsData = {
-    body?: never;
-    path?: never;
-    query?: never;
-    url: '/api/actor-name-mappings/export';
-};
-
-export type ExportActorNameMappingsResponses = {
-    /**
-     * Successful Response
-     */
-    200: unknown;
-};
-
-export type ImportActorNameMappingsData = {
-    /**
-     * Payload
-     */
-    body: {
-        [key: string]: unknown;
-    };
-    path?: never;
-    query?: never;
-    url: '/api/actor-name-mappings/import';
-};
-
-export type ImportActorNameMappingsErrors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type ImportActorNameMappingsError = ImportActorNameMappingsErrors[keyof ImportActorNameMappingsErrors];
-
-export type ImportActorNameMappingsResponses = {
-    /**
-     * Response Import Actor Name Mappings
-     *
-     * Successful Response
-     */
-    200: {
-        [key: string]: unknown;
-    };
-};
-
-export type ImportActorNameMappingsResponse = ImportActorNameMappingsResponses[keyof ImportActorNameMappingsResponses];
 
 export type GetToolCatalogData = {
     body?: never;

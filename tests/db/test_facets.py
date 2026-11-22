@@ -922,3 +922,74 @@ class TestActorUserTags:
         async with repo._session() as session:
             orphans = (await session.exec(select(ActorUserTag).where(col(ActorUserTag.actor_id) == source_id))).all()
             assert list(orphans) == []
+
+
+class TestFacetSources:
+    """分类名的刮削来源来自条目的 field_sources, 不是分类表自己的列."""
+
+    async def test_sources_collected_per_kind(self, repo: Repository) -> None:
+        await repo.upsert_metadata(
+            number="SRC-001",
+            actors=["Alice"],
+            tags=["tag1", "tag2"],
+            studio="StudioX",
+            publisher="PubY",
+            series="SeriesZ",
+            field_sources={
+                "actors": "aventertainments",
+                "tags": "aventertainments",
+                "studio": "aventertainments",
+                "publisher": "aventertainments",
+                "series": "aventertainments",
+            },
+        )
+        await repo.upsert_metadata(
+            number="SRC-002",
+            actors=["Alice", "Bob"],
+            tags=["tag1"],
+            studio="StudioX",
+            field_sources={
+                "actors": "tokyo_hot",
+                "tags": "tokyo_hot",
+                "studio": "tokyo_hot",
+            },
+        )
+
+        # 同一个名字被两个站点刮到: 两个来源都记着.
+        actor_sources = await repo.facet_sources(FacetKind.ACTOR)
+        assert actor_sources["Alice"] == ["aventertainments", "tokyo_hot"]
+        assert actor_sources["Bob"] == ["tokyo_hot"]
+
+        tag_sources = await repo.facet_sources(FacetKind.TAG)
+        assert tag_sources["tag1"] == ["aventertainments", "tokyo_hot"]
+        # 只有一条影片贡献的标签就只有一个来源.
+        assert tag_sources["tag2"] == ["aventertainments"]
+
+        assert (await repo.facet_sources(FacetKind.STUDIO))["StudioX"] == [
+            "aventertainments",
+            "tokyo_hot",
+        ]
+        # 第二条影片没给 publisher / series 来源, 各留原样.
+        assert (await repo.facet_sources(FacetKind.PUBLISHER))["PubY"] == ["aventertainments"]
+        assert (await repo.facet_sources(FacetKind.SERIES))["SeriesZ"] == ["aventertainments"]
+
+    async def test_missing_source_column_yields_empty(self, repo: Repository) -> None:
+        """没记录来源的字段不返回空壳; 用户标签与导演没有来源列, 恒为空表."""
+        await repo.upsert_metadata(number="SRC-003", actors=["Solo"], tags=["lonely"])
+
+        assert await repo.facet_sources(FacetKind.ACTOR) == {}
+        assert await repo.facet_sources(FacetKind.TAG) == {}
+        assert await repo.facet_sources(FacetKind.USER_TAG) == {}
+        assert await repo.facet_sources(FacetKind.DIRECTOR) == {}
+
+    async def test_series_uses_multi_value_column(self, repo: Repository) -> None:
+        """系列是多值分类: 真值列是 series_names, 来源按该列聚合."""
+        await repo.upsert_metadata(
+            number="SRC-004",
+            series_names=["Alpha", "Beta"],
+            field_sources={"series": "tokyo_hot"},
+        )
+
+        sources = await repo.facet_sources(FacetKind.SERIES)
+        assert sources["Alpha"] == ["tokyo_hot"]
+        assert sources["Beta"] == ["tokyo_hot"]

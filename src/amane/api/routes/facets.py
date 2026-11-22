@@ -5,7 +5,7 @@ from fastapi import APIRouter, HTTPException, Query, Response
 
 from ...db.models import FAVORITE_FACET_KINDS, SCRAPE_FACET_KINDS, FacetKind, FacetSortField, SortOrder
 from ...db.repo_types import FacetItem
-from ...tags.mapping import TagMappingStore
+from ...tags import MappingGroup, TagMappingStore
 from ...utils.model import to_resp
 from ..deps import RepoDep, RuntimeDep
 from ..models import (
@@ -30,6 +30,22 @@ router = APIRouter(prefix="/facets", tags=["facets"])
 
 def _facet_response(item: FacetItem) -> FacetResponse:
     return FacetResponse(id=item.id, name=item.name, count=item.count, is_favorite=item.is_favorite)
+
+
+def _mapping_group(kind: FacetKind) -> MappingGroup | None:
+    """有中文映射的分类归到哪一组; 导演与用户标签没有映射表."""
+    if kind is FacetKind.TAG:
+        return MappingGroup.TAG
+    if kind is FacetKind.ACTOR:
+        return MappingGroup.ACTOR
+    if kind in (FacetKind.STUDIO, FacetKind.PUBLISHER, FacetKind.SERIES):
+        return MappingGroup.VENDOR
+    return None
+
+
+def _display_name(runtime: RuntimeDep, kind: FacetKind, name: str) -> str:
+    group = _mapping_group(kind)
+    return runtime.mappings.display(group, name) if group is not None else name
 
 
 @router.post("/user_tag")
@@ -57,7 +73,7 @@ async def list_facets(
         raise HTTPException(status_code=400, detail="该分类不支持收藏")
     # 列表显示的是译文, 库里存的是原名. 用户照着屏幕上的名字输入时必须能命中,
     # 所以译文命中的词条要把它们的原名也并进来.
-    originals = runtime.tag_mappings.originals_matching(search) if (kind == FacetKind.TAG and search) else []
+    originals = runtime.mappings.tags.originals_matching(search) if (kind == FacetKind.TAG and search) else []
     items, total = await repo.list_facets(
         kind, search=search, favorite=favorite, offset=offset, limit=limit, sort_by=sort_by, order=order
     )
@@ -66,7 +82,15 @@ async def list_facets(
         items, total = await _wide_scan(repo, kind, favorite, sort_by, order, wanted=set(originals), items=items)
     responses = [_facet_response(i) for i in items]
     if kind == FacetKind.TAG:
-        responses = _merge_by_display_name(responses, runtime.tag_mappings)
+        responses = _merge_by_display_name(responses, runtime.mappings.tags)
+    else:
+        mapping_group = _mapping_group(kind)
+        if mapping_group is not None:
+            # 片商与演员的名字同样按译文展示; 筛选用的 id 不受影响.
+            responses = [
+                response.model_copy(update={"name": runtime.mappings.display(mapping_group, response.name)})
+                for response in responses
+            ]
     return FacetListResponse(items=responses, total=total)
 
 
@@ -185,11 +209,7 @@ async def get_facet(kind: FacetKind, facet_id: int, repo: RepoDep, runtime: Runt
         raise HTTPException(status_code=404, detail="分类不存在")
     response = _facet_response(item)
     # 单条详情不参与「译名合并」, 因此不输出 merged_ids: 那个字段只对列表里的合并项有意义.
-    return (
-        response.model_copy(update={"name": runtime.tag_mappings.map_tags([response.name])[0]})
-        if kind == FacetKind.TAG
-        else response
-    )
+    return response.model_copy(update={"name": _display_name(runtime, kind, response.name)})
 
 
 @router.post("/{kind}/merge")
@@ -203,11 +223,7 @@ async def merge_facets(kind: FacetKind, req: FacetMergeRequest, repo: RepoDep, r
         raise HTTPException(status_code=404, detail="分类不存在")
     logger.info("facets merged", kind=kind, target_id=req.target_id, source_ids=req.source_ids)
     response = _facet_response(item)
-    return (
-        response.model_copy(update={"name": runtime.tag_mappings.map_tags([response.name])[0]})
-        if kind == FacetKind.TAG
-        else response
-    )
+    return response.model_copy(update={"name": _display_name(runtime, kind, response.name)})
 
 
 @router.patch("/{kind}/{facet_id}")
@@ -218,6 +234,7 @@ async def rename_facet(
     name = req.name.strip()
     if not name:
         raise HTTPException(status_code=400, detail="名称不能为空")
+    before = await repo.get_facet(kind, facet_id)
     try:
         item = await repo.rename_facet(kind, facet_id, name)
     except ValueError as e:
@@ -225,12 +242,17 @@ async def rename_facet(
     if item is None:
         raise HTTPException(status_code=404, detail="分类不存在")
     logger.info("facet renamed", kind=kind, facet_id=facet_id, name=name)
-    return _facet_response(item)
+    # 译名跟着名字走: 名字变了而映射还挂在旧址上, 界面就会退回原文.
+    mapping_group = _mapping_group(kind)
+    if mapping_group is not None and before is not None:
+        runtime.mappings.rename(mapping_group, before.name, name)
+    return _facet_response(item).model_copy(update={"name": _display_name(runtime, kind, name)})
 
 
 @router.delete("/{kind}/{facet_id}", status_code=204)
-async def delete_facet(kind: FacetKind, facet_id: int, repo: RepoDep) -> Response:
+async def delete_facet(kind: FacetKind, facet_id: int, repo: RepoDep, runtime: RuntimeDep) -> Response:
     """删除分类. 爬取侧写入剔除规则并从 Metadata 真值移除; user_tag 硬删."""
+    before = await repo.get_facet(kind, facet_id)
     try:
         ok = await repo.delete_facet(kind, facet_id)
     except ValueError as e:
@@ -238,4 +260,8 @@ async def delete_facet(kind: FacetKind, facet_id: int, repo: RepoDep) -> Respons
     if not ok:
         raise HTTPException(status_code=404, detail="分类不存在")
     logger.info("facet deleted", kind=kind, facet_id=facet_id)
+    # 映射表跟着删: 分类都没了, 留一条 0 次的译名只会挡住真正的词条.
+    mapping_group = _mapping_group(kind)
+    if mapping_group is not None and before is not None:
+        runtime.mappings.forget(mapping_group, before.name)
     return Response(status_code=204)

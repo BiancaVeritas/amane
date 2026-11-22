@@ -102,6 +102,10 @@ _DEFAULT_CONTENT_ROUTES: dict[ContentType, list[SiteName]] = {
         SiteName.FREEJAVBT,
         SiteName.AIRAV,
     ],
+    ContentType.HEYDOUGA: [
+        SiteName.HEYDOUGA,
+        SiteName.JAVDB,
+    ],
     ContentType.CHINESE: [
         SiteName.TANGXIN,
         SiteName.IQQTV,
@@ -426,8 +430,13 @@ class ScrapingConfig(BaseModel):
     crop_poster: bool = True
 
     poster_crop_types: list[ContentType] = Field(
-        # 默认放行传统 JAV 与 FC2: 它们的封面是横版夹页, 右侧 height × poster_ratio 即竖版海报.
-        default_factory=lambda: [ContentType.CENSORED, ContentType.UNCENSORED, ContentType.FC2],
+        # 默认放行传统 JAV、FC2 与 heydouga: 它们的封面是横版夹页, 右侧 height × poster_ratio 即竖版海报.
+        default_factory=lambda: [
+            ContentType.CENSORED,
+            ContentType.UNCENSORED,
+            ContentType.FC2,
+            ContentType.HEYDOUGA,
+        ],
         json_schema_extra={"x-hidden": True},
     )
     """自动裁切放行的内容类型; 与 crop_poster 是「与」关系. 列表为空则一律不裁."""

@@ -147,6 +147,18 @@ class MetadataListResponse(BaseModel):
     semantic_hits: list[SemanticHitInfo] = Field(default_factory=list)
 
 
+class TagPair(BaseModel):
+    """一个标签的两种写法: 库里存的原名, 与映射表给出的展示名.
+
+    成对给出而不只给译文, 是因为详情页要能在两者之间切换; 只给译文时前端只能反查原名,
+    而两个不同原名映射到同一译文 (``パイズリ`` 与 ``パイズリ顔射`` 都译作「乳交」) 时
+    反查必然丢掉一个.
+    """
+
+    raw: str
+    shown: str
+
+
 class MetadataDetailResponse(BaseModel):
     metadata: MetadataResponse
     files: list[MediaFileResponse]
@@ -157,6 +169,10 @@ class MetadataDetailResponse(BaseModel):
     actor_display_names: dict[str, str] = Field(
         default_factory=dict,
         description="演员显示名映射 (原始名 → 中文名); 仅展示用",
+    )
+    tags: list[TagPair] = Field(
+        default_factory=list,
+        description="标签的 (原名, 展示名) 对照, 保序去重; 详情页据此在原文与译文间切换",
     )
     director_ids: dict[str, int] = {}
     tag_ids: dict[str, int] = {}

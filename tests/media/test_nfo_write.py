@@ -238,7 +238,7 @@ async def test_write_nfo_uses_actor_display_name(tmp_path: Path) -> None:
     meta = Metadata(number="PPPE-449", actors=["彩月七緒", "青沼"])
     nfo = tmp_path / "out.nfo"
 
-    assert await write_nfo(meta, nfo, actor_mapping_path=mapping) is True
+    assert await write_nfo(meta, nfo, mapping_dir=tmp_path) is True
 
     names = [e.text for e in ET.parse(nfo).getroot().findall("actor/name")]
     assert names == ["彩月七绪", "青沼"]

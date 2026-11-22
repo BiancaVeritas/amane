@@ -27,6 +27,8 @@ export type FilePhaseLike = {
   ltx?: boolean;
   /** 条目标签; 「無碼」「無修正」这类字样也视为无码. */
   tags?: readonly string[];
+  /** 条目标题; FC2 / heydouga 这类站内自编号的标题里也常写「無修正」. */
+  title?: string | null;
 };
 
 type PhaseChipKey = "sub" | "cen" | "u" | "crack" | "leak" | "ltx" | "def";
@@ -77,18 +79,27 @@ function showsCensored(phase: FilePhaseLike): boolean {
   return phase.censored === true;
 }
 
-/** 标签里表示「无码」的写法. FC2 之类的条目类型本身不带无码标记, 靠标签区分. */
+/** 标签 / 标题里表示「无码」的写法. FC2、heydouga 这类站内自编号的番号不带马赛克
+ * 信息, 只能靠这些字样区分; 「無」单字会命中「無料」, 因此只收方括号包住的写法. */
 const UNCENSORED_TAGS = ["無碼", "无码", "無修正", "无修正", "無修", "无修"];
+const UNCENSORED_BRACKETED = /[[【(（]\s*無\s*[\]】)）]/;
 
-/** 标签里有没有无码字样. */
-function tagsSayUncensored(tags: readonly string[] | null | undefined): boolean {
-  if (!tags) return false;
-  return tags.some((tag) => UNCENSORED_TAGS.some((word) => tag.includes(word)));
+/** 文本里有没有无码字样. */
+function textSaysUncensored(text: string | null | undefined): boolean {
+  if (!text) return false;
+  if (UNCENSORED_BRACKETED.test(text)) return true;
+  return UNCENSORED_TAGS.some((word) => text.includes(word));
 }
 
-/** 无码: 标签明说无码/无修正时直接点亮; 否则用条目布尔值, 再退回看这一份文件自己的标记. */
+/** 标签或标题里有没有无码字样. */
+function metadataSaysUncensored(phase: FilePhaseLike): boolean {
+  if (phase.tags?.some((tag) => textSaysUncensored(tag))) return true;
+  return textSaysUncensored(phase.title);
+}
+
+/** 无码: 标签或标题明说无码/无修正时直接点亮; 否则用条目布尔值, 再退回看这一份文件自己的标记. */
 function showsUncensored(phase: FilePhaseLike): boolean {
-  if (tagsSayUncensored(phase.tags)) return true;
+  if (metadataSaysUncensored(phase)) return true;
   if (phase.uncensored != null) return phase.uncensored;
   return phase.mosaic === "uncensored";
 }
@@ -100,10 +111,13 @@ function hasMosaic(phase: FilePhaseLike, mosaic: Mosaic): boolean {
 
 function mosaicChips(phase: FilePhaseLike, t: TFunction<"metadata">): PhaseChip[] {
   const chips: PhaseChip[] = [];
-  if (showsCensored(phase)) {
+  // 有码 / 无码二选一: 无码的证据成立就不再是有码. 后端聚合已互斥, 这里再判一次是因为
+  // 「無碼」「無修正」标签也能点亮无码 —— 标签与条目类型组合起来同样不能亮两枚.
+  const uncensored = showsUncensored(phase);
+  if (showsCensored(phase) && !uncensored) {
     chips.push({ key: "cen", label: t("filePhase.censored") });
   }
-  if (showsUncensored(phase)) {
+  if (uncensored) {
     chips.push({ key: "u", label: t("filePhase.uncensored") });
   }
   if (hasMosaic(phase, "cracked")) {

@@ -80,6 +80,7 @@ from .metadata import (
     MetadataUserTagsResponse,
     PartialMetadata,
     SemanticHitInfo,
+    TagPair,
 )
 from .network import (
     BrowserBackendItemResponse,
@@ -230,6 +231,7 @@ __all__ = [
     "SemanticIndexSubmission",
     "SemanticModelCounts",
     "SemanticStatusResponse",
+    "TagPair",
     "TaskBatchAction",
     "TaskBatchRequest",
     "TaskBatchResponse",

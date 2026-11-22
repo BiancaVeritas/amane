@@ -89,7 +89,8 @@ export const PosterCard = memo(function PosterCard({
         <Box pos="relative">
           <AspectRatio ratio={imageRatio}>{media}</AspectRatio>
           <FilePhaseOverlay
-            phase={item.file_phase}
+            // 标题一并传入: heydouga / FC2 这类番号不带马赛克信息, 标题里常写「無修正」.
+            phase={item.file_phase ? { ...item.file_phase, title: item.title } : item.file_phase}
             bottomExtra={
               ageThen != null ? (
                 <OverlayChip>

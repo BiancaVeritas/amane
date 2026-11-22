@@ -251,6 +251,7 @@
           "chinese": "国产",
           "western": "欧美",
           "fc2": "FC2",
+          "heydouga": "Heydouga",
           "amateur": "素人",
           "hentai": "动漫"
         }
@@ -502,7 +503,9 @@
     "search": "搜索",
     "noResult": "各来源都没有找到结果",
     "pickOne": "找到 {{count}} 条结果, 选一条作为主元数据",
-    "useThis": "选择"
+    "useThis": "选择",
+    "contentType": "类型路由",
+    "contentTypeAll": "全部"
   },
   "scrape": {
     "manual": "手动搜索"

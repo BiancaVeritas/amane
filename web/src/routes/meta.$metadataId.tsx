@@ -196,6 +196,8 @@ function TitleDetailPage() {
     if (Number.isInteger(id) && id > 0) setLastMetaId(id);
   }, [metadataId, setLastMetaId]);
   const [editOpen, setEditOpen] = useState(false);
+  // 展示语言在顶栏切换, 这里只读: 详情 / 演员 / 列表页共用同一份选择.
+  const lang = useUIStore((s) => s.contentLang);
   // 手动刮削入口: null 表示未打开; 两个口径共用同一个弹窗, 只是落库方式不同.
   const [manualScrapeMode, setManualScrapeMode] = useState<"force" | "append" | null>(null);
   const [mergeOpen, setMergeOpen] = useState(false);
@@ -535,6 +537,17 @@ function TitleDetailPage() {
   }
 
   const item: MetadataResponse = data.metadata;
+  /**
+   * 按当前展示语言取字段.
+   *
+   * 原文里缺失的项回落到译文: 没有 original_title 的条目切到「原文」不该变成空白.
+   * 标签用服务端成对给出的 `data.tags` —— 两个原名可能映射到同一译文, 反查会丢掉其中一个;
+   * 演员名由 `actor_display_names` (原名 → 译文) 正查, 一个原名只有一条, 不会丢.
+   */
+  const showRaw = lang === "raw";
+  const displayTitle = showRaw ? (item.original_title ?? item.title) : item.title;
+  const displayPlot = showRaw ? (item.original_plot ?? item.plot) : item.plot;
+  const actorDisplayNames = data.actor_display_names ?? {};
   // 详情只展示一张主图: 优先横版封面 (thumb), 失败或不存在时回退竖版海报.
   const thumbSrc = item.thumb_url ?? item.thumb_urls?.[0] ?? null;
   const posterSrc = item.poster_url ?? item.poster_urls?.[0] ?? null;
@@ -671,9 +684,11 @@ function TitleDetailPage() {
             {!playingTrailer && (
               <>
                 <FilePhaseOverlay
-                  // 标签一并传入: 无码也可能只体现在「無碼」标签上.
+                  // 标签与标题一并传入: 无码也可能只体现在「無碼」「無修正」字样上.
                   phase={
-                    item.file_phase ? { ...item.file_phase, tags: item.tags } : item.file_phase
+                    item.file_phase
+                      ? { ...item.file_phase, tags: item.tags, title: item.title }
+                      : item.file_phase
                   }
                 />
                 {(item.vr || item.score != null) && (
@@ -905,23 +920,15 @@ function TitleDetailPage() {
             <Title order={2} ff="monospace">
               {item.number}
             </Title>
-            {(item.title || item.original_title) && (
-              <Stack gap={2}>
-                {item.title && (
+            {(displayTitle || displayPlot) && (
+              <Group gap={8} align="center" wrap="nowrap" mt={4}>
+                {displayTitle && (
                   <Group gap={4} align="center" wrap="nowrap">
-                    <Text c="dimmed">{item.title}</Text>
+                    <Text c="dimmed">{displayTitle}</Text>
                     <LockToggle {...lockProps("title")} />
                   </Group>
                 )}
-                {item.original_title && (
-                  <Group gap={4} align="center" wrap="nowrap">
-                    <Text size="sm" c="dimmed">
-                      {t("detail.fields.originalTitle")}: {item.original_title}
-                    </Text>
-                    {!item.title && <LockToggle {...lockProps("title")} />}
-                  </Group>
-                )}
-              </Stack>
+              </Group>
             )}
           </div>
 
@@ -995,28 +1002,42 @@ function TitleDetailPage() {
             </FieldBlock>
           )}
 
-          {item.actors && item.actors.length > 0 && (
+          {(item.actors ?? []).length > 0 && (
             <FieldBlock label={t("detail.fields.actors")} lock={lockProps("actors")}>
               <Group gap={6}>
-                {item.actors.map((a) => (
-                  <FacetBadge
-                    key={a}
-                    kind="actor"
-                    id={data.actor_ids?.[a]}
-                    name={a}
-                    displayName={data.actor_display_names?.[a]}
-                    gender={data.actor_genders?.[a]}
-                  />
-                ))}
+                {(item.actors ?? []).map((raw) => {
+                  // id / 性别 / 链接都按原名索引: 服务端给的 actor_ids 与 actor_genders
+                  // 以库里的原名为键, 换成显示名就查不到了.
+                  const shown = actorDisplayNames[raw] ?? raw;
+                  return (
+                    <FacetBadge
+                      key={raw}
+                      kind="actor"
+                      id={data.actor_ids?.[raw]}
+                      // 影片详情只写当前语言那一个名字, 不带括注 —— 括注留给演员详情页,
+                      // 那里才是核对身份的场合. id 与性别仍按原名查.
+                      name={showRaw ? raw : shown}
+                      gender={data.actor_genders?.[raw]}
+                    />
+                  );
+                })}
               </Group>
             </FieldBlock>
           )}
 
-          {item.tags && item.tags.length > 0 && (
+          {(data.tags ?? []).length > 0 && (
             <FieldBlock label={t("detail.fields.tags")} lock={lockProps("tags")}>
               <Group gap={6}>
-                {item.tags.map((tg) => (
-                  <FacetBadge key={tg} kind="tag" id={data.tag_ids?.[tg]} name={tg} />
+                {(data.tags ?? []).map((pair) => (
+                  <FacetBadge
+                    // 键取原名: 两条不同原名可能译成同一个词, 用展示名当键会撞.
+                    key={pair.raw}
+                    kind="tag"
+                    // tag_ids 按展示名建键 (服务端 map_id_map 的口径), 两种模式下都用它查.
+                    id={data.tag_ids?.[pair.shown]}
+                    // 只写当前语言那一个名字, 不带括注.
+                    name={showRaw ? pair.raw : pair.shown}
+                  />
                 ))}
               </Group>
             </FieldBlock>
@@ -1069,12 +1090,15 @@ function TitleDetailPage() {
             </FieldBlock>
           )}
 
-          {/* 只显示译文剧情: 原剧情在同一处编辑框里也能看到, 详情页重复显示一份长文本
-              只会把页面撑得很长. */}
-          {item.plot && (
-            <FieldBlock label={t("detail.fields.plot")} lock={lockProps("plot")}>
+          {/* 剧情跟随顶部的「原文 / 中文」切换; 同时显示两份会把页面撑得很长,
+              原剧情在同一处编辑框里也能看到. */}
+          {displayPlot && (
+            <FieldBlock
+              label={showRaw ? t("detail.fields.originalPlot") : t("detail.fields.plot")}
+              lock={lockProps("plot")}
+            >
               <Text size="sm" style={{ whiteSpace: "pre-wrap" }}>
-                {item.plot}
+                {displayPlot}
               </Text>
             </FieldBlock>
           )}

@@ -115,10 +115,22 @@ def test_summarize_file_phases_without_files(content_type: ContentType, censored
 
 
 def test_summarize_file_phases_uncensored_marker_on_censored_entry() -> None:
-    """有码番的无码标记副本: 条目有码, 无码由文件标记并进来."""
+    """有码番的无码标记副本: 无码的证据成立就不再是有码, 两枚角标不能同时亮.
+
+    类型仍是有码 (条目属性), 但展示口径与 ``mosaic_nature`` 一致取标记; 破解 / 流出是
+    副本的额外分支, 与有码并存, 无码则是「替换」.
+    """
     marked: FilePhase = {"mosaic": Mosaic.UNCENSORED, "has_subtitle": False, "definition": None}
     summary = summarize_file_phases((marked,), ContentType.CENSORED)
-    assert summary.censored is True
+    assert summary.censored is False
     assert summary.uncensored is True
     assert summary.mosaics == (Mosaic.UNCENSORED,)
 
+
+def test_summarize_file_phases_keeps_censored_with_copy_markers() -> None:
+    """破解 / 流出是副本的分支, 与原片的有码并存; 只有无码才替换掉有码."""
+    cracked: FilePhase = {"mosaic": Mosaic.CRACKED, "has_subtitle": False, "definition": None}
+    leaked: FilePhase = {"mosaic": Mosaic.LEAKED, "has_subtitle": False, "definition": None}
+    summary = summarize_file_phases((cracked, leaked), ContentType.CENSORED)
+    assert summary.censored is True
+    assert summary.uncensored is False

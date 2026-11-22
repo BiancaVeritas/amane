@@ -338,6 +338,21 @@ class TestSiteProxy:
         assert cfg.use_proxy is True
 
 
+class TestContentTypeOrder:
+    """类型枚举的顺序就是界面选项顺序 (类型路由 / 筛选 / 模板映射都按它列).
+
+    heydouga 与 FC2 同类, 必须紧跟在 FC2 之后; 追加到末尾会让下拉里它掉到最后.
+    """
+
+    def test_heydouga_follows_fc2(self):
+        values = [ct.value for ct in ContentType]
+        assert values.index("heydouga") == values.index("fc2") + 1
+
+    def test_unrelated_types_keep_their_relative_order(self):
+        values = [ct.value for ct in ContentType]
+        assert values == ["censored", "uncensored", "chinese", "western", "fc2", "heydouga", "amateur", "hentai"]
+
+
 class TestScrapingPriorityMigration:
     def test_default_priority_reorders_routes(self):
         cfg = ScrapingConfig.model_validate(
@@ -391,6 +406,8 @@ class TestScrapingPriorityMigration:
         assert routes[ContentType.HENTAI][0] == SiteName.GETCHU
         assert routes[ContentType.WESTERN][0] == SiteName.THEPORNDB
         assert routes[ContentType.UNCENSORED][0] == SiteName.AVENTERTAINMENTS
+        # heydouga 与 FC2 同类: 番号不带马赛克信息, 走自己的路由; 官方站优先, 综合索引兜底.
+        assert routes[ContentType.HEYDOUGA] == [SiteName.HEYDOUGA, SiteName.JAVDB]
         # 无码路由按线上命中率排: caribbeancompr 提前, muramura 收尾.
         assert routes[ContentType.UNCENSORED][1] == SiteName.CARIBBEANCOMPR
         assert routes[ContentType.UNCENSORED][-2] == SiteName.PACOPACOMAMA
@@ -542,13 +559,14 @@ class TestConfigManagerUpdate:
         assert isinstance(mgr.hot.worker.concurrency, int)
 
     def test_poster_crop_types_default_and_round_trip(self, mgr: ConfigManager):
-        """自动裁切默认放行有码 / 无码 / FC2; 改动可持久化."""
+        """自动裁切默认放行有码 / 无码 / FC2 / heydouga; 改动可持久化."""
         from amane.parsing import ContentType
 
         assert set(mgr.hot.scraping.poster_crop_types) == {
             ContentType.CENSORED,
             ContentType.UNCENSORED,
             ContentType.FC2,
+            ContentType.HEYDOUGA,
         }
         mgr.update({"scraping": {"poster_crop_types": ["censored", "chinese"]}})
         assert mgr.hot.scraping.poster_crop_types == [ContentType.CENSORED, ContentType.CHINESE]

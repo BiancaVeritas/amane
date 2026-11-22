@@ -147,8 +147,7 @@ async def execute_file_operations(
     safe_dirs: Sequence[Path] | None = (),
     watermark_dir: Path | None = None,
     actor_genders: dict[str, ActorGender] | None = None,
-    tag_mapping_path: Path | None = None,
-    actor_mapping_path: Path | None = None,
+    mapping_dir: Path | None = None,
 ) -> FileOperationsResult:
     """``file_info`` 由渲染路径的那一次 ``parse_file_info`` 产出, 必须带上 ``has_external_subtitle``.
 
@@ -244,8 +243,7 @@ async def execute_file_operations(
         await write_nfo_file(
             metadata,
             paths.nfo,
-            tag_mapping_path=tag_mapping_path,
-            actor_mapping_path=actor_mapping_path,
+            mapping_dir=mapping_dir,
         )
 
     # 字幕按模板落到 video_dest 侧.
@@ -286,8 +284,7 @@ async def apply_file_operations(
     web_client: WebClient | None = None,
     safe_dirs: Sequence[Path] | None = (),
     watermark_dir: Path | None = None,
-    tag_mapping_path: Path | None = None,
-    actor_mapping_path: Path | None = None,
+    mapping_dir: Path | None = None,
     actor_genders: Mapping[str, ActorGender] | None = None,
 ) -> FileOperationsResult | None:
     """缺少 media_file_id 或对应记录时返回 None (跳过, 不视为失败).
@@ -320,7 +317,7 @@ async def apply_file_operations(
         source_path=Path(media_file.path),
         safe_dirs=safe_dirs,
         actor_genders=actor_genders,
-        actor_mapping_path=actor_mapping_path,
+        mapping_dir=mapping_dir,
     )
     # 多盘片的后续张只搬视频与字幕: 元数据、封面、海报、NFO 都由首盘那套文件代表整部作品,
     # 每张再生成一遍只是重复下载与重复写盘.
@@ -344,8 +341,7 @@ async def apply_file_operations(
         safe_dirs=safe_dirs,
         watermark_dir=watermark_dir,
         actor_genders=actor_genders,
-        tag_mapping_path=tag_mapping_path,
-        actor_mapping_path=actor_mapping_path,
+        mapping_dir=mapping_dir,
     )
 
 
@@ -599,8 +595,7 @@ class OrganizeHandler(TaskHandler[OrganizePayload, OrganizeResult]):
         web_client: WebClient | None = None,
         safe_dirs: Sequence[Path] | None = (),
         watermark_dir: Path | None = None,
-        tag_mapping_path: Path | None = None,
-        actor_mapping_path: Path | None = None,
+        mapping_dir: Path | None = None,
         *,
         library_locks: LibraryTaskLocks | None = None,
         actor_scraper: ActorScrapeHandler | None = None,
@@ -612,8 +607,7 @@ class OrganizeHandler(TaskHandler[OrganizePayload, OrganizeResult]):
         self._resource_store = resource_store
         self._safe_dirs = safe_dirs
         self._watermark_dir = watermark_dir
-        self._tag_mapping_path = tag_mapping_path
-        self._actor_mapping_path = actor_mapping_path
+        self._mapping_dir = mapping_dir
         self._library_locks = library_locks if library_locks is not None else LibraryTaskLocks()
         self._actor_scraper = actor_scraper
 
@@ -763,8 +757,7 @@ class OrganizeHandler(TaskHandler[OrganizePayload, OrganizeResult]):
                     web_client=self._web_client,
                     safe_dirs=self._safe_dirs,
                     watermark_dir=self._watermark_dir,
-                    tag_mapping_path=self._tag_mapping_path,
-                    actor_mapping_path=self._actor_mapping_path,
+                    mapping_dir=self._mapping_dir,
                     actor_genders=await self._actor_genders(metadata),
                 )
                 if fop_result is None:

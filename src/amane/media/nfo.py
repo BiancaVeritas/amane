@@ -1,6 +1,5 @@
 """Kodi ``<movie>`` NFO, 供 Emby / Jellyfin / Kodi 读取."""
 
-import json
 import re
 from io import StringIO
 from typing import TYPE_CHECKING
@@ -9,6 +8,7 @@ import aiofiles
 import structlog
 
 from ..parsing import ContentType
+from ..tags import MappingGroup, VendorNames, load_translations, vendor_names, vendor_roots
 from ..utils.text import strip_illegal_xml_chars
 
 if TYPE_CHECKING:
@@ -20,55 +20,22 @@ if TYPE_CHECKING:
 logger = structlog.get_logger()
 
 
-def _display_tags(metadata: Metadata, tag_mapping_path: Path | None) -> list[str]:
+def _display_tags(metadata: Metadata, mapping_dir: Path | None) -> list[str]:
     """标签的显示名 (有译文取译文); NFO 的 ``genre`` 用它.
 
     Emby 把 ``genre`` 当「类型」、``tag`` 当「标签」两个独立维度, 因此标签只进 genre,
     厂商与系列只进 tag, 两边不混.
     """
-    tags = [tag for tag in metadata.tags if tag]
-    if tag_mapping_path is not None and tag_mapping_path.is_file():
-        try:
-            mapping_data = json.loads(tag_mapping_path.read_text(encoding="utf-8"))
-            entries = mapping_data.get("entries", {})
-            tags = [entries.get(tag, {}).get("translation") or tag for tag in tags]
-        except OSError, ValueError, TypeError:
-            logger.warning(
-                "tag mapping dictionary could not be read; writing original tags", path=str(tag_mapping_path)
-            )
-    return list(dict.fromkeys(tags))
+    translations = load_translations(mapping_dir, MappingGroup.TAG)
+    return [translations.get(tag, tag) for tag in dict.fromkeys(tag for tag in metadata.tags if tag)]
 
 
-def _vendor_tags(metadata: Metadata) -> list[str]:
-    """NFO 的 ``tag`` 取值: 发行商 + 系列.
+def _vendor_tag_values(vendor: VendorNames) -> list[str]:
+    """NFO 的 ``tag`` 取值: 发行商 + 全部系列.
 
     只放厂商与系列, 不与标签混: Emby 里「类型」与「标签」是两套筛选口径.
     """
-    values = [metadata.publisher, metadata.series]
-    # 系列可能是多个; 单个字段与列表字段都要收.
-    values.extend(metadata.series_names or [])
-    return list(dict.fromkeys(value for value in values if value))
-
-
-def _load_actor_names(path: Path | None) -> dict[str, str]:
-    """读演员显示名映射; 文件缺失或损坏时返回空表, 调用方回退原名."""
-    if path is None or not path.is_file():
-        return {}
-    try:
-        raw = json.loads(path.read_text(encoding="utf-8"))
-    except OSError, ValueError:
-        logger.warning("actor name mapping unreadable; falling back to original names", path=str(path))
-        return {}
-    entries = raw.get("entries")
-    if not isinstance(entries, dict):
-        return {}
-    names: dict[str, str] = {}
-    for original, value in entries.items():
-        if isinstance(original, str) and isinstance(value, dict):
-            translation = value.get("translation")
-            if isinstance(translation, str) and translation.strip():
-                names[original] = translation.strip()
-    return names
+    return list(dict.fromkeys(value for value in [vendor.publisher, *vendor.series] if value))
 
 
 _XML_ESCAPE_MAP: dict[str, str] = {
@@ -107,8 +74,7 @@ async def write_nfo(
     metadata: Metadata,
     nfo_path: Path,
     *,
-    tag_mapping_path: Path | None = None,
-    actor_mapping_path: Path | None = None,
+    mapping_dir: Path | None = None,
 ) -> bool:
     try:
         nfo_path.parent.mkdir(parents=True, exist_ok=True)
@@ -149,7 +115,7 @@ async def write_nfo(
 
         # 演员名优先写中文映射: 媒体库里显示的就是熟名, 用原名会让人觉得认不出.
         # 没配映射的演员照原名写, 与映射前完全一致.
-        actor_names = _load_actor_names(actor_mapping_path) if actor_mapping_path is not None else {}
+        actor_names = load_translations(mapping_dir, MappingGroup.ACTOR)
         if metadata.actors:
             for actor in metadata.actors:
                 code.write("  <actor>\n")
@@ -164,27 +130,27 @@ async def write_nfo(
         if metadata.runtime is not None:
             code.write(f"  <runtime>{metadata.runtime}</runtime>\n")
 
-        series_values = metadata.series_names or ([metadata.series] if metadata.series else [])
-        series_names = list(dict.fromkeys(name for name in series_values if name))
-        if series_names:
+        # 片商三件套同样走映射; 缺发行商时已按制作商补齐, 因此不会少一个维度.
+        vendor = vendor_names(metadata).translated(vendor_roots(mapping_dir))
+        if vendor.series:
             # Kodi Movie NFO 的 <set> 是单值字段; 保留首项, 多系列完整数据仍保存在 Amane 数据库中.
-            code.write(f"  <series>{_escape_xml(series_names[0])}</series>\n")
+            code.write(f"  <series>{_escape_xml(vendor.series[0])}</series>\n")
             code.write("  <set>\n")
-            code.write(f"    <name>{_escape_xml(series_names[0])}</name>\n")
+            code.write(f"    <name>{_escape_xml(vendor.series[0])}</name>\n")
             code.write("  </set>\n")
 
-        if metadata.studio:
-            code.write(f"  <studio>{_escape_xml(metadata.studio)}</studio>\n")
-            code.write(f"  <maker>{_escape_xml(metadata.studio)}</maker>\n")
+        if vendor.studio:
+            code.write(f"  <studio>{_escape_xml(vendor.studio)}</studio>\n")
+            code.write(f"  <maker>{_escape_xml(vendor.studio)}</maker>\n")
 
-        if metadata.publisher:
-            code.write(f"  <publisher>{_escape_xml(metadata.publisher)}</publisher>\n")
-            code.write(f"  <label>{_escape_xml(metadata.publisher)}</label>\n")
+        if vendor.publisher:
+            code.write(f"  <publisher>{_escape_xml(vendor.publisher)}</publisher>\n")
+            code.write(f"  <label>{_escape_xml(vendor.publisher)}</label>\n")
 
         # genre = 类型 (标签), tag = 标签 (发行商与系列): Emby 把这两者当独立维度.
-        for value in _display_tags(metadata, tag_mapping_path):
+        for value in _display_tags(metadata, mapping_dir):
             code.write(f"  <genre>{_escape_xml(value)}</genre>\n")
-        for value in _vendor_tags(metadata):
+        for value in _vendor_tag_values(vendor):
             code.write(f"  <tag>{_escape_xml(value)}</tag>\n")
 
         if metadata.original_poster_urls:

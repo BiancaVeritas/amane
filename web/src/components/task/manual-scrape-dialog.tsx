@@ -1,4 +1,15 @@
-import { Alert, Button, Group, Image, Loader, Modal, Stack, Text, TextInput } from "@mantine/core";
+import {
+  Alert,
+  Button,
+  Group,
+  Image,
+  Loader,
+  Modal,
+  SegmentedControl,
+  Stack,
+  Text,
+  TextInput,
+} from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { IconInfoCircle, IconSearch } from "@tabler/icons-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -7,6 +18,7 @@ import { useTranslation } from "react-i18next";
 import { previewScrape, submitTask } from "@/client/sdk.gen";
 import type { ContentType, ScrapePreviewItem } from "@/client/types.gen";
 import { extractErrorMessage } from "@/lib/api-error";
+import { CONTENT_TYPES } from "@/lib/exhaustive-maps";
 import { proxyImageUrl } from "@/lib/utils";
 import { Z_INDEX } from "@/lib/z-index";
 
@@ -46,7 +58,7 @@ export function ManualScrapeDialog({
   mediaFileId,
   mode = "force",
 }: ManualScrapeDialogProps) {
-  const { t } = useTranslation(["tasks", "common"]);
+  const { t } = useTranslation(["tasks", "common", "feeds"]);
   const qc = useQueryClient();
   /**
    * 输入框的初值.
@@ -57,21 +69,29 @@ export function ManualScrapeDialog({
   const defaultInput = mode === "append" ? "" : (metadata?.number ?? "");
   const [input, setInput] = useState(defaultInput);
   const [results, setResults] = useState<ScrapePreviewItem[] | null>(null);
+  /**
+   * 类型路由: 空串是「全部」, 交给后端按番号推断; 选了具体类型就只问那条路由的刮削器.
+   *
+   * 绑定条目时以它的类型为初值, 但仍允许改 —— 番号判出来的类型未必对得上用户要找的站,
+   * 锁死等于把「强制刮削」这个入口的用处砍掉一半.
+   */
+  const defaultType: ContentType | "" = mode === "append" ? "" : (metadata?.content_type ?? "");
+  const [contentType, setContentType] = useState<ContentType | "">(defaultType);
 
   // 弹窗常驻渲染树, 切模式不会重建组件: 只靠 useState 初值会让「添加来源链接」沿用
-  // 上一次强制刮削填好的番号. 打开时按当前模式重置一次输入.
+  // 上一次强制刮削填好的番号. 打开时按当前模式重置一次输入与类型.
   const prevOpened = useRef(false);
   useEffect(() => {
     if (opened && !prevOpened.current) {
       setInput(defaultInput);
       setResults(null);
+      setContentType(defaultType);
     }
     prevOpened.current = opened;
-  }, [opened, defaultInput]);
+  }, [opened, defaultInput, defaultType]);
 
-  // 绑定条目时, 范围钉在这一条上: 番号与类型都按它走, 不让用户改.
-  // 「添加来源链接」例外: 它要手动填别处的番号, 钉死就填不进去了.
-  const boundType = mode === "append" ? null : (metadata?.content_type ?? null);
+  /** 这次请求实际用的类型: 用户选的, 没选就交给后端按番号推断. */
+  const effectiveType: ContentType | null = contentType || null;
 
   // 添加来源链接只要链接: 番号 / UUID 在这个口径下没有意义.
   const looksLikeUrl = /^https?:\/\//i.test(input.trim());
@@ -94,7 +114,7 @@ export function ManualScrapeDialog({
         // 并列结果). 手动刮削贴地址与贴番号同义: 地址先读出番号, 再拿番号问各来源.
         body: {
           number: value,
-          content_type: boundType,
+          content_type: effectiveType,
           only_that_url: mode === "append",
         },
         throwOnError: true,
@@ -133,7 +153,7 @@ export function ManualScrapeDialog({
           // 从失败任务进来时沿用它的文件: 刮削成功后要接着把这个文件整理落盘, 缺了它就派不出
           // 整理任务, 文件永远停在未整理.
           media_id: mediaFileId ?? null,
-          content_type: boundType,
+          content_type: effectiveType,
           manual: true,
           preferred_site: item.site,
           search_sites: hits,
@@ -216,6 +236,27 @@ export function ManualScrapeDialog({
             {t("manualScrape.search")}
           </Button>
         </Group>
+
+        {/* 类型路由: 第一项「全部」交给后端按番号推断, 选了具体类型就只问那条路由的刮削器.
+            绑定条目时初值取它的类型, 但仍允许改 —— 番号判出来的类型未必对得上用户想找的站. */}
+        <Stack gap={4} align="flex-start">
+          <Text size="xs" c="dimmed">
+            {t("manualScrape.contentType")}
+          </Text>
+          <SegmentedControl
+            size="xs"
+            value={contentType}
+            onChange={(value) => {
+              const next = CONTENT_TYPES.find((candidate) => candidate === value);
+              setContentType(next ?? "");
+            }}
+            data={[
+              // 空串是「全部」: 不指定类型, 按番号推断后只问对应的那条路由.
+              { value: "", label: t("manualScrape.contentTypeAll") },
+              ...CONTENT_TYPES.map((value) => ({ value, label: t(`feeds:contentTypes.${value}`) })),
+            ]}
+          />
+        </Stack>
 
         {search.isPending && (
           <Group justify="center" p="md">

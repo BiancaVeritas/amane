@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Amane API",
-    "version": "0.27.5"
+    "version": "0.27.6"
   },
   "paths": {
     "/api/health": {
@@ -6141,25 +6141,53 @@
         }
       }
     },
-    "/api/tag-mappings": {
+    "/api/mappings/groups": {
       "get": {
         "tags": [
-          "tag-mappings"
+          "mappings"
+        ],
+        "summary": "List Mapping Groups",
+        "description": "可维护的映射组; 前端据此渲染滑动选项与各组的分类范围, 不在前端硬编码名单.",
+        "operationId": "list_mapping_groups",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response List Mapping Groups"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/mappings/{group}": {
+      "get": {
+        "tags": [
+          "mappings"
         ],
         "summary": "List Mappings",
         "operationId": "list_mappings",
         "parameters": [
           {
+            "name": "group",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/MappingGroup"
+            }
+          },
+          {
             "name": "status",
             "in": "query",
             "required": false,
             "schema": {
-              "enum": [
-                "all",
-                "pending",
-                "mapped"
-              ],
               "type": "string",
+              "pattern": "^(all|pending|mapped)$",
               "default": "pending",
               "title": "Status"
             }
@@ -6169,14 +6197,8 @@
             "in": "query",
             "required": false,
             "schema": {
-              "enum": [
-                "all",
-                "ja",
-                "en",
-                "zh",
-                "other"
-              ],
               "type": "string",
+              "pattern": "^(all|ja|en|zh|other)$",
               "default": "all",
               "title": "Language"
             }
@@ -6186,11 +6208,8 @@
             "in": "query",
             "required": false,
             "schema": {
-              "enum": [
-                "all",
-                "high"
-              ],
               "type": "string",
+              "pattern": "^(all|high)$",
               "default": "all",
               "title": "Frequency"
             }
@@ -6214,6 +6233,24 @@
               "default": false,
               "title": "Archived"
             }
+          },
+          {
+            "name": "kind",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "片商组内按分类过滤: studio / publisher / series",
+              "title": "Kind"
+            },
+            "description": "片商组内按分类过滤: studio / publisher / series"
           },
           {
             "name": "offset",
@@ -6262,10 +6299,20 @@
       },
       "put": {
         "tags": [
-          "tag-mappings"
+          "mappings"
         ],
         "summary": "Save Mapping",
         "operationId": "save_mapping",
+        "parameters": [
+          {
+            "name": "group",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/MappingGroup"
+            }
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -6298,15 +6345,23 @@
         }
       }
     },
-    "/api/tag-mappings/{original}": {
+    "/api/mappings/{group}/{original}": {
       "delete": {
         "tags": [
-          "tag-mappings"
+          "mappings"
         ],
         "summary": "Delete Mapping",
-        "description": "归档词条: 不真删, 否则它会在下次 seed 时按标签表重建出来.",
+        "description": "标签归档 (不真删), 其余两组真删.\n\n标签不真删: 它会在下次对账时按分类表重建出来, 用户看到的就是「删了又回来」.",
         "operationId": "delete_mapping",
         "parameters": [
+          {
+            "name": "group",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/MappingGroup"
+            }
+          },
           {
             "name": "original",
             "in": "path",
@@ -6334,15 +6389,23 @@
         }
       }
     },
-    "/api/tag-mappings/restore/{original}": {
+    "/api/mappings/{group}/restore/{original}": {
       "post": {
         "tags": [
-          "tag-mappings"
+          "mappings"
         ],
         "summary": "Restore Mapping",
-        "description": "把归档的词条放回主列表.",
+        "description": "把标签归档区的词条放回主列表.",
         "operationId": "restore_mapping",
         "parameters": [
+          {
+            "name": "group",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/MappingGroup"
+            }
+          },
           {
             "name": "original",
             "in": "path",
@@ -6375,13 +6438,23 @@
         }
       }
     },
-    "/api/tag-mappings/export": {
+    "/api/mappings/{group}/export": {
       "get": {
         "tags": [
-          "tag-mappings"
+          "mappings"
         ],
         "summary": "Export Mappings",
         "operationId": "export_mappings",
+        "parameters": [
+          {
+            "name": "group",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/MappingGroup"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -6390,28 +6463,48 @@
                 "schema": {}
               }
             }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
           }
         }
       }
     },
-    "/api/tag-mappings/import": {
+    "/api/mappings/{group}/import": {
       "post": {
         "tags": [
-          "tag-mappings"
+          "mappings"
         ],
         "summary": "Import Mappings",
         "operationId": "import_mappings",
+        "parameters": [
+          {
+            "name": "group",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/MappingGroup"
+            }
+          }
+        ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
-                "additionalProperties": true,
                 "type": "object",
+                "additionalProperties": true,
                 "title": "Payload"
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
@@ -6435,23 +6528,33 @@
         }
       }
     },
-    "/api/tag-mappings/suggest": {
+    "/api/mappings/{group}/suggest": {
       "post": {
         "tags": [
-          "tag-mappings"
+          "mappings"
         ],
         "summary": "Suggest Mappings",
         "description": "只返回候选译名，不写入词典；人工确认仍由 PUT 接口完成。",
         "operationId": "suggest_mappings",
+        "parameters": [
+          {
+            "name": "group",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/MappingGroup"
+            }
+          }
+        ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/SuggestRequest"
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
@@ -6459,214 +6562,6 @@
             "content": {
               "application/json": {
                 "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/actor-name-mappings": {
-      "get": {
-        "tags": [
-          "actor-name-mappings"
-        ],
-        "summary": "List Actor Name Mappings",
-        "operationId": "list_actor_name_mappings",
-        "parameters": [
-          {
-            "name": "search",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string",
-              "default": "",
-              "title": "Search"
-            }
-          },
-          {
-            "name": "offset",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "minimum": 0,
-              "default": 0,
-              "title": "Offset"
-            }
-          },
-          {
-            "name": "limit",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "maximum": 500,
-              "minimum": 1,
-              "default": 200,
-              "title": "Limit"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "additionalProperties": true,
-                  "title": "Response List Actor Name Mappings"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      },
-      "put": {
-        "tags": [
-          "actor-name-mappings"
-        ],
-        "summary": "Save Actor Name Mapping",
-        "operationId": "save_actor_name_mapping",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ActorNameUpdate"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "additionalProperties": true,
-                  "title": "Response Save Actor Name Mapping"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/actor-name-mappings/{original}": {
-      "delete": {
-        "tags": [
-          "actor-name-mappings"
-        ],
-        "summary": "Delete Actor Name Mapping",
-        "operationId": "delete_actor_name_mapping",
-        "parameters": [
-          {
-            "name": "original",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Original"
-            }
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": "Successful Response"
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/actor-name-mappings/export": {
-      "get": {
-        "tags": [
-          "actor-name-mappings"
-        ],
-        "summary": "Export Actor Name Mappings",
-        "operationId": "export_actor_name_mappings",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/actor-name-mappings/import": {
-      "post": {
-        "tags": [
-          "actor-name-mappings"
-        ],
-        "summary": "Import Actor Name Mappings",
-        "operationId": "import_actor_name_mappings",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "additionalProperties": true,
-                "type": "object",
-                "title": "Payload"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "additionalProperties": true,
-                  "type": "object",
-                  "title": "Response Import Actor Name Mappings"
-                }
               }
             }
           },
@@ -7993,33 +7888,6 @@
         "type": "object",
         "title": "ActorLocksRequest",
         "description": "整体替换锁定字段集合."
-      },
-      "ActorNameUpdate": {
-        "properties": {
-          "original": {
-            "type": "string",
-            "maxLength": 300,
-            "minLength": 1,
-            "title": "Original"
-          },
-          "translation": {
-            "anyOf": [
-              {
-                "type": "string",
-                "maxLength": 300
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Translation"
-          }
-        },
-        "type": "object",
-        "required": [
-          "original"
-        ],
-        "title": "ActorNameUpdate"
       },
       "ActorPushResult": {
         "properties": {
@@ -9627,6 +9495,7 @@
           "chinese",
           "western",
           "fc2",
+          "heydouga",
           "amateur",
           "hentai"
         ],
@@ -11008,6 +10877,7 @@
                   "avsox"
                 ],
                 "chinese": [
+                  "tangxin",
                   "iqqtv",
                   "javdb",
                   "airav",
@@ -11023,6 +10893,10 @@
                 "hentai": [
                   "getchu",
                   "dmm",
+                  "javdb"
+                ],
+                "heydouga": [
+                  "heydouga",
                   "javdb"
                 ],
                 "uncensored": [
@@ -11300,6 +11174,19 @@
                   "use_browser": "auto",
                   "use_proxy": true
                 },
+                "heydouga": {
+                  "cookie": {},
+                  "languages": [
+                    "zh",
+                    "ja",
+                    "en"
+                  ],
+                  "official_routes": {},
+                  "rate_limit": 2.0,
+                  "tls_impersonate": true,
+                  "use_browser": "auto",
+                  "use_proxy": true
+                },
                 "iqqtv": {
                   "cookie": {},
                   "languages": [
@@ -11457,6 +11344,19 @@
                   "use_proxy": true
                 },
                 "r18dev": {
+                  "cookie": {},
+                  "languages": [
+                    "zh",
+                    "ja",
+                    "en"
+                  ],
+                  "official_routes": {},
+                  "rate_limit": 2.0,
+                  "tls_impersonate": true,
+                  "use_browser": "auto",
+                  "use_proxy": true
+                },
+                "tangxin": {
                   "cookie": {},
                   "languages": [
                     "zh",
@@ -13242,6 +13142,16 @@
         ],
         "title": "Manufacturer"
       },
+      "MappingGroup": {
+        "type": "string",
+        "enum": [
+          "tag",
+          "actor",
+          "vendor"
+        ],
+        "title": "MappingGroup",
+        "description": "页面上的滑动选项; 每项一张表, 各自独立对账与展示."
+      },
       "MappingUpdate": {
         "properties": {
           "original": {
@@ -13793,6 +13703,14 @@
             "type": "object",
             "title": "Actor Display Names",
             "description": "演员显示名映射 (原始名 → 中文名); 仅展示用"
+          },
+          "tags": {
+            "items": {
+              "$ref": "#/components/schemas/TagPair"
+            },
+            "type": "array",
+            "title": "Tags",
+            "description": "标签的 (原名, 展示名) 对照, 保序去重; 详情页据此在原文与译文间切换"
           },
           "director_ids": {
             "additionalProperties": {
@@ -17314,6 +17232,7 @@
                   "freejavbt",
                   "getchu",
                   "giga",
+                  "heydouga",
                   "iqqtv",
                   "jav321",
                   "javbus",
@@ -17329,6 +17248,7 @@
                   "caribbeancompr",
                   "prestige",
                   "r18dev",
+                  "tangxin",
                   "10musume",
                   "tokyo_hot",
                   "theporndb",
@@ -17364,6 +17284,7 @@
                   "freejavbt",
                   "getchu",
                   "giga",
+                  "heydouga",
                   "iqqtv",
                   "jav321",
                   "javbus",
@@ -17379,6 +17300,7 @@
                   "caribbeancompr",
                   "prestige",
                   "r18dev",
+                  "tangxin",
                   "10musume",
                   "tokyo_hot",
                   "theporndb",
@@ -17414,6 +17336,7 @@
                   "freejavbt",
                   "getchu",
                   "giga",
+                  "heydouga",
                   "iqqtv",
                   "jav321",
                   "javbus",
@@ -17429,6 +17352,7 @@
                   "caribbeancompr",
                   "prestige",
                   "r18dev",
+                  "tangxin",
                   "10musume",
                   "tokyo_hot",
                   "theporndb",
@@ -18093,6 +18017,7 @@
           "getchu",
           "gfriends",
           "giga",
+          "heydouga",
           "iqqtv",
           "jav321",
           "javbus",
@@ -18109,6 +18034,7 @@
           "caribbeancompr",
           "prestige",
           "r18dev",
+          "tangxin",
           "10musume",
           "tokyo_hot",
           "theporndb",
@@ -18384,6 +18310,25 @@
           "originals"
         ],
         "title": "SuggestRequest"
+      },
+      "TagPair": {
+        "properties": {
+          "raw": {
+            "type": "string",
+            "title": "Raw"
+          },
+          "shown": {
+            "type": "string",
+            "title": "Shown"
+          }
+        },
+        "type": "object",
+        "required": [
+          "raw",
+          "shown"
+        ],
+        "title": "TagPair",
+        "description": "一个标签的两种写法: 库里存的原名, 与映射表给出的展示名.\n\n成对给出而不只给译文, 是因为详情页要能在两者之间切换; 只给译文时前端只能反查原名,\n而两个不同原名映射到同一译文 (``パイズリ`` 与 ``パイズリ顔射`` 都译作「乳交」) 时\n反查必然丢掉一个."
       },
       "TaskBatchAction": {
         "type": "string",

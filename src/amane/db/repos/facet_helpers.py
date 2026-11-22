@@ -90,9 +90,7 @@ class _LinkFacetSpec:
     get_names: Callable[[Metadata], list[str]] | None = None
     set_names: Callable[[Metadata, list[str]], None] | None = None
     #: 关联行工厂, 批量重建投影时按下标写 position.
-    build: (
-        Callable[[int, int, int], MetadataActor | MetadataDirector | MetadataTag | MetadataSeries] | None
-    ) = None
+    build: Callable[[int, int, int], MetadataActor | MetadataDirector | MetadataTag | MetadataSeries] | None = None
     alias_model: type[ActorAlias] | None = None  # 仅 Actor 搜索一并命中别名行
 
 
@@ -891,6 +889,43 @@ def normalize_names(names: list[str] | None) -> list[str]:
     return [n for n in names if isinstance(n, str) and n]
 
 
+async def facet_sources(session: AsyncSession, kind: FacetKind) -> dict[str, list[str]]:
+    """分类名 → 供给它的刮削来源, 按 ``Metadata.field_sources`` 聚合.
+
+    来源是影片级的归属: 某条影片从哪个站点刮到标签 / 演员 / 片商, 那个名字就记着该站点.
+    只读元数据的真值列与 ``field_sources``, 不碰分类表.
+    """
+    spec = _SOURCE_COLUMNS.get(kind)
+    if spec is None:
+        # 导演没有映射表, 用户标签由用户自己挂载: 两者都没有刮削来源可言.
+        return {}
+    source_key, column_name = spec
+    column = getattr(Metadata, column_name)
+    sources: dict[str, set[str]] = {}
+    rows = await session.exec(select(Metadata.field_sources, column))
+    for field_sources, truth in rows:
+        if not isinstance(field_sources, dict):
+            continue
+        source = field_sources.get(source_key)
+        if not isinstance(source, str) or not source:
+            continue
+        values = truth if isinstance(truth, list) else [truth]
+        for name in normalize_names(values):
+            sources.setdefault(name, set()).add(source)
+    return {name: sorted(values) for name, values in sources.items()}
+
+
+#: 分类 → (``field_sources`` 里的键, ``Metadata`` 上的真值列).
+#: 系列两者不同名: 来源键是 ``series``, 多值真值列是 ``series_names``.
+_SOURCE_COLUMNS: dict[FacetKind, tuple[str, str]] = {
+    FacetKind.ACTOR: ("actors", "actors"),
+    FacetKind.TAG: ("tags", "tags"),
+    FacetKind.STUDIO: ("studio", "studio"),
+    FacetKind.PUBLISHER: ("publisher", "publisher"),
+    FacetKind.SERIES: ("series", "series_names"),
+}
+
+
 async def resolve_scalar_facet_names(
     session: AsyncSession, model: type[Studio] | type[Publisher] | type[Series], ids: Sequence[int] | None
 ) -> list[str]:
@@ -1152,7 +1187,6 @@ async def _merge_mutual_alias_actors(session: AsyncSession, names: list[str]) ->
         if final not in survivors:
             survivors.append(final)
     return survivors
-
 
 
 async def sync_metadata_facets(session: AsyncSession, meta: Metadata) -> None:

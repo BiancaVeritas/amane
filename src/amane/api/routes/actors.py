@@ -9,6 +9,7 @@ from ...db.models import Actor, FacetKind, SavedQueryEntity, TaskType
 from ...db.repo_types import ActorBrowseItem, ActorBrowseParams, ActorPersonFields, WriteMode
 from ...handlers import ActorScrapePayload
 from ...media import manual_crop_image
+from ...tags import MappingGroup
 from ...utils.dates import normalize_calendar_date
 from ...utils.model import to_resp
 from ..deps import RepoDep, RuntimeDep
@@ -123,7 +124,7 @@ async def list_actors(
         id_subquery_sql = await resolve_saved_query_id_subquery(repo, params.saved_query_id, SavedQueryEntity.ACTOR)
     items, total = await repo.browse_actors(params, id_subquery_sql=id_subquery_sql)
     # 映射只换显示名; name 仍是原始名, 前端用它做搜索与跳转.
-    display = runtime.actor_names.display_map([i.name for i in items])
+    display = runtime.mappings.store(MappingGroup.ACTOR).display_map([i.name for i in items])
     return ActorListResponse(items=[_from_browse(i, display_name=display.get(i.name)) for i in items], total=total)
 
 
@@ -170,7 +171,7 @@ async def get_actor(
     actor = await repo.get_actor(actor_id)
     if item is None or actor is None:
         raise HTTPException(status_code=404, detail="演员不存在")
-    return await _detail_response(repo, actor, runtime.actor_names.display(actor.name))
+    return await _detail_response(repo, actor, runtime.mappings.display(MappingGroup.ACTOR, actor.name))
 
 
 @router.patch("/{actor_id}")
@@ -198,7 +199,7 @@ async def update_actor(
     actor = await repo.update_actor(actor_id, mode=WriteMode.MANUAL, **updates)
     if actor is None:
         raise HTTPException(status_code=404, detail="演员不存在")
-    return await _detail_response(repo, actor, runtime.actor_names.display(actor.name))
+    return await _detail_response(repo, actor, runtime.mappings.display(MappingGroup.ACTOR, actor.name))
 
 
 @router.put("/{actor_id}/locks")
@@ -213,7 +214,7 @@ async def set_actor_locks(
     if actor is None:
         raise HTTPException(status_code=404, detail="演员不存在")
     logger.info("actor locks updated", actor_id=actor_id, fields=[str(field) for field in req.fields])
-    return await _detail_response(repo, actor, runtime.actor_names.display(actor.name))
+    return await _detail_response(repo, actor, runtime.mappings.display(MappingGroup.ACTOR, actor.name))
 
 
 @router.post("/{actor_id}/clear-person", deprecated=True)
@@ -227,7 +228,7 @@ async def clear_actor_person(
     if actor is None:
         raise HTTPException(status_code=404, detail="演员不存在")
     logger.info("actor person cleared", actor_id=actor_id)
-    return await _detail_response(repo, actor, runtime.actor_names.display(actor.name))
+    return await _detail_response(repo, actor, runtime.mappings.display(MappingGroup.ACTOR, actor.name))
 
 
 @router.post("/{actor_id}/crop-avatar")
@@ -269,7 +270,7 @@ async def crop_actor_avatar(
     if updated is None:
         raise HTTPException(status_code=404, detail="演员不存在")
     logger.info("actor avatar cropped", actor_id=actor_id, box=box, rotation=req.rotation, image_url=cropped_url)
-    return await _detail_response(repo, updated, runtime.actor_names.display(updated.name))
+    return await _detail_response(repo, updated, runtime.mappings.display(MappingGroup.ACTOR, updated.name))
 
 
 @router.post("/{actor_id}/scrape", status_code=202, deprecated=True)

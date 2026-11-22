@@ -283,6 +283,7 @@
           "chinese": "Chinese",
           "western": "Western",
           "fc2": "FC2",
+          "heydouga": "Heydouga",
           "amateur": "Amateur",
           "hentai": "Hentai"
         }
@@ -535,7 +536,11 @@
     "search": "Search",
     "noResult": "No results from any source",
     "pickOne": "{{count}} result(s) found — pick one to use",
-    "useThis": "Select"
+    "useThis": "Select",
+    "pickOne_one": "manualScrape.pickOne",
+    "pickOne_other": "manualScrape.pickOne",
+    "contentType": "Content route",
+    "contentTypeAll": "All"
   },
   "scrape": {
     "manual": "Manual search"
@@ -549,6 +554,10 @@
     "cleared": "Cleared {{count}} entries",
     "empty": "No records yet",
     "removeOne": "Remove this record",
-    "notOrganized": "Not organized"
+    "notOrganized": "Not organized",
+    "cleared_one": "scrapedRecords.cleared",
+    "cleared_other": "scrapedRecords.cleared",
+    "count_one": "scrapedRecords.count",
+    "count_other": "scrapedRecords.count"
   }
 }

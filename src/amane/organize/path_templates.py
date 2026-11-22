@@ -183,7 +183,7 @@ def resolve_paths(
     file_info: FileInfo | None = None,
     safe_dirs: Sequence[Path] | None = (),
     actor_genders: Mapping[str, ActorGender] | None = None,
-    actor_mapping_path: Path | None = None,
+    mapping_dir: Path | None = None,
 ) -> ResolvedPaths:
     """``safe_dirs is None`` 时不限制绝对模板写出的路径; 相对模板仍须在 base_path 下."""
     base_path = Path(library.path)
@@ -196,7 +196,7 @@ def resolve_paths(
         actor_genders=actor_genders,
         library_root=base_path,
         custom_placeholders=_custom_placeholders(library),
-        actor_mapping_path=actor_mapping_path,
+        mapping_dir=mapping_dir,
     )
 
     # 先渲染视频, 注入 `{video_*}` 后再渲染链接与刮削产物.

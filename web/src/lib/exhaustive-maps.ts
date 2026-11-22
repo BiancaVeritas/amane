@@ -70,6 +70,7 @@ export const CONTENT_TYPES = exhaustiveTuple<ContentType>()(
   "chinese",
   "western",
   "fc2",
+  "heydouga",
   "amateur",
   "hentai",
 );
@@ -177,6 +178,11 @@ export const FAVORITE_FACET_KINDS = exhaustiveTuple<Exclude<FacetKind, "actor" |
   "publisher",
   "series",
 );
+
+/** 有中文映射表的分类 (演员在演员页, 导演与用户标签没有映射表). */
+export const MAPPING_FACET_KINDS = exhaustiveTuple<
+  Exclude<FacetKind, "actor" | "director" | "user_tag">
+>()("tag", "studio", "publisher", "series");
 
 export const ACTOR_SORT_FIELDS = exhaustiveTuple<ActorSortField>()(
   "name",

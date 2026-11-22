@@ -29,6 +29,14 @@ import { ACTOR_SORT_FIELDS } from "@/lib/exhaustive-maps";
 type Theme = "light" | "dark" | "auto";
 type Language = "zh-CN" | "en";
 
+/**
+ * 元数据「原文 / 中文」的展示语言.
+ *
+ * 与界面语言 (`language`) 正交: 界面可以是中文而内容看原文, 反之亦然. 只影响详情页展示,
+ * 不改库里任何数据.
+ */
+export type ContentLang = "zh" | "raw";
+
 export type CardSize = "xs" | "sm" | "small" | "medium" | "default" | "large" | "xl" | "xxl";
 export type CardSizeKey = "meta" | "actors";
 
@@ -66,6 +74,8 @@ interface UIState {
   navbarCollapsed: boolean;
   theme: Theme;
   language: Language;
+  /** 元数据展示语言; 与界面语言正交, 见 `ContentLang`. */
+  contentLang: ContentLang;
   autoScroll: boolean;
   logLevelFilter: LogLevel[];
   pageSizes: Record<PageSizeKey, PageSize>;
@@ -110,6 +120,7 @@ interface UIState {
   setNavbarCollapsed: (collapsed: boolean) => void;
   setTheme: (theme: Theme) => void;
   setLanguage: (language: Language) => void;
+  setContentLang: (lang: ContentLang) => void;
   setAutoScroll: (autoScroll: boolean) => void;
   setLogLevelFilter: (levels: LogLevel[]) => void;
   setPageSize: (key: PageSizeKey, size: PageSize) => void;
@@ -132,6 +143,8 @@ export const useUIStore = create<UIState>()(
       navbarCollapsed: false,
       theme: "dark",
       language: "zh-CN",
+      // 默认看中文: 库里存的多数是日文原名, 直接显示原文对多数用户不可读.
+      contentLang: "zh",
       autoScroll: true,
       logLevelFilter: [],
       pageSizes: { ...DEFAULT_PAGE_SIZES },
@@ -149,6 +162,7 @@ export const useUIStore = create<UIState>()(
       setNavbarCollapsed: (collapsed) => set({ navbarCollapsed: collapsed }),
       setTheme: (theme) => set({ theme }),
       setLanguage: (language) => set({ language }),
+      setContentLang: (contentLang) => set({ contentLang }),
       setAutoScroll: (autoScroll) => set({ autoScroll }),
       setLogLevelFilter: (levels) => set({ logLevelFilter: levels }),
       setPageSize: (key, size) =>
@@ -185,6 +199,9 @@ export const useUIStore = create<UIState>()(
         return {
           ...current,
           ...p,
+          // 不记忆展示语言: 每次进详情页都从「中文」开始, 避免上次选了原文、下次打开
+          // 一片日文条目还以为没翻译. `...p` 会把它带回来, 这里显式覆盖.
+          contentLang: "zh",
           pageSizes,
           cardSizes: {
             meta: isCardSize(persistedCardSizes?.meta) ? persistedCardSizes.meta : "default",

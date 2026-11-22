@@ -75,6 +75,8 @@ OpenAPI 列出参数, 不表达组合语义:
 
 **状态码**: 创建 201、任务入队 202、无返回体 204; 空 PATCH / 非法 cron → 422; 任务状态不允许的 record → 409.
 
+**中文映射**: `/mappings/{group}` 一族 (list / PUT / DELETE / export / import / suggest) 按路径里的 `group` 选表, 只认 `tag` / `actor` / `vendor` —— 分组与页面的滑动选项一致, 不是按 `FacetKind` 分的: 片商那一组的制作商 / 发行商 / 系列共用一个文件, 同一个名字只占一行 (`roles` 记归属). `/mappings/groups` 声明各组管的分类与是否带归档区, 前端据此渲染. 三组行为一致, 差异只有标签那组: DELETE 是归档并另开 `restore`, 列表另带归档统计. 列表读取前先按分类表对账, 分类表里已经不存在的自动条目连同译名一起删 (手动条目保留). 映射只改展示, 筛选与去重的入参仍是原名; 片商三类的展示规则见 [data-model.md](data-model.md).
+
 **资源缓存**: `/resources/{hash}` 与 `/proxy` 因就地超分 URL 不变, 不可 immutable — `Cache-Control: public, no-cache` + `content_hash` ETag. proxy 上游失败 502, 进程内负缓存 15 分钟 (不纳入配置), 同 URL singleflight; 刮削下载不经由该缓存. 图片 token 的 proxy 请求只从缓存读取: 未命中返回 404, 不经过负缓存与 singleflight, 也不发起请求.
 
 **资源出站**: 第三方 URL 进入下载通道前经过 `net/egress` — 协议白名单对每次请求生效, 地址判定由调用点选择 (`/proxy` 只在缓存未命中时判定; 刮削下载允许内网以支持 LAN 镜像), 重定向逐跳复查. 地址判定只拒绝指向本机与内网的段, fake-IP 与 DNS 封堵应答照常放行, 连接失败按上游失败处理. 判定依据本机解析, 不防御 DNS rebinding, 也无法约束由代理解析目标的路径 (HTTP 代理、`socks5h`、TUN); 因此 `/proxy` 另按内容兜底: 不论是否命中缓存, 只回放按内容判定为图片的文件, 下载到非图片时不写入资源记录. 浏览器渲染通道不经该客户端, 不受这条判定约束.

@@ -167,16 +167,27 @@ CASES: list[object] = [
     _Case("/media/FC2PPV1234567.mp4", number="FC2-1234567", content_type=ContentType.FC2),
     _Case("/media/HEYZO-1234.mp4", number="HEYZO-1234", content_type=ContentType.UNCENSORED),
     _Case("/media/H4610-ki221218.mp4", number="H4610-KI221218", content_type=ContentType.UNCENSORED),
-    # heydouga 的两段数字都属于番号; 省略短横线与 4K / 分集尾标不改变结果
+    # heydouga 与 FC2 同类: 番号只是站内编号, 不带马赛克信息, 类型单独一种.
+    # 两段数字都属于番号; 省略短横线与 4K / 分集尾标不改变结果
     _Case(
         "/media/heydouga-4037-1002-4K.mp4",
         definition="4k",
         number="Heydouga-4037-1002",
-        content_type=ContentType.UNCENSORED,
+        content_type=ContentType.HEYDOUGA,
     ),
-    _Case("/media/heydouga4037-1002.mp4", number="Heydouga-4037-1002", content_type=ContentType.UNCENSORED),
-    _Case("/media/heydouga_4037_1002-CD1.mp4", cd=1, number="Heydouga-4037-1002", content_type=ContentType.UNCENSORED),
-    _Case("/media/heydouga-4037.mp4", number="Heydouga-4037", content_type=ContentType.UNCENSORED),
+    _Case("/media/heydouga4037-1002.mp4", number="Heydouga-4037-1002", content_type=ContentType.HEYDOUGA),
+    _Case("/media/heydouga_4037_1002-CD1.mp4", cd=1, number="Heydouga-4037-1002", content_type=ContentType.HEYDOUGA),
+    _Case("/media/heydouga-4037.mp4", number="Heydouga-4037", content_type=ContentType.HEYDOUGA),
+    # 站名写法多样: 方括号 / 括号包住, 或写成 heydouga.com
+    _Case("/media/[Heydouga] 4037-1002.mp4", number="Heydouga-4037-1002", content_type=ContentType.HEYDOUGA),
+    _Case("/media/heydouga.com 4037-1002.mp4", number="Heydouga-4037-1002", content_type=ContentType.HEYDOUGA),
+    # 无码标记只描述这一份文件, 不改变类型
+    _Case(
+        "/media/heydouga-4037-1002 無修正.mp4",
+        mosaic="uncensored",
+        number="Heydouga-4037-1002",
+        content_type=ContentType.HEYDOUGA,
+    ),
     _Case("/media/S2MBD-006.mp4", number="S2MBD-006", content_type=ContentType.UNCENSORED),
     _Case("/media/SMBD-005.mp4", number="SMBD-005", content_type=ContentType.UNCENSORED),
     _Case("/media/gachig256.mp4", number="GACHIG-256", content_type=ContentType.UNCENSORED),
@@ -463,7 +474,7 @@ INFER_CONTENT_TYPE_CASES: list[tuple[str, str | None, ContentType]] = [
     ("FC2-PPV-1234567", None, ContentType.FC2),
     ("vixen.23.04.15", None, ContentType.WESTERN),
     ("HEYZO-1234", None, ContentType.UNCENSORED),
-    ("HEYDOUGA-4037-1002", None, ContentType.UNCENSORED),
+    ("HEYDOUGA-4037-1002", None, ContentType.HEYDOUGA),
     ("CWP-123", None, ContentType.UNCENSORED),
     ("n1234", None, ContentType.UNCENSORED),
     ("k1363", None, ContentType.UNCENSORED),
@@ -612,6 +623,27 @@ def test_mosaic_canonical_filename_roundtrip(source: str, canonical: str) -> Non
     assert info.mosaic == canonical
     again = parse_file_info(f"MIDV-123-{canonical}.mp4")
     assert again.mosaic == canonical
+
+
+UNCENSORED_WORDING_CASES: list[tuple[str, str | None]] = [
+    # 日文站与压制组常用的几种写法都算无码
+    ("MIDV-123 無修正.mp4", "uncensored"),
+    ("MIDV-123-无修正.mp4", "uncensored"),
+    ("【無】MIDV-123.mp4", "uncensored"),
+    ("[無]MIDV-123.mp4", "uncensored"),
+    ("(無)MIDV-123.mp4", "uncensored"),
+    ("MIDV-123【無】.mp4", "uncensored"),
+    # 无括号的「無」会命中「無料」之类无关词, 因此不算标记
+    ("MIDV-123-無料.mp4", None),
+    ("MIDV-123-無.mp4", None),
+    # 破解仍优先于无码
+    ("MIDV-123 無修正 破解.mp4", "cracked"),
+]
+
+
+@pytest.mark.parametrize(("filename", "expected"), UNCENSORED_WORDING_CASES)
+def test_detect_mosaic_uncensored_wording(filename: str, expected: str | None) -> None:
+    assert parse_file_info(filename).mosaic == expected
 
 
 VR_CASES: list[tuple[list[str], bool]] = [

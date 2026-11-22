@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import os
 import re
 from collections.abc import Mapping, Sequence
@@ -10,7 +9,6 @@ from dataclasses import dataclass
 from pathlib import Path, PureWindowsPath
 from typing import TYPE_CHECKING, TypedDict, cast
 
-import structlog
 from jinja2 import Environment, StrictUndefined, TemplateError, meta
 
 from ..enums import ActorGender
@@ -22,6 +20,7 @@ from ..parsing.file_info import (
     mosaic_nature,
     split_number,
 )
+from ..tags import MappingGroup, load_translations
 from ..utils.path import is_any_descendant, is_descendant
 
 if TYPE_CHECKING:
@@ -395,27 +394,6 @@ def custom_variable_values(
     return values
 
 
-def _load_actor_names(path: Path | None) -> dict[str, str]:
-    """读演员显示名映射; 文件缺失或损坏时返回空表, 让模板回退原名."""
-    if path is None or not path.is_file():
-        return {}
-    try:
-        raw = json.loads(path.read_text(encoding="utf-8"))
-    except OSError, ValueError:
-        logger.warning("actor name mapping unreadable; falling back to original names", path=str(path))
-        return {}
-    entries = raw.get("entries")
-    if not isinstance(entries, dict):
-        return {}
-    names: dict[str, str] = {}
-    for original, value in entries.items():
-        if isinstance(original, str) and isinstance(value, dict):
-            translation = value.get("translation")
-            if isinstance(translation, str) and translation.strip():
-                names[original] = translation.strip()
-    return names
-
-
 def _join_display(names: Sequence[str], mapping: Mapping[str, str]) -> str:
     """逗号拼接显示名; 空列表回落到 unknown 占位, 与原名版一致."""
     if not names:
@@ -439,10 +417,10 @@ def _build_variables(
     actor_genders: Mapping[str, ActorGender] | None = None,
     library_root: Path | None = None,
     custom_placeholders: Mapping[str, CustomPlaceholder] | None = None,
-    actor_mapping_path: Path | None = None,
+    mapping_dir: Path | None = None,
 ) -> TemplateVariables:
     year = metadata.release[:4] if metadata.release and len(metadata.release) >= 4 else None
-    actor_names = _load_actor_names(actor_mapping_path)
+    actor_names = load_translations(mapping_dir, MappingGroup.ACTOR)
     actor = metadata.actors[0] if metadata.actors else None
     actresses = actress_names(metadata.actors, actor_genders)
     actress = actresses[0] if actresses else None
@@ -538,7 +516,7 @@ class TemplateContext:
         actor_genders: Mapping[str, ActorGender] | None = None,
         library_root: Path | None = None,
         custom_placeholders: Mapping[str, CustomPlaceholder] | None = None,
-        actor_mapping_path: Path | None = None,
+        mapping_dir: Path | None = None,
     ) -> TemplateContext:
         built = _build_variables(
             metadata,
@@ -549,7 +527,7 @@ class TemplateContext:
             actor_genders,
             library_root,
             custom_placeholders,
-            actor_mapping_path,
+            mapping_dir,
         )
         variables = cast(dict[str, str], {**built})
         # {dir} 是 {raw_dir} 的别名, 不下发 schema.
@@ -719,9 +697,6 @@ class JinjaPathEngine(PathEngine):
             return self._template.render(**variables)
         except TemplateError as exc:
             raise ValueError(f"Jinja2 模板渲染失败: {exc}") from exc
-
-
-logger = structlog.get_logger()
 
 
 class StrmEngine(TemplateEngine):

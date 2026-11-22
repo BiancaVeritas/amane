@@ -52,6 +52,7 @@
     "feeds": "订阅",
     "feedSources": "订阅源",
     "savedQueries": "查询预设",
+    "mappings": "映射表",
     "manual": "用户手册",
     "agent": "Amane",
     "groups": {
@@ -74,6 +75,11 @@
   "language": {
     "zh-CN": "简体中文",
     "en": "English"
+  },
+  "contentLang": {
+    "zh": "中文",
+    "raw": "原文",
+    "hint": "元数据展示语言: 中文 / 原文"
   },
   "pagination": {
     "totalItems": "(共 {{count}} 条)",

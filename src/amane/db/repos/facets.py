@@ -63,6 +63,7 @@ from .facet_helpers import (
     apply_user_tags_to_metadata,
     delete_link_facet,
     delete_scalar_facet,
+    facet_sources,
     get_facet,
     list_facets,
     merge_link_facets,
@@ -257,6 +258,15 @@ class FacetsRepoMixin(RepositoryMixinBase):
                 order=order,
             )
 
+    async def facet_sources(self, kind: FacetKind) -> dict[str, list[str]]:
+        """分类名 → 这些名字来自哪些刮削来源, 取自条目的 ``field_sources``.
+
+        来源是影片级的归属: 一条影片从某个站点刮到标签 / 演员 / 片商, 那个名字就算来自该站点.
+        ``user_tag`` 没有对应字段, 因此恒为空表.
+        """
+        async with self._session() as session:
+            return await facet_sources(session, kind)
+
     async def set_facets_favorite(
         self, kind: FacetKind, facet_ids: Sequence[int], is_favorite: bool
     ) -> FacetBatchResult:
@@ -315,9 +325,7 @@ class FacetsRepoMixin(RepositoryMixinBase):
                         .where(col(ActorAlias.actor_id).in_(chunk))
                         .order_by(col(ActorAlias.actor_id), col(ActorAlias.position), col(ActorAlias.id))
                     )
-                    rows.extend(
-                        (int(actor_id), str(name)) for actor_id, name in (await session.exec(stmt)).all()
-                    )
+                    rows.extend((int(actor_id), str(name)) for actor_id, name in (await session.exec(stmt)).all())
         grouped: dict[int, list[str]] = {}
         for actor_id, name in rows:
             grouped.setdefault(actor_id, []).append(name)

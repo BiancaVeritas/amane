@@ -82,7 +82,7 @@ class TestMetadataHttp:
 
     @pytest.mark.asyncio(loop_scope="function")
     async def test_list_phase_comes_from_number_without_files(self, client: AsyncClient, repo: Repository):
-        """有码 / 无码取番号类别: 没有挂载文件也亮, 无码再并上文件的无码标记."""
+        """有码 / 无码取番号类别: 没有挂载文件也亮; 有码番的无码副本不再同时亮有码."""
         uncensored = await repo.upsert_metadata(number="HEYZO-1234")
         marked = await repo.upsert_metadata(number="MIDV-002")
         assert uncensored.id is not None and marked.id is not None
@@ -102,7 +102,8 @@ class TestMetadataHttp:
             "ltx": False,
             "tags": [],
         }
-        assert items["MIDV-002"]["file_phase"]["censored"] is True
+        # 无码替换掉有码: 两枚角标不能同时亮
+        assert items["MIDV-002"]["file_phase"]["censored"] is False
         assert items["MIDV-002"]["file_phase"]["uncensored"] is True
         assert items["MIDV-002"]["file_phase"]["mosaics"] == ["uncensored"]
 
@@ -651,7 +652,7 @@ async def test_split_merged_tag_ids_merges_by_display_name(tmp_path) -> None:
             return facets, len(facets)
 
     repo = FakeRepo()
-    runtime = SimpleNamespace(tag_mappings=store)
+    runtime = SimpleNamespace(mappings=SimpleNamespace(tags=store))
 
     # 没有映射的中文标签: 与译文同名的日文标签并成一组, 走 OR.
     and_ids, or_ids = await _split_merged_tag_ids(repo, runtime, [1])

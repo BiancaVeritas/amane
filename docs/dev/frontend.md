@@ -26,6 +26,9 @@
 | **Ops** | `/logs` | `routes/logs.tsx` | `components/log/`, `stores/logs.ts` |
 | **Ops** | `/network` | `routes/network.tsx` | `components/network-check/`, `hooks/use-network-check.ts` |
 | **Settings** | `/settings` | `routes/settings.tsx` | `components/schema-form/`, `hooks/use-config.ts` |
+| **Settings** | `/mappings` | `routes/mappings.tsx` | 五个分类的中文映射表 (见下文) |
+
+`/mappings` 是中文映射的唯一入口: 滑动条在最上方 (全宽) 决定整页是哪张表, 三个选项依次是标签 / 演员 / 片商, 标题、说明、筛选项与可用动作都跟着当前选项走 —— 新增一组时只加选项, 不改页面结构. 片商那一组的制作商 / 发行商 / 系列合成一张表, 同一个词只占一行并用徽章标出来源分类. 状态落在 URL search 上 (`group` / `status` / `language` / `frequency` / `search` / `page`), 其余为默认值时由 `stripSearchParams` 抹掉. 演员列表与演员详情页不再各自开映射弹窗.
 
 路由由 `@tanstack/router-vite-plugin` 从 `routes/` 生成 (`routeTree.gen.ts` 不手改): 文件名的点号即路径层级, 需要独立 URL 又共享布局的一层写成 `xxx.tsx` + `xxx.index.tsx`, 叶页与父级同段时用尾随 `_`. `tanstackRouter()` 必须排在 JSX 转换插件之前, 顺序颠倒时构建失败.
 

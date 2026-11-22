@@ -52,6 +52,7 @@
     "feeds": "Feeds",
     "feedSources": "Feed sources",
     "savedQueries": "Saved queries",
+    "mappings": "Mapping tables",
     "manual": "User manual",
     "agent": "Amane",
     "groups": {
@@ -74,6 +75,11 @@
   "language": {
     "zh-CN": "简体中文",
     "en": "English"
+  },
+  "contentLang": {
+    "zh": "中文",
+    "raw": "原文",
+    "hint": "Metadata display language: Chinese / original"
   },
   "pagination": {
     "totalItems": "({{count}} total)",

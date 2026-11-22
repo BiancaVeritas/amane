@@ -11,14 +11,7 @@ import {
   TextInput,
   Title,
 } from "@mantine/core";
-import {
-  IconFilter,
-  IconRefresh,
-  IconSearch,
-  IconTable,
-  IconUserEdit,
-  IconX,
-} from "@tabler/icons-react";
+import { IconFilter, IconRefresh, IconSearch, IconTable, IconX } from "@tabler/icons-react";
 import { notifications } from "@mantine/notifications";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { createFileRoute, stripSearchParams } from "@tanstack/react-router";
@@ -41,7 +34,6 @@ import { BrowseDisplaySettings } from "@/components/common/browse-display-settin
 import { SortMenu } from "@/components/common/sort-menu";
 import { ActorFilterControls } from "@/components/media/actor-filter-controls";
 import { ActorGrid } from "@/components/media/actor-grid";
-import { ActorNameMappingDialog } from "@/components/media/actor-name-mapping-dialog";
 import { ActorTable } from "@/components/media/actor-table";
 import {
   ACTOR_RANGE_FILTERS,
@@ -264,7 +256,6 @@ function ActorsIndexPage() {
     });
   }
 
-  const [mappingOpen, setMappingOpen] = useState(false);
   // 多选提到页面层: 工具栏的「演员同步」要读它来决定同步范围.
   const mediaServer = useMediaServerReady();
   const [picked, setPicked] = useState<Set<number>>(() => new Set());
@@ -344,14 +335,7 @@ function ActorsIndexPage() {
               </Menu>
             </Box>
           </Tooltip>
-          <Button
-            size="sm"
-            variant="light"
-            leftSection={<IconUserEdit size={16} />}
-            onClick={() => setMappingOpen(true)}
-          >
-            {t("actorNameMapping.button")}
-          </Button>
+
           <ListDefaultActions update={{ key: "actors", value: actorListDefaults(search) }} />
         </Group>
       }
@@ -549,7 +533,6 @@ function ActorsIndexPage() {
         </>
       )}
       <ScrollToTop />
-      <ActorNameMappingDialog opened={mappingOpen} onClose={() => setMappingOpen(false)} />
     </BrowsePageShell>
   );
 }
