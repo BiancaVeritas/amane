@@ -1,12 +1,16 @@
 import { Badge, Group, Stack, Text, Title } from "@mantine/core";
-import { IconStar } from "@tabler/icons-react";
-import { useQuery } from "@tanstack/react-query";
+import { notifications } from "@mantine/notifications";
+import { IconStar, IconTrash } from "@tabler/icons-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
-import { listFacetsOptions } from "@/client/@tanstack/react-query.gen";
+import { listFacetsOptions, listFacetsQueryKey } from "@/client/@tanstack/react-query.gen";
+import { pruneEmptyFacetsEndpoint } from "@/client/sdk.gen";
 import type { FacetResponse } from "@/client/types.gen";
+import { HintedActionIcon } from "@/components/common/hinted-action-icon";
 import { FacetFavoriteMark } from "@/components/media/facet-favorite-star";
 import { CATALOG_FACET_KINDS, FAVORITE_FACET_KINDS } from "@/lib/exhaustive-maps";
+import { extractErrorMessage } from "@/lib/api-error";
 import { FACET_KIND_ICON } from "@/lib/facets";
 
 export const Route = createFileRoute("/catalog/")({ component: CatalogIndexPage });
@@ -142,26 +146,58 @@ function KindSection({ kind }: { kind: CatalogKind }) {
     listFacetsOptions({ path: { kind }, query: { limit: PREVIEW, offset: 0 } }),
   );
 
+  // 清掉这一类里作品数为 0 的空壳; 有中文译名或已归档的由服务端保留.
+  const qc = useQueryClient();
+  const prune = useMutation({
+    mutationFn: () => pruneEmptyFacetsEndpoint({ path: { kind }, throwOnError: true }),
+    onSuccess: (res) => {
+      const removed = res.data?.removed ?? 0;
+      notifications.show({
+        message: t("manage.pruneEmptyResult", { count: removed }),
+        color: removed > 0 ? "blue" : "gray",
+      });
+      void qc.invalidateQueries({ queryKey: listFacetsQueryKey({ path: { kind } }) });
+    },
+    onError: (err) => {
+      notifications.show({
+        message: extractErrorMessage(err, t("manage.pruneEmptyFailed")),
+        color: "red",
+      });
+    },
+  });
+
   const items = data?.items ?? [];
   const total = data?.total ?? 0;
 
   return (
     <Stack gap="sm">
-      <Link
-        to="/catalog/$kind"
-        params={{ kind }}
-        style={{ textDecoration: "none", color: "inherit", width: "fit-content" }}
-      >
-        <Group gap="xs" style={{ cursor: "pointer" }}>
-          <Icon size={18} stroke={1.5} />
-          <Text fw={600}>
-            {t(`browse.kinds.${kind}`)}
-            <Text span c="dimmed" fw={400} ml={6}>
-              ({total})
+      <Group gap="xs" wrap="nowrap">
+        <Link
+          to="/catalog/$kind"
+          params={{ kind }}
+          style={{ textDecoration: "none", color: "inherit", width: "fit-content" }}
+        >
+          <Group gap="xs" style={{ cursor: "pointer" }}>
+            <Icon size={18} stroke={1.5} />
+            <Text fw={600}>
+              {t(`browse.kinds.${kind}`)}
+              <Text span c="dimmed" fw={400} ml={6}>
+                ({total})
+              </Text>
             </Text>
-          </Text>
-        </Group>
-      </Link>
+          </Group>
+        </Link>
+        <HintedActionIcon
+          variant="subtle"
+          color="gray"
+          size="sm"
+          loading={prune.isPending}
+          onClick={() => prune.mutate()}
+          label={t("manage.pruneEmpty")}
+        >
+          <IconTrash size={14} />
+        </HintedActionIcon>
+      </Group>
 
       {isLoading && (
         <Text size="sm" c="dimmed">

@@ -31,6 +31,7 @@ import {
   getFacetQueryKey,
   listFacetsQueryKey,
 } from "@/client/@tanstack/react-query.gen";
+import { pruneEmptyFacetsEndpoint } from "@/client/sdk.gen";
 import type { FacetKind, FacetResponse, FacetSortField, SortOrder } from "@/client/types.gen";
 import { FacetFavoriteStar } from "./facet-favorite-star";
 import { FacetRulesPanel } from "./facet-rules-panel";
@@ -127,6 +128,25 @@ export function CatalogFacetTable({
     onError: (err) =>
       notifications.show({
         message: extractErrorMessage(err, t("common:toast.operationFailed")),
+        color: "red",
+      }),
+  });
+
+  // 清掉作品数为 0 的空壳; 有中文译名或已归档的由服务端保留.
+  const pruneMutation = useMutation({
+    mutationFn: () => pruneEmptyFacetsEndpoint({ path: { kind }, throwOnError: true }),
+    onSuccess: (res) => {
+      const removed = res.data?.removed ?? 0;
+      notifications.show({
+        message: t("manage.pruneEmptyResult", { count: removed }),
+        color: removed > 0 ? "blue" : "gray",
+      });
+      void queryClient.invalidateQueries({ queryKey: [{ _id: "listFacets" }] });
+      clear();
+    },
+    onError: (err) =>
+      notifications.show({
+        message: extractErrorMessage(err, t("manage.pruneEmptyFailed")),
         color: "red",
       }),
   });
@@ -251,6 +271,16 @@ export function CatalogFacetTable({
                   </Button>
                 </>
               )}
+              <Button
+                size="xs"
+                variant="light"
+                color="gray"
+                leftSection={<IconTrash size={14} />}
+                loading={pruneMutation.isPending}
+                onClick={() => pruneMutation.mutate()}
+              >
+                {t("manage.pruneEmpty")}
+              </Button>
             </SelectionBar>
           </Stack>
         }

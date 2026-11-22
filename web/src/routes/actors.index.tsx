@@ -11,9 +11,16 @@ import {
   TextInput,
   Title,
 } from "@mantine/core";
-import { IconFilter, IconRefresh, IconSearch, IconTable, IconX } from "@tabler/icons-react";
+import {
+  IconFilter,
+  IconRefresh,
+  IconSearch,
+  IconTable,
+  IconTrash,
+  IconX,
+} from "@tabler/icons-react";
 import { notifications } from "@mantine/notifications";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, stripSearchParams } from "@tanstack/react-router";
 import type { ParseKeys } from "i18next";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -23,6 +30,7 @@ import {
   getFacetOptions,
   listActorsOptions,
 } from "@/client/@tanstack/react-query.gen";
+import { pruneEmptyFacetsEndpoint } from "@/client/sdk.gen";
 import type { ActorGender, ActorSortField } from "@/client/types.gen";
 import { BrowsePageShell } from "@/components/common/browse-page-shell";
 import { useRestoreScroll } from "@/components/common/use-restore-scroll";
@@ -261,6 +269,8 @@ function ActorsIndexPage() {
   const [picked, setPicked] = useState<Set<number>>(() => new Set());
   const clearPicked = useCallback(() => setPicked(new Set()), []);
 
+  const qc = useQueryClient();
+
   const pushMutation = useMutation({
     ...batchSubmitTasksMutation(),
     onSuccess: (res) => {
@@ -273,6 +283,24 @@ function ActorsIndexPage() {
     onError: (err) =>
       notifications.show({
         message: extractErrorMessage(err, t("common:toast.operationFailed")),
+        color: "red",
+      }),
+  });
+
+  // 清掉没有作品的演员; 有中文译名或已归档的由服务端保留.
+  const actorPruneMutation = useMutation({
+    mutationFn: () => pruneEmptyFacetsEndpoint({ path: { kind: "actor" }, throwOnError: true }),
+    onSuccess: (res) => {
+      const removed = res.data?.removed ?? 0;
+      notifications.show({
+        message: t("metadata:manage.pruneEmptyResult", { count: removed }),
+        color: removed > 0 ? "blue" : "gray",
+      });
+      void qc.invalidateQueries({ queryKey: [{ _id: "listActors" }] });
+    },
+    onError: (err) =>
+      notifications.show({
+        message: extractErrorMessage(err, t("metadata:manage.pruneEmptyFailed")),
         color: "red",
       }),
   });
@@ -300,6 +328,17 @@ function ActorsIndexPage() {
       title={<Title order={2}>{t("actors.title")}</Title>}
       actions={
         <Group gap="xs">
+          {/* 清掉没有作品的演员; 有中文译名或已归档的由服务端保留. */}
+          <Button
+            size="sm"
+            variant="light"
+            color="gray"
+            leftSection={<IconTrash size={16} />}
+            loading={actorPruneMutation.isPending}
+            onClick={() => actorPruneMutation.mutate()}
+          >
+            {t("metadata:manage.pruneEmpty")}
+          </Button>
           {/* 悬停给两种口径: 强制覆盖 / 强制增量. 选中若干就只同步这些, 空选则是全部.
               媒体服务器没配 API Key 时置灰, 悬停说明原因 (禁用后 Menu 不展开, 提示才看得到). */}
           <Tooltip label={mediaServer.reason} disabled={mediaServer.ready} withArrow>
