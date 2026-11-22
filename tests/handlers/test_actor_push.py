@@ -562,15 +562,17 @@ class TestSizesOverview:
         ("fields", "overview", "expected"),
         [
             # 有尺寸有简介: 尺寸行在前, <br> 收尾, 简介接在后面.
-            ({"height": 164, "cup": "F"}, "原简介", "身高：164cm、罩杯：F<br>原简介"),
+            ({"height": 164, "cup": "F"}, "原简介", "身高：164cm、罩杯：F<br>\n原简介"),
             # 只有尺寸: 仍带 <br>, 后续追加简介时才不会黏在一起.
-            ({"height": 164}, None, "身高：164cm<br>"),
+            ({"height": 164}, None, "身高：164cm<br>\n"),
             # 只有简介: 不加多余的行.
             ({}, "原简介", "原简介"),
             # 两者都空: 不写空值.
             ({}, None, None),
             # 已经是拼好的: 原样返回, 反复推送内容稳定.
             ({"height": 164}, "身高：164cm`n原简介", "身高：164cm`n原简介"),
+            # 已经是拼好的 (分隔符含换行): 原样返回, 不重复拼接.
+            ({"height": 164}, "身高：164cm\n\n原简介", "身高：164cm\n\n原简介"),
         ],
     )
     @pytest.mark.asyncio(loop_scope="function")
@@ -607,6 +609,9 @@ class TestSizesOverview:
         assert client.updates == [
             (
                 "p-SizedActor",
-                {"Overview": "身高：164cm、三围：94 / 58 / 89、罩杯：F、血型：A 型<br>原简介", "Tags": ["SizedActor"]},
+                {
+                    "Overview": "身高：164cm、三围：94 / 58 / 89、罩杯：F、血型：A 型<br>\n原简介",
+                    "Tags": ["SizedActor"],
+                },
             )
         ]
