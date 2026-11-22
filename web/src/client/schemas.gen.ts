@@ -3204,7 +3204,8 @@ export const HotSettingsSchema = {
                 poster_crop_types: [
                     'censored',
                     'uncensored',
-                    'fc2'
+                    'fc2',
+                    'heydouga'
                 ],
                 poster_ratio: 0.7,
                 uncensored_poster_ratio: 0.7,
