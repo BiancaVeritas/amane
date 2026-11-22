@@ -76,7 +76,7 @@ async def build_metadata_responses(
         summary = summaries.get(m.id) if m.id is not None else None
         # 列表项也要中文映射: 片库卡片直接显示这些标签.
         response = to_resp(MetadataListItem, m).model_copy(
-            update={"tags": runtime.mappings.tags.map_tags(m.tags), **_vendor_display(runtime, m)}
+            update={"tags": runtime.mappings.store(MappingGroup.TAG).map_tags(m.tags), **_vendor_display(runtime, m)}
         )
         if summary is not None:
             response = response.model_copy(
@@ -109,7 +109,7 @@ def _display_response(runtime: RuntimeDep, metadata: Metadata) -> MetadataRespon
     映射只改展示; 搜索、筛选与去重仍用库里的原名.
     """
     return to_resp(MetadataResponse, metadata).model_copy(
-        update={"tags": runtime.mappings.tags.map_tags(metadata.tags), **_vendor_display(runtime, metadata)}
+        update={"tags": runtime.mappings.store(MappingGroup.TAG).map_tags(metadata.tags), **_vendor_display(runtime, metadata)}
     )
 
 
@@ -130,7 +130,7 @@ async def _split_merged_tag_ids(
     rows, _ = await repo.list_facets(
         FacetKind.TAG, search=None, offset=0, limit=1000, sort_by=FacetSortField.NAME, order=SortOrder.ASC
     )
-    display_by_id = {row.id: runtime.mappings.tags.map_tags([row.name])[0] for row in rows}
+    display_by_id = {row.id: runtime.mappings.store(MappingGroup.TAG).map_tags([row.name])[0] for row in rows}
     ids_by_display: dict[str, list[int]] = {}
     for fid, display in display_by_id.items():
         ids_by_display.setdefault(display, []).append(fid)
@@ -306,12 +306,16 @@ async def _semantic_list(
 
 
 @router.post("/batch/delete")
-async def batch_delete_metadata(req: MetadataBatchIdsRequest, repo: RepoDep) -> MetadataBatchDeleteResponse:
+async def batch_delete_metadata(
+    req: MetadataBatchIdsRequest, repo: RepoDep, runtime: RuntimeDep
+) -> MetadataBatchDeleteResponse:
     """级联行为与单条删除一致; 重复 id 去重后只处理一次."""
     ids = unique_ids(req.ids)
     deleted, missing = await repo.batch_delete_metadata(ids)
     skipped = len(req.ids) - len(ids)
-    logger.info("metadata batch deleted", deleted=deleted, missing=missing, skipped=skipped)
+    # 删完再清空分类: 计数归零只可能由这次删除造成, 在这里处理最及时.
+    pruned = await repo.prune_empty_facets(runtime.mappings)
+    logger.info("metadata batch deleted", deleted=deleted, missing=missing, skipped=skipped, pruned=pruned)
     return MetadataBatchDeleteResponse(deleted=deleted, missing=missing, skipped=skipped)
 
 
@@ -422,8 +426,8 @@ async def get_metadata(metadata_id: int, repo: RepoDep, runtime: RuntimeDep) -> 
         series_id,
     ) = await repo.resolve_metadata_facet_ids(metadata)
     series_ids = await repo.resolve_metadata_series_ids(metadata)
-    tag_ids = runtime.mappings.tags.map_id_map(tag_ids)
-    mapped_tags = runtime.mappings.tags.map_tags(metadata.tags)
+    tag_ids = runtime.mappings.store(MappingGroup.TAG).map_id_map(tag_ids)
+    mapped_tags = runtime.mappings.store(MappingGroup.TAG).map_tags(metadata.tags)
     return MetadataDetailResponse(
         metadata=_display_response(runtime, metadata).model_copy(
             update={
@@ -441,7 +445,7 @@ async def get_metadata(metadata_id: int, repo: RepoDep, runtime: RuntimeDep) -> 
         actor_ids=actor_ids,
         actor_genders=actor_genders,
         actor_display_names=runtime.mappings.store(MappingGroup.ACTOR).display_map(list(metadata.actors or [])),
-        tags=[TagPair(raw=raw, shown=shown) for raw, shown in runtime.mappings.tags.map_tag_pairs(metadata.tags)],
+        tags=[TagPair(raw=raw, shown=shown) for raw, shown in runtime.mappings.store(MappingGroup.TAG).map_tag_pairs(metadata.tags)],
         director_ids=director_ids,
         tag_ids=tag_ids,
         studio_id=studio_id,
@@ -492,10 +496,11 @@ async def set_metadata_locks(
 
 
 @router.delete("/{metadata_id}", status_code=204)
-async def delete_metadata(metadata_id: int, repo: RepoDep) -> None:
+async def delete_metadata(metadata_id: int, repo: RepoDep, runtime: RuntimeDep) -> None:
     deleted = await repo.delete_metadata(metadata_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="影片不存在")
+    await repo.prune_empty_facets(runtime.mappings)
     logger.info("metadata deleted", metadata_id=metadata_id)
 
 

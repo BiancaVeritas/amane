@@ -652,7 +652,7 @@ async def test_split_merged_tag_ids_merges_by_display_name(tmp_path) -> None:
             return facets, len(facets)
 
     repo = FakeRepo()
-    runtime = SimpleNamespace(mappings=SimpleNamespace(tags=store))
+    runtime = SimpleNamespace(mappings=SimpleNamespace(store=lambda _group: store))
 
     # 没有映射的中文标签: 与译文同名的日文标签并成一组, 走 OR.
     and_ids, or_ids = await _split_merged_tag_ids(repo, runtime, [1])

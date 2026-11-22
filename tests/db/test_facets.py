@@ -22,6 +22,7 @@ from amane.db.models import (
 )
 from amane.db.repo_types import ActorBrowseParams, FacetBatchResult
 from amane.enums import ActorGender
+from amane.tags.mapping import MappingGroup, MappingRegistry
 
 if TYPE_CHECKING:
     from amane.db.repo_types import UserTagLinkAction
@@ -993,3 +994,75 @@ class TestFacetSources:
         sources = await repo.facet_sources(FacetKind.SERIES)
         assert sources["Alpha"] == ["tokyo_hot"]
         assert sources["Beta"] == ["tokyo_hot"]
+
+
+class TestPruneEmptyFacets:
+    """删掉作品数为 0 的分类实体; 有译名或已归档的保留.
+
+    判据只有「计数归零」不够: 映射表里的人工决定 (中文译名、归档) 不能因为某部片被删而消失.
+    """
+
+    @staticmethod
+    def _registry(tmp_path) -> MappingRegistry:
+        return MappingRegistry(tmp_path)
+
+    async def test_empty_facets_are_pruned(self, repo: Repository, tmp_path) -> None:
+        meta = await repo.upsert_metadata(
+            number="ABC-900",
+            actors=["NoFilmActor"],
+            tags=["Redundant"],
+            studio="GoneStudio",
+        )
+        assert meta.id is not None
+        await repo.delete_metadata(meta.id)
+
+        removed = await repo.prune_empty_facets(self._registry(tmp_path))
+
+        assert removed.get("actor") == 1
+        assert removed.get("tag") == 1
+        assert removed.get("studio") == 1
+        actors, _ = await repo.list_facets(FacetKind.ACTOR)
+        assert actors == []
+
+    async def test_translated_facet_is_kept(self, repo: Repository, tmp_path) -> None:
+        """有中文译名的分类即使作品数为 0 也保留."""
+        meta = await repo.upsert_metadata(number="ABC-901", actors=["NamedActor"])
+        assert meta.id is not None
+        await repo.delete_metadata(meta.id)
+
+        registry = self._registry(tmp_path)
+        registry.store(MappingGroup.ACTOR).upsert("NamedActor", "有名演员")
+        removed = await repo.prune_empty_facets(registry)
+
+        assert "actor" not in removed
+        actors, _ = await repo.list_facets(FacetKind.ACTOR)
+        assert [a.name for a in actors] == ["NamedActor"]
+
+    async def test_archived_facet_is_kept(self, repo: Repository, tmp_path) -> None:
+        """归档的词条即使作品数为 0 也保留."""
+        meta = await repo.upsert_metadata(number="ABC-902", tags=["AlreadyChinese"])
+        assert meta.id is not None
+        await repo.delete_metadata(meta.id)
+
+        registry = self._registry(tmp_path)
+        store = registry.store(MappingGroup.TAG)
+        store.upsert("AlreadyChinese", None)
+        assert store.delete("AlreadyChinese") is True
+        removed = await repo.prune_empty_facets(registry)
+
+        assert "tag" not in removed
+
+    async def test_facet_still_in_use_is_kept(self, repo: Repository, tmp_path) -> None:
+        """还有作品引用的分类不动, 哪怕没有译名."""
+        await repo.upsert_metadata(number="ABC-903", actors=["BusyActor"])
+        removed = await repo.prune_empty_facets(self._registry(tmp_path))
+        assert removed == {}
+        actors, _ = await repo.list_facets(FacetKind.ACTOR)
+        assert [a.name for a in actors] == ["BusyActor"]
+
+    async def test_no_registry_is_noop(self, repo: Repository) -> None:
+        """没有映射表时一个都不删: 判不出人工痕迹就不该动手."""
+        meta = await repo.upsert_metadata(number="ABC-904", actors=["Orphan"])
+        assert meta.id is not None
+        await repo.delete_metadata(meta.id)
+        assert await repo.prune_empty_facets(None) == {}
