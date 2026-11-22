@@ -95,6 +95,21 @@ export function TaskDetailPanel({ task, linkKey, actions }: TaskDetailPanelProps
   const hasResult = detail?.result != null;
   // 手动搜索常驻可用: 不要求本任务处于某个状态.
   const [manualOpen, setManualOpen] = useState(false);
+  /**
+   * 预填到手动搜索的值: 优先番号, 其次标题, 最后 ThePornDB UUID.
+   *
+   * 三种都是「这部片是什么」的表达: 番号最精确; 无番号体系的来源 (糖心) 落库的是标题,
+   * 任务 payload 里也只有标题; WESTERN 的身份是 UUID, 番号对它没有意义. 取第一个非空的,
+   * 让用户点开就是上一次搜的那个词, 不必手抄.
+   */
+  const manualInitialInput = (() => {
+    const payload = detail?.payload ?? {};
+    for (const key of ["number", "title", "theporndb_uuid"] as const) {
+      const value = payload[key];
+      if (typeof value === "string" && value.trim()) return value.trim();
+    }
+    return null;
+  })();
 
   return (
     <Stack gap="sm" p="sm">
@@ -240,6 +255,7 @@ export function TaskDetailPanel({ task, linkKey, actions }: TaskDetailPanelProps
         mediaFileId={
           typeof detail?.payload?.media_file_id === "number" ? detail.payload.media_file_id : null
         }
+        initialInput={manualInitialInput}
       />
     </Stack>
   );

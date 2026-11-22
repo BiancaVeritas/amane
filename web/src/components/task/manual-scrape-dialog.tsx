@@ -38,6 +38,13 @@ interface ManualScrapeDialogProps {
    */
   mediaFileId?: number | null;
   /**
+   * 输入框的预填值; 来自那条任务的 payload.
+   *
+   * 任务页没有绑定条目, 只有 payload, 但用户点手动搜索时往往就是要用同一个番号换个来源重刮.
+   * 优先级: 显式给的 `initialInput` > 绑定条目的番号. 空串与未给都视为「不预填」.
+   */
+  initialInput?: string | null;
+  /**
    * 落库方式:
    * - `force` (默认): 按选中的来源重置字段与来源顺序, 选中站点排第一.
    * - `append`: 只把选中的来源链接追到 `source_urls` 末尾, 不动既有链接与字段.
@@ -56,6 +63,7 @@ export function ManualScrapeDialog({
   onClose,
   metadata,
   mediaFileId,
+  initialInput,
   mode = "force",
 }: ManualScrapeDialogProps) {
   const { t } = useTranslation(["tasks", "common", "feeds"]);
@@ -64,9 +72,10 @@ export function ManualScrapeDialog({
    * 输入框的初值.
    *
    * 「添加来源链接」不自动填: 那一步是手动补一条别处的链接, 预填当前番号只会让人误用.
-   * 强制手动刮削把范围钉在当前条目上, 预填番号省一次输入.
+   * 强制手动刮削把范围钉在当前条目上, 预填番号省一次输入; 任务页没有条目, 用那条任务的
+   * payload 里的番号 / 标题 / UUID.
    */
-  const defaultInput = mode === "append" ? "" : (metadata?.number ?? "");
+  const defaultInput = mode === "append" ? "" : initialInput?.trim() || metadata?.number || "";
   const [input, setInput] = useState(defaultInput);
   const [results, setResults] = useState<ScrapePreviewItem[] | null>(null);
   /**
