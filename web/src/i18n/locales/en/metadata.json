@@ -427,6 +427,7 @@
     "name": "Name",
     "count": "Count",
     "pruneEmpty": "Remove empty categories",
+    "pruneEmptyActors": "Remove actors with no films",
     "pruneEmptyResult": "Removed {{count}} empty categories",
     "pruneEmptyFailed": "Failed to remove",
     "mergeGuide": "Select sources, then click merge on the target",

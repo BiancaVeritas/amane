@@ -408,6 +408,7 @@
     "name": "名称",
     "count": "数量",
     "pruneEmpty": "清除空分类",
+    "pruneEmptyActors": "清除 0 影片的演员",
     "pruneEmptyResult": "已清除 {{count}} 个空分类",
     "pruneEmptyFailed": "清除失败",
     "mergeGuide": "勾选来源后点击目标行的合并图标",

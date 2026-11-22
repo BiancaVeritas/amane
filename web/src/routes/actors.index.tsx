@@ -328,17 +328,18 @@ function ActorsIndexPage() {
       title={<Title order={2}>{t("actors.title")}</Title>}
       actions={
         <Group gap="xs">
-          {/* 清掉没有作品的演员; 有中文译名或已归档的由服务端保留. */}
-          <Button
-            size="sm"
+          {/* 清掉没有作品的演员; 有中文译名或已归档的由服务端保留.
+              只放图标: 这是个低频动作, 占一行文字会把「演员同步」挤到边上. */}
+          <HintedActionIcon
             variant="light"
             color="gray"
-            leftSection={<IconTrash size={16} />}
+            size={36}
             loading={actorPruneMutation.isPending}
             onClick={() => actorPruneMutation.mutate()}
+            label={t("metadata:manage.pruneEmptyActors")}
           >
-            {t("metadata:manage.pruneEmpty")}
-          </Button>
+            <IconTrash size={16} />
+          </HintedActionIcon>
           {/* 悬停给两种口径: 强制覆盖 / 强制增量. 选中若干就只同步这些, 空选则是全部.
               媒体服务器没配 API Key 时置灰, 悬停说明原因 (禁用后 Menu 不展开, 提示才看得到). */}
           <Tooltip label={mediaServer.reason} disabled={mediaServer.ready} withArrow>
