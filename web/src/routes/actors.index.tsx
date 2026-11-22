@@ -8,7 +8,6 @@ import {
   Tooltip,
   SegmentedControl,
   Text,
-  TextInput,
   Title,
 } from "@mantine/core";
 import {
@@ -68,6 +67,7 @@ import { extractErrorMessage } from "@/lib/api-error";
 import { confirm } from "@/lib/confirm";
 import { useMediaServerReady } from "@/hooks/use-media-server-ready";
 import { useUIStore } from "@/stores/ui";
+import { ClearableTextInput } from "@/components/common/clearable-input";
 
 const ACTOR_SORT_I18N_KEY = exhaustiveRecord<ActorSortField>()({
   name: "manage.name",
@@ -403,7 +403,7 @@ function ActorsIndexPage() {
         </Text>
       }
       search={
-        <TextInput
+        <ClearableTextInput
           value={searchInput}
           onChange={(e) => handleSearchChange(e.currentTarget.value)}
           placeholder={t("actors.searchPlaceholder")}

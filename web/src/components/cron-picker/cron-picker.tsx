@@ -1,4 +1,4 @@
-import { Chip, Group, Input, NumberInput, Select, Stack, Text, TextInput } from "@mantine/core";
+import { Chip, Group, Input, NumberInput, Select, Stack, Text } from "@mantine/core";
 import type { TFunction } from "i18next";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -21,6 +21,7 @@ import {
   toWeekly,
 } from "@/lib/cron";
 import { assertNever, isOneOf } from "@/lib/exhaustive";
+import { ClearableTextInput } from "@/components/common/clearable-input";
 
 const HOUR_OPTIONS = Array.from({ length: 24 }, (_, hour) => ({
   value: String(hour),
@@ -225,7 +226,7 @@ function KindFields({
     }
     case "custom":
       return (
-        <TextInput
+        <ClearableTextInput
           value={raw}
           disabled={disabled}
           placeholder={t("cron.customPlaceholder")}

@@ -1,4 +1,4 @@
-import { Button, Group, Input, Textarea } from "@mantine/core";
+import { Button, Group, Input } from "@mantine/core";
 import type { AnyFieldApi } from "@tanstack/react-form";
 import type { FieldProps } from "../schema";
 import { isNullable } from "../schema";
@@ -6,6 +6,7 @@ import type { TextJSONSchema } from "../schema/types";
 import { useFieldDomId } from "./dict-entry-form";
 import { FieldChrome } from "./field-chrome";
 import { fieldError } from "./field-error";
+import { ClearableTextarea } from "@/components/common/clearable-input";
 
 /**
  * Generic text input field. Also serves as the fallback for unrecognized schema types.
@@ -42,7 +43,7 @@ export function TextField({
         >
           <Group gap="xs" wrap="nowrap" align={multiline ? "flex-start" : "center"}>
             {multiline ? (
-              <Textarea
+              <ClearableTextarea
                 id={id}
                 rows={8}
                 value={(field.state.value as string) ?? ""}

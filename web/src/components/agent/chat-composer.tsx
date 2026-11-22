@@ -1,8 +1,9 @@
-import { ActionIcon, Box, Group, Menu, Text, Textarea, UnstyledButton } from "@mantine/core";
+import { ActionIcon, Box, Group, Menu, Text, UnstyledButton } from "@mantine/core";
 import { IconBrain, IconChevronDown, IconPlayerStopFilled, IconSend } from "@tabler/icons-react";
 import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNarrowViewport } from "@/hooks/use-narrow-viewport";
+import { ClearableTextarea } from "@/components/common/clearable-input";
 import classes from "./chat-composer.module.css";
 
 export type ThinkingValue = "off" | "minimal" | "low" | "medium" | "high" | "xhigh";
@@ -101,7 +102,7 @@ export function ChatComposer({
         transition: "border-color 120ms ease, box-shadow 120ms ease",
       }}
     >
-      <Textarea
+      <ClearableTextarea
         value={value}
         onChange={(e) => onChange(e.currentTarget.value)}
         placeholder={placeholder ?? t("placeholder")}

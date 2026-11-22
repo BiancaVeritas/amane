@@ -8,7 +8,6 @@ import {
   SegmentedControl,
   Stack,
   Text,
-  TextInput,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { IconInfoCircle, IconSearch } from "@tabler/icons-react";
@@ -21,6 +20,7 @@ import { extractErrorMessage } from "@/lib/api-error";
 import { CONTENT_TYPES } from "@/lib/exhaustive-maps";
 import { proxyImageUrl } from "@/lib/utils";
 import { Z_INDEX } from "@/lib/z-index";
+import { ClearableTextInput } from "@/components/common/clearable-input";
 
 interface ManualScrapeDialogProps {
   opened: boolean;
@@ -218,7 +218,7 @@ export function ManualScrapeDialog({
           </Text>
         </Alert>
         <Group gap="xs" align="flex-end" wrap="nowrap">
-          <TextInput
+          <ClearableTextInput
             label={mode === "append" ? t("manualScrape.appendLabel") : t("manualScrape.label")}
             placeholder={
               mode === "append"

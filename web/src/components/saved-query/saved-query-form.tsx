@@ -1,4 +1,4 @@
-import { Badge, Input, Stack, Text, Textarea, TextInput } from "@mantine/core";
+import { Badge, Input, Stack, Text } from "@mantine/core";
 import { useTranslation } from "react-i18next";
 import type {
   SavedQueryCreateRequest,
@@ -9,6 +9,7 @@ import type {
 import { EnumToggle } from "@/components/common/enum-toggle";
 import { SAVED_QUERY_ENTITIES } from "@/lib/exhaustive-maps";
 import { SAVED_QUERY_BADGE_COLOR, SAVED_QUERY_ENTITY_LABEL_KEY } from "@/lib/saved-query/display";
+import { ClearableTextInput, ClearableTextarea } from "@/components/common/clearable-input";
 
 export const SAVED_QUERY_FORM_MODAL_SIZE = "min(56rem, 94vw)";
 export const SAVED_QUERY_NAME_MAX = 200;
@@ -91,7 +92,7 @@ export function SavedQueryFormFields({
 
   return (
     <Stack gap="md">
-      <TextInput
+      <ClearableTextInput
         label={t("fieldName")}
         placeholder={t("fieldNamePlaceholder")}
         required
@@ -99,7 +100,7 @@ export function SavedQueryFormFields({
         value={value.name}
         onChange={(e) => onChange({ ...value, name: e.currentTarget.value })}
       />
-      <TextInput
+      <ClearableTextInput
         label={t("fieldDescription")}
         maxLength={SAVED_QUERY_DESCRIPTION_MAX}
         value={value.description}
@@ -127,7 +128,7 @@ export function SavedQueryFormFields({
           </Text>
         )}
       </Input.Wrapper>
-      <Textarea
+      <ClearableTextarea
         label={t("fieldSql")}
         description={t("fieldSqlHint")}
         required

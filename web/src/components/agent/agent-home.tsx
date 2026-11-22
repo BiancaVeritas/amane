@@ -29,7 +29,6 @@ import {
   ScrollArea,
   Stack,
   Text,
-  TextInput,
   UnstyledButton,
 } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
@@ -89,6 +88,7 @@ import { formatDuration } from "@/lib/format-duration";
 import { downloadSavedQueryResult } from "@/lib/saved-query/download";
 import { TokenUsageBar, RequestUsageBar } from "@/components/agent/token-usage-bar";
 import { confirm } from "@/lib/confirm";
+import { ClearableTextInput } from "@/components/common/clearable-input";
 
 /** 非 null 且非数组的对象. 工具参数与回执的形状判定需要排除数组, 故不用 `lib/utils.ts::isRecord` (含数组). */
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -1089,7 +1089,7 @@ function SessionItem({
 
   if (editing) {
     return (
-      <TextInput
+      <ClearableTextInput
         autoFocus
         size="xs"
         value={draft}

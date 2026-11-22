@@ -1,4 +1,4 @@
-import { ActionIcon, Badge, Button, Group, Modal, Text, TextInput, Title } from "@mantine/core";
+import { ActionIcon, Badge, Button, Group, Modal, Text, Title } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { IconFilter, IconPlus, IconSearch, IconX } from "@tabler/icons-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -43,6 +43,7 @@ import {
   uniqueFeedGroups,
 } from "@/lib/feeds/groups";
 import { useUIStore } from "@/stores/ui";
+import { ClearableTextInput } from "@/components/common/clearable-input";
 
 const EMPTY_FEEDS: FeedResponse[] = [];
 
@@ -239,7 +240,7 @@ function FeedSourcesPage() {
           </Text>
         }
         search={
-          <TextInput
+          <ClearableTextInput
             value={searchInput}
             onChange={(event) => handleSearchChange(event.currentTarget.value)}
             placeholder={t("searchSources")}

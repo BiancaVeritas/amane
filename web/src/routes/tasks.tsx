@@ -13,7 +13,6 @@ import {
   SimpleGrid,
   Stack,
   Text,
-  Textarea,
   Title,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
@@ -63,6 +62,7 @@ import { TASK_STATUSES, TASK_TYPES } from "@/lib/exhaustive-maps";
 import { childCountOf } from "@/lib/task/display";
 import { useProgressStore } from "@/stores/progress";
 import { useUIStore } from "@/stores/ui";
+import { ClearableTextarea } from "@/components/common/clearable-input";
 
 /**
  * LiquidJS 批量刮削模板引擎, 用于将模板渲染为一组番号预览. 语法: https://liquidjs.com/
@@ -193,7 +193,7 @@ function BatchScrapePanel({
           <Text size="xs" c="dimmed">
             {t("batchScrape.templateDescription")}
           </Text>
-          <Textarea
+          <ClearableTextarea
             value={template}
             onChange={(e) => onTemplateChange(e.currentTarget.value)}
             placeholder={"{% for i in (1..50) %}\nMIDV-{{ i | plus: 100 }}\n{% endfor %}"}

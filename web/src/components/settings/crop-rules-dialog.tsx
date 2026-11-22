@@ -10,7 +10,6 @@ import {
   Switch,
   Table,
   Text,
-  TextInput,
 } from "@mantine/core";
 import { IconPhoto, IconPlus, IconTrash } from "@tabler/icons-react";
 import { useQuery } from "@tanstack/react-query";
@@ -20,6 +19,7 @@ import { useTranslation } from "react-i18next";
 import { listFacetsOptions } from "@/client/@tanstack/react-query.gen";
 import { Z_INDEX } from "@/lib/z-index";
 import { type CropRule, upsertCropRule } from "@/lib/crop-rules";
+import { ClearableTextInput } from "@/components/common/clearable-input";
 import { CropCalibrateDialog } from "./crop-calibrate-dialog";
 // 类型可以继续从这里借, 它不会被当成运行时代码; 而普通函数不再转出 ——
 // 组件文件同时导出函数会让 React Fast Refresh 判定为「导出不兼容」, 改一次就得整页刷新.
@@ -352,14 +352,14 @@ export function CropRuleEditorDialog({
               value={draft.series ?? null}
               onChange={(v) => setDraft({ ...draft, series: v })}
             />
-            <TextInput
+            <ClearableTextInput
               label={t("fields.scraping.poster_crop_rules.$.number_prefix.label")}
               placeholder="ABP"
               value={draft.number_prefix ?? ""}
               onChange={(e) => setDraft({ ...draft, number_prefix: e.currentTarget.value || null })}
             />
           </Group>
-          <TextInput
+          <ClearableTextInput
             label={t("fields.scraping.poster_crop_rules.$.filename_keyword.label")}
             description={t("cropRules.filenameKeywordHint")}
             placeholder="BD"

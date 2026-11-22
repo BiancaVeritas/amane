@@ -13,7 +13,6 @@ import {
   Stack,
   Table,
   Text,
-  TextInput,
   type MantineBreakpoint,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
@@ -62,6 +61,7 @@ import { proxyImageUrl } from "@/lib/utils";
 import { ClearPersonNotice } from "@/components/media/clear-person-notice";
 import { ProxyImage } from "@/components/media/proxy-image";
 import { type ActorTableColumnKey, useUIStore } from "@/stores/ui";
+import { ClearableTextInput } from "@/components/common/clearable-input";
 import classes from "./actor-table.module.css";
 
 /** 表头可排序列 = ActorSortField 全集 (与 SortMenu 对齐). */
@@ -888,7 +888,7 @@ export function ActorTable({
         centered
       >
         <Stack>
-          <TextInput
+          <ClearableTextInput
             value={identity.renameValue}
             onChange={(e) => identity.setRenameValue(e.currentTarget.value)}
           />

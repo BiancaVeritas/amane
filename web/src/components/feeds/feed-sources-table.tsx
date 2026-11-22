@@ -12,7 +12,6 @@ import {
   Switch,
   Table,
   Text,
-  Textarea,
   type MantineBreakpoint,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
@@ -35,6 +34,7 @@ import { confirm } from "@/lib/confirm";
 import { feedDisplayName, feedGroup, type FeedSourceSortField } from "@/lib/feeds/groups";
 import { parseIgnoreKeywordsText } from "@/lib/feeds/keywords";
 import { useUIStore } from "@/stores/ui";
+import { ClearableTextarea } from "@/components/common/clearable-input";
 import classes from "./feed-sources-table.module.css";
 
 const CELL_OVERFLOW = { overflow: "hidden", maxWidth: 0 } as const;
@@ -285,7 +285,7 @@ export function FeedSourcesTable({
         centered
       >
         <Stack gap="md">
-          <Textarea
+          <ClearableTextarea
             label={t("fields.ignoreKeywords")}
             description={t("fields.ignoreKeywordsHint")}
             placeholder={t("fields.ignoreKeywordsPlaceholder")}

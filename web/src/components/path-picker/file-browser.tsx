@@ -7,7 +7,6 @@ import {
   ScrollArea,
   Stack,
   Text,
-  TextInput,
   Tooltip,
   UnstyledButton,
 } from "@mantine/core";
@@ -17,6 +16,7 @@ import { useTranslation } from "react-i18next";
 import type { FileItem } from "@/client/types.gen";
 import { useFileList } from "@/hooks/use-files";
 import { canonicalAncestor, splitCanonicalPath } from "@/lib/canonical-path";
+import { ClearableTextInput } from "@/components/common/clearable-input";
 
 interface FileBrowserProps {
   /** 起始浏览路径 (仅作首次请求起点; 渲染由服务端规范 path 驱动). */
@@ -175,7 +175,7 @@ export function FileBrowser({
       {/* Path input */}
       {showPathInput && (
         <Group component="form" gap="xs" wrap="nowrap" onSubmit={handlePathInputSubmit}>
-          <TextInput
+          <ClearableTextInput
             value={pathInputValue}
             onChange={(e) => setPathInputValue(e.target.value)}
             placeholder="Enter path..."

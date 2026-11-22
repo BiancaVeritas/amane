@@ -1,15 +1,6 @@
-import {
-  ActionIcon,
-  Group,
-  Paper,
-  ScrollArea,
-  Select,
-  Stack,
-  Tabs,
-  Text,
-  TextInput,
-} from "@mantine/core";
+import { ActionIcon, Group, Paper, ScrollArea, Select, Stack, Tabs, Text } from "@mantine/core";
 import { IconPlus, IconTrash } from "@tabler/icons-react";
+import { ClearableTextInput } from "@/components/common/clearable-input";
 import type { AnyFieldApi } from "@tanstack/react-form";
 import { useRef, useState, type FocusEvent } from "react";
 import { isEmptyDictValue } from "../encode";
@@ -140,7 +131,7 @@ export function DictField({
                       comboboxProps={{ withinPortal: true }}
                     />
                   ) : (
-                    <TextInput
+                    <ClearableTextInput
                       size="xs"
                       w={{ base: 110, sm: 160 }}
                       placeholder="New key..."

@@ -8,7 +8,6 @@ import {
   SimpleGrid,
   Stack,
   Text,
-  TextInput,
   Title,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
@@ -43,6 +42,7 @@ import { confirm } from "@/lib/confirm";
 import { SAVED_QUERY_ENTITIES } from "@/lib/exhaustive-maps";
 import { SAVED_QUERY_ENTITY_LABEL_KEY } from "@/lib/saved-query/display";
 import { downloadSavedQueryResult } from "@/lib/saved-query/download";
+import { ClearableTextInput } from "@/components/common/clearable-input";
 
 /** 与插件页 / 网络检测页同宽. */
 const PAGE_MAX_WIDTH = 1120;
@@ -188,7 +188,7 @@ function SavedQueriesPage() {
         </Button>
       </Group>
 
-      <TextInput
+      <ClearableTextInput
         value={search}
         onChange={(e) => setSearch(e.currentTarget.value)}
         placeholder={t("searchPlaceholder")}

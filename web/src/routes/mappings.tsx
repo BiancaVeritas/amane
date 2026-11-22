@@ -13,7 +13,6 @@ import {
   Stack,
   Table,
   Text,
-  TextInput,
   Title,
 } from "@mantine/core";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -23,6 +22,7 @@ import { useTranslation } from "react-i18next";
 import { z } from "zod";
 import { useNarrowViewport } from "@/hooks/use-narrow-viewport";
 import { apiFetch } from "@/lib/api-token";
+import { ClearableTextInput } from "@/components/common/clearable-input";
 
 /**
  * 分类名称的中文映射表.
@@ -447,7 +447,7 @@ function MappingsPage() {
             label: t(`mappings.frequencies.${value}`),
           }))}
         />
-        <TextInput
+        <ClearableTextInput
           label={t("mappings.search")}
           value={searchInput}
           onChange={(event) => {
@@ -656,7 +656,7 @@ function MappingsPage() {
                           {t("mappings.noTranslation")}
                         </Text>
                       ) : (
-                        <TextInput
+                        <ClearableTextInput
                           size="sm"
                           styles={{
                             root: { width: "100%" },
@@ -768,7 +768,7 @@ function MappingsPage() {
           <Text size="xs" c="dimmed">
             {t("mappings.manualHint")}
           </Text>
-          <TextInput
+          <ClearableTextInput
             label={t("mappings.original")}
             value={manual?.original ?? ""}
             onChange={(event) => {
@@ -777,7 +777,7 @@ function MappingsPage() {
             }}
             data-autofocus
           />
-          <TextInput
+          <ClearableTextInput
             label={t("mappings.translation")}
             value={manual?.translation ?? ""}
             onChange={(event) => {
@@ -890,7 +890,7 @@ function EntryCard({
         </Group>
       ) : (
         <Stack gap="xs">
-          <TextInput
+          <ClearableTextInput
             size="sm"
             value={draft}
             placeholder={t("mappings.translationPlaceholder")}

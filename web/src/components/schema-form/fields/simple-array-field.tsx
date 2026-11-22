@@ -1,8 +1,9 @@
-import { ActionIcon, Group, ScrollArea, Textarea, TextInput } from "@mantine/core";
+import { ActionIcon, Group, ScrollArea } from "@mantine/core";
 import { IconPlus } from "@tabler/icons-react";
 import type { AnyFieldApi } from "@tanstack/react-form";
 import { useState } from "react";
 import { useNarrowViewport } from "@/hooks/use-narrow-viewport";
+import { ClearableTextInput, ClearableTextarea } from "@/components/common/clearable-input";
 import type { ArrayFieldProps, JSONSchemaObject } from "../schema";
 import { isOrdered } from "../schema";
 import { useFieldDomId } from "./dict-entry-form";
@@ -135,7 +136,7 @@ function CommaArrayInput({ id, value, onChange }: ArrayInputProps) {
   const { text, edit, commit } = useArrayTextDraft(value, onChange, parseCommas, joinCommas);
 
   return (
-    <TextInput
+    <ClearableTextInput
       id={id}
       value={text}
       onChange={(e) => edit(e.target.value)}
@@ -150,7 +151,7 @@ function MultilineArrayInput({ id, value, onChange }: ArrayInputProps) {
   const { text, edit, commit } = useArrayTextDraft(value, onChange, parseLines, joinLines);
 
   return (
-    <Textarea
+    <ClearableTextarea
       id={id}
       value={text}
       onChange={(e) => edit(e.target.value)}
@@ -203,7 +204,7 @@ function OrderedArrayBody({ value, onChange, long }: OrderedArrayBodyProps) {
         chips
       )}
       <Group gap={6} mt={4} wrap="nowrap">
-        <TextInput
+        <ClearableTextInput
           size="xs"
           value={newItem}
           onChange={(e) => setNewItem(e.target.value)}

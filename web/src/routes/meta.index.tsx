@@ -6,7 +6,6 @@ import {
   Group,
   SegmentedControl,
   Text,
-  TextInput,
   Title,
 } from "@mantine/core";
 import {
@@ -56,6 +55,7 @@ import { EMBEDDING_KINDS } from "@/lib/exhaustive-maps";
 import { metaSearchSchema, METADATA_SORT_OPTIONS } from "@/lib/media/browse";
 import { metaListDefaults } from "@/lib/nav-defaults";
 import { useUIStore } from "@/stores/ui";
+import { ClearableTextInput } from "@/components/common/clearable-input";
 import classes from "./meta.module.css";
 
 const SEMANTIC_KIND_OPTIONS = ["all", ...EMBEDDING_KINDS] as const;
@@ -476,7 +476,7 @@ function MetaIndexPage() {
                 : classes.searchBox
             }
           >
-            <TextInput
+            <ClearableTextInput
               value={searchInput}
               onChange={(e) => handleSearchChange(e.currentTarget.value)}
               onKeyDown={(e) => {

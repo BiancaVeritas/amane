@@ -1,9 +1,10 @@
-import { Button, Group, Input, Modal, Stack, TextInput } from "@mantine/core";
+import { Button, Group, Input, Modal, Stack } from "@mantine/core";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { ContentType, MediaFileResponse } from "@/client/types.gen";
 import { EnumToggle } from "@/components/common/enum-toggle";
 import { CONTENT_TYPES } from "@/lib/exhaustive-maps";
+import { ClearableTextInput } from "@/components/common/clearable-input";
 
 const CONTENT_TYPE_OPTIONS = ["", ...CONTENT_TYPES] as const;
 
@@ -67,7 +68,7 @@ function ScrapeOverrideForm({
 
   return (
     <Stack>
-      <TextInput
+      <ClearableTextInput
         label={t("scrapeOverride.number")}
         placeholder={t("scrapeOverride.numberPlaceholder")}
         value={number}
@@ -91,7 +92,7 @@ function ScrapeOverrideForm({
         />
       </Input.Wrapper>
       {contentType === "western" && (
-        <TextInput
+        <ClearableTextInput
           label={t("scrapeOverride.theporndbUuid")}
           placeholder={t("scrapeOverride.theporndbUuidPlaceholder")}
           value={theporndbUuid}

@@ -7,8 +7,6 @@ import {
   NumberInput,
   Stack,
   Switch,
-  Textarea,
-  TextInput,
 } from "@mantine/core";
 import { useTranslation } from "react-i18next";
 import { FeedCreateRequestSchema } from "@/client/schemas.gen";
@@ -18,6 +16,7 @@ import { encodeFormBody } from "@/components/schema-form/encode";
 import { CACHE_KINDS, CONTENT_TYPES } from "@/lib/exhaustive-maps";
 import { feedGroup, tryNormalizeFeedGroup } from "@/lib/feeds/groups";
 import { formatIgnoreKeywordsText, parseIgnoreKeywordsText } from "@/lib/feeds/keywords";
+import { ClearableTextInput, ClearableTextarea } from "@/components/common/clearable-input";
 
 export { feedDisplayName } from "@/lib/feeds/groups";
 
@@ -168,14 +167,14 @@ export function FeedFormFields({
   const groupValid = tryNormalizeFeedGroup(form.group) != null;
   return (
     <Stack gap="md">
-      <TextInput
+      <ClearableTextInput
         label={t("fields.name")}
         placeholder={t("fields.namePlaceholder")}
         description={t("fields.nameHint")}
         value={form.name}
         onChange={(e) => patch({ name: e.currentTarget.value })}
       />
-      <TextInput
+      <ClearableTextInput
         label={t("fields.url")}
         placeholder={t("fields.urlPlaceholder")}
         value={form.url}
@@ -219,7 +218,7 @@ export function FeedFormFields({
           />
         </Group>
       </Input.Wrapper>
-      <TextInput
+      <ClearableTextInput
         label={t("fields.numberPattern")}
         description={t("fields.numberPatternHint")}
         value={form.numberPattern}
@@ -250,7 +249,7 @@ export function FeedFormFields({
           ))}
         </Group>
       </Checkbox.Group>
-      <Textarea
+      <ClearableTextarea
         label={t("fields.ignoreKeywords")}
         description={t("fields.ignoreKeywordsHint")}
         placeholder={t("fields.ignoreKeywordsPlaceholder")}

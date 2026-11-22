@@ -1,4 +1,4 @@
-import { ActionIcon, Badge, Box, Group, NavLink, ScrollArea, Text, TextInput } from "@mantine/core";
+import { ActionIcon, Badge, Box, Group, NavLink, ScrollArea, Text } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import {
   IconChevronDown,
@@ -17,6 +17,7 @@ import { pollFeed } from "@/client/sdk.gen";
 import type { FeedResponse } from "@/client/types.gen";
 import { HintedActionIcon } from "@/components/common/hinted-action-icon";
 import { extractErrorMessage } from "@/lib/api-error";
+import { ClearableTextInput } from "@/components/common/clearable-input";
 import {
   ancestorGroupPaths,
   buildFeedTree,
@@ -419,7 +420,7 @@ export function FeedSidebar({
       }}
     >
       <Box p="sm" pb="xs">
-        <TextInput
+        <ClearableTextInput
           value={query}
           onChange={(event) => setQuery(event.currentTarget.value)}
           placeholder={t("sidebar.searchFeeds")}

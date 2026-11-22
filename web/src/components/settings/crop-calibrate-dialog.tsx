@@ -10,7 +10,6 @@ import {
   Stack,
   Tabs,
   Text,
-  TextInput,
 } from "@mantine/core";
 import { IconAlertCircle, IconPhoto, IconUpload } from "@tabler/icons-react";
 import { useQuery } from "@tanstack/react-query";
@@ -20,6 +19,7 @@ import { listMetadataOptions } from "@/client/@tanstack/react-query.gen";
 import { ImageCropDialog } from "@/components/media/image-crop-dialog";
 import { proxyImageUrl } from "@/lib/utils";
 import { Z_INDEX } from "@/lib/z-index";
+import { ClearableTextInput } from "@/components/common/clearable-input";
 
 /** 标定结果: 相对封面宽高的比例 (0~1), 直接写进裁切规则. */
 export interface CalibratedWindow {
@@ -96,7 +96,7 @@ export function CropCalibrateDialog({ opened, onClose, onCalibrated }: CropCalib
             <Tabs.Panel value="library" pt="md">
               <Stack gap="sm">
                 <Group>
-                  <TextInput
+                  <ClearableTextInput
                     flex={1}
                     placeholder={t("cropCalibrate.searchPlaceholder")}
                     value={search}

@@ -10,7 +10,6 @@ import {
   ScrollArea,
   SegmentedControl,
   Text,
-  TextInput,
   Title,
   Tooltip,
 } from "@mantine/core";
@@ -55,6 +54,7 @@ import { navItemClick } from "@/lib/nav-defaults";
 import { shellEnvironment } from "@/lib/shell";
 import { useConnectionStore } from "@/stores/connection";
 import { type ContentLang, useUIStore } from "@/stores/ui";
+import { ClearableTextInput } from "@/components/common/clearable-input";
 
 type CommonKey = ParseKeys<"common">;
 
@@ -379,7 +379,7 @@ function HeaderSearch() {
         void navigate({ to: "/meta", search: { q: q || undefined } });
       }}
     >
-      <TextInput
+      <ClearableTextInput
         value={value}
         onChange={(e) => setValue(e.currentTarget.value)}
         placeholder={t("search.placeholder")}

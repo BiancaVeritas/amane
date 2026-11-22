@@ -10,8 +10,6 @@ import {
   Stack,
   Switch,
   Text,
-  Textarea,
-  TextInput,
   Tooltip,
 } from "@mantine/core";
 import { IconChevronDown, IconChevronRight, IconPlus, IconX } from "@tabler/icons-react";
@@ -43,6 +41,7 @@ import {
   LINK_MODES,
 } from "@/lib/exhaustive-maps";
 import { copyText } from "@/lib/clipboard";
+import { ClearableTextInput, ClearableTextarea } from "@/components/common/clearable-input";
 import { AddCustomPlaceholderDialog } from "./add-custom-placeholder-dialog";
 import classes from "./library-form.module.css";
 import { templateCatalogFromPlaceholders } from "./template-highlight";
@@ -369,7 +368,7 @@ export function LibraryFormFields({ value, onChange, showCreateOnly }: LibraryFo
   return (
     <Stack gap="md">
       <Group align="flex-end" grow preventGrowOverflow={false} wrap="wrap">
-        <TextInput
+        <ClearableTextInput
           label={t("fieldName")}
           value={value.name}
           onChange={(e) => onChange({ ...value, name: e.currentTarget.value })}
@@ -427,7 +426,7 @@ export function LibraryFormFields({ value, onChange, showCreateOnly }: LibraryFo
           </div>
         </Input.Wrapper>
         {value.ingest === "clouddrive" && (
-          <TextInput
+          <ClearableTextInput
             label={t("ingest.cloudPath")}
             description={t("ingest.cloudPathHint")}
             placeholder="/115open/云下载"
@@ -448,19 +447,19 @@ export function LibraryFormFields({ value, onChange, showCreateOnly }: LibraryFo
       </SimpleGrid>
       <Stack gap="sm">
         <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
-          <TextInput
+          <ClearableTextInput
             label={t("fieldPatterns")}
             description={t("fieldPatternsHint")}
             value={value.patterns}
             onChange={(e) => onChange({ ...value, patterns: e.currentTarget.value })}
           />
-          <TextInput
+          <ClearableTextInput
             label={t("fieldTrailerPattern")}
             description={t("fieldTrailerPatternHint")}
             value={value.trailer_pattern}
             onChange={(e) => onChange({ ...value, trailer_pattern: e.currentTarget.value })}
           />
-          <Textarea
+          <ClearableTextarea
             label={t("fieldBlacklistPatterns")}
             description={t("fieldBlacklistPatternsHint")}
             autosize
@@ -499,7 +498,7 @@ export function LibraryFormFields({ value, onChange, showCreateOnly }: LibraryFo
           <Input.Description className={classes.d3} aria-hidden>
             {"\u00a0"}
           </Input.Description>
-          <TextInput
+          <ClearableTextInput
             id="library-subtitle-extensions"
             className={classes.c1}
             value={value.subtitle_extensions}

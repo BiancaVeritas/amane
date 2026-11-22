@@ -10,8 +10,6 @@ import {
   SimpleGrid,
   Stack,
   Text,
-  TextInput,
-  Textarea,
 } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
 import { IconPlus } from "@tabler/icons-react";
@@ -23,6 +21,7 @@ import { DraggableChips } from "@/components/schema-form/fields/draggable-chips"
 import { FanartLightbox } from "@/components/media/fanart-lightbox";
 import { SortableImageList } from "@/components/media/sortable-image-list";
 import { useResettingState } from "@/hooks/use-resetting-state";
+import { ClearableTextInput, ClearableTextarea } from "@/components/common/clearable-input";
 
 interface ActorDraft {
   gender: ActorGender;
@@ -182,14 +181,14 @@ export function ActorEditDialog({
             ]}
             allowDeselect={false}
           />
-          <TextInput
+          <ClearableTextInput
             label={t("browse.person.birthday")}
             description={t("browse.person.birthdayFormat")}
             value={draft.birthday}
             onChange={(e) => patchDraft({ birthday: e.currentTarget.value })}
             placeholder="YYYY-MM-DD"
           />
-          <TextInput
+          <ClearableTextInput
             label={t("browse.person.birthplace")}
             value={draft.birthplace}
             onChange={(e) => patchDraft({ birthplace: e.currentTarget.value })}
@@ -202,7 +201,7 @@ export function ActorEditDialog({
               min={0}
               allowDecimal={false}
             />
-            <TextInput
+            <ClearableTextInput
               label={t("browse.person.cup")}
               value={draft.cup}
               onChange={(e) => patchDraft({ cup: e.currentTarget.value })}
@@ -232,12 +231,12 @@ export function ActorEditDialog({
             allowDecimal={false}
           />
         </Group>
-        <TextInput
+        <ClearableTextInput
           label={t("browse.person.tagline")}
           value={draft.tagline}
           onChange={(e) => patchDraft({ tagline: e.currentTarget.value })}
         />
-        <Textarea
+        <ClearableTextarea
           label={t("browse.person.overview")}
           value={draft.overview}
           onChange={(e) => patchDraft({ overview: e.currentTarget.value })}
@@ -258,7 +257,7 @@ export function ActorEditDialog({
                 }
               />
             )}
-            <TextInput
+            <ClearableTextInput
               placeholder={t("actors.aliasesAddPlaceholder")}
               value={aliasInput}
               leftSection={<IconPlus size={14} />}
@@ -294,7 +293,7 @@ export function ActorEditDialog({
             reorderLabel={t("actors.reorderImage")}
           />
           <Group gap="xs" wrap="nowrap">
-            <TextInput
+            <ClearableTextInput
               style={{ flex: 1 }}
               placeholder="https://"
               value={newImageUrl}

@@ -1,5 +1,6 @@
-import { Button, Group, Modal, Stack, Text, TextInput } from "@mantine/core";
+import { Button, Group, Modal, Stack, Text } from "@mantine/core";
 import { useCallback, useState } from "react";
+import { ClearableTextInput } from "@/components/common/clearable-input";
 import { useTranslation } from "react-i18next";
 
 interface AddCustomPlaceholderDialogProps {
@@ -66,7 +67,7 @@ export function AddCustomPlaceholderDialog({
         <Text size="xs" c="dimmed">
           {t("placeholders.addCustomHint")}
         </Text>
-        <TextInput
+        <ClearableTextInput
           label={t("placeholders.customName")}
           description={t("placeholders.customNameHint")}
           placeholder="LTX"
@@ -74,7 +75,7 @@ export function AddCustomPlaceholderDialog({
           error={touched ? nameError : null}
           onChange={(event) => setName(event.currentTarget.value)}
         />
-        <TextInput
+        <ClearableTextInput
           label={t("placeholders.customLiteral")}
           description={t("placeholders.customLiteralHint")}
           placeholder="LTX"

@@ -5,6 +5,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { apiFetch } from "@/lib/api-token";
 import { Z_INDEX } from "@/lib/z-index";
+import { ClearableTextInput } from "@/components/common/clearable-input";
 
 /**
  * 单个分类名的中文映射编辑.
@@ -152,7 +153,7 @@ export function NameMappingDialog({ opened, onClose, kind, name }: NameMappingDi
           {t("mappings.detailHint")}
         </Text>
         <TextInput label={t("mappings.original")} value={name} readOnly />
-        <TextInput
+        <ClearableTextInput
           label={t("mappings.translation")}
           placeholder={t("mappings.translationPlaceholder")}
           value={translation}

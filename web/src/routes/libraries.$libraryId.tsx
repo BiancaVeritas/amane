@@ -11,7 +11,6 @@ import {
   Skeleton,
   Stack,
   Text,
-  TextInput,
   Title,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
@@ -47,6 +46,7 @@ import { extractErrorMessage } from "@/lib/api-error";
 import { isOneOf } from "@/lib/exhaustive";
 import { MEDIA_FILE_STATUSES, MEDIA_SORT_FIELDS, SORT_ORDERS } from "@/lib/exhaustive-maps";
 import { useUIStore } from "@/stores/ui";
+import { ClearableTextInput } from "@/components/common/clearable-input";
 
 const libraryDetailSearchSchema = z.object({
   q: z.string().optional(),
@@ -239,7 +239,7 @@ function LibraryDetailPage() {
           </Text>
         }
         search={
-          <TextInput
+          <ClearableTextInput
             value={searchInput}
             onChange={(e) => handleSearchChange(e.currentTarget.value)}
             placeholder={t("searchPlaceholder")}

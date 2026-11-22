@@ -8,7 +8,6 @@ import {
   Stack,
   Switch,
   Text,
-  TextInput,
   Title,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
@@ -34,6 +33,7 @@ import { extractErrorMessage } from "@/lib/api-error";
 import { confirm } from "@/lib/confirm";
 import { DEFAULT_CRON, isUsableCron } from "@/lib/cron";
 import { ROUTINE_TYPES } from "@/lib/exhaustive-maps";
+import { ClearableTextInput } from "@/components/common/clearable-input";
 
 export const Route = createFileRoute("/schedules")({ component: SchedulesPage });
 
@@ -249,7 +249,7 @@ function SchedulesPage() {
             submitLabel={t("common:actions.save")}
             header={
               <Stack gap="md">
-                <TextInput
+                <ClearableTextInput
                   label={t("fields.name")}
                   placeholder={t("fields.namePlaceholder")}
                   value={name}
@@ -281,7 +281,7 @@ function SchedulesPage() {
         centered
       >
         <Stack gap="md">
-          <TextInput
+          <ClearableTextInput
             label={t("fields.name")}
             value={editName}
             onChange={(e) => setEditName(e.currentTarget.value)}

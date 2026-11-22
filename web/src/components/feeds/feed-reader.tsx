@@ -8,7 +8,6 @@ import {
   Stack,
   Switch,
   Text,
-  TextInput,
 } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
 import { notifications } from "@mantine/notifications";
@@ -57,6 +56,7 @@ import { UNGROUPED_GROUP } from "@/lib/feeds/groups";
 import { feedNavDelta, nextFeedItemIndex, shouldIgnoreFeedNavHotkey } from "@/lib/feeds/keyboard";
 import { feedDateBucket, feedDateBucketKey, feedDateBucketLabel } from "@/lib/feeds/time";
 import { useUIStore } from "@/stores/ui";
+import { ClearableTextInput } from "@/components/common/clearable-input";
 import { FeedArticle } from "./feed-article";
 
 type DateGroup = { key: string; label: string; items: DedupedFeedItem[] };
@@ -670,7 +670,7 @@ export function FeedReader({
           label: t(`historyReadStates.${value}`),
         }))}
       />
-      <TextInput
+      <ClearableTextInput
         value={searchInput}
         onChange={(event) => setSearchInput(event.currentTarget.value)}
         onKeyDown={(event) => {

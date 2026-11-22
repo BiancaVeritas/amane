@@ -1,14 +1,4 @@
-import {
-  Alert,
-  Badge,
-  Collapse,
-  Group,
-  SegmentedControl,
-  Stack,
-  Tabs,
-  Text,
-  TextInput,
-} from "@mantine/core";
+import { Alert, Badge, Collapse, Group, SegmentedControl, Stack, Tabs, Text } from "@mantine/core";
 import { IconAlertCircle, IconFilter, IconSearch, IconTrash } from "@tabler/icons-react";
 import { notifications } from "@mantine/notifications";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -38,6 +28,7 @@ import {
 import { FACET_KIND_ICON } from "@/lib/facets";
 import { useNarrowViewport } from "@/hooks/use-narrow-viewport";
 import { useUIStore } from "@/stores/ui";
+import { ClearableTextInput } from "@/components/common/clearable-input";
 
 const catalogKindSearchSchema = z.object({
   q: z.string().optional(),
@@ -269,7 +260,7 @@ function CatalogKindPage() {
         </Text>
       }
       search={
-        <TextInput
+        <ClearableTextInput
           value={searchInput}
           onChange={(e) => handleSearchChange(e.currentTarget.value)}
           placeholder={t("browse.searchPlaceholder")}

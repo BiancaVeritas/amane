@@ -12,7 +12,6 @@ import {
   Select,
   Stack,
   Text,
-  TextInput,
 } from "@mantine/core";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
@@ -33,6 +32,7 @@ import {
   rangeValue,
 } from "@/lib/actors/browse";
 import { USER_TAG_FACET_LIST } from "@/lib/facets";
+import { ClearableTextInput } from "@/components/common/clearable-input";
 
 export type { ActorFilterPatch, ActorFilterValues };
 
@@ -111,7 +111,7 @@ function RangeTextInputs({
   return (
     <Input.Wrapper label={label} size="sm" styles={{ root: { width: "fit-content" } }}>
       <Group gap={4} wrap="nowrap">
-        <TextInput
+        <ClearableTextInput
           size="sm"
           placeholder={minPlaceholder}
           value={min ?? ""}
@@ -121,7 +121,7 @@ function RangeTextInputs({
         <Text size="sm" c="dimmed">
           –
         </Text>
-        <TextInput
+        <ClearableTextInput
           size="sm"
           placeholder={maxPlaceholder}
           value={max ?? ""}
@@ -307,7 +307,7 @@ export function ActorFilterControls({ opened, committed, onApply }: ActorFilterC
               onChange={patchDraft}
             />
           ))}
-          <TextInput
+          <ClearableTextInput
             label={t("browse.person.birthplace")}
             size="sm"
             value={draft.birthplace ?? ""}

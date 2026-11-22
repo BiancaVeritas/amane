@@ -10,7 +10,6 @@ import {
   Stack,
   Table,
   Text,
-  TextInput,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import {
@@ -45,6 +44,7 @@ import { extractErrorMessage } from "@/lib/api-error";
 import { isOneOf } from "@/lib/exhaustive";
 import { FAVORITE_FACET_KINDS } from "@/lib/exhaustive-maps";
 import { useUIStore } from "@/stores/ui";
+import { ClearableTextInput } from "@/components/common/clearable-input";
 import classes from "./catalog-facet-table.module.css";
 
 export interface CatalogFacetTableProps {
@@ -206,7 +206,7 @@ export function CatalogFacetTable({
           <Stack gap="sm">
             {isUserTag && (
               <Group gap="xs">
-                <TextInput
+                <ClearableTextInput
                   value={newTagName}
                   onChange={(e) => setNewTagName(e.currentTarget.value)}
                   placeholder={t("detail.newUserTagPlaceholder")}
@@ -438,7 +438,7 @@ export function CatalogFacetTable({
         centered
       >
         <Stack gap="md">
-          <TextInput
+          <ClearableTextInput
             value={identity.renameValue}
             onChange={(e) => identity.setRenameValue(e.currentTarget.value)}
           />

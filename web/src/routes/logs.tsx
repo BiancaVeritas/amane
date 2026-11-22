@@ -1,14 +1,4 @@
-import {
-  Badge,
-  Button,
-  Group,
-  Stack,
-  Switch,
-  Text,
-  TextInput,
-  Title,
-  Tooltip,
-} from "@mantine/core";
+import { Badge, Button, Group, Stack, Switch, Text, Title, Tooltip } from "@mantine/core";
 import { IconAlertCircle, IconInfoCircle, IconSearch, IconTrash } from "@tabler/icons-react";
 import { createFileRoute } from "@tanstack/react-router";
 import type { ParseKeys } from "i18next";
@@ -29,6 +19,7 @@ import {
   useLogStore,
 } from "@/stores/logs";
 import { useUIStore } from "@/stores/ui";
+import { ClearableTextInput } from "@/components/common/clearable-input";
 
 export const Route = createFileRoute("/logs")({ component: LogsPage });
 
@@ -211,7 +202,7 @@ function LogsPage() {
       </Group>
 
       <Group gap="xs" style={{ flexShrink: 0 }}>
-        <TextInput
+        <ClearableTextInput
           flex={1}
           leftSection={<IconSearch size={16} />}
           placeholder={t("searchPlaceholder")}

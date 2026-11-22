@@ -1,14 +1,4 @@
-import {
-  Badge,
-  Button,
-  Card,
-  Group,
-  SegmentedControl,
-  Stack,
-  Text,
-  Textarea,
-  Title,
-} from "@mantine/core";
+import { Badge, Button, Card, Group, SegmentedControl, Stack, Text, Title } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { IconPencil, IconSend, IconTrash } from "@tabler/icons-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -27,6 +17,7 @@ import { HintedActionIcon } from "@/components/common/hinted-action-icon";
 import { extractErrorMessage } from "@/lib/api-error";
 import { confirm } from "@/lib/confirm";
 import { formatRelativeTime } from "@/lib/format-relative-time";
+import { ClearableTextarea } from "@/components/common/clearable-input";
 
 import { CommentBody } from "./comment-body";
 import classes from "./comment-section.module.css";
@@ -350,7 +341,7 @@ export function CommentSection({ metadataId, comments, canSeek, onSeek }: Commen
                       )}
                     </div>
                   ) : (
-                    <Textarea
+                    <ClearableTextarea
                       value={editBody}
                       onChange={(event) => setEditBody(event.currentTarget.value)}
                       aria-label={t("detail.editComment")}
@@ -395,7 +386,7 @@ export function CommentSection({ metadataId, comments, canSeek, onSeek }: Commen
         {composerMode === "preview" ? (
           <CommentPreview body={body} emptyLabel={t("detail.commentPreviewEmpty")} />
         ) : (
-          <Textarea
+          <ClearableTextarea
             value={body}
             onChange={(event) => setBody(event.currentTarget.value)}
             placeholder={t("detail.commentPlaceholder")}
