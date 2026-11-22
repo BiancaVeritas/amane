@@ -47,7 +47,7 @@
 
 **airav.io** — 中文标题补强, 不是国产分区; 国产路由里置于 iqqtv 之后, fc2 路由里链尾 (官方电子市场下架的作品只剩这类索引站收录); FC2 番号站内恒写 `FC2-PPV-<id>`, 检索词用该写法; caribbeancom / 1pondo 等来源在番号前加来源名 (`caribbeancom_051318-665`), 比对与取值都先剥除.
 
-**iqqtv** (`iqq5.xyz` 会跳转到 `iqqk4.quest` 一类轮换域) — 导航有國產区 (爱豆傳媒、杏吧傳媒等, 不是 MD 号为主), 国产路由第一源; 爬虫带 `/cn|/jp` 语言前缀.
+**iqqtv** (`iqqbl.com`, 站方轮换域名) — 导航有國產区 (爱豆傳媒、杏吧傳媒等, 不是 MD 号为主), 国产路由第一源; 爬虫带 `/cn|/jp|/en` 语言前缀.
 
 **tangxinvlog.app (糖心)** — 国产原创站, 国产路由第一源. **站内没有番号体系**, 番号就是标题: 爬虫用剥离演员名后的标题同时当 `number` 与 `title`, 落库时由 `handlers/scrape.py` 按 `field_sources["title"] == "tangxin"` 把 `payload.number` 换成刮削到的标题 (聚合层一律用 payload 的番号, 不改这一处等于没改). 搜索页 `/search/?q=` 是纯前端过滤, 抓 HTML 永远拿不到结果, 检索只能读 `/search-index.json` 整份索引 (约 2MB, 进程内缓存). 有文件路径时只在路径含「糖心」/「tangxin」时认领, 无路径 (手动搜索) 一律放行.
 

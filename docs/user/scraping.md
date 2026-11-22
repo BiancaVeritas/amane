@@ -109,7 +109,7 @@
 | heydouga | heydouga.com | Heydouga | | Hey動画 单品种贩; 番号第二段就是详情页地址, 不需要搜索; 提供标题、出演、日文剧情、标签、样片与横版封面; 制作商取站点「提供元」, 发行商固定为 Heydouga |
 | airav | airav.io | FC2、国产 | | 中文标题 |
 | tangxin | tangxinvlog.app | 国产 | | 糖心 Vlog 原创站; 无番号体系, 番号即标题; 搜索按标题匹配站内索引 |
-| iqqtv | iqq5.xyz | 国产 | | 国产第一来源; 按「字段语言偏好」请求对应语言的页面 |
+| iqqtv | iqqbl.com | 国产 | | 国产第一来源; 按「字段语言偏好」请求对应语言的页面 |
 | mgstage | mgstage.com | 素人 | | 素人第一来源; 素人影片不记录站内化名为演员 |
 | theporndb | theporndb.net | 欧美 | :material-check: | 需要 API Token; 新文件按 OSHASH 匹配, 重新刮削 / 手动兜底可指定 Scene ID; 指纹未命中不按重复番号猜测 |
 | getchu | getchu.com | 动漫 | | 动漫第一来源 |
