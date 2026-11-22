@@ -185,7 +185,8 @@ class ActorBrowseItem(BaseModel):
     bust: int | None = None
     waist: int | None = None
     hip: int | None = None
-    cup: str | None = None
+    cup: str | None
+    blood_type: str | None = None
     overview: str | None = None
     tagline: str | None = None
     image_urls: list[str] = []
@@ -394,6 +395,7 @@ class ActorPersonFields(TypedDict, total=False):
     waist: int | None
     hip: int | None
     cup: str | None
+    blood_type: str | None
     overview: str | None
     tagline: str | None
     image_urls: list[str]

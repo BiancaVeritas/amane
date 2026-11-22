@@ -80,6 +80,7 @@ const ACTOR_SORT_I18N_KEY = exhaustiveRecord<ActorSortField>()({
   waist: "browse.person.waist",
   hip: "browse.person.hip",
   cup: "browse.person.cup",
+  blood_type: "browse.person.bloodType",
 } as const satisfies Record<ActorSortField, ParseKeys<"metadata">>);
 
 const GENDER_I18N = {

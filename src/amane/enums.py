@@ -159,6 +159,7 @@ class ActorField(StrEnum):
     WAIST = "waist"
     HIP = "hip"
     CUP = "cup"
+    BLOOD_TYPE = "blood_type"
     OVERVIEW = "overview"
     TAGLINE = "tagline"
     IMAGE_URLS = "image_urls"

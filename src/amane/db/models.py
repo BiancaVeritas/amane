@@ -134,6 +134,7 @@ class ActorSortField(StrEnum):
     WAIST = "waist"
     HIP = "hip"
     CUP = "cup"
+    BLOOD_TYPE = "blood_type"
 
 
 class FacetKind(StrEnum):
@@ -681,6 +682,7 @@ class Actor(SQLModel, table=True):
     waist: int | None = None
     hip: int | None = None
     cup: str | None = None
+    blood_type: str | None = None
     overview: str | None = None
     tagline: str | None = None
     image_urls: list[str] = Field(default_factory=list, sa_column=Column(JSON))

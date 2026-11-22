@@ -183,6 +183,7 @@ async def browse_actors(
                 waist=actor.waist,
                 hip=actor.hip,
                 cup=actor.cup,
+                blood_type=actor.blood_type,
                 image_urls=list(actor.image_urls or []),
                 updated_at=actor.updated_at,
             )

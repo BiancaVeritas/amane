@@ -17,6 +17,7 @@ def actor_to_aggregated(actor: Actor) -> AggregatedActor:
         waist=actor.waist,
         hip=actor.hip,
         cup=actor.cup,
+        blood_type=actor.blood_type,
         overview=actor.overview,
         tagline=actor.tagline,
         image_urls=list(actor.image_urls or []),
@@ -37,6 +38,7 @@ def apply_aggregated_to_actor(actor: Actor, data: AggregatedActor) -> None:
     actor.waist = data.waist
     actor.hip = data.hip
     actor.cup = data.cup
+    actor.blood_type = data.blood_type
     actor.overview = normalize_long_text(data.overview)
     actor.tagline = data.tagline
     actor.image_urls = list(data.image_urls)

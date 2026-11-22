@@ -358,8 +358,9 @@ def _profile_updates(
     desired_name = display_name or actor.name
     if desired_name and desired_name != person.name:
         updates["Name"] = desired_name
-    if actor.overview and (force or not _has_text(person.overview)):
-        updates["Overview"] = actor.overview
+    overview = _composed_overview(actor)
+    if overview and (force or not _has_text(person.overview)):
+        updates["Overview"] = overview
 
     if actor.birthday and _ISO_DATE.fullmatch(actor.birthday):
         if force or not person.premiere_date:
@@ -379,6 +380,49 @@ def _profile_updates(
     if merged != person.tags:
         updates["Tags"] = merged
     return updates
+
+
+#: 人物尺寸行与简介之间的分隔符.
+#
+# Emby 的人物简介只有一个纯文本字段, 没有分行能力, 换行符在客户端会被折叠. 这里写 `<br>`:
+# 网页端按 HTML 渲染, 于是尺寸行自成一行; 其它客户端至少能看出两段之间断开.
+# 它同时是「尺寸行已经写进去了」的标记, 见 ``_SIZES_MARKER``.
+_OVERVIEW_BREAK = "<br>"
+
+#: 尺寸行的起始标记; 用它判断已有简介里是否已经带了一段尺寸行.
+_SIZES_MARKER = "身高："
+
+
+def _composed_overview(actor: Actor) -> str | None:
+    """把尺寸行拼在简介前面, 尺寸行以 ``<br>`` 结尾.
+
+    格式固定为「身高 / 三围 / 罩杯 / 血型」, 缺项跳过; 一项都没有时返回原简介, 不造空行.
+    已有简介也带着尺寸行时不重复拼: 反复推送同一人物时内容必须稳定, 否则每轮都会写一次.
+    """
+    sizes = _sizes_line(actor)
+    overview = (actor.overview or "").strip()
+    if not sizes:
+        return overview or None
+    head = f"{sizes}{_OVERVIEW_BREAK}"
+    if not overview:
+        return head
+    if overview.startswith(_SIZES_MARKER):
+        return overview
+    return f"{head}{overview}"
+
+
+def _sizes_line(actor: Actor) -> str:
+    """按 身高 / 三围 / 罩杯 / 血型 的顺序拼一行; 缺项跳过, 全缺返回空串."""
+    parts: list[str] = []
+    if actor.height is not None:
+        parts.append(f"身高：{actor.height}cm")
+    if actor.bust is not None and actor.waist is not None and actor.hip is not None:
+        parts.append(f"三围：{actor.bust} / {actor.waist} / {actor.hip}")
+    if actor.cup:
+        parts.append(f"罩杯：{actor.cup}")
+    if actor.blood_type:
+        parts.append(f"血型：{actor.blood_type} 型")
+    return "、".join(parts)
 
 
 def _has_text(value: str | None) -> bool:

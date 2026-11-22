@@ -23,6 +23,7 @@ _AGENT_ACTOR_PATCH_KEYS = frozenset(
         "waist",
         "hip",
         "cup",
+        "blood_type",
         "overview",
         "tagline",
         "image_urls",

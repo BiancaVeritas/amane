@@ -52,6 +52,7 @@ def _from_browse(item: ActorBrowseItem, *, display_name: str | None = None) -> A
         waist=item.waist,
         hip=item.hip,
         cup=item.cup,
+        blood_type=item.blood_type,
         image_urls=list(item.image_urls),
         updated_at=item.updated_at,
     )
@@ -82,6 +83,7 @@ def _from_actor(
         waist=actor.waist,
         hip=actor.hip,
         cup=actor.cup,
+        blood_type=actor.blood_type,
         overview=actor.overview,
         tagline=actor.tagline,
         image_urls=list(actor.image_urls or []),

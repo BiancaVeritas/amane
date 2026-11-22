@@ -41,7 +41,7 @@ export type ActorClearPersonBatchResponse = {
  *
  * 演员人物档案的可锁字段; 除 ``ALIASES`` 外取值与 Actor 列名同形.
  */
-export type ActorField = 'gender' | 'birthday' | 'birthplace' | 'height' | 'bust' | 'waist' | 'hip' | 'cup' | 'overview' | 'tagline' | 'image_urls' | 'aliases';
+export type ActorField = 'gender' | 'birthday' | 'birthplace' | 'height' | 'bust' | 'waist' | 'hip' | 'cup' | 'blood_type' | 'overview' | 'tagline' | 'image_urls' | 'aliases';
 
 /**
  * ActorGender
@@ -252,6 +252,10 @@ export type ActorResponse = {
      */
     cup?: string | null;
     /**
+     * Blood Type
+     */
+    blood_type?: string | null;
+    /**
      * Overview
      */
     overview?: string | null;
@@ -402,7 +406,7 @@ export type ActorScrapingConfig = {
 /**
  * ActorSortField
  */
-export type ActorSortField = 'name' | 'count' | 'updated_at' | 'has_image' | 'birthday' | 'height' | 'bust' | 'waist' | 'hip' | 'cup';
+export type ActorSortField = 'name' | 'count' | 'updated_at' | 'has_image' | 'birthday' | 'height' | 'bust' | 'waist' | 'hip' | 'cup' | 'blood_type';
 
 /**
  * ActorUpdateRequest
@@ -437,6 +441,10 @@ export type ActorUpdateRequest = {
      * Cup
      */
     cup?: string | null;
+    /**
+     * Blood Type
+     */
+    blood_type?: string | null;
     /**
      * Overview
      */

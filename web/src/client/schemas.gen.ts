@@ -53,6 +53,7 @@ export const ActorFieldSchema = {
         'waist',
         'hip',
         'cup',
+        'blood_type',
         'overview',
         'tagline',
         'image_urls',
@@ -379,6 +380,17 @@ export const ActorResponseSchema = {
             ],
             title: 'Cup'
         },
+        blood_type: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Blood Type'
+        },
         overview: {
             anyOf: [
                 {
@@ -627,7 +639,8 @@ export const ActorSortFieldSchema = {
         'bust',
         'waist',
         'hip',
-        'cup'
+        'cup',
+        'blood_type'
     ],
     title: 'ActorSortField'
 } as const;
@@ -720,6 +733,17 @@ export const ActorUpdateRequestSchema = {
                 }
             ],
             title: 'Cup'
+        },
+        blood_type: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Blood Type'
         },
         overview: {
             anyOf: [

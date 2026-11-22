@@ -137,6 +137,8 @@ async def _apply_actor_updates(
         actor.waist = updates["waist"]
     if "hip" in updates:
         actor.hip = updates["hip"]
+    if "blood_type" in updates:
+        actor.blood_type = updates["blood_type"]
     if "cup" in updates:
         actor.cup = updates["cup"]
     if "overview" in updates:

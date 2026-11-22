@@ -87,7 +87,8 @@ def lookup_actress_ids(name: str) -> set[str]:
     hits: set[str] = set()
     for actress_id, entry in table.items():
         if str(entry["name"]).strip() == key or any(
-            str(a).strip() == key for a in entry["aliases"]  # type: ignore[union-attr]
+            str(a).strip() == key
+            for a in entry["aliases"]  # type: ignore[union-attr]
         ):
             hits.add(actress_id)
             continue
@@ -164,7 +165,9 @@ def _mutual_links(candidates: set[str]) -> set[str]:
         if aid in table
     }
     primary_of = {
-        aid: str(table[aid]["name"]).strip() for aid in candidates if aid in table  # type: ignore[union-attr]
+        aid: str(table[aid]["name"]).strip()
+        for aid in candidates
+        if aid in table  # type: ignore[union-attr]
     }
     if len(alias_of) < 2:
         return set()
@@ -183,9 +186,7 @@ def _mutual_links(candidates: set[str]) -> set[str]:
             crossed = primary in other_aliases and other_primary in own_aliases
             # 两份记录名字完全一致 —— 但别名为空时不能算: 空集恒相等, 那样所有只留主名的
             # 同名者都会被并成一个.
-            same_record = (
-                bool(own_aliases) and primary == other_primary and own_aliases == other_aliases
-            )
+            same_record = bool(own_aliases) and primary == other_primary and own_aliases == other_aliases
             if crossed or same_record:
                 linked.add(aid)
                 linked.add(other_id)
@@ -382,6 +383,7 @@ def parse_minnano_detail(html_text: str, *, page_url: str, base_url: str) -> Act
     birthday = _parse_birthday(fields.get("生年月日", ""))
     birthplace = _plain(fields.get("出身地", "")) or None
     height, bust, waist, hip, cup = _parse_figure(fields.get("サイズ", ""))
+    blood_type = _parse_blood_type(fields.get("血液型", ""))
 
     image = extract_text(html, '//meta[@property="og:image"]/@content') or extract_text(
         html, '//div[contains(@class,"thumb")]//img[contains(@src,"p_actress")]/@src'
@@ -406,6 +408,7 @@ def parse_minnano_detail(html_text: str, *, page_url: str, base_url: str) -> Act
         waist=waist,
         hip=hip,
         cup=cup,
+        blood_type=blood_type,
         image_urls=image_urls,
         source_url=source,
         provider_ids={"minnano": source} if source else {},
@@ -487,6 +490,19 @@ def _plain(text: str) -> str:
 
 def _parse_birthday(raw: str) -> str | None:
     return normalize_calendar_date(raw)
+
+
+#: 血型取值; 站点偶尔写成全角, 归一后再判断.
+_BLOOD_TYPES = ("A", "B", "O", "AB")
+
+
+def _parse_blood_type(raw: str) -> str | None:
+    """从 血液型 字段取出 A / B / O / AB; 认不出返回 None.
+
+    写成 ``RH-`` 之类不认: 站点只会给 ABO 四种, 其余当作脏数据丢掉比瞎猜安全.
+    """
+    text = unicodedata.normalize("NFKC", _plain(raw)).strip().upper().removesuffix("型").strip()
+    return text if text in _BLOOD_TYPES else None
 
 
 def _parse_figure(raw: str) -> tuple[int | None, int | None, int | None, int | None, str | None]:

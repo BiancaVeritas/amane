@@ -7832,6 +7832,7 @@
           "waist",
           "hip",
           "cup",
+          "blood_type",
           "overview",
           "tagline",
           "image_urls",
@@ -8150,6 +8151,17 @@
             ],
             "title": "Cup"
           },
+          "blood_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Blood Type"
+          },
           "overview": {
             "anyOf": [
               {
@@ -8393,7 +8405,8 @@
           "bust",
           "waist",
           "hip",
-          "cup"
+          "cup",
+          "blood_type"
         ],
         "title": "ActorSortField"
       },
@@ -8485,6 +8498,17 @@
               }
             ],
             "title": "Cup"
+          },
+          "blood_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Blood Type"
           },
           "overview": {
             "anyOf": [

@@ -91,6 +91,12 @@ async def _actor(
     birthplace: str | None = None,
     image_urls: list[str] | None = None,
     aliases: list[str] | None = None,
+    height: int | None = None,
+    bust: int | None = None,
+    waist: int | None = None,
+    hip: int | None = None,
+    cup: str | None = None,
+    blood_type: str | None = None,
 ) -> int:
     await repo.upsert_metadata(number=f"AP-{name}", actors=[name])
     actors = await repo.get_actors_by_names([name])
@@ -104,6 +110,12 @@ async def _actor(
         birthplace=birthplace,
         image_urls=image_urls or [],
         aliases=aliases or [],
+        height=height,
+        bust=bust,
+        waist=waist,
+        hip=hip,
+        cup=cup,
+        blood_type=blood_type,
     )
     return actor.id
 
@@ -507,12 +519,94 @@ async def test_matches_person_renamed_to_display_name(
     )
     client = _FakeClient([_person("波多野结衣")])
 
-    handler = ActorPushHandler(
-        repo, resource_store, _hot(), client_factory=lambda _: client, mapping_dir=tmp_path
-    )
+    handler = ActorPushHandler(repo, resource_store, _hot(), client_factory=lambda _: client, mapping_dir=tmp_path)
     result = await handler.handle(ActorPushPayload())
 
     assert result.success
     assert result.result is not None
     assert result.result.matched == 1
     assert result.result.not_found == 0
+
+
+class TestSizesOverview:
+    """尺寸行拼进人物简介; 尺寸行必须以 <br> 结尾, 否则后续简介会被连成一句."""
+
+    @pytest.mark.parametrize(
+        ("fields", "expected"),
+        [
+            # 四项齐全: 顺序固定为 身高 / 三围 / 罩杯 / 血型.
+            (
+                {"height": 164, "bust": 94, "waist": 58, "hip": 89, "cup": "F", "blood_type": "A"},
+                "身高：164cm、三围：94 / 58 / 89、罩杯：F、血型：A 型",
+            ),
+            # 缺项跳过, 不留下空槽.
+            ({"height": 160}, "身高：160cm"),
+            ({"bust": 90, "waist": 60, "hip": 88}, "三围：90 / 60 / 88"),
+            ({"cup": "C", "blood_type": "AB"}, "罩杯：C、血型：AB 型"),
+            # 三围要三项齐全才写: 只给一两项拼不出「XX / XX / XX」.
+            ({"bust": 90}, ""),
+            ({"bust": 90, "waist": 60}, ""),
+            # 一项都没有: 整行不写.
+            ({}, ""),
+        ],
+    )
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_sizes_line(self, repo: Repository, fields, expected: str) -> None:
+        from amane.handlers.actor_push import _sizes_line
+
+        actor_id = await _actor(repo, f"Sizes{abs(hash(str(fields))) % 9999}", **fields)
+        actor = await repo.get_actor(actor_id)
+        assert _sizes_line(actor) == expected
+
+    @pytest.mark.parametrize(
+        ("fields", "overview", "expected"),
+        [
+            # 有尺寸有简介: 尺寸行在前, <br> 收尾, 简介接在后面.
+            ({"height": 164, "cup": "F"}, "原简介", "身高：164cm、罩杯：F<br>原简介"),
+            # 只有尺寸: 仍带 <br>, 后续追加简介时才不会黏在一起.
+            ({"height": 164}, None, "身高：164cm<br>"),
+            # 只有简介: 不加多余的行.
+            ({}, "原简介", "原简介"),
+            # 两者都空: 不写空值.
+            ({}, None, None),
+            # 已经是拼好的: 原样返回, 反复推送内容稳定.
+            ({"height": 164}, "身高：164cm`n原简介", "身高：164cm`n原简介"),
+        ],
+    )
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_composed_overview(
+        self, repo: Repository, fields, overview: str | None, expected: str | None
+    ) -> None:
+        from amane.handlers.actor_push import _composed_overview
+
+        actor_id = await _actor(repo, f"Composed{abs(hash(str(fields))) % 9999}", overview=overview, **fields)
+        actor = await repo.get_actor(actor_id)
+        assert _composed_overview(actor) == expected
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_push_writes_composed_overview(self, repo: Repository) -> None:
+        """推送时写的是拼好的简介, 不是裸的 actor.overview."""
+        await _actor(
+            repo,
+            "SizedActor",
+            overview="原简介",
+            height=164,
+            bust=94,
+            waist=58,
+            hip=89,
+            cup="F",
+            blood_type="A",
+        )
+        client = _FakeClient([_person("SizedActor")])
+        handler = ActorPushHandler(repo, None, _hot(), client_factory=lambda _: client)
+
+        result = await handler.handle(ActorPushPayload(force=True))
+
+        assert result.success
+        # 写进服务器的是拼好的简介: 尺寸行在前, <br> 收尾.
+        assert client.updates == [
+            (
+                "p-SizedActor",
+                {"Overview": "身高：164cm、三围：94 / 58 / 89、罩杯：F、血型：A 型<br>原简介", "Tags": ["SizedActor"]},
+            )
+        ]

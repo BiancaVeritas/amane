@@ -23,6 +23,7 @@ _SCALAR_FIELDS: tuple[str, ...] = (
     "waist",
     "hip",
     "cup",
+    "blood_type",
     "overview",
     "tagline",
 )
@@ -38,6 +39,7 @@ class AggregatedActor(BaseModel):
     waist: int | None = None
     hip: int | None = None
     cup: str | None = None
+    blood_type: str | None = None
     overview: str | None = None
     tagline: str | None = None
     image_urls: list[str] = Field(default_factory=list)

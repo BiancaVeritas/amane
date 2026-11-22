@@ -32,6 +32,7 @@ interface ActorDraft {
   waist: number | string;
   hip: number | string;
   cup: string;
+  blood_type: string;
   tagline: string;
   overview: string;
   aliases: string[];
@@ -48,6 +49,7 @@ function draftFromActor(actor: ActorResponse): ActorDraft {
     waist: actor.waist ?? "",
     hip: actor.hip ?? "",
     cup: actor.cup ?? "",
+    blood_type: actor.blood_type ?? "",
     tagline: actor.tagline ?? "",
     overview: actor.overview ?? "",
     aliases: [...(actor.aliases ?? [])],
@@ -78,6 +80,9 @@ function patchFromDraft(draft: ActorDraft, actor: ActorResponse): ActorUpdateReq
   if (numOrNull(draft.waist) !== numOrNull(initial.waist)) patch.waist = numOrNull(draft.waist);
   if (numOrNull(draft.hip) !== numOrNull(initial.hip)) patch.hip = numOrNull(draft.hip);
   if (draft.cup.trim() !== initial.cup) patch.cup = draft.cup.trim() || null;
+  if (draft.blood_type.trim() !== initial.blood_type) {
+    patch.blood_type = draft.blood_type.trim() || null;
+  }
   if (draft.tagline.trim() !== initial.tagline) patch.tagline = draft.tagline.trim() || null;
   if (draft.overview.trim() !== initial.overview) patch.overview = draft.overview.trim() || null;
   const aliases = draft.aliases.map((a) => a.trim()).filter(Boolean);
@@ -205,6 +210,11 @@ export function ActorEditDialog({
               label={t("browse.person.cup")}
               value={draft.cup}
               onChange={(e) => patchDraft({ cup: e.currentTarget.value })}
+            />
+            <ClearableTextInput
+              label={t("browse.person.bloodType")}
+              value={draft.blood_type}
+              onChange={(e) => patchDraft({ blood_type: e.currentTarget.value })}
             />
           </Group>
         </SimpleGrid>

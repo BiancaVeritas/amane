@@ -195,6 +195,7 @@ export const ACTOR_SORT_FIELDS = exhaustiveTuple<ActorSortField>()(
   "waist",
   "hip",
   "cup",
+  "blood_type",
 );
 
 export const MANUAL_TASK_TYPES = exhaustiveTuple<ManualTaskType>()(
