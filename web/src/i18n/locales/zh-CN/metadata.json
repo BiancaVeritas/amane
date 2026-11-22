@@ -232,6 +232,7 @@
       "sourceUrl": "来源链接",
       "images": "头像",
       "cm": "{{value}} cm",
+    "bloodTypeValue": "{{value}} 型",
       "birthdayFormat": "格式: 2000-01-01 或 2000/1/1 或 2000年1月1日"
     },
     "tagFilms": "影片",

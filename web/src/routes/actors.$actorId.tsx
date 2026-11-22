@@ -668,6 +668,17 @@ function ActorHero({
             )}
           </FieldBlock>
         )}
+        {(actor.blood_type || lockedFields.has("blood_type")) && (
+          <FieldBlock label={t("browse.person.bloodType")} lock={lockProps("blood_type")}>
+            {actor.blood_type ? (
+              <Text size="sm">
+                {t("browse.person.bloodTypeValue", { value: actor.blood_type })}
+              </Text>
+            ) : (
+              <EmptyValue />
+            )}
+          </FieldBlock>
+        )}
         {(measurements || measurementLocked) && (
           <div>
             <Group gap={4} wrap="nowrap" align="center" mb={4}>

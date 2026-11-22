@@ -236,6 +236,7 @@
       "sourceUrl": "Source link",
       "images": "Photos",
       "cm": "{{value}} cm",
+    "bloodTypeValue": "Type {{value}}",
       "birthdayFormat": "Format: 2000-01-01, 2000/1/1, or 2000年1月1日"
     },
     "tagFilms": "Titles",
