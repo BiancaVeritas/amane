@@ -534,15 +534,15 @@ class TestSizesOverview:
     @pytest.mark.parametrize(
         ("fields", "expected"),
         [
-            # 四项齐全: 顺序固定为 身高 / 三围 / 罩杯 / 血型.
+            # 四项齐全: 顺序固定为 身高 / 血型 / 三围 / 罩杯.
             (
                 {"height": 164, "bust": 94, "waist": 58, "hip": 89, "cup": "F", "blood_type": "A"},
-                "身高：164cm、三围：94 / 58 / 89、罩杯：F、血型：A 型",
+                "身高：164cm、血型：A 型、三围：94 / 58 / 89、罩杯：F",
             ),
             # 缺项跳过, 不留下空槽.
             ({"height": 160}, "身高：160cm"),
             ({"bust": 90, "waist": 60, "hip": 88}, "三围：90 / 60 / 88"),
-            ({"cup": "C", "blood_type": "AB"}, "罩杯：C、血型：AB 型"),
+            ({"cup": "C", "blood_type": "AB"}, "血型：AB 型、罩杯：C"),
             # 三围要三项齐全才写: 只给一两项拼不出「XX / XX / XX」.
             ({"bust": 90}, ""),
             ({"bust": 90, "waist": 60}, ""),
@@ -610,7 +610,7 @@ class TestSizesOverview:
             (
                 "p-SizedActor",
                 {
-                    "Overview": "身高：164cm、三围：94 / 58 / 89、罩杯：F、血型：A 型<br>\n原简介",
+                    "Overview": "身高：164cm、血型：A 型、三围：94 / 58 / 89、罩杯：F<br>\n原简介",
                     "Tags": ["SizedActor"],
                 },
             )

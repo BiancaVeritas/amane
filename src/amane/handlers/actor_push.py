@@ -413,16 +413,16 @@ def _composed_overview(actor: Actor) -> str | None:
 
 
 def _sizes_line(actor: Actor) -> str:
-    """按 身高 / 三围 / 罩杯 / 血型 的顺序拼一行; 缺项跳过, 全缺返回空串."""
+    """按 身高 / 血型 / 三围 / 罩杯 的顺序拼一行; 缺项跳过, 全缺返回空串."""
     parts: list[str] = []
     if actor.height is not None:
         parts.append(f"身高：{actor.height}cm")
+    if actor.blood_type:
+        parts.append(f"血型：{actor.blood_type} 型")
     if actor.bust is not None and actor.waist is not None and actor.hip is not None:
         parts.append(f"三围：{actor.bust} / {actor.waist} / {actor.hip}")
     if actor.cup:
         parts.append(f"罩杯：{actor.cup}")
-    if actor.blood_type:
-        parts.append(f"血型：{actor.blood_type} 型")
     return "、".join(parts)
 
 
