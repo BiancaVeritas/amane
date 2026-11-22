@@ -9,13 +9,15 @@ import {
   Text,
   TextInput,
 } from "@mantine/core";
-import { IconAlertCircle, IconFilter, IconSearch } from "@tabler/icons-react";
-import { useQuery } from "@tanstack/react-query";
+import { IconAlertCircle, IconFilter, IconSearch, IconTrash } from "@tabler/icons-react";
+import { notifications } from "@mantine/notifications";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link, stripSearchParams } from "@tanstack/react-router";
 import { useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { z } from "zod";
-import { listFacetsOptions } from "@/client/@tanstack/react-query.gen";
+import { listFacetsOptions, listFacetsQueryKey } from "@/client/@tanstack/react-query.gen";
+import { pruneEmptyFacetsEndpoint } from "@/client/sdk.gen";
 import type { FacetKind, FacetResponse, FacetSortField } from "@/client/types.gen";
 import { BrowsePageShell } from "@/components/common/browse-page-shell";
 import { HintedActionIcon } from "@/components/common/hinted-action-icon";
@@ -25,6 +27,7 @@ import { SortMenu } from "@/components/common/sort-menu";
 import { TriStateSegment } from "@/components/common/tri-state-segment";
 import { CatalogFacetTable } from "@/components/media/catalog-facet-table";
 import { FacetFavoriteMark } from "@/components/media/facet-favorite-star";
+import { extractErrorMessage } from "@/lib/api-error";
 import { isOneOf } from "@/lib/exhaustive";
 import {
   CATALOG_FACET_KINDS,
@@ -138,6 +141,26 @@ function CatalogKindPage() {
       },
     }),
     enabled: validKind,
+  });
+
+  // 清掉作品数为 0 的空壳. 有中文译名或已归档的服务端会保留, 这里只需要刷新列表.
+  const qc = useQueryClient();
+  const pruneMutation = useMutation({
+    mutationFn: () => pruneEmptyFacetsEndpoint({ path: { kind }, throwOnError: true }),
+    onSuccess: (res) => {
+      const removed = res.data?.removed ?? 0;
+      notifications.show({
+        message: t("manage.pruneEmptyResult", { count: removed }),
+        color: removed > 0 ? "blue" : "gray",
+      });
+      void qc.invalidateQueries({ queryKey: listFacetsQueryKey({ path: { kind } }) });
+    },
+    onError: (err) => {
+      notifications.show({
+        message: extractErrorMessage(err, t("manage.pruneEmptyFailed")),
+        color: "red",
+      });
+    },
   });
 
   const maxCount = useMemo(
@@ -284,6 +307,16 @@ function CatalogKindPage() {
               }
             />
           )}
+          {/* 清掉作品数为 0 的空壳; 有中文译名或已归档的由服务端保留. */}
+          <HintedActionIcon
+            variant="default"
+            size={36}
+            loading={pruneMutation.isPending}
+            onClick={() => pruneMutation.mutate()}
+            label={t("manage.pruneEmpty")}
+          >
+            <IconTrash size={16} />
+          </HintedActionIcon>
         </Group>
       }
       filterPanel={

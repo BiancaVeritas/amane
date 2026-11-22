@@ -426,6 +426,9 @@
   "manage": {
     "name": "Name",
     "count": "Count",
+    "pruneEmpty": "Remove empty categories",
+    "pruneEmptyResult": "Removed {{count}} empty categories",
+    "pruneEmptyFailed": "Failed to remove",
     "mergeGuide": "Select sources, then click merge on the target",
     "mergeNeedSources": "Select at least one other entry as a source first",
     "merge": "Merge into this",

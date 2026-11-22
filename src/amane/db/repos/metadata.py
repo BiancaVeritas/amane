@@ -1057,15 +1057,15 @@ class MetadataRepoMixin(RepositoryMixinBase):
         await self._drop_embeddings(removed)
         return len(removed), missing
 
-    async def prune_empty_facets(self, registry) -> dict[str, int]:
+    async def prune_empty_facets(self, registry, *, kind=None) -> dict[str, int]:
         """删掉作品数为 0 的分类实体; 有译名或已归档的保留.
 
-        在删除影片之后调用: 计数归零只可能由删除造成. ``registry`` 为 None 时保守处理,
-        一个都不删.
+        在删除影片之后调用: 计数归零只可能由删除造成. ``kind`` 限定只处理一种分类.
+        ``registry`` 为 None 时保守处理, 一个都不删.
         """
         async with self._session() as session:
             await acquire_write_lock(session)
-            removed = await prune_empty_facets(session, registry)
+            removed = await prune_empty_facets(session, registry, kind=kind)
             if removed:
                 await session.commit()
             return removed

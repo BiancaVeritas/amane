@@ -14,6 +14,7 @@ from ..models import (
     FacetBatchResponse,
     FacetListResponse,
     FacetMergeRequest,
+    FacetPruneResponse,
     FacetRenameRequest,
     FacetResponse,
     FacetRuleListResponse,
@@ -200,6 +201,19 @@ async def batch_facets(kind: FacetKind, req: FacetBatchRequest, repo: RepoDep) -
         missing=result.missing,
     )
     return FacetBatchResponse(changed=result.changed, unchanged=result.unchanged, missing=result.missing)
+
+
+@router.post("/{kind}/prune-empty")
+async def prune_empty_facets_endpoint(kind: FacetKind, repo: RepoDep, runtime: RuntimeDep) -> FacetPruneResponse:
+    """清掉该分类里作品数为 0 的实体; 有中文译名或已归档的保留.
+
+    删除影片时会自动跑同样的清理, 这个端点供存量数据与手动需要: 早先删掉的影片没有清理过,
+    列表里会一直留着 0 次的空壳.
+    """
+    pruned = await repo.prune_empty_facets(runtime.mappings, kind=kind)
+    removed = pruned.get(str(kind), 0)
+    logger.info("empty facets pruned on demand", kind=kind, removed=removed)
+    return FacetPruneResponse(removed=removed)
 
 
 @router.get("/{kind}/{facet_id}", response_model_exclude={"merged_ids"})

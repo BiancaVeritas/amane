@@ -1353,6 +1353,20 @@ export type FacetMergeRequest = {
 };
 
 /**
+ * FacetPruneResponse
+ *
+ * 清空空分类的结果: 本次删掉的实体数.
+ */
+export type FacetPruneResponse = {
+    /**
+     * Removed
+     *
+     * 被删除的空分类数; 有中文译名或已归档的计在保留侧, 不在此列
+     */
+    removed: number;
+};
+
+/**
  * FacetRenameRequest
  */
 export type FacetRenameRequest = {
@@ -8870,6 +8884,33 @@ export type BatchFacetsResponses = {
 };
 
 export type BatchFacetsResponse = BatchFacetsResponses[keyof BatchFacetsResponses];
+
+export type PruneEmptyFacetsEndpointData = {
+    body?: never;
+    path: {
+        kind: FacetKind;
+    };
+    query?: never;
+    url: '/api/facets/{kind}/prune-empty';
+};
+
+export type PruneEmptyFacetsEndpointErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type PruneEmptyFacetsEndpointError = PruneEmptyFacetsEndpointErrors[keyof PruneEmptyFacetsEndpointErrors];
+
+export type PruneEmptyFacetsEndpointResponses = {
+    /**
+     * Successful Response
+     */
+    200: FacetPruneResponse;
+};
+
+export type PruneEmptyFacetsEndpointResponse = PruneEmptyFacetsEndpointResponses[keyof PruneEmptyFacetsEndpointResponses];
 
 export type DeleteFacetData = {
     body?: never;

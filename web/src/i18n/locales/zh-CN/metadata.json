@@ -407,6 +407,9 @@
   "manage": {
     "name": "名称",
     "count": "数量",
+    "pruneEmpty": "清除空分类",
+    "pruneEmptyResult": "已清除 {{count}} 个空分类",
+    "pruneEmptyFailed": "清除失败",
     "mergeGuide": "勾选来源后点击目标行的合并图标",
     "mergeNeedSources": "请先选中至少一个其它条目作为来源",
     "merge": "合并到此项",

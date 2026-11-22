@@ -52,6 +52,12 @@ class FacetBatchResponse(BaseModel):
     missing: int = Field(description="不存在的分类 id 数")
 
 
+class FacetPruneResponse(BaseModel):
+    """清空空分类的结果: 本次删掉的实体数."""
+
+    removed: int = Field(description="被删除的空分类数; 有中文译名或已归档的计在保留侧, 不在此列")
+
+
 class FacetListResponse(BaseModel):
     items: list[FacetResponse]
     total: int

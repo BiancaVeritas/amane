@@ -48,23 +48,25 @@ _SCALAR_FACETS: dict[FacetKind, tuple[type, str, MappingGroup]] = {
 }
 
 
-async def prune_empty_facets(session: AsyncSession, registry: MappingRegistry | None) -> dict[str, int]:
+async def prune_empty_facets(
+    session: AsyncSession, registry: MappingRegistry | None, *, kind: FacetKind | None = None
+) -> dict[str, int]:
     """删掉作品数为 0 的分类实体; 有译名或已归档的保留.
 
+    ``kind`` 限定只处理一种分类 (手动清理用); 缺省处理全部.
     ``registry`` 缺省时直接返回: 没有映射表就判不出人工痕迹, 宁可不删.
     调用方负责提交事务. 返回各分类被删的条数, 供日志与测试断言.
     """
     if registry is None:
         return {}
 
+    link_facets = _LINK_FACETS if kind is None else {kind: _LINK_FACETS[kind]} if kind in _LINK_FACETS else {}
+    scalar_facets = _SCALAR_FACETS if kind is None else {kind: _SCALAR_FACETS[kind]} if kind in _SCALAR_FACETS else {}
+
     removed: dict[str, int] = {}
 
-    for kind, (entity, fk_column, group) in _LINK_FACETS.items():
-        used = {
-            int(row)
-            for row in (await session.exec(select(col(fk_column)).distinct())).all()
-            if row is not None
-        }
+    for facet_kind, (entity, fk_column, group) in link_facets.items():
+        used = {int(row) for row in (await session.exec(select(col(fk_column)).distinct())).all() if row is not None}
         doomed = [
             row
             for row in (await session.exec(select(entity))).all()
@@ -73,9 +75,9 @@ async def prune_empty_facets(session: AsyncSession, registry: MappingRegistry | 
         for row in doomed:
             await session.delete(row)
         if doomed:
-            removed[str(kind)] = len(doomed)
+            removed[str(facet_kind)] = len(doomed)
 
-    for kind, (entity, column_name, group) in _SCALAR_FACETS.items():
+    for facet_kind, (entity, column_name, group) in scalar_facets.items():
         column = getattr(Metadata, column_name)
         used = {str(name) for name in (await session.exec(select(col(column)))).all() if name}
         doomed = [
@@ -86,7 +88,7 @@ async def prune_empty_facets(session: AsyncSession, registry: MappingRegistry | 
         for row in doomed:
             await session.delete(row)
         if doomed:
-            removed[str(kind)] = len(doomed)
+            removed[str(facet_kind)] = len(doomed)
 
     if removed:
         logger.info("empty facets pruned", counts=removed)

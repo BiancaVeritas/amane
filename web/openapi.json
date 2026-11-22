@@ -4234,6 +4234,48 @@
         }
       }
     },
+    "/api/facets/{kind}/prune-empty": {
+      "post": {
+        "tags": [
+          "facets"
+        ],
+        "summary": "Prune Empty Facets Endpoint",
+        "description": "清掉该分类里作品数为 0 的实体; 有中文译名或已归档的保留.\n\n删除影片时会自动跑同样的清理, 这个端点供存量数据与手动需要: 早先删掉的影片没有清理过,\n列表里会一直留着 0 次的空壳.",
+        "operationId": "prune_empty_facets_endpoint",
+        "parameters": [
+          {
+            "name": "kind",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/FacetKind"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FacetPruneResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/facets/{kind}/{facet_id}": {
       "get": {
         "tags": [
@@ -9925,6 +9967,21 @@
           "source_ids"
         ],
         "title": "FacetMergeRequest"
+      },
+      "FacetPruneResponse": {
+        "properties": {
+          "removed": {
+            "type": "integer",
+            "title": "Removed",
+            "description": "被删除的空分类数; 有中文译名或已归档的计在保留侧, 不在此列"
+          }
+        },
+        "type": "object",
+        "required": [
+          "removed"
+        ],
+        "title": "FacetPruneResponse",
+        "description": "清空空分类的结果: 本次删掉的实体数."
       },
       "FacetRenameRequest": {
         "properties": {

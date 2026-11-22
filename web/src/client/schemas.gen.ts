@@ -2254,6 +2254,22 @@ export const FacetMergeRequestSchema = {
     title: 'FacetMergeRequest'
 } as const;
 
+export const FacetPruneResponseSchema = {
+    properties: {
+        removed: {
+            type: 'integer',
+            title: 'Removed',
+            description: '被删除的空分类数; 有中文译名或已归档的计在保留侧, 不在此列'
+        }
+    },
+    type: 'object',
+    required: [
+        'removed'
+    ],
+    title: 'FacetPruneResponse',
+    description: '清空空分类的结果: 本次删掉的实体数.'
+} as const;
+
 export const FacetRenameRequestSchema = {
     properties: {
         name: {

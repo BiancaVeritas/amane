@@ -357,3 +357,17 @@ async def test_concurrent_rename_same_name_returns_single_409(client: AsyncClien
     assert sorted(response.status_code for response in responses) == [200, 409]
     conflict = next(response for response in responses if response.status_code == 409)
     assert "合并" in conflict.json()["detail"]
+
+
+@pytest.mark.asyncio(loop_scope="function")
+async def test_prune_empty_facets_endpoint(client: AsyncClient, repo: Repository) -> None:
+    """清空空分类端点: 只处理指定分类, 有译名或已归档的保留."""
+    from amane.db.models import FacetKind
+
+    meta = await repo.upsert_metadata(number="PRUNE-001", actors=["Prunee"])
+    assert meta.id is not None
+    await repo.delete_metadata(meta.id)
+
+    resp = await client.post(f"facets/{FacetKind.ACTOR.value}/prune-empty")
+    assert resp.status_code == 200
+    assert resp.json()["removed"] >= 1
