@@ -69,9 +69,7 @@ async def test_content_type_inference(repo: Repository):
 
 @pytest.mark.asyncio(loop_scope="function")
 async def test_western_rescrape_carries_metadata_and_theporndb_uuidentity(repo: Repository):
-    metadata = await repo.upsert_western_metadata(
-        "scene-123", "Lancelotstylesevolution.26.10.16", title="Western"
-    )
+    metadata = await repo.upsert_western_metadata("scene-123", "Lancelotstylesevolution.26.10.16", title="Western")
     handler = RescrapeHandler(repo)
 
     result = await handler.handle(RescrapePayload(limit=10))

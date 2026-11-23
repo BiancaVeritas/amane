@@ -4767,6 +4767,13 @@ export const LibraryCreateRequestSchema = {
             type: 'array',
             title: 'Subtitle Extensions'
         },
+        sidecar_extensions: {
+            items: {
+                type: 'string'
+            },
+            type: 'array',
+            title: 'Sidecar Extensions'
+        },
         write_nfo: {
             type: 'boolean',
             title: 'Write Nfo',
@@ -5052,6 +5059,13 @@ export const LibraryResponseSchema = {
             type: 'array',
             title: 'Subtitle Extensions'
         },
+        sidecar_extensions: {
+            items: {
+                type: 'string'
+            },
+            type: 'array',
+            title: 'Sidecar Extensions'
+        },
         write_nfo: {
             type: 'boolean',
             title: 'Write Nfo'
@@ -5097,6 +5111,7 @@ export const LibraryResponseSchema = {
         'jinja_video_template',
         'link_mode',
         'subtitle_extensions',
+        'sidecar_extensions',
         'write_nfo',
         'copy_resources',
         'trailer_pattern',
@@ -5420,6 +5435,20 @@ export const LibraryUpdateRequestSchema = {
                 }
             ],
             title: 'Subtitle Extensions'
+        },
+        sidecar_extensions: {
+            anyOf: [
+                {
+                    items: {
+                        type: 'string'
+                    },
+                    type: 'array'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Sidecar Extensions'
         },
         write_nfo: {
             anyOf: [
@@ -6839,8 +6868,7 @@ export const MetadataPartialSchema = {
                     type: 'null'
                 }
             ],
-            title: 'Series',
-            'x-hidden': true
+            title: 'Series'
         },
         series_names: {
             anyOf: [
@@ -7824,6 +7852,13 @@ export const PathTemplateSchemaResponseSchema = {
             },
             type: 'array',
             title: 'Subtitle Extensions Default'
+        },
+        sidecar_extensions_default: {
+            items: {
+                type: 'string'
+            },
+            type: 'array',
+            title: 'Sidecar Extensions Default'
         }
     },
     type: 'object',
@@ -7832,7 +7867,8 @@ export const PathTemplateSchemaResponseSchema = {
         'jinja_video_default',
         'optional_defaults',
         'placeholders',
-        'subtitle_extensions_default'
+        'subtitle_extensions_default',
+        'sidecar_extensions_default'
     ],
     title: 'PathTemplateSchemaResponse',
     description: '与 resolve_paths 同源.'

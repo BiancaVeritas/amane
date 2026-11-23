@@ -31,7 +31,6 @@ from ..observability.models import SiteOutcomeKind
 from ..parsing import ContentType, canonical_number, parse_file_info
 from ..plugins.models import SourceDescriptor, SourceTrait
 from ..utils.litepan_strm import read_litepan_115_file_id
-from ..utils.path import path_is_under
 from ._common import ensure_oshash, finalize_media_file
 from .models import ActorScrapePayload, CacheKind, OrganizePayload, ScrapePayload, ScrapeResult
 from .protocol import FollowupTask, TaskHandler, TaskResult
@@ -1146,18 +1145,21 @@ class ScrapeHandler(TaskHandler[ScrapePayload, ScrapeResult]):
                 return None
             # 启用监控目录后整理不再由 auto_organize 决定 (界面那开关跟着置灰).
             # 下载目录进来的文件必须整理, 否则永远落不到库路径;
-            # 目标目录内的文件是否整理, 取决于 watch_rename (只改名不搬动).
-            from_download = bool(library.watch_path) and path_is_under(Path(file.path), Path(library.watch_path))
-            if library.watch_dir_enabled:
-                if not from_download and not library.watch_rename:
-                    current().debug("auto organize skipped: in-place mode", library_id=library.id)
-                    return None
-            elif not library.auto_organize:
+            # 目标目录内的文件同样要整理 —— 那是补写 NFO / 图片的唯一时机.
+            # 「不移动、不改名」由整理侧按原地模式决定 (见 file.py 的 in_place / keep_name),
+            # 与这里是否派发整理无关: 早先把两者混在一起, 结果是原地库永远补不出元数据.
+            if not library.watch_dir_enabled and not library.auto_organize:
                 return None
             # 多盘片的后续张不发 SCRAPE, 靠首盘这次的元数据一起落盘. 同番号、同库、
             # 还没整理的行都并进来, 否则 CD2 会永远留在原处.
             siblings = await self._adopt_sibling_discs(file, metadata_id)
-            return OrganizePayload(library_id=file.library_id, media_file_ids=[file.id, *siblings])
+            return OrganizePayload(
+                library_id=file.library_id,
+                media_file_ids=[file.id, *siblings],
+                # 自动整理只补缺口: 目标已有 NFO / 图片就原样保留, 不冲掉用户既有的元数据.
+                # 想以库里数据为准覆盖, 用「整理落盘」手动跑一次.
+                keep_existing_artifacts=True,
+            )
         except Exception:
             current().exception("failed to build auto organize followup", media_file_id=file.id)
             return None

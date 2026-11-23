@@ -1907,7 +1907,7 @@
           "metadata"
         ],
         "summary": "Upload Thumb",
-        "description": "上传自定义封面. 原样使用, 不裁剪. 旧封面保留在列表后面.",
+        "description": "上传自定义封面. 原样使用, 不裁剪. 旧封面保留在列表后面.\n\n若当前海报就是封面本身 (两者 URL 相同), 海报也跟着换成新封面 —— 那种状态下「海报=封面」\n是用户的既定选择, 换了封面却留着旧海报等于把这个关系悄悄破坏掉. 海报另有过独立来源\n(单独上传或手工裁切) 时不动它: 那是另一份资源, 不该被换封面带走.",
         "operationId": "upload_thumb",
         "parameters": [
           {
@@ -2029,7 +2029,7 @@
           "metadata"
         ],
         "summary": "Adopt Thumb",
-        "description": "把一张已有图 (剧照 / 候选图) 设为封面. **只换引用, 不复制文件**.\n\n源图可能还没本地化, 先确保它在 Resource 里落地, 然后把它 join 到 ``thumb_urls`` 头部.\n复制一份会让来回切换不断堆积内容相同的副本, 列表越切越长.",
+        "description": "把一张已有图 (剧照 / 候选图) 设为封面. **只换引用, 不复制文件**.\n\n源图可能还没本地化, 先确保它在 Resource 里落地, 然后把它 join 到 ``thumb_urls`` 头部.\n复制一份会让来回切换不断堆积内容相同的副本, 列表越切越长.\n\n与 ``upload-thumb`` 同一口径: 当前海报就是封面时, 海报跟着换.",
         "operationId": "adopt_thumb",
         "parameters": [
           {
@@ -12607,6 +12607,13 @@
             "type": "array",
             "title": "Subtitle Extensions"
           },
+          "sidecar_extensions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Sidecar Extensions"
+          },
           "write_nfo": {
             "type": "boolean",
             "title": "Write Nfo",
@@ -12889,6 +12896,13 @@
             "type": "array",
             "title": "Subtitle Extensions"
           },
+          "sidecar_extensions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Sidecar Extensions"
+          },
           "write_nfo": {
             "type": "boolean",
             "title": "Write Nfo"
@@ -12934,6 +12948,7 @@
           "jinja_video_template",
           "link_mode",
           "subtitle_extensions",
+          "sidecar_extensions",
           "write_nfo",
           "copy_resources",
           "trailer_pattern",
@@ -13256,6 +13271,20 @@
               }
             ],
             "title": "Subtitle Extensions"
+          },
+          "sidecar_extensions": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sidecar Extensions"
           },
           "write_nfo": {
             "anyOf": [
@@ -14647,8 +14676,7 @@
                 "type": "null"
               }
             ],
-            "title": "Series",
-            "x-hidden": true
+            "title": "Series"
           },
           "series_names": {
             "anyOf": [
@@ -15618,6 +15646,13 @@
             },
             "type": "array",
             "title": "Subtitle Extensions Default"
+          },
+          "sidecar_extensions_default": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Sidecar Extensions Default"
           }
         },
         "type": "object",
@@ -15626,7 +15661,8 @@
           "jinja_video_default",
           "optional_defaults",
           "placeholders",
-          "subtitle_extensions_default"
+          "subtitle_extensions_default",
+          "sidecar_extensions_default"
         ],
         "title": "PathTemplateSchemaResponse",
         "description": "与 resolve_paths 同源."

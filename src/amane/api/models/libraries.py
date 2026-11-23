@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field, model_validator
 from ...db import Library
 from ...enums import DownloadableResource, LibraryAutomation, LibraryIngest, LinkMode, MoveMode
 from ...library import (
+    DEFAULT_SIDECAR_EXTENSIONS,
     DEFAULT_SUBTITLE_EXTENSIONS,
     DEFAULT_TRAILER_PATTERN,
     BlacklistPattern,
@@ -82,6 +83,8 @@ class LibraryCreateRequest(BaseModel):
     trailer_template: PathTemplate | None = None
     subtitle_template: PathTemplate | None = None
     subtitle_extensions: SubtitleExtensions = Field(default_factory=lambda: list(DEFAULT_SUBTITLE_EXTENSIONS))
+    sidecar_extensions: list[str] = Field(default_factory=lambda: list(DEFAULT_SIDECAR_EXTENSIONS))
+    """随视频一起搬走的同名附属文件扩展名; 文件名原样保留 (见 `Library.sidecar_extensions`)."""
     write_nfo: bool = True
     copy_resources: list[DownloadableResource] = Field(default_factory=lambda: list(DownloadableResource))
     trailer_pattern: TrailerPattern = DEFAULT_TRAILER_PATTERN
@@ -134,6 +137,7 @@ class LibraryResponse(BaseModel):
     trailer_template: str | None = None
     subtitle_template: str | None = None
     subtitle_extensions: list[str]
+    sidecar_extensions: list[str]
     write_nfo: bool
     copy_resources: list[DownloadableResource]
     trailer_pattern: str
@@ -189,6 +193,7 @@ class PathTemplateSchemaResponse(BaseModel):
     optional_defaults: OptionalPathTemplateDefaults
     placeholders: list[PathTemplatePlaceholder]
     subtitle_extensions_default: list[str]
+    sidecar_extensions_default: list[str]
 
 
 def path_template_schema(
@@ -210,4 +215,5 @@ def path_template_schema(
         optional_defaults=OPTIONAL_TEMPLATE_DEFAULTS,
         placeholders=[*builtin, *extra],
         subtitle_extensions_default=list(DEFAULT_SUBTITLE_EXTENSIONS),
+        sidecar_extensions_default=list(DEFAULT_SIDECAR_EXTENSIONS),
     )

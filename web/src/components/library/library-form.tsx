@@ -114,6 +114,7 @@ export interface LibraryFormState {
   blacklist_patterns: string;
   min_file_size: number;
   subtitle_extensions: string;
+  sidecar_extensions: string;
   video_template: string;
   use_jinja_template: boolean;
   jinja_video_template: string;
@@ -155,6 +156,7 @@ export function emptyLibraryForm(schema?: PathTemplateSchemaResponse | null): Li
     subtitle_extensions: (
       schema?.subtitle_extensions_default ?? [".srt", ".ass", ".ssa", ".vtt", ".sub"]
     ).join(", "),
+    sidecar_extensions: (schema?.sidecar_extensions_default ?? [".bif"]).join(", "),
     video_template: schema?.video_default ?? "",
     use_jinja_template: false,
     jinja_video_template: schema?.jinja_video_default ?? "",
@@ -194,6 +196,7 @@ export function libraryFormFromResponse(lib: LibraryResponse): LibraryFormState 
     blacklist_patterns: lib.blacklist_patterns?.join("\n") ?? "",
     min_file_size: lib.min_file_size ?? 0,
     subtitle_extensions: lib.subtitle_extensions?.join(", ") ?? "",
+    sidecar_extensions: lib.sidecar_extensions?.join(", ") ?? "",
     video_template: lib.video_template,
     use_jinja_template: lib.use_jinja_template,
     jinja_video_template: lib.jinja_video_template ?? "",
@@ -248,6 +251,7 @@ function libraryFormValues(form: LibraryFormState): Record<string, unknown> {
     blacklist_patterns: parseBlacklistPatterns(form.blacklist_patterns),
     min_file_size: form.min_file_size,
     subtitle_extensions: parseLibraryPatterns(form.subtitle_extensions),
+    sidecar_extensions: parseLibraryPatterns(form.sidecar_extensions),
     video_template: form.video_template.trim(),
     use_jinja_template: form.use_jinja_template,
     jinja_video_template: form.jinja_video_template.trim() || null,
@@ -521,6 +525,12 @@ export function LibraryFormFields({ value, onChange, showCreateOnly }: LibraryFo
             />
           </div>
         </div>
+        <ClearableTextInput
+          label={t("fieldSidecarExtensions")}
+          description={t("fieldSidecarExtensionsHint")}
+          value={value.sidecar_extensions}
+          onChange={(e) => onChange({ ...value, sidecar_extensions: e.currentTarget.value })}
+        />
       </Stack>
       <Checkbox.Group
         label={t("fieldCopyResources")}

@@ -17,6 +17,7 @@ export const TEMPLATE_TOKEN_KINDS = [
   "punct",
   "mapKey",
   "mapValue",
+  "unknown",
   "error",
 ] as const;
 
@@ -35,7 +36,9 @@ function nameKind(raw: string, catalog: TemplateCatalog | undefined): TemplateTo
   if (catalog == null || catalog.size === 0) {
     return "name";
   }
-  return catalog.has(name) ? "name" : "error";
+  // 名字不在目录里单独成一类: 语法是对的, 只是这个占位符已不存在 (典型是删掉了自定义占位符).
+  // 两者都要标红, 但提示文案不同 —— 语法错误说"写法不对", 这个说"哪个名字不认识".
+  return catalog.has(name) ? "name" : "unknown";
 }
 
 function mapKeyKind(

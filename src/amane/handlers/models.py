@@ -197,6 +197,13 @@ class OrganizePayload(LibraryBase):
         default=True,
         description="移动后删除本次腾空的目录 (库根与 .amane_trash 除外); 复制 / 硬链接 / 符号链接方式不移走源文件, 该开关无效",
     )
+    keep_existing_artifacts: bool = Field(
+        default=False,
+        description=(
+            "目标位置已存在 NFO / 图片时保留原文件, 不覆盖. 自动整理 (刮削后继、监控触发) 传 True —— "
+            "用户已有的元数据是既有成果, 不该被一次自动整理冲掉; 手动「整理落盘」传 False, 表示以库里数据为准"
+        ),
+    )
 
     async def resolve(self, repo: Repository) -> None:
         if self.media_file_ids is not None and self.path:

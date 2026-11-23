@@ -16,7 +16,7 @@ from amane.crawlers.base import Crawler, CrawlerProfile
 from amane.crawlers.factory import CrawlerFactory
 from amane.crawlers.models import MediaMetadata
 from amane.db.models import MediaFileStatus, TaskType
-from amane.enums import SiteName
+from amane.enums import DownloadableResource, SiteName
 from amane.handlers import (
     FollowupTask,
     OrganizeHandler,
@@ -27,6 +27,8 @@ from amane.handlers import (
     TaskResult,
 )
 from amane.handlers._common import register_media_file
+from amane.handlers.file import _existing_sibling_of
+from amane.library import IMAGE_EXTENSIONS
 
 if TYPE_CHECKING:
     from amane.db.repository import Repository
@@ -148,6 +150,31 @@ async def test_auto_organize_skips_missing_library(
 
 
 @pytest.mark.asyncio(loop_scope="function")
+async def test_auto_organize_runs_for_in_place_library(repo: Repository, tmp_path: Path) -> None:
+    """原地模式的库, 目标目录里的文件也要整理.
+
+    这是补写 NFO / 图片的唯一时机. 「不移动、不改名」由整理侧按原地模式决定, 与是否派发无关 ——
+    早先在这里就把后继挡掉了, 于是原地库永远补不出元数据.
+    """
+    lib_root = tmp_path / "lib"
+    lib_root.mkdir()
+    lib = await repo.create_library(
+        name="t", path=str(lib_root), auto_organize=False, watch_dir_enabled=True, watch_rename=False
+    )
+    assert lib.id is not None
+    # 文件就躺在库根下 (原地模式), 不在任何下载目录里.
+    media = await register_media_file(repo, lib.id, lib_root / "MIDV-123.mp4")
+    assert media.id is not None
+
+    result = await _handler(repo).handle(ScrapePayload(number="MIDV-123", media_file_id=media.id))
+
+    assert result.success is True
+    organize = _organize_followups(result)
+    assert len(organize) == 1, "原地库也要派发整理, 否则元数据永远写不出去"
+    assert organize[0].payload["media_file_ids"] == [media.id]
+
+
+@pytest.mark.asyncio(loop_scope="function")
 async def test_auto_organize_followup_lands_in_task_graph(repo: Repository, tmp_path: Path) -> None:
     """后继经完成事务落库: 整理任务成为刮削任务的子节点, 链根是那次刮削."""
     _, media_id = await _library_with_file(repo, tmp_path, auto_organize=True)
@@ -250,3 +277,163 @@ async def test_repeated_single_file_organize_keeps_file_in_place(
     assert moved is not None
     assert moved.path != str(src)
     assert Path(moved.path).read_bytes() == b"video"
+
+
+@pytest.mark.asyncio(loop_scope="function")
+async def test_existing_nfo_kept_on_auto_but_overwritten_manually(
+    repo: Repository, resource_store: ResourceStore, tmp_path: Path
+) -> None:
+    """自动整理保留已有 NFO, 手动整理才覆盖.
+
+    用户库里早就有一份自己认可的 NFO; 一次自动整理不该把它冲掉. 只有显式点「整理落盘」
+    才表示「以库里数据为准」.
+
+    用原地模式的库: 视频不移动, NFO 就在它旁边, 这样「已有 NFO」的判定落在真正的位置上.
+    """
+    lib_root = tmp_path / "lib"
+    lib_root.mkdir()
+    src = lib_root / "MIDV-123.mp4"
+    src.write_bytes(b"video")
+    # 预先放一份「用户自己的」NFO, 与视频同目录.
+    nfo = lib_root / "MIDV-123.nfo"
+    nfo.write_text("<movie><title>我原来的标题</title></movie>", encoding="utf-8")
+
+    lib = await repo.create_library(
+        name="t",
+        path=str(lib_root),
+        write_nfo=True,
+        watch_dir_enabled=True,
+        watch_rename=False,
+        auto_organize=False,
+    )
+    assert lib.id is not None
+    meta = await repo.upsert_metadata(number="MIDV-123", title="刮削来的标题", studio="Studio")
+    assert meta.id is not None
+    media = await repo.create_media_file(
+        lib.id, path=str(src), number="MIDV-123", status=MediaFileStatus.SCRAPED, metadata_id=meta.id
+    )
+    assert media.id is not None
+
+    handler = OrganizeHandler(repo, HotSettings(), resource_store)
+
+    # 自动整理: 保留原 NFO
+    auto = await handler.handle(
+        OrganizePayload(library_id=lib.id, media_file_ids=[media.id], keep_existing_artifacts=True)
+    )
+    assert auto.success is True
+    assert src.exists(), "原地模式不移动视频"
+    assert "我原来的标题" in nfo.read_text(encoding="utf-8"), "自动整理不该覆盖已有 NFO"
+
+    # 手动「整理落盘」: 以库里数据覆盖
+    manual = await handler.handle(OrganizePayload(library_id=lib.id, media_file_ids=[media.id]))
+    assert manual.success is True
+    content = nfo.read_text(encoding="utf-8")
+    assert "刮削来的标题" in content, "手动整理应覆盖 NFO"
+    assert "我原来的标题" not in content
+
+
+@pytest.mark.asyncio(loop_scope="function")
+async def test_existing_image_with_other_extension_blocks_auto_write(
+    repo: Repository, resource_store: ResourceStore, tmp_path: Path
+) -> None:
+    """已有图片是别的扩展名时, 自动整理也不该再写一份.
+
+    图片模板默认写 `.jpg`, 而用户手上的可能是 `.png` / `.webp`. 只比模板算出的那个名字会判成
+    "没有", 于是又生成一张 `.jpg`, 磁盘上留下两张语义相同的图, 前端读哪张并不确定.
+    """
+    lib_root = tmp_path / "lib"
+    lib_root.mkdir()
+    src = lib_root / "MIDV-123.mp4"
+    src.write_bytes(b"video")
+    # 用户已有的封面 / 海报 / 剧照, 都是 png.
+    (lib_root / "thumb.png").write_bytes(b"user-cover")
+    (lib_root / "poster.png").write_bytes(b"user-poster")
+    extrafanart = lib_root / "extrafanart"
+    extrafanart.mkdir()
+    (extrafanart / "1.png").write_bytes(b"user-still")
+
+    lib = await repo.create_library(
+        name="t",
+        path=str(lib_root),
+        write_nfo=False,
+        watch_dir_enabled=True,
+        watch_rename=False,
+        auto_organize=False,
+        copy_resources=[DownloadableResource.thumb, DownloadableResource.poster, DownloadableResource.extrafanart],
+    )
+    assert lib.id is not None
+    meta = await repo.upsert_metadata(number="MIDV-123", title="刮削来的标题", studio="Studio")
+    assert meta.id is not None
+    media = await repo.create_media_file(
+        lib.id, path=str(src), number="MIDV-123", status=MediaFileStatus.SCRAPED, metadata_id=meta.id
+    )
+    assert media.id is not None
+
+    handler = OrganizeHandler(repo, HotSettings(), resource_store)
+    await handler.handle(OrganizePayload(library_id=lib.id, media_file_ids=[media.id], keep_existing_artifacts=True))
+
+    # 用户的 png 原样保留
+    assert (lib_root / "thumb.png").read_bytes() == b"user-cover"
+    assert (lib_root / "poster.png").read_bytes() == b"user-poster"
+    assert (extrafanart / "1.png").read_bytes() == b"user-still"
+    # 且没有被换成 / 新增同主名的 jpg
+    assert not (lib_root / "thumb.jpg").exists()
+    assert not (lib_root / "poster.jpg").exists()
+    assert not (extrafanart / "1.jpg").exists()
+
+
+def test_bif_index_does_not_count_as_cover(tmp_path: Path) -> None:
+    """只有 `.bif` 索引时不算"已有封面".
+
+    `.bif` 是缩略图索引不是位图, 把它当成封面会让真正的封面永远写不出来.
+    """
+    (tmp_path / "thumb-320-10.bif").write_bytes(b"bif-index")
+    (tmp_path / "thumb.bif").write_bytes(b"bif-index")
+
+    assert _existing_sibling_of(tmp_path / "thumb.jpg") is None, "bif 不该被当成封面"
+    # 真正的位图才算
+    (tmp_path / "thumb.png").write_bytes(b"png")
+    found = _existing_sibling_of(tmp_path / "thumb.jpg")
+    assert found is not None
+    assert found.name == "thumb.png"
+
+
+@pytest.mark.asyncio(loop_scope="function")
+@pytest.mark.parametrize("existing_ext", sorted(IMAGE_EXTENSIONS))
+async def test_any_image_format_blocks_auto_write(
+    repo: Repository, resource_store: ResourceStore, tmp_path: Path, existing_ext: str
+) -> None:
+    """图片类里任何一个扩展名都算「已经有封面了」, 自动整理不得再写 `.jpg`.
+
+    判定按类别而不是逐字比文件名: 用户可能用 png / webp / bif, 而模板默认写 jpg.
+    """
+    lib_root = tmp_path / "lib"
+    lib_root.mkdir()
+    src = lib_root / "MIDV-123.mp4"
+    src.write_bytes(b"video")
+    cover = lib_root / f"thumb{existing_ext}"
+    cover.write_bytes(b"user-cover")
+
+    lib = await repo.create_library(
+        name="t",
+        path=str(lib_root),
+        write_nfo=False,
+        watch_dir_enabled=True,
+        watch_rename=False,
+        auto_organize=False,
+        copy_resources=[DownloadableResource.thumb],
+    )
+    assert lib.id is not None
+    meta = await repo.upsert_metadata(number="MIDV-123", title="t", studio="Studio")
+    assert meta.id is not None
+    media = await repo.create_media_file(
+        lib.id, path=str(src), number="MIDV-123", status=MediaFileStatus.SCRAPED, metadata_id=meta.id
+    )
+    assert media.id is not None
+
+    handler = OrganizeHandler(repo, HotSettings(), resource_store)
+    await handler.handle(OrganizePayload(library_id=lib.id, media_file_ids=[media.id], keep_existing_artifacts=True))
+
+    assert cover.read_bytes() == b"user-cover", f"{existing_ext} 应原样保留"
+    if existing_ext != ".jpg":
+        assert not (lib_root / "thumb.jpg").exists(), f"已有 {existing_ext} 时不该再写 jpg"

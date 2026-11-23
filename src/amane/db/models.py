@@ -8,6 +8,7 @@ from sqlmodel import JSON, Field, SQLModel, col, select
 
 from ..enums import ActorGender, DownloadableResource, LibraryAutomation, LibraryIngest, LinkMode, MoveMode
 from ..library import (
+    DEFAULT_SIDECAR_EXTENSIONS,
     DEFAULT_SUBTITLE_EXTENSIONS,
     DEFAULT_TRAILER_PATTERN,
     BlacklistPattern,
@@ -548,6 +549,15 @@ class Library(SQLModel, table=True):
         default_factory=lambda: list(DEFAULT_SUBTITLE_EXTENSIONS), sa_column=Column(JSON, nullable=False)
     )
     """ORGANIZE 时在视频同目录发现字幕的扩展名列表; 空列表关闭."""
+    sidecar_extensions: list[str] = Field(
+        default_factory=lambda: list(DEFAULT_SIDECAR_EXTENSIONS), sa_column=Column(JSON, nullable=False)
+    )
+    """ORGANIZE 时随视频一起搬到目标目录的同名附属文件扩展名; 空列表关闭.
+
+    这些文件**原样搬运**: 文件名整段保留, 不套模板、不写占位符. 典型是 `.bif` 缩略图索引,
+    它的名字里带着 `-320-10` 这类参数 (图大小与取帧间隔), 改了就配不上视频; 整理只负责把它
+    放到视频旁边, 名字一个字都不动.
+    """
     write_nfo: bool = Field(default=True)
     copy_resources: list[DownloadableResource] = Field(
         default_factory=lambda: [r for r in DownloadableResource if r != DownloadableResource.trailer],

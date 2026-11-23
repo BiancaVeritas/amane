@@ -11,7 +11,14 @@ from ..config import HotSettings, WatermarkConfig
 from ..db.models import Library, MediaFile
 from ..db.repo_types import MediaFileUpdates
 from ..enums import ActorGender, DownloadableResource, LinkMode
-from ..library import MEDIA_EXTENSIONS, LibraryFileKind, LibraryScan, ancestor_dirs, prune_empty_dirs
+from ..library import (
+    IMAGE_EXTENSIONS,
+    MEDIA_EXTENSIONS,
+    LibraryFileKind,
+    LibraryScan,
+    ancestor_dirs,
+    prune_empty_dirs,
+)
 from ..library.rules import is_in_trash
 from ..media import ResourceStore, allows_poster_crop, apply_cover_watermarks_from_info, crop_poster
 from ..media import write_nfo as write_nfo_file
@@ -25,8 +32,10 @@ from ..organize import (
     ResolvedPaths,
     SubtitleConflict,
     TargetState,
+    discover_sidecars,
     discover_subtitles,
     execute_organize,
+    place_sidecars,
     place_subtitles,
     render_extrafanart_names,
     render_strm_content,
@@ -62,19 +71,35 @@ logger = structlog.get_logger()
 
 
 def _rebase_artifacts(paths: ResolvedPaths, video_dir: Path, video_stem: str) -> ResolvedPaths:
-    """把产物路径整体挪到视频所在目录, 文件名沿用模板算出的那套.
+    """把产物路径整体挪到视频所在目录, 名字跟着**实际文件名**走.
 
-    视频已经在库内时, 它的位置就是权威: 用户可能手动把它摆到了别处并建立了关联.
+    视频已经在库内时, 它的位置与名字就是权威: 用户可能手动把它摆到了别处并建立了关联.
     模板算出的另一条路径不该把产物写到那里去 —— 那样界面上看到的是旧图, 新图落在别处.
+
+    NFO 用 `{video_name}` 重算, 不能直接沿用模板算出的那个名字: 模板里的 `{video_name}`
+    是**整理后**的视频名, 而原地模式不改名, 两者可能不同 (例如源文件叫
+    `CWPBD-142 [Cos] [1080p]`, 模板算出 `CWPBD-142 [1080p]`). 沿用模板名会生成一个
+    配不上视频的 NFO, 播放器读不到.
+
+    图片同理: 默认模板是 `{video_name}-thumb.jpg` 这类, 名字里的主名段要换成实际主名.
     """
+    template_stem = paths.video.stem
+
+    def _rename(name: str) -> str:
+        """把名字里的「模板视频主名」换成实际主名; 不含该主名的保持原样."""
+        if template_stem and name.startswith(template_stem):
+            return f"{video_stem}{name[len(template_stem) :]}"
+        return name
+
     return ResolvedPaths(
         video=video_dir / f"{video_stem}{paths.video.suffix}",
-        thumb=video_dir / paths.thumb.name,
-        poster=video_dir / paths.poster.name,
-        fanart=video_dir / paths.fanart.name,
+        thumb=video_dir / _rename(paths.thumb.name),
+        poster=video_dir / _rename(paths.poster.name),
+        fanart=video_dir / _rename(paths.fanart.name),
         extrafanart_dir=video_dir,
-        nfo=video_dir / paths.nfo.name,
-        trailer=video_dir / paths.trailer.name,
+        # NFO 只有 `.nfo` 一种后缀, 用实际文件名 + 原后缀即可.
+        nfo=video_dir / f"{video_stem}{paths.nfo.suffix or '.nfo'}",
+        trailer=video_dir / _rename(paths.trailer.name),
         link=paths.link,
         context=paths.context,
     )
@@ -148,6 +173,7 @@ async def execute_file_operations(
     watermark_dir: Path | None = None,
     actor_genders: dict[str, ActorGender] | None = None,
     mapping_dir: Path | None = None,
+    keep_existing_artifacts: bool = False,
 ) -> FileOperationsResult:
     """``file_info`` 由渲染路径的那一次 ``parse_file_info`` 产出, 必须带上 ``has_external_subtitle``.
 
@@ -176,6 +202,9 @@ async def execute_file_operations(
     # 必须在下载图片之前 rebase: 图片是按 paths 里的目标路径写的.
     if library is not None and library.watch_dir_enabled and not _from_download(source_path, library):
         paths = _rebase_artifacts(paths, source_path.parent, source_path.stem)
+        # 产物路径换了, `{video_name}` 也要跟着换成实际文件名 —— 否则 NFO / 字幕仍按模板名
+        # 取名字, 落在 `[演员] XYZ.nfo` 而视频叫 `abc.mkv`, 播放器认不出配套文件.
+        paths.context.apply_video(paths.video, Path(library.path))
 
     # 下载图片; 水印打在库路径副本上, 不能修改 Resource 原图.
     if web_client and download_images:
@@ -192,12 +221,17 @@ async def execute_file_operations(
             content_type=metadata.content_type,
             watermark_dir=watermark_dir,
             library=library,
+            keep_existing_artifacts=keep_existing_artifacts,
         )
 
     # 发现字幕: 必须在视频移动前检查同目录.
     subtitles: list[Path] = []
+    # 同名附属文件 (如 .bif 缩略图索引) 同样要在移动前发现, 且必须在视频落位后才搬 ——
+    # 它们要跟着*新*视频名走.
+    sidecars: list[Path] = []
     if library is not None:
         subtitles = await discover_subtitles(source_path, library.subtitle_extensions, file_info)
+        sidecars = await discover_sidecars(source_path, library.sidecar_extensions)
 
     # 原地模式: 开启独立监控后, 目标目录里的文件「不移动也不改名」, 除非显式开了 watch_rename.
     # 判据不能用「有没有配下载目录」: 配了下载目录只说明**下载目录里的**文件要搬进目标目录,
@@ -239,12 +273,18 @@ async def execute_file_operations(
             return FileOperationsResult(outcome=PlaceOutcome.FAILED, dest=org_result.dest, error=link_result.error)
 
     # 写入 NFO. 演员名走中文映射: 没配映射的演员照原名写.
+    # 自动整理时目标已有的 NFO 原样保留: 那是既有成果, 不该被一次自动整理冲掉.
+    # NFO 只认 `.nfo` 这一个扩展名 —— 它不像图片有 jpg/png 多种格式, Emby 也只读 `.nfo`,
+    # 按类别放宽反而会漏判 (以为写了, 实际没写).
     if org_result.outcome is PlaceOutcome.PLACED and org_result.dest and write_nfo:
-        await write_nfo_file(
-            metadata,
-            paths.nfo,
-            mapping_dir=mapping_dir,
-        )
+        if keep_existing_artifacts and paths.nfo.exists():
+            logger.debug("nfo kept", path=str(paths.nfo))
+        else:
+            await write_nfo_file(
+                metadata,
+                paths.nfo,
+                mapping_dir=mapping_dir,
+            )
 
     # 字幕按模板落到 video_dest 侧.
     subtitle_conflicts: list[SubtitleConflict] = []
@@ -262,6 +302,10 @@ async def execute_file_operations(
             link_name=paths.link.stem if paths.link is not None else None,
             actor_genders=actor_genders,
         )
+
+    # 同名附属文件跟着视频走: 只换主名, 名字里的参数后缀原样保留.
+    if org_result.outcome is PlaceOutcome.PLACED and org_result.dest and sidecars:
+        await place_sidecars(sidecars, org_result.dest, move_mode, video_source_stem=source_path.stem)
 
     if org_result.outcome is PlaceOutcome.PLACED:
         logger.debug("file operations done", number=metadata.number, dest=str(org_result.dest), mode=str(move_mode))
@@ -286,6 +330,7 @@ async def apply_file_operations(
     watermark_dir: Path | None = None,
     mapping_dir: Path | None = None,
     actor_genders: Mapping[str, ActorGender] | None = None,
+    keep_existing_artifacts: bool = False,
 ) -> FileOperationsResult | None:
     """缺少 media_file_id 或对应记录时返回 None (跳过, 不视为失败).
     Library 由 MediaFile.library_id 派生.
@@ -342,6 +387,7 @@ async def apply_file_operations(
         watermark_dir=watermark_dir,
         actor_genders=actor_genders,
         mapping_dir=mapping_dir,
+        keep_existing_artifacts=keep_existing_artifacts,
     )
 
 
@@ -437,6 +483,36 @@ def _write_into_library(source: Path, target: Path) -> None:
             logger.debug("temp file cleanup skipped", path=str(tmp), error=str(exc))
 
 
+def _format_extensions(suffix: str) -> frozenset[str]:
+    """某类产物在「已有同类文件」判定里认哪些扩展名.
+
+    只有图片与视频存在"同一件东西多种格式"的情况: 封面可以是 jpg / png / webp, 预告片可以是
+    mp4 / mkv. NFO 这类格式唯一的文件不走这里 —— 放宽只会误判.
+    """
+    lowered = suffix.lower()
+    if lowered in IMAGE_EXTENSIONS:
+        return IMAGE_EXTENSIONS
+    return MEDIA_EXTENSIONS
+
+
+def _existing_sibling_of(target: Path) -> Path | None:
+    """同目录下与 ``target`` 同类 (按扩展名类别) 且主名相同的已有文件.
+
+    图片按整个图片类别匹配: 模板默认写 `.jpg`, 用户手上可能是 `.png` / `.webp`. 只比确切
+    文件名会判成"没有", 于是又生成一份, 磁盘上留下两张语义相同的图.
+    """
+    if target.exists():
+        return target
+    if not target.parent.is_dir():
+        return None
+    allowed = _format_extensions(target.suffix)
+    stem = target.stem
+    for child in target.parent.iterdir():
+        if child.is_file() and child.stem == stem and child.suffix.lower() in allowed:
+            return child
+    return None
+
+
 @in_thread
 def _place_library_images(
     paths: ResolvedPaths,
@@ -450,16 +526,35 @@ def _place_library_images(
     file_info: FileInfo | None,
     content_type: ContentType,
     watermark_dir: Path | None,
+    keep_existing: bool = False,
 ) -> None:
-    # 复制封面 / 海报 / 预告片 / extrafanart 到库路径, 不判断目标上是否已有产物.
-    # fanart 没有刮削来源, 内容取 thumb, 随 thumb 一同重写.
-    if thumb_local is not None and DownloadableResource.thumb in kinds:
-        paths.thumb.parent.mkdir(parents=True, exist_ok=True)
-        _write_into_library(thumb_local, paths.thumb)
-        paths.fanart.parent.mkdir(parents=True, exist_ok=True)
-        _write_into_library(thumb_local, paths.fanart)
+    """
+    ``keep_existing`` 为真时, 目标位置已存在同类产物就跳过 —— 自动整理不该冲掉用户已有的
+    NFO 与图片; 手动「整理落盘」才以库里数据为准覆盖.
 
-    if DownloadableResource.poster in kinds:
+    判定按**文件类别**匹配, 不是只比模板算出的那个确切文件名: 图片模板默认写 `.jpg`,
+    用户手上的可能是 `.png` / `.webp`, 剧照也可能是 `.bif`. 只比 `.jpg` 会判成"没有",
+    于是自动整理又写一份 `.jpg`, 磁盘上留下两张语义相同的图, 前端读哪张并不确定.
+    """
+
+    def _existing_sibling(target: Path) -> Path | None:
+        return _existing_sibling_of(target)
+
+    def _should_write(target: Path) -> bool:
+        return not (keep_existing and _existing_sibling(target) is not None)
+
+    # 复制封面 / 海报 / 预告片 / extrafanart 到库路径.
+    # fanart 没有刮削来源, 内容取 thumb, 但**各自独立判断**: 用户可能只留了其中一张,
+    # 用 thumb 的判定结果连带跳过 fanart 会漏写, 反之会覆盖.
+    if thumb_local is not None and DownloadableResource.thumb in kinds:
+        if _should_write(paths.thumb):
+            paths.thumb.parent.mkdir(parents=True, exist_ok=True)
+            _write_into_library(thumb_local, paths.thumb)
+        if _should_write(paths.fanart):
+            paths.fanart.parent.mkdir(parents=True, exist_ok=True)
+            _write_into_library(thumb_local, paths.fanart)
+
+    if DownloadableResource.poster in kinds and _should_write(paths.poster):
         if poster_local is not None:
             paths.poster.parent.mkdir(parents=True, exist_ok=True)
             _write_into_library(poster_local, paths.poster)
@@ -482,14 +577,16 @@ def _place_library_images(
                 jpeg_quality=config.scraping.jpeg_quality,
             )
 
-    if trailer_local is not None and DownloadableResource.trailer in kinds:
+    if trailer_local is not None and DownloadableResource.trailer in kinds and _should_write(paths.trailer):
         paths.trailer.parent.mkdir(parents=True, exist_ok=True)
         _write_into_library(trailer_local, paths.trailer)
 
     if extrafanart_targets and DownloadableResource.extrafanart in kinds:
         paths.extrafanart_dir.mkdir(parents=True, exist_ok=True)
         for name, p in extrafanart_targets:
-            _write_into_library(p, paths.extrafanart_dir / name)
+            target = paths.extrafanart_dir / name
+            if _should_write(target):
+                _write_into_library(p, target)
 
     # 叠加水印 (thumb / poster).
     wm = config.watermark if config is not None else WatermarkConfig()
@@ -528,6 +625,7 @@ async def _download_images_via_store(
     content_type: ContentType,
     watermark_dir: Path | None = None,
     library: Library | None = None,
+    keep_existing_artifacts: bool = False,
 ) -> None:
     """优先用 Resource 已有文件; 缺失则现场 acquire.
 
@@ -573,6 +671,7 @@ async def _download_images_via_store(
         file_info=file_info,
         content_type=content_type,
         watermark_dir=watermark_dir,
+        keep_existing=keep_existing_artifacts,
     )
 
 
@@ -759,6 +858,7 @@ class OrganizeHandler(TaskHandler[OrganizePayload, OrganizeResult]):
                     watermark_dir=self._watermark_dir,
                     mapping_dir=self._mapping_dir,
                     actor_genders=await self._actor_genders(metadata),
+                    keep_existing_artifacts=payload.keep_existing_artifacts,
                 )
                 if fop_result is None:
                     skipped += 1

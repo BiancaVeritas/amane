@@ -2338,6 +2338,10 @@ export type LibraryCreateRequest = {
      */
     subtitle_extensions?: Array<string>;
     /**
+     * Sidecar Extensions
+     */
+    sidecar_extensions?: Array<string>;
+    /**
      * Write Nfo
      */
     write_nfo?: boolean;
@@ -2491,6 +2495,10 @@ export type LibraryResponse = {
      */
     subtitle_extensions: Array<string>;
     /**
+     * Sidecar Extensions
+     */
+    sidecar_extensions: Array<string>;
+    /**
      * Write Nfo
      */
     write_nfo: boolean;
@@ -2618,6 +2626,10 @@ export type LibraryUpdateRequest = {
      * Subtitle Extensions
      */
     subtitle_extensions?: Array<string> | null;
+    /**
+     * Sidecar Extensions
+     */
+    sidecar_extensions?: Array<string> | null;
     /**
      * Write Nfo
      */
@@ -3908,6 +3920,10 @@ export type PathTemplateSchemaResponse = {
      * Subtitle Extensions Default
      */
     subtitle_extensions_default: Array<string>;
+    /**
+     * Sidecar Extensions Default
+     */
+    sidecar_extensions_default: Array<string>;
 };
 
 /**

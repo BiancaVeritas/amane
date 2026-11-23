@@ -302,5 +302,10 @@
   "fieldUseJinja": "Enable Jinja2 naming template",
   "fieldUseJinjaHint": "Use Jinja2 syntax for the video path; the template above is disabled. Placeholders keep their names; conditionals look like {% if cd %}-CD{{ cd }}{% endif %}.",
   "fieldJinjaVideoTemplate": "Jinja2 video naming template",
-  "fieldJinjaVideoTemplateHint": "Used when a watch directory is enabled. Jinja2 syntax, see https://jinja.palletsprojects.com/en/3.0.x/templates"
+  "fieldJinjaVideoTemplateHint": "Used when a watch directory is enabled. Jinja2 syntax, see https://jinja.palletsprojects.com/en/3.0.x/templates",
+  "template": {
+    "unknownPlaceholders": "Unknown placeholders: {{names}}. Remove them, or add custom placeholders with those names."
+  },
+  "fieldSidecarExtensions": "Sidecar extensions",
+  "fieldSidecarExtensionsHint": "Same-name files moved together with the video, comma separated. Names are kept verbatim — parameter suffixes such as -320-10 in .bif stay untouched."
 }

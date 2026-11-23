@@ -458,6 +458,8 @@ _ROUNDTRIP = [
         frozenset(
             {
                 "subtitle_extensions",
+                # 与 subtitle_extensions 同一套归一 (补点 / 小写 / 去重), 写入值与读回值不逐字相同
+                "sidecar_extensions",
                 "video_template",
                 "link_template",
                 "thumb_template",

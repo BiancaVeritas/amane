@@ -8,6 +8,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from ...enums import DownloadableResource, LibraryAutomation, LibraryIngest, LinkMode, MoveMode
 from ...library import (
+    DEFAULT_SIDECAR_EXTENSIONS,
     DEFAULT_SUBTITLE_EXTENSIONS,
     DEFAULT_TRAILER_PATTERN,
     cloud_paths_overlap,
@@ -120,6 +121,7 @@ class LibrariesRepoMixin(RepositoryMixinBase):
         trailer_template: str | None = None,
         subtitle_template: str | None = None,
         subtitle_extensions: list[str] | None = None,
+        sidecar_extensions: list[str] | None = None,
         write_nfo: bool = True,
         copy_resources: list[DownloadableResource] | None = None,
         trailer_pattern: str | None = None,
@@ -172,6 +174,9 @@ class LibrariesRepoMixin(RepositoryMixinBase):
                 subtitle_template=subtitle_template,
                 subtitle_extensions=normalize_subtitle_extensions(
                     list(subtitle_extensions) if subtitle_extensions is not None else list(DEFAULT_SUBTITLE_EXTENSIONS)
+                ),
+                sidecar_extensions=normalize_subtitle_extensions(
+                    list(sidecar_extensions) if sidecar_extensions is not None else list(DEFAULT_SIDECAR_EXTENSIONS)
                 ),
                 write_nfo=write_nfo,
                 copy_resources=list(copy_resources) if copy_resources is not None else list(DownloadableResource),
@@ -313,6 +318,11 @@ class LibrariesRepoMixin(RepositoryMixinBase):
             if "subtitle_extensions" in updates:
                 extensions = updates["subtitle_extensions"]
                 lib.subtitle_extensions = normalize_subtitle_extensions(
+                    list(extensions) if extensions is not None else []
+                )
+            if "sidecar_extensions" in updates:
+                extensions = updates["sidecar_extensions"]
+                lib.sidecar_extensions = normalize_subtitle_extensions(
                     list(extensions) if extensions is not None else []
                 )
             if "write_nfo" in updates:

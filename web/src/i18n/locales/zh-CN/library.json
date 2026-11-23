@@ -290,5 +290,10 @@
   "fieldUseJinja": "启用 Jinja2 命名模板",
   "fieldUseJinjaHint": "开启后改用 Jinja2 语法渲染视频命名，上方模板置灰不再生效。占位符同名，条件写法如 {％ if cd ％}-CD{％ cd ％}{％ endif ％}。",
   "fieldJinjaVideoTemplate": "Jinja2 视频命名模板",
-  "fieldJinjaVideoTemplateHint": "启用监控目录时使用 Jinja2 语法，格式参考：https://jinja.palletsprojects.com/en/3.0.x/templates"
+  "fieldJinjaVideoTemplateHint": "启用监控目录时使用 Jinja2 语法，格式参考：https://jinja.palletsprojects.com/en/3.0.x/templates",
+  "template": {
+    "unknownPlaceholders": "模板里的占位符不存在: {{names}}. 删掉它们, 或重新添加同名自定义占位符."
+  },
+  "fieldSidecarExtensions": "同名附属文件扩展名",
+  "fieldSidecarExtensionsHint": "随视频一起搬走的同名文件, 逗号分隔. 文件名原样保留, 后缀里的参数 (如 .bif 的 -320-10) 不会被改."
 }

@@ -312,6 +312,10 @@ export const cropPosterFromThumb = <ThrowOnError extends boolean = false>(option
  * Upload Thumb
  *
  * 上传自定义封面. 原样使用, 不裁剪. 旧封面保留在列表后面.
+ *
+ * 若当前海报就是封面本身 (两者 URL 相同), 海报也跟着换成新封面 —— 那种状态下「海报=封面」
+ * 是用户的既定选择, 换了封面却留着旧海报等于把这个关系悄悄破坏掉. 海报另有过独立来源
+ * (单独上传或手工裁切) 时不动它: 那是另一份资源, 不该被换封面带走.
  */
 export const uploadThumb = <ThrowOnError extends boolean = false>(options: Options<UploadThumbData, ThrowOnError>): RequestResult<UploadThumbResponses, UploadThumbErrors, ThrowOnError> => (options.client ?? client).post<UploadThumbResponses, UploadThumbErrors, ThrowOnError>({
     bodySerializer: null,
@@ -349,6 +353,8 @@ export const uploadPoster = <ThrowOnError extends boolean = false>(options: Opti
  *
  * 源图可能还没本地化, 先确保它在 Resource 里落地, 然后把它 join 到 ``thumb_urls`` 头部.
  * 复制一份会让来回切换不断堆积内容相同的副本, 列表越切越长.
+ *
+ * 与 ``upload-thumb`` 同一口径: 当前海报就是封面时, 海报跟着换.
  */
 export const adoptThumb = <ThrowOnError extends boolean = false>(options: Options<AdoptThumbData, ThrowOnError>): RequestResult<AdoptThumbResponses, AdoptThumbErrors, ThrowOnError> => (options.client ?? client).post<AdoptThumbResponses, AdoptThumbErrors, ThrowOnError>({ url: '/api/metadata/{metadata_id}/adopt-thumb', ...options });
 

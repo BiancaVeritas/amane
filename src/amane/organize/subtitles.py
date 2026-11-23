@@ -107,6 +107,79 @@ def _belongs(video: FileInfo, sub: FileInfo) -> bool:
     return _cd_belongs(video.cd, sub.cd)
 
 
+@in_thread
+def discover_sidecars(video_path: Path, extensions: Sequence[str]) -> list[Path]:
+    """视频同目录下的同名附属文件 (不递归).
+
+    与字幕不同, 这里**不解析番号**: 附属文件的文件名就是视频主名加各自的参数后缀,
+    它们天然跟着那一个视频, 解析反而不准. 空扩展名列表返空.
+    """
+    exts = {e.lower() for e in extensions}
+    if not exts:
+        return []
+    parent = video_path.parent
+    if not parent.is_dir():
+        return []
+    stem = video_path.stem
+    found: list[Path] = []
+    for child in parent.iterdir():
+        if not child.is_file() or child == video_path:
+            continue
+        if child.suffix.lower() not in exts:
+            continue
+        # 只收「视频主名 + 后缀」这一种形状: `xxx-320-10.bif` 的主名以视频主名开头,
+        # 后面直接跟 `-` 或什么都不跟. 其它视频的附属文件不能被顺手带走.
+        rest = child.stem[len(stem) :] if child.stem.startswith(stem) else None
+        if rest is None:
+            continue
+        if rest and not rest.startswith(("-", "_", ".", " ")):
+            continue
+        found.append(child)
+    found.sort(key=lambda p: p.name.casefold())
+    return found
+
+
+@in_thread
+def place_sidecars(
+    sources: Sequence[Path],
+    video_dest: Path,
+    mode: MoveMode,
+    *,
+    video_source_stem: str,
+) -> list[Path]:
+    """把附属文件搬到视频旁边, 保留它们在**原视频主名之后**的那一段.
+
+    目标名是「新视频主名 + 原尾巴」: 尾巴里是 `-320-10` 这类缩略图尺寸与取帧间隔参数,
+    媒体服务器按原样读, 改了就对不上视频. 因此这里不套任何模板, 只换主名与目录.
+
+    源视频主名必须由调用方给出: 只凭附属文件名无法反推它是从哪个主名接出来的
+    (`abc` 与 `abc-320-10` 都能前缀匹配). 失败只记日志, 返回未能搬运的源.
+    """
+    failed: list[Path] = []
+    target_dir = video_dest.parent
+    video_stem = video_dest.stem
+    for src in sources:
+        # 附属文件名 = 原视频主名 + 尾巴; 去掉原主名就得到尾巴.
+        tail = src.stem[len(video_source_stem) :] if src.stem.startswith(video_source_stem) else ""
+        result = execute_organize.sync(
+            source=src,
+            target_dir=target_dir,
+            target_stem=f"{video_stem}{tail}",
+            mode=mode,
+            suffix=src.suffix,
+        )
+        match result.outcome:
+            case PlaceOutcome.PLACED:
+                pass
+            case PlaceOutcome.CONFLICT:
+                logger.warning("sidecar target occupied", source=str(src))
+                failed.append(src)
+            case PlaceOutcome.FAILED:
+                logger.warning("sidecar organize failed", source=str(src), error=result.error)
+                failed.append(src)
+    return failed
+
+
 def _cd_belongs(video_cd: int | None, sub_cd: int | None) -> bool:
     if sub_cd == video_cd:
         return True

@@ -46,8 +46,10 @@ from .delete import (
     same_path,
 )
 from .rules import (
+    DEFAULT_SIDECAR_EXTENSIONS,
     DEFAULT_SUBTITLE_EXTENSIONS,
     DEFAULT_TRAILER_PATTERN,
+    IMAGE_EXTENSIONS,
     MEDIA_EXTENSIONS,
     TRASH_DIRNAME,
     BlacklistPattern,
@@ -63,8 +65,10 @@ from .rules import (
 from .scan import LibraryFileKind, LibraryHit, LibraryScan, UnwantedKind
 
 __all__ = [
+    "DEFAULT_SIDECAR_EXTENSIONS",
     "DEFAULT_SUBTITLE_EXTENSIONS",
     "DEFAULT_TRAILER_PATTERN",
+    "IMAGE_EXTENSIONS",
     "INVENTORY_RETENTION",
     "INVENTORY_TTL_SECONDS",
     "MAX_INVENTORY_ENTRIES",

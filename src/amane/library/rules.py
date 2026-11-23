@@ -27,11 +27,36 @@ MEDIA_EXTENSIONS = frozenset(
     }
 )
 
+IMAGE_EXTENSIONS = frozenset(
+    {
+        ".jpg",
+        ".jpeg",
+        ".png",
+        ".webp",
+        ".gif",
+        ".bmp",
+        ".tiff",
+        ".tif",
+        ".avif",
+        ".heic",
+    }
+)
+"""图片类扩展名. 用途是按**类别**判定"这里已经有一张图了", 而不是逐字比对文件名.
+
+不含 `.bif`: 它是缩略图**索引**, 不是一张能当封面显示的位图. 把它算进来会让
+"只有 `thumb.bif`" 被当成"已有封面", 真正的 `thumb.jpg` 反而不写了.
+"""
+
 # 与默认 trailer 模板文件名 `{link_dir}/trailer.mp4` 对齐; 空串表示不跳过.
 DEFAULT_TRAILER_PATTERN = "(?i)trailer"
 
 # 空列表关闭字幕发现. 不纳入 MEDIA_EXTENSIONS (字幕不是正片).
 DEFAULT_SUBTITLE_EXTENSIONS: tuple[str, ...] = (".srt", ".ass", ".ssa", ".vtt", ".sub")
+
+# 随视频一起搬走的同名附属文件. 同样不是正片, 不纳入 MEDIA_EXTENSIONS.
+# `.bif` 是媒体服务器的缩略图索引 (Emby / Jellyfin 的分段预览), 名字里带 `-320-10`
+# 这类图大小与取帧间隔参数, 必须原样保留.
+DEFAULT_SIDECAR_EXTENSIONS: tuple[str, ...] = (".bif",)
 
 _SUBTITLE_EXT_RE = re.compile(r"^\.[a-z0-9]+$")
 

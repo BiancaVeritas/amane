@@ -23,7 +23,7 @@ from .strm_content import (
     render_strm_content,
     validate_strm_content_template,
 )
-from .subtitles import SubtitleConflict, discover_subtitles, place_subtitles
+from .subtitles import SubtitleConflict, discover_sidecars, discover_subtitles, place_sidecars, place_subtitles
 
 __all__ = [
     "EXTRAFANART_NAME_TEMPLATE_DEFAULT",
@@ -40,10 +40,12 @@ __all__ = [
     "TargetCheck",
     "TargetState",
     "create_video_link",
+    "discover_sidecars",
     "discover_subtitles",
     "execute_organize",
     "normalize_link_template",
     "normalize_strm_content_template",
+    "place_sidecars",
     "place_subtitles",
     "render_extrafanart_names",
     "render_path_template",

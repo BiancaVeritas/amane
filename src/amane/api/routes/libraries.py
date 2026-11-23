@@ -85,6 +85,7 @@ async def create_library(req: LibraryCreateRequest, repo: RepoDep, runtime: Runt
             trailer_template=req.trailer_template,
             subtitle_template=req.subtitle_template,
             subtitle_extensions=req.subtitle_extensions,
+            sidecar_extensions=req.sidecar_extensions,
             write_nfo=req.write_nfo,
             copy_resources=req.copy_resources,
             trailer_pattern=req.trailer_pattern,

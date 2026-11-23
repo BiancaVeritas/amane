@@ -13,6 +13,7 @@ from amane.enums import DownloadableResource
 from amane.handlers.file import _write_into_library, execute_file_operations
 from amane.media import ResourceStore
 from amane.organize import MoveMode, PlaceOutcome, ResolvedPaths, resolve_paths
+from amane.organize.template import TemplateContext
 from amane.parsing import ContentType, parse_file_info
 
 if TYPE_CHECKING:
@@ -375,6 +376,67 @@ async def test_in_place_rewrites_existing_artifacts(resource_store: ResourceStor
     for image in stale:
         assert _pixel(image) != before[image]
     assert paths.trailer.read_bytes() == b"video"
+
+
+@pytest.mark.asyncio
+async def test_in_place_artifacts_follow_actual_file_name(
+    resource_store: ResourceStore, tmp_path: Path
+) -> None:
+    """原地模式下产物名跟着**实际文件名**, 不能用模板算出的名字.
+
+    源文件叫 `CWPBD-142 [Cos] [1080p]`, 而模板算出 `CWPBD-142 [1080p]` (没有 `[Cos]`).
+    沿用模板名会写出 `CWPBD-142 [1080p].nfo`, 配不上旁边那个视频, 播放器读不到.
+    """
+    client = cast("WebClient", FakeClient())
+    lib_root = tmp_path / "lib"
+    actual_stem = "CWPBD-142 [Cos] [1080p]"
+    template_stem = "CWPBD-142 [1080p]"
+
+    # 模板算出的是 template_stem, 实际文件是 actual_stem.
+    paths = ResolvedPaths(
+        video=lib_root / f"{template_stem}.strm",
+        thumb=lib_root / f"{template_stem}-thumb.jpg",
+        poster=lib_root / f"{template_stem}-poster.jpg",
+        fanart=lib_root / f"{template_stem}-fanart.jpg",
+        extrafanart_dir=lib_root / "extrafanart",
+        nfo=lib_root / f"{template_stem}.nfo",
+        trailer=lib_root / "trailer.mp4",
+        context=TemplateContext(variables={"video_name": template_stem}),
+    )
+    lib_root.mkdir(parents=True)
+    source = lib_root / f"{actual_stem}.strm"
+    source.write_bytes(b"movie")
+
+    mf = MediaFile(path=str(source), library_id=1)
+    meta = Metadata(
+        number="CWPBD-142",
+        title="标题",
+        thumb_urls=["https://s/t.jpg"],
+        poster_urls=["https://s/p.jpg"],
+    )
+    lib = Library(id=1, name="t", path=str(lib_root), watch_dir_enabled=True, watch_rename=False)
+
+    result = await execute_file_operations(
+        media_file=mf,
+        metadata=meta,
+        paths=paths,
+        move_mode=MoveMode.MOVE,
+        resource_store=resource_store,
+        file_info=parse_file_info(source),
+        web_client=client,
+        config=HotSettings(),
+        library=lib,
+    )
+
+    assert result.outcome is PlaceOutcome.PLACED
+    # 产物名都带完整实际主名
+    assert (lib_root / f"{actual_stem}.nfo").exists(), "NFO 应跟随实际文件名"
+    assert (lib_root / f"{actual_stem}-thumb.jpg").exists()
+    assert (lib_root / f"{actual_stem}-poster.jpg").exists()
+    assert (lib_root / f"{actual_stem}-fanart.jpg").exists()
+    # 模板名那份不该出现
+    assert not (lib_root / f"{template_stem}.nfo").exists()
+    assert not (lib_root / f"{template_stem}-thumb.jpg").exists()
 
 
 @pytest.mark.parametrize("pre_existing", [True, False])
