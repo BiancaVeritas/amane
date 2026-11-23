@@ -196,6 +196,10 @@
         "label": "写入 NFO",
         "description": "覆盖媒体库设置"
       },
+      "keep_existing_artifacts": {
+        "label": "保留已有元数据",
+        "description": "目标位置已存在 NFO / 图片时原样保留, 只补缺失的那些. 关闭则以库里数据为准覆盖"
+      },
       "copy_resources": {
         "label": "整理时复制",
         "description": "覆盖媒体库设置",

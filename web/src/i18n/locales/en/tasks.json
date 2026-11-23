@@ -228,6 +228,10 @@
         "label": "Write NFO",
         "description": "Overrides library setting"
       },
+      "keep_existing_artifacts": {
+        "label": "Keep existing metadata",
+        "description": "Keep an NFO / image already present at the target and only fill in what is missing. Off overwrites with library data"
+      },
       "copy_resources": {
         "label": "Copy on organize",
         "description": "Overrides library setting",
