@@ -851,21 +851,87 @@ def _detect_cd_from_parent(parent: str) -> int | None:
     return n if n >= 1 else None
 
 
+#: 方括号 / 圆括号包住的字幕写法: ``[字幕]`` / ``【中文字幕】`` / ``(中文)``.
+#: 必须带括号才认「中文」「中字」, 否则「中出」这类内容描述会被当成中字标记.
+_BRACKETED_SUBTITLE = re.compile(r"[【\[(（]\s*(?:中文字幕|中字|字幕|中文)\s*[】\])）]")
+
+
 def _detect_subtitle(basename: str) -> bool:
+    """文件名里的中字标记: ``-C`` / ``-UC``, 或带括号的字幕写法, 或独立的「字幕」词.
+
+    不再按「中」「文」「字」「幕」单字判定: 那会把「中出」这类内容描述当成中字标记.
+    外挂字幕是独立来源 (``has_external_subtitle``), 两者或起来才算中字.
+    """
     if re.search(r"-U?C(?![A-Z0-9])", basename):
         return True
-    return bool(re.search(r"[字幕中文]", basename))
+    if _BRACKETED_SUBTITLE.search(basename):
+        return True
+    # 不带括号时只认完整的「字幕」: 前后不得再接汉字 / 假名 (「字幕组」不算), 字母数字照常.
+    return (
+        re.search(r"(?<![A-Z\u3040-\u30ff\u4e00-\u9fff])字幕(?![A-Z\u3040-\u30ff\u4e00-\u9fff])", basename) is not None
+    )
+
+
+#: 判边界时当作「已知词」抹掉的写法: 分辨率档位与马赛克标记本身.
+#: 它们与标记紧贴是同一件事的组合写法 (``4K無碼`` / ``無碼流出`` / ``破解流出``),
+#: 不属于「前后有字」; 其余紧贴的汉字多是剧情词 (``蜜穴流出``), 不当作标记.
+_NEUTRAL_TOKENS = (
+    "4320P",
+    "2160P",
+    "1440P",
+    "1080P",
+    "480P",
+    "576P",
+    "8K",
+    "4K",
+    "2K",
+    "720P",
+    "FHD",
+    "HD",
+    "SD",
+    "無修正",
+    "无修正",
+    "無碼",
+    "无码",
+    "UNCENSORED",
+    "CRACKED",
+    "破解",
+    "克破",
+    "LEAKED",
+    "流出",
+)
+
+#: 汉字与字母 (含假名) 都算「字」, 用作标记两侧的排除字符类.
+_CJK_OR_LETTER = r"A-Z\u3040-\u30ff\u4e00-\u9fff"
+
+
+def _bounded_word(basename: str, words: str) -> bool:
+    """``words`` 两侧不得紧贴汉字或字母; 数字, 分隔符与别的已知标记相邻照常算.
+
+    判定前先把**其它**已知词换成长度相同的分隔符, 于是 ``破解流出`` 里「破解」的右邻
+    变成分隔符, 而 ``蜜穴流出`` 里「流出」的左邻仍是「穴」—— 前者是标记组合, 后者是剧情.
+    """
+    keep = set(words.split("|"))
+    masked = basename
+    for token in sorted(_NEUTRAL_TOKENS, key=len, reverse=True):
+        if token not in keep:
+            masked = masked.replace(token, "-" * len(token))
+    return re.search(rf"(?<![{_CJK_OR_LETTER}])(?:{words})(?![{_CJK_OR_LETTER}])", masked) is not None
+
+
+#: ``UL`` 是 ``Uncensored + Leaked`` 的缩写, 记为流出; 前后不得接字母数字, 否则 ``NULL`` 这类会命中.
+_UL = re.compile(r"(?<![A-Z0-9])UL(?![A-Z0-9])")
 
 
 def _detect_mosaic(basename: str) -> Mosaic | None:
     """basename 已大写. `CRACKED` / `-U` / `-UC` 是破解; 多标记优先级见 docs/dev/data-model.md."""
-    if re.search(r"破解|克破|CRACKED", basename) or re.search(r"-U(C)?(?![A-Z0-9])", basename):
+    if _bounded_word(basename, "破解|克破|CRACKED") or re.search(r"-U(C)?(?![A-Z0-9])", basename):
         return Mosaic.CRACKED
-    if re.search(r"流出|LEAKED", basename):
+    if _bounded_word(basename, "流出|LEAKED") or _UL.search(basename):
         return Mosaic.LEAKED
     # 無修正 是日文站与压制组最常用的写法, 与 無碼 同义; 【無】 一类的方括号写法也收.
     # 单独的「無」不收: 它会命中「無料」之类与马赛克无关的词.
-    if re.search(r"無碼|无码|無修正|无修正|UNCENSORED", basename) or re.search(r"[【\[(（]無[】\])）]", basename):
+    if _bounded_word(basename, "無碼|无码|無修正|无修正|UNCENSORED") or re.search(r"[【\[(（]無[】\])）]", basename):
         return Mosaic.UNCENSORED
     return None
 

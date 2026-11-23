@@ -44,11 +44,18 @@ CASES: list[object] = [
     _Case("MIDV-123-01.mp4"),
     _Case("MIDV-123-10.mp4"),
     _Case("MIDV-123-12.mp4"),
-    # --- 字幕 ---
+    # --- 字幕: -C / -UC, 带括号的字幕写法, 或独立的「字幕」词 ---
     _Case("MIDV-123-C.mp4", has_subtitle=True, number="MIDV-123"),
     _Case("MIDV-123-UC.mp4", has_subtitle=True, mosaic="cracked", number="MIDV-123"),
     _Case("[字幕]MIDV-123.mp4", has_subtitle=True, number="MIDV-123"),
     _Case("[中文字幕]MIDV-123.mp4", has_subtitle=True, number="MIDV-123"),
+    _Case("【中文字幕】MIDV-123.mp4", has_subtitle=True, number="MIDV-123"),
+    _Case("MIDV-123 (中文).mp4", has_subtitle=True, number="MIDV-123"),
+    _Case("MIDV-123-字幕.mp4", has_subtitle=True, number="MIDV-123"),
+    # 「中出」这类内容描述不算中字; 不带括号的「中文字幕组」也不按单字命中
+    _Case("MIDV-123-中出.mp4", number="MIDV-123"),
+    _Case("MIDV-123-中文字幕组.mp4", number="MIDV-123"),
+    _Case("约会成为人妻的前女友.mp4", number="约会成为人妻的前女友"),
     # --- 马赛克: 文件名标记 ---
     _Case("[無碼]MIDV-123.mp4", mosaic="uncensored", number="MIDV-123"),
     _Case("[无码]MIDV-123.mp4", mosaic="uncensored", number="MIDV-123"),
@@ -274,12 +281,14 @@ CASES: list[object] = [
     # 近目录优先
     _Case("/media/uncensored/流出/MIDV-123.mp4", mosaic="leaked", number="MIDV-123"),
     _Case("/media/流出/uncensored/MIDV-123.mp4", mosaic="uncensored", number="MIDV-123"),
-    # 马赛克目录按子串识别: 目录名含标记词即命中, 只有 -UC 不算 (词表里没有).
+    # 马赛克目录按词识别: 目录名含标记词即命中, 只有 -UC 不算 (词表里没有).
     _Case("/media/uncensored-guide/MIDV-123.mp4", number="MIDV-123", mosaic="uncensored"),
     _Case("/media/JAV-uncensored/MIDV-123.mp4", number="MIDV-123", mosaic="uncensored"),
     _Case("/media/leaked-info/MIDV-123.mp4", number="MIDV-123", mosaic="leaked"),
     _Case("/media/无码破解/MIDV-123.mp4", number="MIDV-123", mosaic="cracked"),
-    _Case("/media/流出物/MIDV-123.mp4", number="MIDV-123", mosaic="leaked"),
+    # 标记词后面还跟着字时是内容描述, 不是标记 (「流出物」说的是剧情)
+    _Case("/media/流出物/MIDV-123.mp4", number="MIDV-123"),
+    _Case("/media/无码破解物/MIDV-123.mp4", number="MIDV-123", mosaic="uncensored"),
     _Case("/media/UC/MIDV-123.mp4", number="MIDV-123"),
     _Case("/media/documentation/MIDV-123.mp4", number="MIDV-123"),
     # 分辨率不从目录读 (盘符/分类夹)
@@ -672,6 +681,89 @@ UNCENSORED_WORDING_CASES: list[tuple[str, str | None]] = [
 
 @pytest.mark.parametrize(("filename", "expected"), UNCENSORED_WORDING_CASES)
 def test_detect_mosaic_uncensored_wording(filename: str, expected: str | None) -> None:
+    assert parse_file_info(filename).mosaic == expected
+
+
+SUBTITLE_MARKER_CASES: list[tuple[str, bool]] = [
+    # -C / -UC
+    ("MIDV-123-C.mp4", True),
+    ("MIDV-123-UC.mp4", True),
+    ("MIDV-123-C-4K.mp4", True),
+    ("MIDV-123-C-CD1.mp4", True),
+    ("MIDV-123-UC-CD1-4K.mp4", True),
+    ("MIDV-123-C-U.mp4", True),
+    # 带括号的字幕写法
+    ("[字幕]MIDV-123.mp4", True),
+    ("[中文字幕]MIDV-123.mp4", True),
+    ("【中文字幕】MIDV-123.mp4", True),
+    ("(中文)MIDV-123.mp4", True),
+    ("MIDV-123 (中字).mp4", True),
+    # 不带括号时只认完整的「字幕」
+    ("MIDV-123-字幕.mp4", True),
+    ("字幕-MIDV-123.mp4", True),
+    # 反例: -CD / -CS 不是 -C
+    ("MIDV-123-CD1.mp4", False),
+    ("MIDV-123-CS.mp4", False),
+    # 反例: 「中出」这类内容描述不是中字; 「字幕组」不算
+    ("MIDV-123-中出.mp4", False),
+    ("MIDV-123-中文字幕组.mp4", False),
+    ("约会成为人妻的前女友.mp4", False),
+    ("MIDV-123.mp4", False),
+]
+
+
+@pytest.mark.parametrize(("filename", "expected"), SUBTITLE_MARKER_CASES)
+def test_subtitle_marker_detection(filename: str, expected: bool) -> None:
+    """中字认 ``-C`` / ``-UC`` 与带括号的字幕写法; 外挂字幕是独立来源, 不在这一层判."""
+    assert parse_file_info(filename).has_subtitle_in_name is expected
+
+
+#: 用户给的糖心标题: 含「中出」「蜜穴」「流出」等剧情词, 都不能被当成标记.
+_TANGXIN_STYLE_TITLES: list[str] = [
+    "COS爱莉希雅 揉奶指交轻调 足穴蜜穴侍奉肉棒中出内射",
+    "网恋面基 反差萌妹深夜公园野战中出 多体位深插蜜汁穴精液灌满流出",
+    "【小草神现世】 人类游戏体验 调教插穴中出灌精",
+    "【内射coser】陪玩少女的足穴服务 嫩穴欣奈化身神里绫华侍奉肉棒被中出 精液灌满骚穴流出",
+]
+
+
+@pytest.mark.parametrize("title", _TANGXIN_STYLE_TITLES)
+def test_content_words_are_not_markers(title: str) -> None:
+    """标题里的「中出」「蜜穴」「流出」是剧情描述: 既不算中字, 也不算流出."""
+    info = parse_file_info(f"{title}.mp4")
+    assert info.has_subtitle_in_name is False
+    assert info.mosaic is None
+
+
+MARKER_BOUNDARY_CASES: list[tuple[str, str | None]] = [
+    # 标记词单独成段 (前后是分隔符 / 数字 / 串首尾)
+    ("MIDV-123-破解.mp4", "cracked"),
+    ("[破解]MIDV-123.mp4", "cracked"),
+    ("MIDV-123-CRACKED.mp4", "cracked"),
+    ("MIDV-123-流出.mp4", "leaked"),
+    ("MIDV-123-LEAKED.mp4", "leaked"),
+    ("SONE638流出.mp4", "leaked"),
+    # 紧贴的已知标记词是组合写法, 仍算标记
+    ("MIDV-123-無碼流出.mp4", "leaked"),
+    ("MIDV-123-無碼破解.mp4", "cracked"),
+    ("MIDV-123-Uncensored Leaked.mp4", "leaked"),
+    ("MIDV-123-Uncensored Cracked.mp4", "cracked"),
+    ("MIDV-123-破解流出.mp4", "cracked"),
+    # UL = Uncensored + Leaked 的缩写, 记为流出
+    ("MIDV-123-UL.mp4", "leaked"),
+    # 反例: 前后还有汉字就是内容描述, 不是标记
+    ("MIDV-123-蜜穴流出.mp4", None),
+    ("MIDV-123-流出物.mp4", None),
+    ("MIDV-123-破解物.mp4", None),
+    ("MIDV-123-中出.mp4", None),
+    # 反例: UL 前后接字母数字不算 (NULL 之类)
+    ("MIDV-123-NULL.mp4", None),
+]
+
+
+@pytest.mark.parametrize(("filename", "expected"), MARKER_BOUNDARY_CASES)
+def test_marker_words_need_boundaries(filename: str, expected: str | None) -> None:
+    """破解 / 流出的词必须「前后没有字」, 否则「蜜穴流出」这类剧情会被误判."""
     assert parse_file_info(filename).mosaic == expected
 
 
