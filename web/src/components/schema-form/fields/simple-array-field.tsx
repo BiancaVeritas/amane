@@ -1,14 +1,52 @@
-import { ActionIcon, Group, ScrollArea } from "@mantine/core";
+import { ActionIcon, Autocomplete, Group, ScrollArea } from "@mantine/core";
 import { IconPlus } from "@tabler/icons-react";
 import type { AnyFieldApi } from "@tanstack/react-form";
 import { useState } from "react";
 import { useNarrowViewport } from "@/hooks/use-narrow-viewport";
 import { ClearableTextInput, ClearableTextarea } from "@/components/common/clearable-input";
+import {
+  type CandidateGroup,
+  type CandidateOption,
+  filterCandidates,
+  resolveEnterChoice,
+  selectedLabel,
+  useMappingCandidates,
+  type VendorKind,
+} from "@/lib/media/mapping-candidates";
 import type { ArrayFieldProps, JSONSchemaObject } from "../schema";
 import { isOrdered } from "../schema";
 import { useFieldDomId } from "./dict-entry-form";
 import { DraggableChips } from "./draggable-chips";
 import { FieldChrome } from "./field-chrome";
+
+/**
+ * 数组字段该用哪一组的候选补全.
+ *
+ * 标签 / 演员来自各自的名字表; 系列来自片商表的 series 分类. 其它数组 (如 extrafanart_urls)
+ * 保持纯文本输入 —— 它们没有可复用的名字表, 硬套补全只会给出无关建议.
+ */
+const CANDIDATE_GROUP_BY_FIELD: Record<string, { group: CandidateGroup; vendorKind?: VendorKind }> =
+  {
+    tags: { group: "tag" },
+    actors: { group: "actor" },
+    series_names: { group: "vendor", vendorKind: "series" },
+  };
+
+/**
+ * 从字段路径里取最后一段.
+ *
+ * ``name`` 是带前缀的完整路径 (``fields.actors`` / ``scraping.download_resources``),
+ * 按它整体查表永远匹配不到, 取末段才是字段本身的键.
+ */
+function leafFieldName(path: string): string {
+  return path.slice(path.lastIndexOf(".") + 1);
+}
+
+/** 取字段路径的前缀 (`fields.series_names` → `fields.`); 没有前缀时返回空串. */
+function prefixOf(path: string): string {
+  const dot = path.lastIndexOf(".");
+  return dot < 0 ? "" : path.slice(0, dot + 1);
+}
 
 export function SimpleArrayField({
   name,
@@ -21,23 +59,62 @@ export function SimpleArrayField({
   const id = useFieldDomId(name);
   const ordered = isOrdered(schema);
   const long = schema["x-long"] === true;
+  // name 带前缀 (fields.actors), 要取末段才能对上表.
+  const candidateSpec = CANDIDATE_GROUP_BY_FIELD[leafFieldName(name)];
+  // 没有对应组时传一个不会被用到的占位, 并用 enabled=false 关掉请求 —— 否则会白拉一份标签.
+  const candidates = useMappingCandidates(
+    candidateSpec?.group ?? "tag",
+    candidateSpec !== undefined,
+    candidateSpec?.vendorKind,
+  );
+  /**
+   * 多系列对应到主系列字段的路径.
+   *
+   * 库里 `series` 是 `series_names[0]` 的投影 (见 `repos/metadata.py` 的写入逻辑), 编辑界面把两者
+   * 都放出来; 改动多系列时要顺手更新主系列, 否则拖完排序主系列会停在旧值上.
+   */
+  const seriesSibling = leafFieldName(name) === "series_names" ? `${prefixOf(name)}series` : null;
 
   return (
     <form.Field name={name}>
       {(field: AnyFieldApi) => {
         const value = Array.isArray(field.state.value) ? (field.state.value as string[]) : [];
 
+        /**
+         * 多系列的改动要同时把第一项写进主系列.
+         *
+         * 库里 `series` 是 `series_names[0]` 的投影, 但表单里是两个独立输入, 拖动排序后如果不
+         * 跟着写, 主系列会停在旧值上 (看起来像"拖了但没生效"). 这个联动只认第一项, 用户在主系列
+         * 里手填的内容会被它覆盖 —— 这正是"第一项即主系列"的定义.
+         */
+        const handleArrayChange = (next: string[]) => {
+          field.handleChange(next);
+          if (seriesSibling !== null) form.setFieldValue(seriesSibling, next[0] ?? null);
+        };
+
         const control = ordered ? (
-          <OrderedArrayBody value={value} onChange={field.handleChange} long={long} />
+          <OrderedArrayBody
+            value={value}
+            onChange={handleArrayChange}
+            long={long}
+            candidates={candidates}
+          />
         ) : long ? (
           // x-long, unordered: 多行文本域, 一行一个值
-          <MultilineArrayInput id={id} value={value} onChange={field.handleChange} />
+          <MultilineArrayInput id={id} value={value} onChange={handleArrayChange} />
         ) : (
-          <CommaArrayInput id={id} value={value} onChange={field.handleChange} />
+          <CommaArrayInput id={id} value={value} onChange={handleArrayChange} />
         );
 
         return (
-          <FieldChrome variant={variant} htmlFor={id} label={label} description={description}>
+          <FieldChrome
+            variant={variant}
+            htmlFor={id}
+            // 带候选的字段断开标签联动: 否则点标题那一整段都会把焦点送进输入框.
+            linkLabel={candidates.length === 0}
+            label={label}
+            description={description}
+          >
             {control}
           </FieldChrome>
         );
@@ -167,27 +244,41 @@ interface OrderedArrayBodyProps {
   onChange: (v: string[]) => void;
   /** x-long: render the chip list inside a fixed-height scrollable container. */
   long?: boolean;
+  /** 可选的候选 (标签 / 演员来自映射表); 为空时退化成纯文本输入. */
+  candidates?: CandidateOption[];
 }
 
 /** x-ordered mode body: draggable chips + add input. Chrome handled by parent. */
-function OrderedArrayBody({ value, onChange, long }: OrderedArrayBodyProps) {
+function OrderedArrayBody({ value, onChange, long, candidates = [] }: OrderedArrayBodyProps) {
   const [newItem, setNewItem] = useState("");
   // 触屏设备无法执行 HTML5 拖拽, 窄屏改由上移 / 下移按钮调整顺序.
   const narrow = useNarrowViewport();
 
-  const handleAdd = () => {
-    const trimmed = newItem.trim();
-    if (trimmed && !value.includes(trimmed)) {
-      onChange([...value, trimmed]);
-      setNewItem("");
-    }
+  const add = (raw: string) => {
+    const choice = candidates.length > 0 ? resolveEnterChoice(raw, candidates) : null;
+    // 有候选时按「原始名 / 译名」解析; 没候选 (或解析不出) 就用原词.
+    const trimmed = (choice?.value ?? raw).trim();
+    if (trimmed && !value.includes(trimmed)) onChange([...value, trimmed]);
+    setNewItem("");
+  };
+
+  /**
+   * 清空输入框, 但排在 Mantine 自己的回写之后.
+   *
+   * `Autocomplete` 的 `onOptionSubmit` 内部会再调一次 `handleValueChange(label)`, 把选中项的
+   * label 写回输入框 —— 直接在回调里 `setNewItem("")` 会被它盖掉, 表现为"选了之后字还在".
+   * 用 rAF 等这一轮更新落地再清.
+   */
+  const clearAfterSubmit = () => {
+    requestAnimationFrame(() => setNewItem(""));
   };
 
   const chips = (
     <DraggableChips
       items={value}
       getKey={(item) => item}
-      getLabel={(item) => item}
+      // 选中项只显示译名: 值已经是确定的原始名, 再挂一遍原名只是噪音.
+      getLabel={(item) => selectedLabel(candidates, item)}
       onChange={onChange}
       onDelete={(item) => onChange(value.filter((v) => v !== item))}
       onMove={narrow ? onChange : undefined}
@@ -204,24 +295,56 @@ function OrderedArrayBody({ value, onChange, long }: OrderedArrayBodyProps) {
         chips
       )}
       <Group gap={6} mt={4} wrap="nowrap">
-        <ClearableTextInput
-          size="xs"
-          value={newItem}
-          onChange={(e) => setNewItem(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
+        {candidates.length > 0 ? (
+          <Autocomplete
+            size="xs"
+            value={newItem}
+            onChange={setNewItem}
+            data={filterCandidates(candidates, newItem).map((option) => option.label)}
+            onOptionSubmit={(label) => {
+              // 选中的是 `原始名 (译名)` 形式, 取回对应候选拿原始名.
+              const hit = candidates.find((option) => option.label === label);
+              add(hit ? hit.value : label);
+              clearAfterSubmit();
+            }}
+            // 回车在下拉打开时会被组件自己的键盘逻辑先吃掉 (它读到高亮项就 clickSelectedOption),
+            // 因此在 capture 阶段拦: 先于 Mantine 的 target props 处理, 才能保证手打的新词
+            // 一定能加进去. 候选里已有的词走 resolveEnterChoice 同样会被正确解析.
+            onKeyDownCapture={(e) => {
+              if (e.key !== "Enter") return;
+              if (e.nativeEvent.isComposing) return;
+              if (!newItem.trim()) return;
               e.preventDefault();
-              handleAdd();
-            }
-          }}
-          onBlur={handleAdd}
-          placeholder="Add item..."
-          style={{ flex: 1 }}
-        />
+              e.stopPropagation();
+              add(newItem);
+            }}
+            placeholder="从已有选择, 或输入新名字"
+            style={{ flex: 1 }}
+            // 关掉「聚焦即开」: 点标签 / 描述会让输入框获焦, 那时不该弹候选.
+            // 点击输入框本身由组件自己的 onClick 展开, 不需要额外接管 —— 受控 dropdownOpened
+            // 会连带把它的 openDropdown 变成空操作, 下拉就再也打不开了.
+            openOnFocus={false}
+            comboboxProps={{ withinPortal: true }}
+          />
+        ) : (
+          <ClearableTextInput
+            size="xs"
+            value={newItem}
+            onChange={(e) => setNewItem(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                add(newItem);
+              }
+            }}
+            placeholder="Add item..."
+            style={{ flex: 1 }}
+          />
+        )}
         <ActionIcon
           variant="default"
           size="sm"
-          onClick={handleAdd}
+          onClick={() => add(newItem)}
           disabled={!newItem.trim()}
           aria-label="Add item"
         >

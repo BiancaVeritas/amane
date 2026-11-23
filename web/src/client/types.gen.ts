@@ -2667,6 +2667,32 @@ export type LoggingConfig = {
 export type Manufacturer = 'attackers' | 'befree' | 'bi' | 'bibian' | 'das' | 'ebody' | 'fitch' | 'hajime_kikaku' | 'honnaka' | 'hunter' | 'idea_pocket' | 'kawaii' | 'kirakira' | 'madonna' | 'miman' | 'mko_labo' | 'moodyz' | 'muku' | 'mvg' | 'nanpa_japan' | 'oppai' | 'opera' | 'premium_beauty' | 'rookie' | 's1' | 'tameikegoro' | 'tosatsu' | 'v' | 'wanz_factory';
 
 /**
+ * MappingCandidate
+ *
+ * 补全框的一项: ``original`` 是要写库的原始名, ``label`` 是同一条的译名.
+ */
+export type MappingCandidate = {
+    /**
+     * Original
+     */
+    original: string;
+    /**
+     * Label
+     */
+    label: string;
+};
+
+/**
+ * MappingCandidatesResponse
+ */
+export type MappingCandidatesResponse = {
+    /**
+     * Items
+     */
+    items: Array<MappingCandidate>;
+};
+
+/**
  * MappingGroup
  *
  * 页面上的滑动选项; 每项一张表, 各自独立对账与展示.
@@ -2966,6 +2992,37 @@ export type MetadataBatchScrapeResponse = {
      * 提交的任务 id 列表
      */
     task_ids: Array<number>;
+};
+
+/**
+ * MetadataCreateRequest
+ *
+ * 手动创建条目: 番号必填, 其余字段与详情页可编辑项同口径.
+ *
+ * 与 PATCH 的区别只有两点: 番号与类型在这里可以给 (PATCH 不给, 它们是创建时的属性),
+ * 并且不会覆盖已存在的同号条目 —— 已存在时返回 409, 由用户改去编辑那一条.
+ */
+export type MetadataCreateRequest = {
+    /**
+     * Number
+     *
+     * 番号; 入库前按 canonical_number 归一
+     */
+    number: string;
+    /**
+     * 内容类型; 留空按番号推断. 只在此处可写, 之后不可改
+     */
+    content_type?: ContentType | null;
+    /**
+     * Source
+     *
+     * 来源站点名 (如 tangxin); 只用于落一条占位来源链接, 让该来源的既定行为 (糖心判无码) 生效
+     */
+    source?: string | null;
+    /**
+     * 详情页可编辑的字段
+     */
+    fields?: MetadataPartial;
 };
 
 /**
@@ -7147,6 +7204,28 @@ export type GetMetadataSchemaResponses = {
 
 export type GetMetadataSchemaResponse = GetMetadataSchemaResponses[keyof GetMetadataSchemaResponses];
 
+export type GetSourcePresetsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/metadata/source-presets';
+};
+
+export type GetSourcePresetsResponses = {
+    /**
+     * Response Get Source Presets
+     *
+     * Successful Response
+     */
+    200: {
+        [key: string]: {
+            [key: string]: string;
+        };
+    };
+};
+
+export type GetSourcePresetsResponse = GetSourcePresetsResponses[keyof GetSourcePresetsResponses];
+
 export type ListMetadataData = {
     body?: never;
     path?: never;
@@ -7294,6 +7373,31 @@ export type ListMetadataResponses = {
 };
 
 export type ListMetadataResponse = ListMetadataResponses[keyof ListMetadataResponses];
+
+export type CreateMetadataData = {
+    body: MetadataCreateRequest;
+    path?: never;
+    query?: never;
+    url: '/api/metadata';
+};
+
+export type CreateMetadataErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type CreateMetadataError = CreateMetadataErrors[keyof CreateMetadataErrors];
+
+export type CreateMetadataResponses = {
+    /**
+     * Successful Response
+     */
+    201: MetadataResponse;
+};
+
+export type CreateMetadataResponse = CreateMetadataResponses[keyof CreateMetadataResponses];
 
 export type BatchDeleteMetadataData = {
     body: MetadataBatchIdsRequest;
@@ -7589,7 +7693,14 @@ export type UploadPosterData = {
          */
         metadata_id: number;
     };
-    query?: never;
+    query?: {
+        /**
+         * Crop
+         *
+         * 是否按海报比例自动裁剪; false 则原样使用
+         */
+        crop?: boolean;
+    };
     url: '/api/metadata/{metadata_id}/upload-poster';
 };
 
@@ -10261,6 +10372,50 @@ export type RestoreMappingResponses = {
      */
     200: unknown;
 };
+
+export type ListMappingCandidatesData = {
+    body?: never;
+    path: {
+        group: MappingGroup;
+    };
+    query?: {
+        /**
+         * Search
+         *
+         * 按原名或译名过滤
+         */
+        search?: string;
+        /**
+         * Limit
+         */
+        limit?: number;
+        /**
+         * Kind
+         *
+         * 片商组内按分类过滤: studio / publisher / series
+         */
+        kind?: string | null;
+    };
+    url: '/api/mappings/{group}/candidates';
+};
+
+export type ListMappingCandidatesErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ListMappingCandidatesError = ListMappingCandidatesErrors[keyof ListMappingCandidatesErrors];
+
+export type ListMappingCandidatesResponses = {
+    /**
+     * Successful Response
+     */
+    200: MappingCandidatesResponse;
+};
+
+export type ListMappingCandidatesResponse = ListMappingCandidatesResponses[keyof ListMappingCandidatesResponses];
 
 export type ExportMappingsData = {
     body?: never;

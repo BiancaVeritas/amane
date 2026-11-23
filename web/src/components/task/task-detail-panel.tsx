@@ -14,6 +14,7 @@ import {
   IconChevronDown,
   IconChevronRight,
   IconDownload,
+  IconFilePlus,
   IconPlayerStop,
   IconRefresh,
   IconSearch,
@@ -27,6 +28,7 @@ import { client } from "@/client/client.gen";
 import type { TaskListItem } from "@/client/types.gen";
 import { HintedActionIcon } from "@/components/common/hinted-action-icon";
 import { TaskLogView } from "@/components/log/task-log-view";
+import { ManualCreateDialog } from "@/components/task/manual-create-dialog";
 import { ManualScrapeDialog } from "@/components/task/manual-scrape-dialog";
 import { TaskResultPanel } from "@/components/task/task-result-panel";
 import { formatDuration } from "@/lib/format-duration";
@@ -95,6 +97,7 @@ export function TaskDetailPanel({ task, linkKey, actions }: TaskDetailPanelProps
   const hasResult = detail?.result != null;
   // 手动搜索常驻可用: 不要求本任务处于某个状态.
   const [manualOpen, setManualOpen] = useState(false);
+  const [manualCreateOpen, setManualCreateOpen] = useState(false);
   /**
    * 预填到手动搜索的值: 优先番号, 其次标题, 最后 ThePornDB UUID.
    *
@@ -223,6 +226,15 @@ export function TaskDetailPanel({ task, linkKey, actions }: TaskDetailPanelProps
         >
           {t("actions.manualScrape")}
         </Button>
+        {/* 与手动搜索并列: 搜不到就是要自己建一条, 两者是同一件事的两个出口. */}
+        <Button
+          size="xs"
+          variant="light"
+          leftSection={<IconFilePlus size={14} />}
+          onClick={() => setManualCreateOpen(true)}
+        >
+          {t("actions.manualCreate")}
+        </Button>
         {isTerminal && (
           <Button
             size="xs"
@@ -256,6 +268,11 @@ export function TaskDetailPanel({ task, linkKey, actions }: TaskDetailPanelProps
           typeof detail?.payload?.media_file_id === "number" ? detail.payload.media_file_id : null
         }
         initialInput={manualInitialInput}
+      />
+      <ManualCreateDialog
+        opened={manualCreateOpen}
+        onClose={() => setManualCreateOpen(false)}
+        initialNumber={manualInitialInput}
       />
     </Stack>
   );

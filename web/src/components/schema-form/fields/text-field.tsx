@@ -1,4 +1,4 @@
-import { Button, Group, Input } from "@mantine/core";
+import { Autocomplete, Button, Group, Input } from "@mantine/core";
 import type { AnyFieldApi } from "@tanstack/react-form";
 import type { FieldProps } from "../schema";
 import { isNullable } from "../schema";
@@ -7,6 +7,28 @@ import { useFieldDomId } from "./dict-entry-form";
 import { FieldChrome } from "./field-chrome";
 import { fieldError } from "./field-error";
 import { ClearableTextarea } from "@/components/common/clearable-input";
+import {
+  filterCandidates,
+  useMappingCandidates,
+  type VendorKind,
+} from "@/lib/media/mapping-candidates";
+
+/**
+ * 单值片商字段 → 片商表的哪个分类.
+ *
+ * 制作商 / 发行商 / 系列在这里都是**单值**, 不做拖动排序; 候选只用来省打字, 取的是片商表里的
+ * 原始名. 多值的那份是 `series_names`, 走数组字段.
+ */
+const VENDOR_KIND_BY_FIELD: Record<string, VendorKind> = {
+  studio: "studio",
+  publisher: "publisher",
+  series: "series",
+};
+
+/** 从字段路径里取最后一段 (`fields.studio` → `studio`). */
+function leafFieldName(path: string): string {
+  return path.slice(path.lastIndexOf(".") + 1);
+}
 
 /**
  * Generic text input field. Also serves as the fallback for unrecognized schema types.
@@ -30,6 +52,13 @@ export function TextField({
   const id = useFieldDomId(name);
   const nullable = isNullable(schema);
   const multiline = schema["x-long"] === true;
+  // schema 给了格式提示就写进输入框, 不再用「(not set)」。放在行内才不会把同一行的字段顶歪.
+  const placeholder = schema.placeholder ?? (nullable ? "(not set)" : undefined);
+
+  // 制作商 / 发行商: 唯一值, 给候选省打字, 不做排序.
+  const vendorKind = VENDOR_KIND_BY_FIELD[leafFieldName(name)];
+  // 没有对应分类时传占位组并关掉请求, 免得每个文本字段都白拉一份候选.
+  const vendorOptions = useMappingCandidates("vendor", vendorKind !== undefined, vendorKind);
 
   return (
     <form.Field name={name}>
@@ -37,6 +66,8 @@ export function TextField({
         <FieldChrome
           variant={variant}
           htmlFor={id}
+          // 带候选的字段断开标签联动: 否则点标题那一整段都会把焦点送进输入框, 看起来像点框外也有反应.
+          linkLabel={vendorKind === undefined}
           label={label}
           description={description}
           error={fieldError(field)}
@@ -50,8 +81,28 @@ export function TextField({
                 onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
                   field.handleChange(e.target.value || (nullable ? null : ""))
                 }
-                placeholder={nullable ? "(not set)" : undefined}
+                placeholder={placeholder}
                 style={{ flex: 1 }}
+              />
+            ) : vendorKind !== undefined ? (
+              <Autocomplete
+                id={id}
+                value={(field.state.value as string) ?? ""}
+                onChange={(value: string) => field.handleChange(value || (nullable ? null : ""))}
+                // 候选显示 `原始名 (译名)`; 选中后取原始名写库, 与标签 / 演员同一口径.
+                data={filterCandidates(vendorOptions, (field.state.value as string) ?? "").map(
+                  (option) => option.label,
+                )}
+                onOptionSubmit={(picked) => {
+                  const hit = vendorOptions.find((option) => option.label === picked);
+                  if (hit) field.handleChange(hit.value);
+                }}
+                placeholder={placeholder}
+                style={{ flex: 1 }}
+                // 关掉「聚焦即开」: 点标签 / 描述会让输入框获焦, 那时不该弹候选.
+                // 点击输入框本身仍由组件自己的 onClick 展开, 不需要额外接管.
+                openOnFocus={false}
+                comboboxProps={{ withinPortal: true }}
               />
             ) : (
               <Input
@@ -60,7 +111,7 @@ export function TextField({
                 onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
                   field.handleChange(e.target.value || (nullable ? null : ""))
                 }
-                placeholder={nullable ? "(not set)" : undefined}
+                placeholder={placeholder}
                 style={{ flex: 1 }}
               />
             )}

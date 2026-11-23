@@ -5557,6 +5557,43 @@ export const ManufacturerSchema = {
     title: 'Manufacturer'
 } as const;
 
+export const MappingCandidateSchema = {
+    properties: {
+        original: {
+            type: 'string',
+            title: 'Original'
+        },
+        label: {
+            type: 'string',
+            title: 'Label'
+        }
+    },
+    type: 'object',
+    required: [
+        'original',
+        'label'
+    ],
+    title: 'MappingCandidate',
+    description: '补全框的一项: ``original`` 是要写库的原始名, ``label`` 是同一条的译名.'
+} as const;
+
+export const MappingCandidatesResponseSchema = {
+    properties: {
+        items: {
+            items: {
+                $ref: '#/components/schemas/MappingCandidate'
+            },
+            type: 'array',
+            title: 'Items'
+        }
+    },
+    type: 'object',
+    required: [
+        'items'
+    ],
+    title: 'MappingCandidatesResponse'
+} as const;
+
 export const MappingGroupSchema = {
     type: 'string',
     enum: [
@@ -6080,6 +6117,52 @@ export const MetadataBatchScrapeResponseSchema = {
         'task_ids'
     ],
     title: 'MetadataBatchScrapeResponse'
+} as const;
+
+export const MetadataCreateRequestSchema = {
+    properties: {
+        number: {
+            type: 'string',
+            maxLength: 200,
+            minLength: 1,
+            title: 'Number',
+            description: '番号; 入库前按 canonical_number 归一'
+        },
+        content_type: {
+            anyOf: [
+                {
+                    $ref: '#/components/schemas/ContentType'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            description: '内容类型; 留空按番号推断. 只在此处可写, 之后不可改'
+        },
+        source: {
+            anyOf: [
+                {
+                    type: 'string',
+                    maxLength: 64
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Source',
+            description: '来源站点名 (如 tangxin); 只用于落一条占位来源链接, 让该来源的既定行为 (糖心判无码) 生效'
+        },
+        fields: {
+            $ref: '#/components/schemas/MetadataPartial',
+            description: '详情页可编辑的字段'
+        }
+    },
+    type: 'object',
+    required: [
+        'number'
+    ],
+    title: 'MetadataCreateRequest',
+    description: '手动创建条目: 番号必填, 其余字段与详情页可编辑项同口径.\n\n与 PATCH 的区别只有两点: 番号与类型在这里可以给 (PATCH 不给, 它们是创建时的属性),\n并且不会覆盖已存在的同号条目 —— 已存在时返回 409, 由用户改去编辑那一条.'
 } as const;
 
 export const MetadataDetailResponseSchema = {
@@ -6681,7 +6764,8 @@ export const MetadataPartialSchema = {
                     type: 'null'
                 }
             ],
-            title: 'Actors'
+            title: 'Actors',
+            'x-ordered': true
         },
         studio: {
             anyOf: [
@@ -6709,10 +6793,10 @@ export const MetadataPartialSchema = {
             anyOf: [
                 {
                     type: 'string',
-                    description: '发行日 (YYYY-MM-DD); 也可输入带时刻的 ISO 串, 服务端只保留日期',
                     examples: [
                         '2020-01-01'
-                    ]
+                    ],
+                    placeholder: 'YYYY-MM-DD'
                 },
                 {
                     type: 'null'
@@ -6743,7 +6827,8 @@ export const MetadataPartialSchema = {
                     type: 'null'
                 }
             ],
-            title: 'Tags'
+            title: 'Tags',
+            'x-ordered': true
         },
         series: {
             anyOf: [
@@ -6754,7 +6839,8 @@ export const MetadataPartialSchema = {
                     type: 'null'
                 }
             ],
-            title: 'Series'
+            title: 'Series',
+            'x-hidden': true
         },
         series_names: {
             anyOf: [
@@ -6768,7 +6854,8 @@ export const MetadataPartialSchema = {
                     type: 'null'
                 }
             ],
-            title: 'Series Names'
+            title: 'Series Names',
+            'x-ordered': true
         },
         plot: {
             anyOf: [
@@ -6806,7 +6893,8 @@ export const MetadataPartialSchema = {
                     type: 'null'
                 }
             ],
-            title: 'Directors'
+            title: 'Directors',
+            'x-ordered': true
         },
         poster_urls: {
             anyOf: [

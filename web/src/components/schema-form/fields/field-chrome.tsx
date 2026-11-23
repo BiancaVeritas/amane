@@ -22,6 +22,13 @@ interface FieldChromeProps {
   layout?: FieldChromeLayout;
   /** Maps the label's `htmlFor` to the inner control's `id` (for clickable labels). */
   htmlFor?: string;
+  /**
+   * 标签是否可点击聚焦控件 (默认可以).
+   *
+   * 带候选下拉的字段关掉它: 标签挂在 `<label htmlFor>` 上时, 点标题 / 说明这一整段都会把焦点
+   * 送进输入框, 看起来像"点框外也有反应". 关掉后只有点控件本身才生效.
+   */
+  linkLabel?: boolean;
   /** Resolved label text (i18n already applied by FieldRouter). */
   label: string;
   /** Optional description shown under the label. */
@@ -45,6 +52,7 @@ export function FieldChrome({
   variant = "default",
   layout = "vertical",
   htmlFor,
+  linkLabel = true,
   label,
   description,
   children,
@@ -52,6 +60,8 @@ export function FieldChrome({
   error,
 }: FieldChromeProps) {
   const narrow = useNarrowViewport();
+  // 不联动时不给 htmlFor: `<label>` 一旦带上它, 点整块标签区都会聚焦控件.
+  const labelFor = linkLabel ? htmlFor : undefined;
 
   if (variant === "bare") {
     return (
@@ -79,7 +89,7 @@ export function FieldChrome({
         py="xs"
       >
         <Stack gap={2}>
-          <Input.Label htmlFor={htmlFor} size="sm" fw={500}>
+          <Input.Label htmlFor={labelFor} size="sm" fw={500}>
             {label}
           </Input.Label>
           {description && (
@@ -105,7 +115,7 @@ export function FieldChrome({
   return (
     <Stack gap="xs" py="xs">
       <Stack gap={2}>
-        <Input.Label htmlFor={htmlFor} size="sm" fw={500}>
+        <Input.Label htmlFor={labelFor} size="sm" fw={500}>
           {label}
         </Input.Label>
         {description && (

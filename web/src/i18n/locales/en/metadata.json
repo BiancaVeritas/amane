@@ -367,8 +367,7 @@
       "label": "Publisher"
     },
     "release": {
-      "label": "Release Date",
-      "description": "Format: 2000-01-01"
+      "label": "Release Date"
     },
     "runtime": {
       "label": "Runtime (min)"
@@ -378,6 +377,10 @@
     },
     "series": {
       "label": "Series"
+    },
+    "series_names": {
+      "label": "Multiple series",
+      "description": "Multiple values allowed; drag to reorder. The first one becomes the main series"
     },
     "plot": {
       "label": "Plot"
@@ -457,7 +460,9 @@
     "mergeEntriesDelete": "Source entries are deleted after merging",
     "mergeEntriesRescrape": "Re-scrape the target by its number afterwards (reusing snapshots)",
     "mergeEntriesLead_one": "manage.mergeEntriesLead",
-    "mergeEntriesLead_other": "manage.mergeEntriesLead"
+    "mergeEntriesLead_other": "manage.mergeEntriesLead",
+    "pruneEmptyResult_one": "metadata:manage.pruneEmptyResult",
+    "pruneEmptyResult_other": "metadata:manage.pruneEmptyResult"
   },
   "merge": {
     "title": "Compare Sources",

@@ -348,8 +348,7 @@
       "label": "发行商"
     },
     "release": {
-      "label": "发行日期",
-      "description": "格式: 2000-01-01"
+      "label": "发行日期"
     },
     "runtime": {
       "label": "时长 (分钟)"
@@ -359,6 +358,10 @@
     },
     "series": {
       "label": "系列"
+    },
+    "series_names": {
+      "label": "多系列",
+      "description": "可多个, 拖动排序; 第一项会作为主系列"
     },
     "plot": {
       "label": "剧情"

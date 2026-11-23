@@ -6,7 +6,7 @@ import { UnsavedChangesBar } from "@/components/common/unsaved-changes-bar";
 import { isRecord } from "@/lib/utils";
 import { encodeFormBody } from "./encode";
 import { FieldRouter } from "./fields";
-import type { JSONSchemaObject, TrailingNode } from "./schema";
+import type { JSONSchemaObject, SchemaFormInstance, TrailingNode } from "./schema";
 import {
   createSchemaValidator,
   isArray,
@@ -249,6 +249,23 @@ export function SchemaForm({
     form.reset(defaultValues);
   }, [form, defaultValues]);
 
+  /**
+   * 传给字段的 form 适配层.
+   *
+   * TanStack Form 的 `setFieldValue` 第二个参数是按字段路径推导出的联合类型, 而字段组件只用得到
+   * "把某个兄弟字段写成字符串", 直接传 `form` 会因类型过窄而报错. 这里收成一个明确的窄口子,
+   * 具体字段的类型正确性由调用点自己保证.
+   */
+  const fieldForm = useMemo<SchemaFormInstance>(
+    () => ({
+      Field: form.Field,
+      setFieldValue: (field, value) => {
+        form.setFieldValue(field as never, value as never);
+      },
+    }),
+    [form],
+  );
+
   const primaryLabel =
     submitLabel ??
     (isCreate ? t("actions.submit") : saving ? t("actions.saving") : t("actions.save"));
@@ -302,7 +319,7 @@ export function SchemaForm({
         key={key}
         name={`${prefix}.${key}`}
         schema={fieldSchema}
-        form={form}
+        form={fieldForm}
         i18nPrefix={i18nPrefix}
         trailing={trailingField?.[key]}
       />

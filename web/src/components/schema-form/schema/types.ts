@@ -25,6 +25,8 @@ export interface AmaneBaseExtensions {
 export interface AmaneTextExtensions extends AmaneBaseExtensions {
   /** 多行文本框 (rows=8); 顶层字段与 dict 值共用同一控制符. */
   "x-long"?: boolean;
+  /** 输入框内的格式提示. 与 `description` 不同, 它不占额外一行, 不会把同行字段顶歪. */
+  placeholder?: string;
 }
 
 /** 仅用于 x-widget: "PathPicker" 的 string 字段 */
@@ -230,6 +232,13 @@ export interface SchemaFormInstance {
     name: string;
     children: (field: import("@tanstack/react-form").AnyFieldApi) => React.ReactNode;
   }>;
+  /**
+   * 写另一个字段的值.
+   *
+   * 极少数联动才需要 (如多系列的第一项要同步到主系列); 常规字段一律只写自己.
+   * 形参放宽成 `string` / `string | null`: 具体字段类型由调用方自己保证, 这里是跨字段的公共入口.
+   */
+  setFieldValue: (name: string, value: string | null) => void;
 }
 
 // ==================== Field props ====================

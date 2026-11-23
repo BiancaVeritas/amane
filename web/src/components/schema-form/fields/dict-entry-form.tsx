@@ -110,4 +110,6 @@ function DictEntryField({
 
 export const dictEntryForm: SchemaFormInstance = {
   Field: DictEntryField,
+  // dict 条目是局部作用域, 一个键的值不联动到同级的其它键; 跨字段写入在这个语境里没有意义.
+  setFieldValue: () => undefined,
 };
