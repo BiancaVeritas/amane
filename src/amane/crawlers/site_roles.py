@@ -58,6 +58,23 @@ def builtin_descriptors() -> tuple[SourceDescriptor, ...]:
     )
 
 
+def site_publishers() -> dict[str, str]:
+    """声明了固定发行商的来源 → 发行商名.
+
+    只有内容专属于该站的来源才声明 (糖心 / Heydouga / 一本道 等); 索引类站点覆盖多家厂牌,
+    不在表里. 手工建条目时据此预填发行商, 真值仍在各爬虫的 ``CrawlerProfile.publisher``.
+    """
+    publishers: dict[str, str] = {}
+    for site in FILM_METADATA_SITES:
+        cls = registry.get(site)
+        if cls is None:
+            continue
+        publisher = cls.profile().publisher
+        if publisher:
+            publishers[str(site)] = publisher
+    return publishers
+
+
 _ACTOR_PROFILE_SET = frozenset(ACTOR_PROFILE_SITES)
 _ACTOR_IMAGE_SET = frozenset(ACTOR_IMAGE_SITES)
 

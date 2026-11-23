@@ -199,6 +199,51 @@ async def restore_mapping(group: MappingGroup, original: str, runtime: RuntimeDe
     return {"restored": original}
 
 
+class MappingCandidate(BaseModel):
+    """补全框的一项: ``original`` 是要写库的原始名, ``label`` 是同一条的译名."""
+
+    original: str
+    label: str
+
+
+class MappingCandidatesResponse(BaseModel):
+    items: list[MappingCandidate]
+
+
+@router.get("/{group}/candidates")
+async def list_mapping_candidates(
+    group: MappingGroup,
+    runtime: RuntimeDep,
+    repo: RepoDep,
+    search: Annotated[str, Query(description="按原名或译名过滤")] = "",
+    limit: Annotated[int, Query(ge=1, le=500)] = 200,
+    kind: Annotated[str | None, Query(description="片商组内按分类过滤: studio / publisher / series")] = None,
+) -> MappingCandidatesResponse:
+    """给选择框用的候选: ``(原始名, 展示名)`` 成对返回.
+
+    与 ``GET /{group}`` 的区别: 那边是给人看的管理表 (默认只看待映射, 且要翻译), 这里是给
+    录入框的补全 —— 要的是**原始名**, 因为写进条目的是原始名, 展示名只是同一件事的译文.
+    两个原始名映射到同一译文时也要各出一条, 不能按译文去重.
+
+    ``kind`` 只对片商组有意义: 制作商与发行商共用一张表, 各自的候选要分开取.
+    """
+    await _sync_group(runtime, repo, group)
+    role = kind if group is MappingGroup.VENDOR and kind in {str(value) for value in VendorRole} else None
+    needle = search.strip().casefold()
+    items: list[MappingCandidate] = []
+    entries, _ = runtime.mappings.store(group).list(
+        status="all", include_archived=True, role=role, limit=1000
+    )
+    for item in entries:
+        shown = item.translation or item.original
+        if needle and needle not in item.original.casefold() and needle not in shown.casefold():
+            continue
+        items.append(MappingCandidate(original=item.original, label=shown))
+        if len(items) >= limit:
+            break
+    return MappingCandidatesResponse(items=items)
+
+
 @router.get("/{group}/export")
 async def export_mappings(group: MappingGroup, runtime: RuntimeDep):
     return JSONResponse(

@@ -118,12 +118,40 @@ PartialMetadata = create_partial_model(
         "original_plot": anyof_extras(kv({"x-long": True})),
         "release": anyof_extras(
             {
-                "description": "发行日 (YYYY-MM-DD); 也可输入带时刻的 ISO 串, 服务端只保留日期",
+                # 格式提示放进行内 placeholder: 写在 description 里会单独占一行, 与其它字段对不齐.
+                "placeholder": "YYYY-MM-DD",
                 "examples": ["2020-01-01"],
             }
         ),
+        # 这三个列表在详情页做成可拖动的角标: 用户会按自己的习惯排序, 顺序也随 PATCH 原样保存.
+        # 它们是纯 list (不是 X | None), 不能用 anyof_extras —— 那个只往 anyOf 的非 null 分支写.
+        "actors": kv({"x-ordered": True}),
+        "directors": kv({"x-ordered": True}),
+        "tags": kv({"x-ordered": True}),
+        # 系列同样可多值、可拖动: 一个作品能同时属于多个系列.
+        "series_names": kv({"x-ordered": True}),
     },
 )
+
+
+class MetadataCreateRequest(BaseModel):
+    """手动创建条目: 番号必填, 其余字段与详情页可编辑项同口径.
+
+    与 PATCH 的区别只有两点: 番号与类型在这里可以给 (PATCH 不给, 它们是创建时的属性),
+    并且不会覆盖已存在的同号条目 —— 已存在时返回 409, 由用户改去编辑那一条.
+    """
+
+    number: str = Field(min_length=1, max_length=200, description="番号; 入库前按 canonical_number 归一")
+    content_type: ContentType | None = Field(
+        default=None,
+        description="内容类型; 留空按番号推断. 只在此处可写, 之后不可改",
+    )
+    source: str | None = Field(
+        default=None,
+        max_length=64,
+        description="来源站点名 (如 tangxin); 只用于落一条占位来源链接, 让该来源的既定行为 (糖心判无码) 生效",
+    )
+    fields: PartialMetadata = Field(default_factory=PartialMetadata, description="详情页可编辑的字段")
 
 
 class SemanticHitInfo(BaseModel):

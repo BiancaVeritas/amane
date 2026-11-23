@@ -94,7 +94,7 @@ def _public_gallery(data: Any, number: str, base_url: str) -> list[str]:
 class TenmusumeCrawler(Crawler):
     @classmethod
     def profile(cls) -> CrawlerProfile:
-        return CrawlerProfile(name=SiteName.TENMUSUME, base_url=_BASE_URL)
+        return CrawlerProfile(name=SiteName.TENMUSUME, base_url=_BASE_URL, publisher="天然むすめ")
 
     def _detail_url(self, number: str) -> str | None:
         normalized = _number(number)

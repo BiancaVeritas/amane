@@ -29,6 +29,9 @@ _BASE_URL = "https://tangxinvlog.app"
 _INDEX_URL = f"{_BASE_URL}/search-index.json"
 _MEDIA_BASE = "https://t.5gcdn.xyz/videos"
 
+#: 制作商与发行商都固定为站点本身: 站内没有厂牌字段, 原创内容只属于糖心.
+_STUDIO = "糖心Vlog"
+
 #: 详情页地址里的 id: 长短两种形态都有 (``6aef1a3558ccd9a2e6045645`` / ``29570``).
 _ID_RE = re.compile(r"/v/([0-9a-z]+)/?", re.IGNORECASE)
 
@@ -258,7 +261,7 @@ class TangxinCrawler(Crawler):
 
     @classmethod
     def profile(cls) -> CrawlerProfile:
-        return CrawlerProfile(name=SiteName.TANGXIN, base_url=_BASE_URL)
+        return CrawlerProfile(name=SiteName.TANGXIN, base_url=_BASE_URL, publisher=_STUDIO)
 
     async def _load_index(self) -> list[_Row]:
         """整份搜索索引, 进程内复用."""
@@ -447,6 +450,8 @@ class TangxinCrawler(Crawler):
             title=title,
             actors=film_actors(actors),
             tags=list(dict.fromkeys(tags)),
+            studio=_STUDIO,
+            publisher=_STUDIO,
             release=release,
             runtime=runtime,
             plot=plot,

@@ -214,7 +214,7 @@ def _runtime_minutes(value: str) -> int | None:
 class CaribbeancomCrawler(Crawler):
     @classmethod
     def profile(cls) -> CrawlerProfile:
-        return CrawlerProfile(name=SiteName.CARIBBEANCOM, base_url=_BASE_URL)
+        return CrawlerProfile(name=SiteName.CARIBBEANCOM, base_url=_BASE_URL, publisher="カリビアンコム")
 
     def _detail_url(self, number: str) -> str | None:
         exact = _number(number)

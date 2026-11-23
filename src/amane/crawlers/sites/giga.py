@@ -62,7 +62,7 @@ class GigaCrawler(Crawler):
 
     @classmethod
     def profile(cls) -> CrawlerProfile:
-        return CrawlerProfile(name=SiteName.GIGA, base_url="https://www.giga-web.jp")
+        return CrawlerProfile(name=SiteName.GIGA, base_url="https://www.giga-web.jp", publisher="GIGA")
 
     async def _search(self, query: SearchQuery, options: FetchOptions | None = None) -> str | None:
         text = await self._get_html(f"{self.base_url}/search/?keyword={query.number}")

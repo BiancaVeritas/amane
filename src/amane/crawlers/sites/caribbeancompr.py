@@ -244,7 +244,7 @@ class CaribbeancomprCrawler(Crawler):
 
     @classmethod
     def profile(cls) -> CrawlerProfile:
-        return CrawlerProfile(name=SiteName.CARIBBEANCOMPR, base_url=_BASE_URL)
+        return CrawlerProfile(name=SiteName.CARIBBEANCOMPR, base_url=_BASE_URL, publisher="HEYZO")
 
     async def _lookup_javbus(self, number: str) -> tuple[str, str | None] | None:
         javbus = JavBusCrawler(self.client)

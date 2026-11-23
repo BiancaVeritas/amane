@@ -94,7 +94,7 @@ def _sample_trailers(value: Any) -> list[str]:
 class PondoCrawler(Crawler):
     @classmethod
     def profile(cls) -> CrawlerProfile:
-        return CrawlerProfile(name=SiteName.PONDO, base_url=_BASE_URL)
+        return CrawlerProfile(name=SiteName.PONDO, base_url=_BASE_URL, publisher="一本道")
 
     def _detail_url(self, number: str) -> str | None:
         normalized = _number(number)

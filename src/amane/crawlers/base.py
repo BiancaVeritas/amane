@@ -39,6 +39,9 @@ class CrawlerProfile:
     # 与 capabilities (来源提供什么) 分开.
     traits: frozenset[SourceTrait] = field(default_factory=frozenset)
     genders: frozenset[ActorGender] | None = None
+    # 该站内容的固定发行商. 站内没有厂牌字段、内容只属于这一家时才有值 (糖心 / Heydouga 等);
+    # 索引类站点 (javdb / javbus) 覆盖多家厂牌, 保持 None. 手工建条目时据此预填发行商.
+    publisher: str | None = None
 
     def effective_capabilities(self) -> frozenset[SourceCapability]:
         return self.capabilities or frozenset({SourceCapability.FILM_METADATA})

@@ -132,7 +132,7 @@ def _search_result_url(text: str, requested_number: str, page_url: str) -> str |
 class TokyoHotCrawler(Crawler):
     @classmethod
     def profile(cls) -> CrawlerProfile:
-        return CrawlerProfile(name=SiteName.TOKYO_HOT, base_url=_BASE_URL)
+        return CrawlerProfile(name=SiteName.TOKYO_HOT, base_url=_BASE_URL, publisher="Tokyo-Hot")
 
     async def _search(self, query: SearchQuery, options: FetchOptions | None = None) -> str | None:
         del options

@@ -60,7 +60,7 @@ def _public_gallery(data: Any, number: str, base_url: str, gallery_dir: str) -> 
 class PacopacomamaCrawler(Crawler):
     @classmethod
     def profile(cls) -> CrawlerProfile:
-        return CrawlerProfile(name=SiteName.PACOPACOMAMA, base_url=_BASE_URL)
+        return CrawlerProfile(name=SiteName.PACOPACOMAMA, base_url=_BASE_URL, publisher="パコパコママ")
 
     def _detail_url(self, number: str) -> str | None:
         exact = _number(number)

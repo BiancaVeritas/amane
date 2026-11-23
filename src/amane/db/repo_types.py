@@ -3,12 +3,12 @@ from enum import StrEnum
 from typing import TYPE_CHECKING, Any, Literal, NamedTuple, TypedDict
 
 from pydantic import BaseModel, Field, ValidationInfo, field_validator, model_validator
-from sqlalchemy import UnaryExpression, asc, desc, exists, func, or_
+from sqlalchemy import String, UnaryExpression, asc, cast, desc, exists, func, or_
 from sqlalchemy.sql.elements import ColumnElement
 from sqlmodel import col, select
 from sqlmodel.sql.expression import SelectOfScalar
 
-from ..enums import ActorGender, DownloadableResource, LibraryAutomation, LibraryIngest, LinkMode, MoveMode
+from ..enums import ActorGender, DownloadableResource, LibraryAutomation, LibraryIngest, LinkMode, MoveMode, SiteName
 from ..parsing import ContentType, Mosaic
 from ..utils.dates import normalize_calendar_date
 from .models import (
@@ -151,11 +151,26 @@ def _metadata_linked_file_exists(*extra: ColumnElement[bool]) -> ColumnElement[b
 
 
 def _metadata_uncensored_predicate() -> ColumnElement[bool]:
-    """条目无码: 类型为无码, 或存在带无码标记的文件. 没有挂载文件也成立."""
+    """条目无码: 类型为无码, 存在带无码标记的文件, 或来自糖心.
+
+    糖心只放无马赛克的原创国产片, 类型却是国产; 它的无码在展示层与筛选侧都必须成立,
+    否则会出现「角标亮着、按无码筛却查不到」.
+    """
     return or_(
         col(Metadata.content_type) == ContentType.UNCENSORED,
         _metadata_linked_file_exists(col(MediaFile.mosaic) == Mosaic.UNCENSORED),
+        _metadata_from_tangxin(),
     )
+
+
+def _metadata_from_tangxin() -> ColumnElement[bool]:
+    """条目的 ``source_urls`` 里记着糖心: JSON 列按文本匹配, 键名带引号才算精确命中.
+
+    用 ``cast == text`` 而不是 ``JSON.contains``: 后者在 SQLite 的 JSON 列上会走到
+    未声明支持的运算符, 触发 SQLAlchemy 弃用警告. ``"tangxin"`` 带引号后也不会命中
+    ``tangxin_other`` 这类更长的键.
+    """
+    return cast(col(Metadata.source_urls), String).like(f'%"{SiteName.TANGXIN}"%')
 
 
 def _facet_primary_order(sort_by: FacetSortField, order: SortOrder, *, name_col: Any, count_expr: Any) -> Any:

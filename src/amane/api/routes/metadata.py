@@ -8,18 +8,20 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from pydantic import TypeAdapter
 
 from ...aggregate import compute_merge_updates
+from ...crawlers import registry
+from ...crawlers.site_roles import site_publishers
 from ...db.embeddings import EmbeddingKind
 from ...db.models import FacetKind, FacetSortField, Metadata, MetadataSortField, SavedQueryEntity, SortOrder, TaskType
 from ...db.repo_types import WriteMode
 from ...db.repos.media import file_phase_of
-from ...enums import MetadataField
+from ...enums import MetadataField, SiteName
 from ...handlers import ScrapePayload
 from ...llm import build_translator
 from ...media import manual_crop_image
 from ...media.images import crop_poster, probe_oriented_size
 from ...media.resource_store import RESOURCE_URL_PREFIX, ResourceStore, internal_url_hash
 from ...media.upload import StoredUpload, UploadRejected, store_upload
-from ...parsing import ContentType, summarize_file_phases
+from ...parsing import ContentType, canonical_number, summarize_file_phases
 from ...parsing import FilePhaseSummary as ParsedFilePhase
 from ...semantic import SemanticUnavailable
 from ...tags import MappingGroup, vendor_names
@@ -40,6 +42,7 @@ from ..models import (
     MetadataBatchIdsRequest,
     MetadataBatchScrapeRequest,
     MetadataBatchScrapeResponse,
+    MetadataCreateRequest,
     MetadataDetailResponse,
     MetadataListItem,
     MetadataListResponse,
@@ -82,7 +85,7 @@ async def build_metadata_responses(
             response = response.model_copy(
                 update={
                     "file_count": summary.file_count,
-                    "file_phase": _file_phase_resp(summary.phase, response.tags),
+                    "file_phase": _file_phase_resp(summary.phase, response.tags, from_tangxin=_is_tangxin(m)),
                 }
             )
         responses.append(response)
@@ -109,7 +112,10 @@ def _display_response(runtime: RuntimeDep, metadata: Metadata) -> MetadataRespon
     映射只改展示; 搜索、筛选与去重仍用库里的原名.
     """
     return to_resp(MetadataResponse, metadata).model_copy(
-        update={"tags": runtime.mappings.store(MappingGroup.TAG).map_tags(metadata.tags), **_vendor_display(runtime, metadata)}
+        update={
+            "tags": runtime.mappings.store(MappingGroup.TAG).map_tags(metadata.tags),
+            **_vendor_display(runtime, metadata),
+        }
     )
 
 
@@ -146,12 +152,18 @@ async def _split_merged_tag_ids(
     return and_ids or None, or_ids or None
 
 
-def _file_phase_resp(summary: ParsedFilePhase, tags: Sequence[str] = ()) -> FilePhaseSummary:
-    """``tags`` 传条目已映射的标签: 前端据此点亮「无码」, 缺了它就只剩文件标记可看."""
+def _file_phase_resp(
+    summary: ParsedFilePhase, tags: Sequence[str] = (), *, from_tangxin: bool = False
+) -> FilePhaseSummary:
+    """``tags`` 传条目已映射的标签: 前端据此点亮「无码」, 缺了它就只剩文件标记可看.
+
+    ``from_tangxin`` 是糖心条目: 该站只放无马赛克的原创国产片, 类型却是国产 (国产不触发
+    无码), 因此在这里直接给无码, 不靠塞标签或改文件相位 —— 那是两个不相干的真值来源.
+    """
     return FilePhaseSummary(
         has_subtitle=summary.has_subtitle,
-        censored=summary.censored,
-        uncensored=summary.uncensored,
+        censored=summary.censored and not from_tangxin,
+        uncensored=summary.uncensored or from_tangxin,
         mosaics=list(summary.mosaics),
         definition=summary.definition,
         ltx=summary.ltx,
@@ -159,9 +171,40 @@ def _file_phase_resp(summary: ParsedFilePhase, tags: Sequence[str] = ()) -> File
     )
 
 
+def _is_tangxin(metadata: Metadata) -> bool:
+    """条目是否来自糖心. 用 ``source_urls`` 的站点键判定, 与刮削实际写过哪个来源一致."""
+    return str(SiteName.TANGXIN) in (metadata.source_urls or {})
+
+
+def _site_home(site: str) -> str:
+    """来源主页地址, 用作手建条目的占位来源链接; 认不出的站点返回其名, 只为占键."""
+    cls = registry.get(site)
+    return cls.profile().base_url if cls is not None else site
+
+
 @router.get("/schema")
 async def get_metadata_schema() -> dict:
     return TypeAdapter(PartialMetadata).json_schema()
+
+
+@router.get("/source-presets")
+async def get_source_presets(runtime: RuntimeDep) -> dict[str, dict[str, str]]:
+    """按内容类型给出可选的「来源」→ 该来源固定义发行商与制作商.
+
+    候选范围就是**类型路由**: 只有该类型路由里出现的来源才列出来, 所以「糖心」只会在选国产时
+    出现, 与刮削实际会走哪些站一致. 路由里的索引站 (javdb / javbus) 覆盖多家厂牌, 没有固定
+    厂牌, 因而不在结果里 —— 选中它们也不会预填任何字段.
+
+    结构是 ``{content_type: {site: publisher}}``; 真值仍在 `CrawlerProfile.publisher`.
+    """
+    publishers = site_publishers()
+    routes = runtime.config.hot.scraping.content_routes
+    by_type: dict[str, dict[str, str]] = {}
+    for content_type, sites in routes.items():
+        presets = {site: publishers[site] for site in sites if site in publishers}
+        if presets:
+            by_type[str(content_type)] = presets
+    return by_type
 
 
 @router.get("")
@@ -305,6 +348,46 @@ async def _semantic_list(
     )
 
 
+@router.post("", status_code=201)
+async def create_metadata(req: MetadataCreateRequest, repo: RepoDep, runtime: RuntimeDep) -> MetadataResponse:
+    """手动创建条目: 番号 + 类型 + 详情字段.
+
+    与刮削落库的区别只在入口: 类型由用户指定 (留空按番号推断), 字段按 ``WriteMode.MANUAL``
+    写入, 因此不会被既有锁定挡住. 番号已存在时返回 409, 让用户去编辑那一条 ——
+    静默覆盖既有条目会把刮削来的字段冲掉.
+    """
+    number = canonical_number(req.number.strip()) or req.number.strip()
+    existing = await repo.get_metadata_by_number(number)
+    if existing is not None:
+        raise HTTPException(status_code=409, detail=f"番号 {number} 已存在")
+
+    updates = cast("MetadataFields", req.fields.model_dump(exclude_unset=True))
+    if "release" in updates and updates["release"] is not None:
+        raw_release = updates["release"]
+        normalized = normalize_calendar_date(raw_release) if isinstance(raw_release, str) else None
+        if normalized is None:
+            raise HTTPException(status_code=422, detail="发行日期必须为 YYYY-MM-DD")
+        updates["release"] = normalized
+    # 选了来源就落一条占位链接: 无码判定 (糖心) 与「来源」展示都读 source_urls,
+    # 手建条目没有真实刮削地址, 用来源主页占位即可.
+    if req.source:
+        site = req.source.strip()
+        if site not in site_publishers() and site not in {str(s.name) for s in SiteName}:
+            raise HTTPException(status_code=422, detail=f"未知来源: {site}")
+        updates["source_urls"] = {site: f"{_site_home(site)}"}
+    try:
+        metadata = await repo.upsert_metadata(
+            number,
+            content_type=req.content_type,
+            mode=WriteMode.MANUAL,
+            **updates,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    logger.info("metadata created", metadata_id=metadata.id, number=number, content_type=str(metadata.content_type))
+    return _display_response(runtime, metadata)
+
+
 @router.post("/batch/delete")
 async def batch_delete_metadata(
     req: MetadataBatchIdsRequest, repo: RepoDep, runtime: RuntimeDep
@@ -436,6 +519,7 @@ async def get_metadata(metadata_id: int, repo: RepoDep, runtime: RuntimeDep) -> 
                 "file_phase": _file_phase_resp(
                     summarize_file_phases((file_phase_of(f) for f in files), metadata.content_type),
                     mapped_tags,
+                    from_tangxin=_is_tangxin(metadata),
                 ),
             }
         ),
@@ -445,7 +529,10 @@ async def get_metadata(metadata_id: int, repo: RepoDep, runtime: RuntimeDep) -> 
         actor_ids=actor_ids,
         actor_genders=actor_genders,
         actor_display_names=runtime.mappings.store(MappingGroup.ACTOR).display_map(list(metadata.actors or [])),
-        tags=[TagPair(raw=raw, shown=shown) for raw, shown in runtime.mappings.store(MappingGroup.TAG).map_tag_pairs(metadata.tags)],
+        tags=[
+            TagPair(raw=raw, shown=shown)
+            for raw, shown in runtime.mappings.store(MappingGroup.TAG).map_tag_pairs(metadata.tags)
+        ],
         director_ids=director_ids,
         tag_ids=tag_ids,
         studio_id=studio_id,
@@ -539,10 +626,9 @@ async def crop_poster_from_thumb(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
 
-    # 写回 poster_urls, 原有条目保留在后面.
-    existing = [url for url in metadata.poster_urls if url != poster_url]
-    updated = await repo.update_metadata(metadata_id, mode=WriteMode.MANUAL, poster_urls=[poster_url, *existing])
-    assert updated is not None
+    # 海报只有一个: 裁一次就替换一次. 早先把旧海报留在后面 (当作候选池), 于是反复裁切会
+    # 一直堆积 —— 海报没有「换回上一张」的场景, 旧的那份没有任何用处.
+    updated = await _apply_poster(runtime.resource_store, repo, metadata_id, metadata, poster_url)
     logger.info(
         "poster cropped",
         metadata_id=metadata_id,
@@ -620,6 +706,26 @@ async def _admit(store: ResourceStore, pool: list[str], url: str, current: str |
     return [*out, url]
 
 
+async def _poster_equals_cover(store: ResourceStore, metadata: Metadata) -> bool:
+    """海报是否就是封面本身.
+
+    **不能比 URL**: 上传时的 locator 是 ``upload:{digest}:{kind}``, 同一份字节以封面传和以
+    海报传会落到两个不同地址, 地址相同只在"把封面的 URL 直接塞给海报"时才成立.
+    因此按内容哈希判定 —— 字节一样就是同一张图.
+
+    两者的任一地址还不是本地资源 (外链未缓存) 时判为不同: 宁可不动海报, 也不误删用户的图.
+    """
+    thumb = metadata.thumb_urls[0] if metadata.thumb_urls else None
+    poster = metadata.poster_urls[0] if metadata.poster_urls else None
+    if thumb is None or poster is None:
+        return False
+    if thumb == poster:
+        return True
+    thumb_hash = await _content_hash_of(store, thumb)
+    poster_hash = await _content_hash_of(store, poster)
+    return thumb_hash is not None and thumb_hash == poster_hash
+
+
 async def _apply_thumb(store: ResourceStore, repo: RepoDep, metadata_id: int, metadata: Metadata, url: str) -> Metadata:
     """把 ``url`` 设为当前封面.
 
@@ -685,7 +791,12 @@ async def upload_thumb(
     runtime: RuntimeDep,
     file: Annotated[bytes, Body(media_type="application/octet-stream")],
 ) -> MetadataResponse:
-    """上传自定义封面. 原样使用, 不裁剪. 旧封面保留在列表后面."""
+    """上传自定义封面. 原样使用, 不裁剪. 旧封面保留在列表后面.
+
+    若当前海报就是封面本身 (两者 URL 相同), 海报也跟着换成新封面 —— 那种状态下「海报=封面」
+    是用户的既定选择, 换了封面却留着旧海报等于把这个关系悄悄破坏掉. 海报另有过独立来源
+    (单独上传或手工裁切) 时不动它: 那是另一份资源, 不该被换封面带走.
+    """
     metadata = await repo.get_metadata(metadata_id)
     if metadata is None:
         raise HTTPException(status_code=404, detail="影片不存在")
@@ -693,8 +804,16 @@ async def upload_thumb(
     store = runtime.resource_store
     stored = await _store_upload_or_400(store, file, kind="thumb")
     url = _resource_url(store, stored.url)
+    poster_equals_cover = await _poster_equals_cover(store, metadata)
     updated = await _apply_thumb(store, repo, metadata_id, metadata, url)
-    logger.info("thumb uploaded", metadata_id=metadata_id, url=url)
+    if poster_equals_cover:
+        updated = await _apply_poster(store, repo, metadata_id, updated, url)
+    logger.info(
+        "thumb uploaded",
+        metadata_id=metadata_id,
+        url=url,
+        poster_followed=poster_equals_cover,
+    )
     return _display_response(runtime, updated)
 
 
@@ -704,11 +823,13 @@ async def upload_poster(
     repo: RepoDep,
     runtime: RuntimeDep,
     file: Annotated[bytes, Body(media_type="application/octet-stream")],
+    crop: Annotated[bool, Query(description="是否按海报比例自动裁剪; false 则原样使用")] = True,
 ) -> MetadataResponse:
     """上传自定义图片作为海报.
 
-    存好后按当前比例**自动裁剪一次** (人脸优先定位主体); 不满意可以再调 ``crop-poster``
-    手工调整. 旧海报保留在列表后面.
+    默认按当前比例**自动裁剪一次** (人脸优先定位主体), 不满意可以再调 ``crop-poster``
+    手工调整. ``crop=false`` 时原样使用 —— 手工建条目时用户传的往往就是竖版海报本身,
+    再裁一次反而会把画面切掉. 旧海报保留在列表后面.
     """
     metadata = await repo.get_metadata(metadata_id)
     if metadata is None:
@@ -716,10 +837,14 @@ async def upload_poster(
 
     store = runtime.resource_store
     stored = await _store_upload_or_400(store, file, kind="poster")
-    ratio = _poster_ratio(runtime, metadata.content_type)
-    url = await _crop_source_to_poster(stored.url, stored.path, ratio, store, runtime)
+    if crop:
+        ratio = _poster_ratio(runtime, metadata.content_type)
+        url = await _crop_source_to_poster(stored.url, stored.path, ratio, store, runtime)
+    else:
+        ratio = None
+        url = _resource_url(store, stored.url)
     updated = await _apply_poster(store, repo, metadata_id, metadata, url)
-    logger.info("poster uploaded", metadata_id=metadata_id, url=url, ratio=ratio)
+    logger.info("poster uploaded", metadata_id=metadata_id, url=url, ratio=ratio, cropped=crop)
     return _display_response(runtime, updated)
 
 
@@ -734,6 +859,8 @@ async def adopt_thumb(
 
     源图可能还没本地化, 先确保它在 Resource 里落地, 然后把它 join 到 ``thumb_urls`` 头部.
     复制一份会让来回切换不断堆积内容相同的副本, 列表越切越长.
+
+    与 ``upload-thumb`` 同一口径: 当前海报就是封面时, 海报跟着换.
     """
     metadata = await repo.get_metadata(metadata_id)
     if metadata is None:
@@ -748,8 +875,16 @@ async def adopt_thumb(
 
     # 直接引用用户点的那条地址, 不重新拼: 重拼得到的字符串未必与池中一致 (查询串、
     # 外部 URL vs 内部地址), 会被当成新图追加, 池子越点越长.
+    poster_equals_cover = await _poster_equals_cover(store, metadata)
     updated = await _apply_thumb(store, repo, metadata_id, metadata, source_url)
-    logger.info("thumb adopted", metadata_id=metadata_id, source_url=source_url)
+    if poster_equals_cover:
+        updated = await _apply_poster(store, repo, metadata_id, updated, source_url)
+    logger.info(
+        "thumb adopted",
+        metadata_id=metadata_id,
+        source_url=source_url,
+        poster_followed=poster_equals_cover,
+    )
     return _display_response(runtime, updated)
 
 

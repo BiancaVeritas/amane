@@ -229,7 +229,7 @@ def _gallery(html: Selector) -> list[str]:
 class HeydougaCrawler(Crawler):
     @classmethod
     def profile(cls) -> CrawlerProfile:
-        return CrawlerProfile(name=SiteName.HEYDOUGA, base_url=_BASE_URL)
+        return CrawlerProfile(name=SiteName.HEYDOUGA, base_url=_BASE_URL, publisher=PUBLISHER)
 
     async def _search(self, query: SearchQuery, options: FetchOptions | None = None) -> str | None:
         """没有搜索接口: 番号即地址, 存在与否由详情页自己回答."""

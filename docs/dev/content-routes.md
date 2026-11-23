@@ -49,7 +49,7 @@
 
 **iqqtv** (`iqqbl.com`, 站方轮换域名) — 导航有國產区 (爱豆傳媒、杏吧傳媒等, 不是 MD 号为主), 国产路由第一源; 爬虫带 `/cn|/jp|/en` 语言前缀.
 
-**tangxinvlog.app (糖心)** — 国产原创站, 国产路由第一源. **站内没有番号体系**, 番号就是标题: 爬虫用剥离演员名后的标题同时当 `number` 与 `title`, 落库时由 `handlers/scrape.py` 按 `field_sources["title"] == "tangxin"` 把 `payload.number` 换成刮削到的标题 (聚合层一律用 payload 的番号, 不改这一处等于没改). 搜索页 `/search/?q=` 是纯前端过滤, 抓 HTML 永远拿不到结果, 检索只能读 `/search-index.json` 整份索引 (约 2MB, 进程内缓存). 有文件路径时只在路径含「糖心」/「tangxin」时认领, 无路径 (手动搜索) 一律放行.
+**tangxinvlog.app (糖心)** — 国产原创站, 国产路由第一源. **站内没有番号体系**, 番号就是标题: 爬虫用剥离演员名后的标题同时当 `number` 与 `title`, 落库时由 `handlers/scrape.py` 按 `field_sources["title"] == "tangxin"` 把 `payload.number` 换成刮削到的标题 (聚合层一律用 payload 的番号, 不改这一处等于没改). 搜索页 `/search/?q=` 是纯前端过滤, 抓 HTML 永远拿不到结果, 检索只能读 `/search-index.json` 整份索引 (约 2MB, 进程内缓存). 有文件路径时只在路径含「糖心」/「tangxin」时认领, 无路径 (手动搜索) 一律放行. 制作商与发行商固定为 `糖心Vlog` (站内没有厂牌字段); 该站只放无马赛克的原创片, 条目在相位层直接判无码, 见 [data-model.md](data-model.md).
 
 ## 类型专属 / 官方
 

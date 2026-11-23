@@ -32,7 +32,7 @@ def _muramura_number(value: str | None) -> str | None:
 class MuramuraCrawler(Crawler):
     @classmethod
     def profile(cls) -> CrawlerProfile:
-        return CrawlerProfile(name=SiteName.MURAMURA, base_url=_BASE_URL)
+        return CrawlerProfile(name=SiteName.MURAMURA, base_url=_BASE_URL, publisher="ムラムラってくる素人")
 
     def _detail_url(self, number: str) -> str | None:
         normalized = _muramura_number(number)
