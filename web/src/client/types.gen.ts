@@ -3864,6 +3864,12 @@ export type OrganizeSubmission = {
      */
     prune_empty_dirs?: boolean;
     /**
+     * Keep Existing Artifacts
+     *
+     * 目标位置已存在 NFO / 图片时保留原文件, 不覆盖. 自动整理 (刮削后继、监控触发) 传 True —— 用户已有的元数据是既有成果, 不该被一次自动整理冲掉; 手动「整理落盘」传 False, 表示以库里数据为准
+     */
+    keep_existing_artifacts?: boolean;
+    /**
      * Type
      */
     type: 'organize';
