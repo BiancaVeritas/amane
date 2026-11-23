@@ -153,6 +153,8 @@ async def test_scrape_detail_fields() -> None:
     assert meta.title == "【饥渴的巨乳人妻】 背着老公偷情 肉穴塞满抽插不停"
     assert [actor.name for actor in meta.actors] == ["由奈"]
     assert meta.tags == ["口爆", "人妻", "巨乳"]
+    assert meta.studio == "糖心Vlog"
+    assert meta.publisher == "糖心Vlog"
     assert meta.runtime == 25
     assert meta.release == "2026-11-12"
     assert meta.poster_urls == ["https://t.5gcdn.xyz/videos/6aef1a3558ccd9a2e6045645/cover.jpg"]

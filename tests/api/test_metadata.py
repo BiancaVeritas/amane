@@ -1,5 +1,6 @@
 """/metadata HTTP 接线: 状态码、JSON 形状、422. 列表筛选/级联删除见 tests/db; 合并规则见 tests/aggregate."""
 
+import io
 from typing import TYPE_CHECKING
 
 import pytest
@@ -9,6 +10,7 @@ from PIL import Image
 from amane.db.models import MediaFileStatus, Metadata
 from amane.enums import ActorGender
 from amane.media.resource_store import RESOURCE_URL_PREFIX, ResourceStore
+from amane.parsing import ContentType
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -31,6 +33,13 @@ _FILTER_LIMIT_CASES = [
     ({"actor_id": list(range(100)), "tag_id": list(range(100)), "director_id": [1]}, 422, "合计"),
     ({"actor_id": list(range(100))}, 200, None),
 ]
+
+
+def _png_bytes(size: tuple[int, int]) -> bytes:
+    """构造一张纯色 PNG, 供上传类用例当请求体."""
+    buffer = io.BytesIO()
+    Image.new("RGB", size, "blue").save(buffer, format="PNG")
+    return buffer.getvalue()
 
 
 class TestMetadataHttp:
@@ -118,6 +127,204 @@ class TestMetadataHttp:
         by_mosaic = await client.get("metadata?mosaic=uncensored")
         assert [item["number"] for item in by_mosaic.json()["items"]] == ["MIDV-002"]
         assert (await client.get("metadata?mosaic=censored")).status_code == 422
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_tangxin_phase_is_uncensored(self, client: AsyncClient, repo: Repository):
+        """糖心条目直接判无码: 它放的是无马赛克的原创国产片, 类型却是国产.
+
+        无码在展示层与筛选侧都要成立, 否则会出现「角标亮着、按无码筛却查不到」.
+        """
+        tangxin = await repo.upsert_metadata(
+            number="糖心原创标题",
+            content_type=ContentType.CHINESE,
+            source_urls={"tangxin": "https://tangxinvlog.app/v/abc/"},
+        )
+        # 同样国产但不是糖心来源的条目不受影响
+        other = await repo.upsert_metadata(
+            number="国产非糖心",
+            content_type=ContentType.CHINESE,
+            source_urls={"iqqtv": "https://iqq5.xyz/x"},
+        )
+        assert tangxin.id is not None and other.id is not None
+
+        listed = await client.get("metadata?sort_by=number&order=asc")
+        items = {item["number"]: item for item in listed.json()["items"]}
+        assert items["糖心原创标题"]["file_phase"]["uncensored"] is True
+        # 国产类型不产生有码, 因此两枚角标也不会同时亮
+        assert items["糖心原创标题"]["file_phase"]["censored"] is False
+        assert items["国产非糖心"]["file_phase"]["uncensored"] is False
+
+        detail = await client.get(f"metadata/{tangxin.id}")
+        assert detail.json()["metadata"]["file_phase"]["uncensored"] is True
+
+        filtered = await client.get("metadata?uncensored=true")
+        assert [item["number"] for item in filtered.json()["items"]] == ["糖心原创标题"]
+        # 按类型筛仍是国产, 与「无码」是两回事
+        by_type = await client.get("metadata?content_type=chinese")
+        assert {item["number"] for item in by_type.json()["items"]} == {"糖心原创标题", "国产非糖心"}
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_create_manual_entry(self, client: AsyncClient, repo: Repository):
+        """手动创建: 番号 + 类型 + 详情字段; 只写填过的键, 同号再建是 409."""
+        resp = await client.post(
+            "metadata",
+            json={
+                "number": "MIDV-777",
+                "content_type": "censored",
+                "fields": {
+                    "title": "手建标题",
+                    "release": "2024-05-21",
+                    "runtime": 120,
+                    "actors": ["甲", "乙"],
+                    "tags": ["标签一"],
+                },
+            },
+        )
+        assert resp.status_code == 201
+        created = resp.json()
+        assert created["number"] == "MIDV-777"
+        assert created["content_type"] == "censored"
+        assert created["title"] == "手建标题"
+        assert created["release"] == "2024-05-21"
+        assert created["runtime"] == 120
+        assert created["actors"] == ["甲", "乙"]
+        # 没给的字段保持空, 不是空串
+        assert created["studio"] is None
+        assert created["plot"] is None
+
+        # 番号重复: 409, 且不覆盖既有条目
+        again = await client.post("metadata", json={"number": "MIDV-777", "fields": {"title": "覆盖"}})
+        assert again.status_code == 409
+        still = (await client.get(f"metadata/{created['id']}")).json()["metadata"]
+        assert still["title"] == "手建标题"
+
+        # 类型留空按番号推断
+        inferred = await client.post("metadata", json={"number": "HEYZO-9999"})
+        assert inferred.status_code == 201
+        assert inferred.json()["content_type"] == "uncensored"
+
+        # 番号必填; 非法发行日 422
+        assert (await client.post("metadata", json={"number": ""})).status_code == 422
+        assert (
+            await client.post("metadata", json={"number": "X-1", "fields": {"release": "not-a-date"}})
+        ).status_code == 422
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_upload_poster_crop_flag(self, client: AsyncClient, repo: Repository):
+        """``crop=false`` 时海报原样使用, 不派生裁切图."""
+        meta = await repo.upsert_metadata(number="MIDV-888")
+        assert meta.id is not None
+
+        png = _png_bytes((640, 360))
+        plain = await client.post(
+            f"metadata/{meta.id}/upload-poster",
+            params={"crop": "false"},
+            content=png,
+            headers={"Content-Type": "application/octet-stream"},
+        )
+        assert plain.status_code == 200
+        plain_poster = plain.json()["poster_url"]
+
+        cropped = await client.post(
+            f"metadata/{meta.id}/upload-poster",
+            params={"crop": "true"},
+            content=png,
+            headers={"Content-Type": "application/octet-stream"},
+        )
+        assert cropped.status_code == 200
+        # 两种模式给出不同的图, 说明 crop 真的生效了
+        assert cropped.json()["poster_url"] != plain_poster
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_upload_thumb_follows_only_when_poster_equals_cover(self, client: AsyncClient, repo: Repository):
+        """换封面时, 只有「海报=封面」这种状态才跟着换海报.
+
+        海报一旦有独立来源 (单独上传 / 手工裁切), 换封面不该把它带走 —— 那是另一份资源.
+        """
+        meta = await repo.upsert_metadata(number="MIDV-999")
+        assert meta.id is not None
+
+        # 先让海报就是封面: 同一张图以 crop=false 传两遍, 两边拿到同一个资源地址.
+        png = _png_bytes((640, 360))
+        await client.post(
+            f"metadata/{meta.id}/upload-thumb",
+            content=png,
+            headers={"Content-Type": "application/octet-stream"},
+        )
+        same = await client.post(
+            f"metadata/{meta.id}/upload-poster",
+            params={"crop": "false"},
+            content=png,
+            headers={"Content-Type": "application/octet-stream"},
+        )
+        assert same.status_code == 200
+        before = same.json()
+        # 地址本来就不同 (locator 里带 kind), 「海报=封面」看的是内容相同.
+        assert before["thumb_url"] != before["poster_url"]
+
+        # 换封面 → 海报跟着换, 两者内容仍相同
+        new_thumb = await client.post(
+            f"metadata/{meta.id}/upload-thumb",
+            content=_png_bytes((800, 600)),
+            headers={"Content-Type": "application/octet-stream"},
+        )
+        assert new_thumb.status_code == 200
+        followed = new_thumb.json()
+        assert followed["thumb_url"] != before["thumb_url"]
+        assert followed["poster_url"] == followed["thumb_url"], "海报=封面时, 换封面要把海报指向新封面"
+
+        # 换成独立海报后, 再换封面就不该动海报了
+        independent = await client.post(
+            f"metadata/{meta.id}/upload-poster",
+            params={"crop": "true"},
+            content=_png_bytes((640, 360)),
+            headers={"Content-Type": "application/octet-stream"},
+        )
+        assert independent.status_code == 200
+        kept_poster = independent.json()["poster_url"]
+        assert kept_poster != independent.json()["thumb_url"], "前提: 此时海报已独立"
+
+        again = await client.post(
+            f"metadata/{meta.id}/upload-thumb",
+            content=_png_bytes((1024, 768)),
+            headers={"Content-Type": "application/octet-stream"},
+        )
+        assert again.status_code == 200
+        assert again.json()["poster_url"] == kept_poster, "海报独立时, 换封面不该改海报"
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_source_presets_grouped_by_content_type(self, client: AsyncClient):
+        """来源按类型路由分组: 糖心只出现在国产下; 索引站没有固定厂牌, 不在任何一组."""
+        presets = (await client.get("metadata/source-presets")).json()
+        assert presets["chinese"]["tangxin"] == "糖心Vlog"
+        assert presets["heydouga"]["heydouga"] == "Heydouga"
+        # 糖心不在其它类型下
+        assert "tangxin" not in presets.get("censored", {})
+        assert "tangxin" not in presets.get("uncensored", {})
+        # javdb / javbus 覆盖多家厂牌, 任何组里都不该出现
+        assert all("javdb" not in group and "javbus" not in group for group in presets.values())
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_create_with_source_marks_tangxin_uncensored(self, client: AsyncClient, repo: Repository):
+        """手建时选了糖心: 落一条占位来源, 相位按糖心判无码; 未知来源 422."""
+        resp = await client.post(
+            "metadata",
+            json={"number": "糖心手建标题", "content_type": "chinese", "source": "tangxin"},
+        )
+        assert resp.status_code == 201
+        created = resp.json()
+        assert created["source_urls"] == {"tangxin": "https://tangxinvlog.app"}
+
+        listed = await client.get("metadata?search=糖心手建标题")
+        phase = listed.json()["items"][0]["file_phase"]
+        assert phase["uncensored"] is True
+        assert phase["censored"] is False
+
+        # 类型仍是国产, 与无码是两回事
+        assert (await client.get("metadata?content_type=chinese")).json()["total"] == 1
+
+        bad = await client.post("metadata", json={"number": "X-404", "source": "not-a-source"})
+        assert bad.status_code == 422
 
     @pytest.mark.asyncio(loop_scope="function")
     async def test_list_detail_update_delete(self, client: AsyncClient, repo: Repository):
@@ -311,10 +518,10 @@ class TestMetadataHttp:
         )
         assert resp.status_code == 200
         data = resp.json()
-        # 新裁的海报插到首位, 原有地址保留在后面 (不删数据, 用户可切回).
-        assert len(data["poster_urls"]) == 2
+        # 海报只有一个: 裁切替换掉旧的, 不留历史 —— 海报没有候选池, 留着的旧图只会越积越多.
+        assert len(data["poster_urls"]) == 1
         assert data["poster_urls"][0].startswith("/api/resources/")
-        assert data["poster_urls"][1] == "https://example.com/old-p.jpg"
+        assert "https://example.com/old-p.jpg" not in data["poster_urls"]
         assert data["thumb_urls"] == ["https://example.com/t.jpg"]
         # 裁切写入 poster_urls 并自动锁定.
         assert data["locked_fields"] == ["poster_urls"]
@@ -326,6 +533,8 @@ class TestMetadataHttp:
         )
         assert rotated.status_code == 200
         assert rotated.json()["poster_urls"] != data["poster_urls"]
+        # 连裁多次也只有一条, 不累积
+        assert len(rotated.json()["poster_urls"]) == 1
         # 按未旋转尺寸的框在旋转后越界
         assert (
             await client.post(

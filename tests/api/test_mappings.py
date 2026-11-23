@@ -35,6 +35,34 @@ async def test_mapping_crud_per_group(client: AsyncClient, group: MappingGroup, 
 
 
 @pytest.mark.asyncio(loop_scope="function")
+async def test_candidates_return_original_name(client: AsyncClient) -> None:
+    """补全框要的是原始名: 写进条目的是原名, 译名只作提示.
+
+    同一译名下的多个原始名必须各出一条 —— 按译文去重会让其中一个填不进去.
+    """
+    for original, translation in (("完全無修正", "无修正"), ("無碼", "无修正")):
+        assert (
+            await client.put("mappings/tag", json={"original": original, "translation": translation})
+        ).status_code == 200
+
+    resp = await client.get("mappings/tag/candidates", params={"search": "无修正"})
+    assert resp.status_code == 200
+    items = resp.json()["items"]
+    originals = {item["original"] for item in items}
+    # 两个原名都还在, 没有被译文合并掉
+    assert {"完全無修正", "無碼"} <= originals
+    for item in items:
+        assert item["label"] == "无修正"
+        # 值必须是原始名: 拿译名填进条目会写入一个库里不存在的标签
+        assert item["original"] != item["label"]
+
+
+@pytest.mark.asyncio(loop_scope="function")
+async def test_candidates_unknown_group_rejected(client: AsyncClient) -> None:
+    assert (await client.get("mappings/nope/candidates")).status_code == 422
+
+
+@pytest.mark.asyncio(loop_scope="function")
 async def test_groups_endpoint_lists_three_slides(client: AsyncClient) -> None:
     """三组各自声明管的分类; 三组都有归档区, 前端据此渲染, 不硬编码."""
     response = await client.get("mappings/groups")
