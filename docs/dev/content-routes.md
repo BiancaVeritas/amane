@@ -37,6 +37,8 @@
 
 **avsox.click** — 日本无码情报站. 同源 AVMOO = 有碼, AVHEAT = 欧美 (`avheat.shop`), 项目只接入 AVSOX. 搜索对有无短横线都能命中, `_` 与 `-` 是两部; 对不上不取首条.
 
+**heyzo.com** — HEYZO 官方站. 没有搜索接口: 番号 `HEYZO-<数字>` 直接拼成 `/movie/<数字>`, 前导零属于番号 (`0683` 与 `683` 是两部). 页面是 Next.js App Router, 字段不在 HTML 标签里, 而在内联 RSC payload (`self.__next_f.push([1, "..."])`) 的字符串块中, 必须按出现顺序拼接并反转义后再取值; 同一 id 也出现在推荐位, 只有详情节点带 `movie_seq` 与 `name`. 发行日期取 `create_date`, 时长取 `download.whole[].duration`, 旧片写 `00:00:00` 视为没有时长. 图片目录的第二级是运营编号 (恒为 `3000`), 与 `movie_seq` 无关, 剧照固定 11 张 (`capture12` 起 404). 站点固定无码, 片商与发行商都是站本身, 因此在无码路由排第一而不是并入其他自编号类型. 
+
 **heydouga.com** — Hey動画 单品种贩. 没有搜索接口: 番号两段数字直接拼成 `/moviepages/{提供元}/{作品}/index.html`, 因此 `_search` 只做地址拼接, 存在性由详情页的 HTTP 状态回答. 标题取 `og:title` (尾段是演员时剥掉), 日期有「配信日」与「配信期間」(区间) 两套写法, 出演在 `#movie-info` 的「主演」, 剧情在 `div.movie-description`: 同一块里可能跟着一段内容重复的英文译文, **只保留含假名的段落**, 整块没有日文时不存剧情. **标签在页面上只是占位**, 必须 POST `/get_movie_tag_all/` (`movie_seq` + `provider_id=3000`, 返回转义的 JSON). 封面只有 `player_thumb.webp` 横版 960×540, 没有竖版海报; 样片是公开的 `contents/{提供元}/{作品}/sample.mp4`, 没有样片的作品页面上不会出现该地址. 剧照在 `#movie-gallery-images` 的 fancybox 链接里 (`/image_gallery/{提供元}/{作品}/{n}.jpg`, 1280×720), 站点按编号**降序**渲染, 刮削按编号升序重排. 「提供元」是片商 (逐条不同), **发行商固定为 `Heydouga`** —— 站点是发行方, 片商不是.
 
 **jav321.com** — DMM 目录镜像; 有碼与素人排链尾, 无无碼 / FC2 / 欧美入口. 检索是 POST `sn` 表单, 详情地址为站内 content id; 相近番号也会被重定向, 必须按详情页的 品番 确认. 信息面板首图是竖版缩略 (`ps.jpg` 或 Prestige 系的 `pf_o1`), 横版封面与剧照在快照序列: 首张是封面, 其余 `jp-N` / `cap_e_N` 是剧照.

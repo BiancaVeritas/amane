@@ -92,6 +92,20 @@ async def build_metadata_responses(
     return responses
 
 
+def _vendor_raw_names(metadata: Metadata) -> dict[str, str]:
+    """片商三件套的原名 (未映射).
+
+    编辑框要原名: 候选的 value 是原名, 用展示值去匹配会找不到候选, 显示不出
+    `译名 (原名)`; 保存时还会把译文写回库, 而库里按原名索引.
+    """
+    raw = vendor_names(metadata)
+    return {
+        "studio": raw.studio or "",
+        "publisher": raw.publisher or "",
+        "series": raw.series[0] if raw.series else "",
+    }
+
+
 def _vendor_display(runtime: RuntimeDep, metadata: Metadata) -> dict[str, object]:
     """片商三件套的展示值 (已映射, 缺发行商时按制作商补齐).
 
@@ -540,6 +554,7 @@ async def get_metadata(metadata_id: int, repo: RepoDep, runtime: RuntimeDep) -> 
         publisher_id=publisher_id if metadata.publisher else studio_id,
         series_id=series_id,
         series_ids=series_ids,
+        vendor_raw_names=_vendor_raw_names(metadata),
     )
 
 

@@ -18,6 +18,20 @@ _NUMBER_RE = re.compile(r"[0-9]{6}-[0-9]{3}")
 #: 出演栏里的占位词: 表示「还有其他人」, 不是演员名.
 _NON_NAMES = frozenset({"他", "他/他", "ほか", "他多数", "その他"})
 _CONNECTIVITY_NUMBER = "072926-001"
+#: 单条用户点评的星级. ``li.movie-spec`` 里那个总评是页面模板 (恒为五颗), 表单里的星是
+#: 点击控件, 两者都不是数据; 点评区的 ``<div class="rating" itemparop=...>`` 才是真的.
+_REVIEW_RATING = re.compile(r'<div class="rating"[^>]*>\s*([★☆]+)\s*</div>')
+
+
+def _score(html: str) -> float | None:
+    """用户点评星级的平均值 (5 分制); 一条点评都没有时返回 ``None``.
+
+    站点没有给现成的平均分, 只能按每条点评自己数星再取均值. 没有任何点评时不给 0 分 ——
+    「没人评分」与「评了 0 分」在展示上是两回事.
+    """
+    rated = [stars.count("★") for stars in _REVIEW_RATING.findall(html)]
+    rated = [value for value in rated if value]
+    return round(sum(rated) / len(rated), 2) if rated else None
 
 
 def _number(value: str) -> str | None:
@@ -177,6 +191,7 @@ def _detail(html: str, page_url: str) -> tuple[dict[str, object], list[str]]:
         "runtime_seconds": _runtime_seconds(parser.runtime),
         "series": parser.series or None,
         "tags": parser.tags,
+        "score": _score(html),
     }
     gallery = [urljoin(page_url, item) for item in parser.gallery]
     return metadata, gallery
@@ -266,4 +281,5 @@ class CaribbeancomCrawler(Crawler):
             trailer_urls=_trailer_urls(html),
             source_url=url,
             external_id=requested,
+            score=metadata["score"] if isinstance(metadata["score"], float) else None,
         )

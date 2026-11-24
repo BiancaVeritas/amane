@@ -119,6 +119,7 @@ async def aggregate(
     on_progress: ProgressCallback | None = None,
     multi_lang_sites: frozenset[SourceName] = MULTI_LANGUAGE_SOURCE_IDS,
     deferred_sites: frozenset[SourceName] = frozenset(),
+    tag_display: Callable[[str], str] | None = None,
 ) -> AggregateResult:
     fl = field_language or {}
     snapshots = cache or {}
@@ -142,6 +143,8 @@ async def aggregate(
 
     raw: dict[str, dict] = {k: v.model_dump() for k, v in state.fetched.items() if v is not None}
 
+    if tag_display is not None:
+        _merge_tags(graph, state, tag_display)
     _sanitize_aggregated_lists(state.result)
 
     return AggregateResult(
@@ -159,6 +162,7 @@ def aggregate_single(
     site: str,
     data: MediaMetadata,
     field_priority: FieldPriority,
+    tag_display: Callable[[str], str] | None = None,
 ) -> AggregateResult:
     """只用一家来源的结果装配成 AggregateResult.
 
@@ -181,6 +185,9 @@ def aggregate_single(
 
     _assemble_aggregate_fields(graph, state)
     _fill_actor_genders(state.result, state.fetched)
+    if tag_display is not None:
+        # 单源也走同一条合并: 这一份列表内部可能就有「同一显示名、不同原始名」的两条.
+        _merge_tags(graph, state, tag_display)
     _sanitize_aggregated_lists(state.result)
 
     return AggregateResult(
@@ -195,6 +202,37 @@ def aggregate_single(
 
 def _resolved_scalar_count(result: AggregatedMetadata) -> int:
     return sum(1 for field in SCALAR_FIELDS if field in result.field_sources)
+
+
+def _merge_tags(graph: FetchGraph, state: ExecutionState, tag_display: Callable[[str], str]) -> None:
+    """跨来源合并标签: 按字段链顺序累加, 按**映射后的显示名**去重, 先到先得.
+
+    各站的标签体系不同 (日文站写「中出し」, 中文站写「中出」), 只取首源会丢掉后面各站独有的
+    标签, 直接并集又会让同一个意思重复出现. 以显示名作等价类: 显示名相同的只留链上最靠前的
+    那份原始名, 因此主来源的写法与顺序得以保留, 后面各站只补充主来源没有的标签.
+
+    显示名相同即跳过, 也顺带解决「中文标签与别站译文撞车」的情况 —— 后者映射后就是同一个显示名.
+    """
+    merged: list[str] = []
+    seen: set[str] = set()
+    primary: str | None = None
+    for node in graph.field_chains[MetadataField.TAGS]:
+        data = state.fetched.get(node.cache_key)
+        if data is None:
+            continue
+        for tag in data.tags:
+            if not tag:
+                continue
+            shown = tag_display(tag)
+            if shown in seen:
+                continue
+            seen.add(shown)
+            merged.append(tag)
+            if primary is None:
+                primary = node.cache_key
+    if merged:
+        state.result.tags = merged
+        state.result.field_sources[MetadataField.TAGS] = primary or ""
 
 
 @dataclass

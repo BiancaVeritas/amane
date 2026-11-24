@@ -211,6 +211,13 @@ class MetadataDetailResponse(BaseModel):
     publisher_id: int | None = None
     series_id: int | None = None
     series_ids: dict[str, int] = Field(default_factory=dict)
+    vendor_raw_names: dict[str, str] = Field(
+        default_factory=dict,
+        description=(
+            "片商三件套的**原名**: studio / publisher / series. "
+            "metadata 里的同名字段是已映射的展示值, 编辑框要原名才匹配得上候选、也才不会把译文写回库."
+        ),
+    )
 
 
 class MergeRequest(BaseModel):

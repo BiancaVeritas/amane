@@ -50,9 +50,13 @@ class _FakeClient:
         self.movie_id = movie_id
         self.json_url: str | None = None
         self.gallery_url: str | None = None
+        self.reviews_url: str | None = None
 
     async def get_json(self, url: str, **kwargs: object) -> dict[str, object]:
-        # 剧照接口与详情接口是两条路径, 按 URL 分流.
+        # 严格按 URL 分流: 详情 / 剧照 / 评论三条路径, 否则 json_url 会被后到的请求覆盖.
+        if "movie_reviews" in url:
+            self.reviews_url = url
+            return {"AvgRating": 4.5, "Rows": [{"UserRating": "5"}, {"UserRating": "4"}]}
         if "movie_galleries" in url:
             self.gallery_url = url
             return {
@@ -95,9 +99,7 @@ async def test_scrape_url_turns_page_url_into_detail_json() -> None:
 
     assert result is not None
     assert result.number == "110526_100"
-    assert client.json_url == (
-        "https://www.pacopacomama.com/dyn/phpauto/movie_details/movie_id/110526_100.json"
-    )
+    assert client.json_url == ("https://www.pacopacomama.com/dyn/phpauto/movie_details/movie_id/110526_100.json")
 
 
 @pytest.mark.asyncio
@@ -154,3 +156,39 @@ async def test_scrape_rejects_mismatched_movie_id_without_loading_gallery() -> N
     result = await crawler._scrape("https://www.pacopacomama.com/dyn/phpauto/movie_details/movie_id/110526_100.json")
     assert result is None
     assert client.gallery_url is None
+
+
+@pytest.mark.asyncio
+async def test_score_prefers_reviews_over_detail() -> None:
+    """详情 JSON 的 AvgRating 与评论列表对不上时, 以列表为准.
+
+    实测 012017_012: 详情给 4.3125, 15 条评论自算 4.2667 —— 界面上星与下面的评论必须能对上,
+    因此取评论那一路; 详情值只在评论接口不可用时兜底.
+    """
+    from unittest.mock import AsyncMock
+
+    from amane.crawlers.http import HttpClient
+    from amane.crawlers.sites._d2pass_reviews import rating_from_rows
+
+    rows = [{"UserRating": v} for v in [3, 3, 3, 3, 4, 4, 4, 5, 5, 5, 5, 5, 5, 5, 5]]
+    assert rating_from_rows(rows) == 4.27
+
+    web = AsyncMock()
+    web.get_json.return_value = {"AvgRating": 4.2666666666667, "Rows": rows}
+    crawler = PacopacomamaCrawler(client=HttpClient(web=web))
+
+    assert await crawler._score("012017_012", 4.3125, "https://x") == 4.27
+
+
+@pytest.mark.asyncio
+async def test_score_falls_back_to_detail_when_reviews_unavailable() -> None:
+    """评论接口不可用时退回详情值, 不让评分整条消失."""
+    from unittest.mock import AsyncMock
+
+    from amane.crawlers.http import HttpClient
+
+    web = AsyncMock()
+    web.get_json.side_effect = RuntimeError("boom")
+    crawler = PacopacomamaCrawler(client=HttpClient(web=web))
+
+    assert await crawler._score("012017_012", 4.3125, "https://x") == 4.31

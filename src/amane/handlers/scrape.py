@@ -656,6 +656,8 @@ class ScrapeHandler(TaskHandler[ScrapePayload, ScrapeResult]):
             route, self._config.scraping.field_priority, self._config.scraping.field_blacklist
         )
         field_language = self._config.scraping.field_language
+        # 标签跨来源合并的等价类: 映射到同一个中文名的不同写法只留主来源那条.
+        tag_display = self._tag_mappings.display if self._tag_mappings is not None else (lambda name: name)
 
         await self.report_progress(0, progress_total, "fetch")
 
@@ -675,7 +677,7 @@ class ScrapeHandler(TaskHandler[ScrapePayload, ScrapeResult]):
             if payload.append_sources:
                 # 「添加来源链接」只要这一条: 不把其余来源重新问一遍. aggregate_single 按单源
                 # 拼装, 不需要这一站出现在获取图里.
-                result = aggregate_single(q, fetched_site, fetched_meta, field_priority)
+                result = aggregate_single(q, fetched_site, fetched_meta, field_priority, tag_display)
             else:
                 # 手动刮削: 这一条 + 用番号问一遍当前类型路由里的其余来源.
                 #
@@ -705,6 +707,7 @@ class ScrapeHandler(TaskHandler[ScrapePayload, ScrapeResult]):
                     on_progress=_on_fetch_progress,
                     multi_lang_sites=self._multi_language_sources,
                     deferred_sites=frozenset(name for name in crawlers if name in self._partial_sources),
+                    tag_display=tag_display,
                 )
         else:
             result = await aggregate(
@@ -716,6 +719,7 @@ class ScrapeHandler(TaskHandler[ScrapePayload, ScrapeResult]):
                 on_progress=_on_fetch_progress,
                 multi_lang_sites=self._multi_language_sources,
                 deferred_sites=frozenset(name for name in crawlers if name in self._partial_sources),
+                tag_display=tag_display,
             )
 
         # 站点结果已由引擎 _fetch_one 逐条上报到 summary.outcomes; 这里只记录调度顺序.

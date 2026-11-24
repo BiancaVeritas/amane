@@ -405,11 +405,11 @@ class TestScrapingPriorityMigration:
         assert routes[ContentType.CHINESE][1] == SiteName.IQQTV
         assert routes[ContentType.HENTAI][0] == SiteName.GETCHU
         assert routes[ContentType.WESTERN][0] == SiteName.THEPORNDB
-        assert routes[ContentType.UNCENSORED][0] == SiteName.AVENTERTAINMENTS
-        # heydouga 与 FC2 同类: 番号不带马赛克信息, 走自己的路由; 官方站优先, 综合索引兜底.
-        assert routes[ContentType.HEYDOUGA] == [SiteName.HEYDOUGA, SiteName.JAVDB]
+        # HEYZO 官方站排最前: 番号来自该站, 其余无码站是转售或转载, 字段以官方为准.
+        assert routes[ContentType.UNCENSORED][0] == SiteName.HEYZO
+        assert routes[ContentType.UNCENSORED][1] == SiteName.AVENTERTAINMENTS
         # 无码路由按线上命中率排: caribbeancompr 提前, muramura 收尾.
-        assert routes[ContentType.UNCENSORED][1] == SiteName.CARIBBEANCOMPR
+        assert routes[ContentType.UNCENSORED][2] == SiteName.CARIBBEANCOMPR
         assert routes[ContentType.UNCENSORED][-2] == SiteName.PACOPACOMAMA
         assert routes[ContentType.UNCENSORED][-1] == SiteName.MURAMURA
         assert SiteName.FC2PPVDB in routes[ContentType.FC2]

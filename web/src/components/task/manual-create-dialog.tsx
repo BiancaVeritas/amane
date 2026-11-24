@@ -149,7 +149,7 @@ function CreatableMultiSelect({
       // 受控后它的 openDropdown 会变成空操作, 下拉就再也打不开了.
       openOnFocus={false}
       comboboxProps={{ zIndex: Z_INDEX.dropdown }}
-      // 下拉里显示 `原始名 (译名)` 才选得准; 选中后值已定, pill 只显示译名.
+      // 下拉与已选 pill 都显示 `译名 (原名)`: 同一个译名可能由多个原名映射而来, 只显示译名分不清.
       renderPill={({ option, value: itemValue, onRemove, reorderProps }) => (
         // reorderProps 必须展开: 拖动排序靠它挂的拖拽事件, 漏了这条 pill 就拖不动.
         <Pill withRemoveButton onRemove={onRemove} size="sm" {...reorderProps}>
@@ -187,7 +187,9 @@ function VendorInput({
       // 断开标签联动: label 的 htmlFor 会让点标题那一整段都把焦点送进输入框.
       labelProps={{ htmlFor: undefined }}
       placeholder={placeholder}
-      // 候选写 `原始名 (译名)`; 输入框本身显示译名 (selectedLabel).
+      // 候选与输入框都写 `译名 (原名)` (selectedLabel).
+      // 已按原名 / 译名 / 别名筛过, 关掉 Mantine 自己的过滤, 否则别名命中会被它滤掉.
+      filter={({ options: filtered }) => filtered}
       data={filterCandidates(options, search).map((option) => option.label)}
       value={search || selectedLabel(options, value)}
       onChange={(next) => {

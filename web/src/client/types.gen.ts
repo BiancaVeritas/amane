@@ -2682,6 +2682,9 @@ export type Manufacturer = 'attackers' | 'befree' | 'bi' | 'bibian' | 'das' | 'e
  * MappingCandidate
  *
  * 补全框的一项: ``original`` 是要写库的原始名, ``label`` 是同一条的译名.
+ *
+ * ``aliases`` 只对演员组有值: 该演员的别名 (不含展示名). 录入框据此把用户输入的别名
+ * 换成主名 —— 库里按主名索引, 写别名进去会另建一条同名演员.
  */
 export type MappingCandidate = {
     /**
@@ -2692,6 +2695,10 @@ export type MappingCandidate = {
      * Label
      */
     label: string;
+    /**
+     * Aliases
+     */
+    aliases?: Array<string>;
 };
 
 /**
@@ -3109,6 +3116,14 @@ export type MetadataDetailResponse = {
      */
     series_ids?: {
         [key: string]: number;
+    };
+    /**
+     * Vendor Raw Names
+     *
+     * 片商三件套的**原名**: studio / publisher / series. metadata 里的同名字段是已映射的展示值, 编辑框要原名才匹配得上候选、也才不会把译文写回库.
+     */
+    vendor_raw_names?: {
+        [key: string]: string;
     };
 };
 
@@ -5195,19 +5210,19 @@ export type ScrapingConfig = {
      * Content Routes
      */
     content_routes?: {
-        [key in ContentType]?: Array<'airav' | 'avbase' | 'aventertainments' | 'avsox' | 'dahlia' | 'd2pass' | 'dmm' | 'faleno' | 'fc2' | 'fc2club' | 'fc2ppvdb' | 'freejavbt' | 'getchu' | 'giga' | 'heydouga' | 'iqqtv' | 'jav321' | 'javbus' | 'javdb' | 'javlibrary' | 'kin8' | 'mgstage' | 'muramura' | 'official' | '1pondo' | 'pacopacomama' | 'caribbeancom' | 'caribbeancompr' | 'prestige' | 'r18dev' | 'tangxin' | '10musume' | 'tokyo_hot' | 'theporndb' | 'xcity'>;
+        [key in ContentType]?: Array<'airav' | 'avbase' | 'aventertainments' | 'avsox' | 'dahlia' | 'd2pass' | 'dmm' | 'faleno' | 'fc2' | 'fc2club' | 'fc2ppvdb' | 'freejavbt' | 'getchu' | 'giga' | 'heydouga' | 'heyzo' | 'iqqtv' | 'jav321' | 'javbus' | 'javdb' | 'javlibrary' | 'kin8' | 'mgstage' | 'muramura' | 'official' | '1pondo' | 'pacopacomama' | 'caribbeancom' | 'caribbeancompr' | 'prestige' | 'r18dev' | 'tangxin' | '10musume' | 'tokyo_hot' | 'theporndb' | 'xcity'>;
     };
     /**
      * Field Priority
      */
     field_priority?: {
-        [key in MetadataField]?: Array<'airav' | 'avbase' | 'aventertainments' | 'avsox' | 'dahlia' | 'd2pass' | 'dmm' | 'faleno' | 'fc2' | 'fc2club' | 'fc2ppvdb' | 'freejavbt' | 'getchu' | 'giga' | 'heydouga' | 'iqqtv' | 'jav321' | 'javbus' | 'javdb' | 'javlibrary' | 'kin8' | 'mgstage' | 'muramura' | 'official' | '1pondo' | 'pacopacomama' | 'caribbeancom' | 'caribbeancompr' | 'prestige' | 'r18dev' | 'tangxin' | '10musume' | 'tokyo_hot' | 'theporndb' | 'xcity'>;
+        [key in MetadataField]?: Array<'airav' | 'avbase' | 'aventertainments' | 'avsox' | 'dahlia' | 'd2pass' | 'dmm' | 'faleno' | 'fc2' | 'fc2club' | 'fc2ppvdb' | 'freejavbt' | 'getchu' | 'giga' | 'heydouga' | 'heyzo' | 'iqqtv' | 'jav321' | 'javbus' | 'javdb' | 'javlibrary' | 'kin8' | 'mgstage' | 'muramura' | 'official' | '1pondo' | 'pacopacomama' | 'caribbeancom' | 'caribbeancompr' | 'prestige' | 'r18dev' | 'tangxin' | '10musume' | 'tokyo_hot' | 'theporndb' | 'xcity'>;
     };
     /**
      * Field Blacklist
      */
     field_blacklist?: {
-        [key in MetadataField]?: Array<'airav' | 'avbase' | 'aventertainments' | 'avsox' | 'dahlia' | 'd2pass' | 'dmm' | 'faleno' | 'fc2' | 'fc2club' | 'fc2ppvdb' | 'freejavbt' | 'getchu' | 'giga' | 'heydouga' | 'iqqtv' | 'jav321' | 'javbus' | 'javdb' | 'javlibrary' | 'kin8' | 'mgstage' | 'muramura' | 'official' | '1pondo' | 'pacopacomama' | 'caribbeancom' | 'caribbeancompr' | 'prestige' | 'r18dev' | 'tangxin' | '10musume' | 'tokyo_hot' | 'theporndb' | 'xcity'>;
+        [key in MetadataField]?: Array<'airav' | 'avbase' | 'aventertainments' | 'avsox' | 'dahlia' | 'd2pass' | 'dmm' | 'faleno' | 'fc2' | 'fc2club' | 'fc2ppvdb' | 'freejavbt' | 'getchu' | 'giga' | 'heydouga' | 'heyzo' | 'iqqtv' | 'jav321' | 'javbus' | 'javdb' | 'javlibrary' | 'kin8' | 'mgstage' | 'muramura' | 'official' | '1pondo' | 'pacopacomama' | 'caribbeancom' | 'caribbeancompr' | 'prestige' | 'r18dev' | 'tangxin' | '10musume' | 'tokyo_hot' | 'theporndb' | 'xcity'>;
     };
     /**
      * Field Language
@@ -5620,7 +5635,7 @@ export type SiteConfig = {
  *
  * 爬虫站点名称 (影片与演员源共用).
  */
-export type SiteName = 'airav' | 'avbase' | 'aventertainments' | 'avsox' | 'dahlia' | 'd2pass' | 'dmm' | 'faleno' | 'fc2' | 'fc2club' | 'fc2ppvdb' | 'freejavbt' | 'getchu' | 'gfriends' | 'giga' | 'heydouga' | 'iqqtv' | 'jav321' | 'javbus' | 'javdb' | 'javlibrary' | 'kin8' | 'mgstage' | 'minnano' | 'muramura' | 'official' | '1pondo' | 'pacopacomama' | 'caribbeancom' | 'caribbeancompr' | 'prestige' | 'r18dev' | 'tangxin' | '10musume' | 'tokyo_hot' | 'theporndb' | 'tushy' | 'tushy_raw' | 'wikipedia' | 'xcity';
+export type SiteName = 'airav' | 'avbase' | 'aventertainments' | 'avsox' | 'dahlia' | 'd2pass' | 'dmm' | 'faleno' | 'fc2' | 'fc2club' | 'fc2ppvdb' | 'freejavbt' | 'getchu' | 'gfriends' | 'giga' | 'heydouga' | 'heyzo' | 'iqqtv' | 'jav321' | 'javbus' | 'javdb' | 'javlibrary' | 'kin8' | 'mgstage' | 'minnano' | 'muramura' | 'official' | '1pondo' | 'pacopacomama' | 'caribbeancom' | 'caribbeancompr' | 'prestige' | 'r18dev' | 'tangxin' | '10musume' | 'tokyo_hot' | 'theporndb' | 'tushy' | 'tushy_raw' | 'wikipedia' | 'xcity';
 
 /**
  * SiteOutcomeKind

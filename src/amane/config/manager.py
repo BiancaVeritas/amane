@@ -85,6 +85,8 @@ _DEFAULT_CONTENT_ROUTES: dict[ContentType, list[SiteName]] = {
         SiteName.AVSOX,
     ],
     ContentType.UNCENSORED: [
+        # HEYZO 官方站排最前: 番号本身来自该站, 其余站是转售或转载, 字段以官方为准.
+        SiteName.HEYZO,
         SiteName.AVENTERTAINMENTS,
         SiteName.CARIBBEANCOMPR,
         SiteName.D2PASS,

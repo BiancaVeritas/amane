@@ -23,6 +23,8 @@ from ..base import Crawler, CrawlerProfile
 from ..models import FetchOptions, MediaMetadata, SearchQuery, film_actors
 
 _BASE_URL = "https://www.heydouga.com"
+#: 官方评分: 返回总票数与均分. 只打星不写字的票也算在内, 因此与评论列表的条数不同.
+_RATING_PATH = "/ppv/movie_get_movie_rating/?movie_seq={}"
 _MOVIE_PATH = "/moviepages/{provider}/{movie}/index.html"
 #: 番号 → (提供元, 作品). 与 ``parsing/file_info.py`` 的 ``Heydouga-x-y`` 归一写法一致.
 _NUMBER_RE = re.compile(r"^heydouga[-_]?(\d{2,4})[-_](\d{1,4})$", re.IGNORECASE)
@@ -111,6 +113,24 @@ def _release(html: Selector) -> str | None:
         return None
     start = re.split(r"[～~]", raw, maxsplit=1)[0]
     return normalize_calendar_date(start.strip().replace("/", "-"))
+
+
+def _avg_rating(value: object) -> float | None:
+    """把官方均分收成两位小数; 0 或缺省表示无人评分, 返回 ``None``.
+
+    接口给字符串 (``"4.4000"``); 无人评分时站点回 0 —— 那时不给 0 分, 因为界面上「没人
+    评分」与「评了 0 分」是两回事.
+    """
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, str):
+        try:
+            value = float(value)
+        except ValueError:
+            return None
+    if not isinstance(value, int | float) or value <= 0:
+        return None
+    return round(float(value), 2)
 
 
 def _runtime(html: Selector) -> int | None:
@@ -236,6 +256,29 @@ class HeydougaCrawler(Crawler):
         del options
         return detail_url(query.number)
 
+    async def _score(self, movie_seq: str | None) -> float | None:
+        """官方评分 (5 分制), 取自 ``/ppv/movie_get_movie_rating/``.
+
+        这个均分把「只打星、不写字」的票也算进来, 而 ``/ppv/get_review_ajax/`` 只回带文字
+        的评论 —— 实测 4386/101 是 10 票均分 4.4, 但评论只有 4 条且全为 4 分。页面上显示的
+        是前者, 所以取官方均分, 不按评论列表自算.
+
+        取不到就返回 ``None``: 评分是补充信息, 不该让整条刮削失败.
+        """
+        if movie_seq is None:
+            return None
+        try:
+            data = await self.client.get_json(
+                f"{self.base_url}{_RATING_PATH.format(movie_seq)}",
+                headers={"Accept": "application/json", "X-Requested-With": "XMLHttpRequest"},
+            )
+        except Exception as exc:
+            self.logger.warning("评分接口不可用", movie_seq=movie_seq, error=str(exc))
+            return None
+        if not isinstance(data, dict):
+            return None
+        return _avg_rating(data.get("movie_rating_average"))
+
     async def _tags(self, movie_seq: str | None) -> list[str]:
         """标签走 ``/get_movie_tag_all/`` 表单接口, 页面上只有占位符.
 
@@ -276,6 +319,7 @@ class HeydougaCrawler(Crawler):
             return None
 
         movie_seq = html.xpath("//script[contains(., 'var movie_seq')]/text()").re_first(r"var movie_seq\s*=\s*'(\d+)'")
+        score = await self._score(movie_seq)
         tags = await self._tags(movie_seq)
         cover = _cover(html)
         series = _spec(html, "シリーズ")
@@ -296,5 +340,6 @@ class HeydougaCrawler(Crawler):
             thumb_urls=[cover] if cover else [],
             extrafanart=_gallery(html),
             trailer_urls=[trailer] if (trailer := _trailer(html, provider, movie)) else [],
+            score=score,
             source_url=url,
         )

@@ -3292,6 +3292,7 @@ export const HotSettingsSchema = {
                         'javdb'
                     ],
                     uncensored: [
+                        'heyzo',
                         'aventertainments',
                         'caribbeancompr',
                         'd2pass',
@@ -3567,6 +3568,19 @@ export const HotSettingsSchema = {
                         use_proxy: true
                     },
                     heydouga: {
+                        cookie: {},
+                        languages: [
+                            'zh',
+                            'ja',
+                            'en'
+                        ],
+                        official_routes: {},
+                        rate_limit: 2,
+                        tls_impersonate: true,
+                        use_browser: 'auto',
+                        use_proxy: true
+                    },
+                    heyzo: {
                         cookie: {},
                         languages: [
                             'zh',
@@ -5595,6 +5609,13 @@ export const MappingCandidateSchema = {
         label: {
             type: 'string',
             title: 'Label'
+        },
+        aliases: {
+            items: {
+                type: 'string'
+            },
+            type: 'array',
+            title: 'Aliases'
         }
     },
     type: 'object',
@@ -5603,7 +5624,7 @@ export const MappingCandidateSchema = {
         'label'
     ],
     title: 'MappingCandidate',
-    description: '补全框的一项: ``original`` 是要写库的原始名, ``label`` 是同一条的译名.'
+    description: '补全框的一项: ``original`` 是要写库的原始名, ``label`` 是同一条的译名.\n\n``aliases`` 只对演员组有值: 该演员的别名 (不含展示名). 录入框据此把用户输入的别名\n换成主名 —— 库里按主名索引, 写别名进去会另建一条同名演员.'
 } as const;
 
 export const MappingCandidatesResponseSchema = {
@@ -6309,6 +6330,14 @@ export const MetadataDetailResponseSchema = {
             },
             type: 'object',
             title: 'Series Ids'
+        },
+        vendor_raw_names: {
+            additionalProperties: {
+                type: 'string'
+            },
+            type: 'object',
+            title: 'Vendor Raw Names',
+            description: '片商三件套的**原名**: studio / publisher / series. metadata 里的同名字段是已映射的展示值, 编辑框要原名才匹配得上候选、也才不会把译文写回库.'
         }
     },
     type: 'object',
@@ -9981,6 +10010,7 @@ export const ScrapingConfigSchema = {
                         'getchu',
                         'giga',
                         'heydouga',
+                        'heyzo',
                         'iqqtv',
                         'jav321',
                         'javbus',
@@ -10033,6 +10063,7 @@ export const ScrapingConfigSchema = {
                         'getchu',
                         'giga',
                         'heydouga',
+                        'heyzo',
                         'iqqtv',
                         'jav321',
                         'javbus',
@@ -10085,6 +10116,7 @@ export const ScrapingConfigSchema = {
                         'getchu',
                         'giga',
                         'heydouga',
+                        'heyzo',
                         'iqqtv',
                         'jav321',
                         'javbus',
@@ -10780,6 +10812,7 @@ export const SiteNameSchema = {
         'gfriends',
         'giga',
         'heydouga',
+        'heyzo',
         'iqqtv',
         'jav321',
         'javbus',

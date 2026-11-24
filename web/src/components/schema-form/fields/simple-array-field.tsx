@@ -277,7 +277,7 @@ function OrderedArrayBody({ value, onChange, long, candidates = [] }: OrderedArr
     <DraggableChips
       items={value}
       getKey={(item) => item}
-      // 选中项只显示译名: 值已经是确定的原始名, 再挂一遍原名只是噪音.
+      // 已选项显示 `译名 (原名)`: 同一个译名可能对应多个原名, 不带原名就分不清落库的是哪个.
       getLabel={(item) => selectedLabel(candidates, item)}
       onChange={onChange}
       onDelete={(item) => onChange(value.filter((v) => v !== item))}
@@ -300,9 +300,12 @@ function OrderedArrayBody({ value, onChange, long, candidates = [] }: OrderedArr
             size="xs"
             value={newItem}
             onChange={setNewItem}
+            // 已按原名 / 译名 / 别名筛过, 关掉 Mantine 自己的过滤: 它会拿输入值再匹配一遍
+            // 标签文本, 而别名 (如「凤羽瑾瑶」) 不在标签里, 会被它滤掉.
+            filter={({ options }) => options}
             data={filterCandidates(candidates, newItem).map((option) => option.label)}
             onOptionSubmit={(label) => {
-              // 选中的是 `原始名 (译名)` 形式, 取回对应候选拿原始名.
+              // 选中的是 `译名 (原名)` 形式, 取回对应候选拿原名.
               const hit = candidates.find((option) => option.label === label);
               add(hit ? hit.value : label);
               clearAfterSubmit();

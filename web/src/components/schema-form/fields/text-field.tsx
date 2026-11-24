@@ -1,5 +1,6 @@
 import { Autocomplete, Button, Group, Input } from "@mantine/core";
 import type { AnyFieldApi } from "@tanstack/react-form";
+import { useState } from "react";
 import type { FieldProps } from "../schema";
 import { isNullable } from "../schema";
 import type { TextJSONSchema } from "../schema/types";
@@ -9,6 +10,8 @@ import { fieldError } from "./field-error";
 import { ClearableTextarea } from "@/components/common/clearable-input";
 import {
   filterCandidates,
+  resolveEnterChoice,
+  selectedLabel,
   useMappingCandidates,
   type VendorKind,
 } from "@/lib/media/mapping-candidates";
@@ -85,24 +88,14 @@ export function TextField({
                 style={{ flex: 1 }}
               />
             ) : vendorKind !== undefined ? (
-              <Autocomplete
+              <VendorAutocomplete
                 id={id}
+                nullable={nullable}
+                options={vendorOptions}
                 value={(field.state.value as string) ?? ""}
                 onChange={(value: string) => field.handleChange(value || (nullable ? null : ""))}
-                // 候选显示 `原始名 (译名)`; 选中后取原始名写库, 与标签 / 演员同一口径.
-                data={filterCandidates(vendorOptions, (field.state.value as string) ?? "").map(
-                  (option) => option.label,
-                )}
-                onOptionSubmit={(picked) => {
-                  const hit = vendorOptions.find((option) => option.label === picked);
-                  if (hit) field.handleChange(hit.value);
-                }}
                 placeholder={placeholder}
                 style={{ flex: 1 }}
-                // 关掉「聚焦即开」: 点标签 / 描述会让输入框获焦, 那时不该弹候选.
-                // 点击输入框本身仍由组件自己的 onClick 展开, 不需要额外接管.
-                openOnFocus={false}
-                comboboxProps={{ withinPortal: true }}
               />
             ) : (
               <Input
@@ -129,5 +122,71 @@ export function TextField({
         </FieldChrome>
       )}
     </form.Field>
+  );
+}
+
+/**
+ * 片商单值输入: 值是**原名** (写库用), 框里显示 `译名 (原名)`.
+ *
+ * 不能把关着状态的框直接设成候选值: `Autocomplete` 的 `value` 同时是「输入内容」, 写成
+ * `译名 (原名)` 后用户一编辑就会带着括号提交, 而库里按原名索引. 因此照标签的做法分成
+ * 「正在输入」与「未输入」两态 —— 未输入时显示 `selectedLabel`, 一旦开始输入就换成原词.
+ */
+function VendorAutocomplete({
+  id,
+  nullable,
+  options,
+  value,
+  onChange,
+  placeholder,
+  style,
+}: {
+  id: string;
+  nullable: boolean;
+  options: ReturnType<typeof useMappingCandidates>;
+  value: string;
+  onChange: (next: string) => void;
+  placeholder?: string;
+  style?: React.CSSProperties;
+}) {
+  const [search, setSearch] = useState("");
+
+  return (
+    <Autocomplete
+      id={id}
+      value={search || selectedLabel(options, value)}
+      onChange={(next) => {
+        setSearch(next);
+        // 手输时按原词写回; 点选由 onOptionSubmit 覆盖成原名.
+        onChange(next);
+      }}
+      // 已按原名 / 译名 / 别名筛过, 关掉 Mantine 自己的过滤.
+      filter={({ options: filtered }) => filtered}
+      data={filterCandidates(options, search || selectedLabel(options, value)).map(
+        (option) => option.label,
+      )}
+      onOptionSubmit={(picked) => {
+        const hit = options.find((option) => option.label === picked);
+        if (hit) {
+          setSearch("");
+          onChange(hit.value);
+        }
+      }}
+      onKeyDownCapture={(event) => {
+        if (event.key !== "Enter") return;
+        if (event.nativeEvent.isComposing) return;
+        const choice = resolveEnterChoice(search, options);
+        if (choice === null) return;
+        event.preventDefault();
+        event.stopPropagation();
+        setSearch("");
+        onChange(choice.value || (nullable ? "" : ""));
+      }}
+      onBlur={() => setSearch("")}
+      placeholder={placeholder}
+      style={style}
+      openOnFocus={false}
+      comboboxProps={{ withinPortal: true }}
+    />
   );
 }

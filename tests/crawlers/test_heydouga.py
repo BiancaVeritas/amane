@@ -14,6 +14,7 @@ from amane.crawlers.models import SearchQuery
 from amane.crawlers.sites.heydouga import (
     HeydougaCrawler,
     _actors,
+    _avg_rating,
     _clean,
     _cover,
     _gallery,
@@ -332,3 +333,64 @@ async def test_fetch_rejects_non_heydouga_number(web_client: AsyncMock) -> None:
 
     assert await crawler.fetch(SearchQuery(number="MIDV-123")) is None
     web_client.get_text.assert_not_awaited()
+
+
+class TestAvgRating:
+    """官方评分: ``/ppv/movie_get_movie_rating/`` 的 ``movie_rating_average``.
+
+    这个均分把「只打星、不写字」的票也算进来, 而评论列表只回带文字的评论 —— 实测
+    4386/101 是 10 票均分 4.4, 评论只有 4 条且全为 4 分。界面显示前者, 所以取官方均分。
+    """
+
+    @pytest.mark.parametrize(
+        ("raw", "expected"),
+        [
+            ("4.4000", 4.4),
+            ("4.6262", 4.63),
+            (4.5, 4.5),
+            (5, 5.0),
+            # 无人评分时站点回 0: 不给 0 分, 否则界面上会显示成「评了 0 分」.
+            ("0", None),
+            ("0.0000", None),
+            (0, None),
+            (None, None),
+            # 非数字不猜.
+            ("", None),
+            ("abc", None),
+            (True, None),
+        ],
+    )
+    def test_avg_rating(self, raw, expected: float | None) -> None:
+        assert _avg_rating(raw) == expected
+
+
+@pytest.mark.asyncio
+async def test_score_uses_official_average_not_review_rows() -> None:
+    """取官方均分, 不按评论列表自算: 后者漏掉只有星级的票."""
+    from unittest.mock import AsyncMock
+
+    from amane.crawlers.http import HttpClient
+
+    web = AsyncMock()
+    web.get_json.return_value = {
+        "movie_rating_count": "10",
+        "movie_rating_average": "4.4000",
+        "movie_rating_count_review_posted": "4",
+    }
+    crawler = HeydougaCrawler(client=HttpClient(web=web))
+
+    assert await crawler._score("160848") == 4.4
+
+
+@pytest.mark.asyncio
+async def test_score_missing_seq_skips_request() -> None:
+    """页面上取不到 movie_seq 时不发请求."""
+    from unittest.mock import AsyncMock
+
+    from amane.crawlers.http import HttpClient
+
+    web = AsyncMock()
+    crawler = HeydougaCrawler(client=HttpClient(web=web))
+
+    assert await crawler._score(None) is None
+    web.get_json.assert_not_awaited()

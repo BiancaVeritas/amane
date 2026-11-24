@@ -8,6 +8,7 @@ from typing import Any
 from ...enums import SiteName
 from ..base import Crawler, CrawlerProfile
 from ..models import FetchOptions, MediaMetadata, SearchQuery, film_actors
+from ._d2pass_reviews import REVIEW_PATH, average_rating, rating_from_rows
 
 _BASE_URL = "https://www.1pondo.tv"
 _DETAIL_PATH = "/dyn/phpauto/movie_details/movie_id/{}.json"
@@ -157,6 +158,7 @@ class PondoCrawler(Crawler):
         else:
             extrafanart = _public_gallery(gallery, number, self.base_url, _GALLERY_DIR)
         # 只取日文标签: UCNAMEEn 是同一批标签的英文写法, 并进来会让界面上日文夹英文.
+        score = await self._score(number, data.get("AvgRating"), page_url)
         tags = list(dict.fromkeys(_strings(data.get("UCNAME"))))
         series = data.get("Series") if isinstance(data.get("Series"), str) else None
         if not series and isinstance(data.get("SeriesEn"), str):
@@ -178,4 +180,23 @@ class PondoCrawler(Crawler):
             trailer_urls=_sample_trailers(data.get("SampleFiles")),
             source_url=page_url,
             external_id=number,
+            score=score,
         )
+
+    async def _score(self, number: str, detail_rating: Any, page_url: str) -> float | None:
+        """评分优先取自评论接口, 使星与页面上列出的评论自洽.
+
+        详情 JSON 与评论 JSON 都带 ``AvgRating``; 这里以评论列表为准, 因为同系其它站
+        (10musume) 实测详情值与列表对不上. 评论接口不可用时退回详情那个值.
+        """
+        try:
+            reviews = await self.client.get_json(
+                f"{self.base_url}{REVIEW_PATH.format(number)}",
+                headers={"Accept": "application/json", "Referer": page_url},
+            )
+        except Exception as e:
+            self.logger.warning("评论接口不可用", number=number, error=str(e))
+            return average_rating(detail_rating)
+        if not isinstance(reviews, dict):
+            return average_rating(detail_rating)
+        return rating_from_rows(reviews.get("Rows")) or average_rating(reviews.get("AvgRating"))

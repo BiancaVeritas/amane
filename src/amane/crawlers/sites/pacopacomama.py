@@ -8,6 +8,7 @@ from typing import Any
 from ...enums import SiteName
 from ..base import Crawler, CrawlerProfile
 from ..models import FetchOptions, MediaMetadata, SearchQuery, film_actors
+from ._d2pass_reviews import REVIEW_PATH, average_rating, rating_from_rows
 
 _BASE_URL = "https://www.pacopacomama.com"
 _DETAIL_PATH = "/dyn/phpauto/movie_details/movie_id/{}.json"
@@ -117,6 +118,7 @@ class PacopacomamaCrawler(Crawler):
             extrafanart: list[str] = []
         else:
             extrafanart = _public_gallery(gallery, requested_number, self.base_url, _GALLERY_DIR)
+        score = await self._score(requested_number, data.get("AvgRating"), page_url)
         tags = list(dict.fromkeys(_strings(data.get("UCNAME"))))
         series = data.get("Series")
         actors = _strings(data.get("ActressesJa"))
@@ -137,4 +139,23 @@ class PacopacomamaCrawler(Crawler):
             extrafanart=extrafanart,
             source_url=page_url,
             external_id=requested_number,
+            score=score,
         )
+
+    async def _score(self, number: str, detail_rating: object, page_url: str) -> float | None:
+        """评分优先取自评论接口, 使星与页面上列出的评论自洽.
+
+        详情 JSON 也带 ``AvgRating``, 但它与评论列表里的票不一定对得上 (实测同一部片详情
+        给 4.3125、评论列表自算 4.2667); 评论接口不可用时才退回详情那个值.
+        """
+        try:
+            reviews = await self.client.get_json(
+                f"{self.base_url}{REVIEW_PATH.format(number)}",
+                headers={"Accept": "application/json", "Referer": page_url},
+            )
+        except Exception as e:
+            self.logger.warning("评论接口不可用", number=number, error=str(e))
+            return average_rating(detail_rating)
+        if not isinstance(reviews, dict):
+            return average_rating(detail_rating)
+        return rating_from_rows(reviews.get("Rows")) or average_rating(reviews.get("AvgRating"))

@@ -1027,8 +1027,8 @@ function TitleDetailPage() {
                       key={raw}
                       kind="actor"
                       id={data.actor_ids?.[raw]}
-                      // 影片详情只写当前语言那一个名字, 不带括注 —— 括注留给演员详情页,
-                      // 那里才是核对身份的场合. id 与性别仍按原名查.
+                      // 详情页只写当前语言那一个名字, 不带括注 —— 括注留给编辑弹窗,
+                      // 那里才是核对「落库的是哪个词」的场合. id 与性别仍按原名查.
                       name={showRaw ? raw : shown}
                       gender={data.actor_genders?.[raw]}
                     />
@@ -1048,7 +1048,7 @@ function TitleDetailPage() {
                     kind="tag"
                     // tag_ids 按展示名建键 (服务端 map_id_map 的口径), 两种模式下都用它查.
                     id={data.tag_ids?.[pair.shown]}
-                    // 只写当前语言那一个名字, 不带括注.
+                    // 只写当前语言那一个名字, 不带括注 —— 括注留给编辑弹窗.
                     name={showRaw ? pair.raw : pair.shown}
                   />
                 ))}
@@ -1372,6 +1372,15 @@ function TitleDetailPage() {
                   key === "external_ids" && item.content_type === "western"
                     ? westernExternalIds
                     : (bag[key] ?? null);
+              }
+              // 标签在编辑框里必须是**原始名**: 候选的 value 是原名, 而 API 回的是译文.
+              // 用译文填进去, 已选项匹配不到候选, 显示不出 `译名 (原名)`; 保存时还会把库里
+              // 没有的名字写回去.
+              out.tags = (data.tags ?? []).map((pair) => pair.raw);
+              // 片商三件套同理: metadata 里是展示值, 原名在 vendor_raw_names.
+              const rawVendors = data.vendor_raw_names ?? {};
+              for (const key of ["studio", "publisher", "series"] as const) {
+                if (key in out) out[key] = rawVendors[key] || null;
               }
               return out;
             })()}

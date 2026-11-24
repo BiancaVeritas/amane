@@ -32,6 +32,7 @@ from .sites import (
     GetchuCrawler,
     GigaCrawler,
     HeydougaCrawler,
+    HeyzoCrawler,
     IqqtvCrawler,
     Jav321Crawler,
     JavBusCrawler,
@@ -74,6 +75,7 @@ registry.register(FC2ClubCrawler)
 registry.register(FC2PPVDBCrawler)
 registry.register(GetchuCrawler)
 registry.register(HeydougaCrawler)
+registry.register(HeyzoCrawler)
 registry.register(IqqtvCrawler)
 registry.register(PrestigeCrawler)
 registry.register(PondoCrawler)
@@ -115,6 +117,7 @@ __all__ = [
     "GetchuCrawler",
     "GigaCrawler",
     "HeydougaCrawler",
+    "HeyzoCrawler",
     "HttpClient",
     "IqqtvCrawler",
     "Jav321Crawler",

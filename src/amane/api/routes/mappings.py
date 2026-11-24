@@ -200,10 +200,15 @@ async def restore_mapping(group: MappingGroup, original: str, runtime: RuntimeDe
 
 
 class MappingCandidate(BaseModel):
-    """补全框的一项: ``original`` 是要写库的原始名, ``label`` 是同一条的译名."""
+    """补全框的一项: ``original`` 是要写库的原始名, ``label`` 是同一条的译名.
+
+    ``aliases`` 只对演员组有值: 该演员的别名 (不含展示名). 录入框据此把用户输入的别名
+    换成主名 —— 库里按主名索引, 写别名进去会另建一条同名演员.
+    """
 
     original: str
     label: str
+    aliases: list[str] = Field(default_factory=list)
 
 
 class MappingCandidatesResponse(BaseModel):
@@ -230,18 +235,32 @@ async def list_mapping_candidates(
     await _sync_group(runtime, repo, group)
     role = kind if group is MappingGroup.VENDOR and kind in {str(value) for value in VendorRole} else None
     needle = search.strip().casefold()
+    aliases = await _actor_aliases_by_name(repo) if group is MappingGroup.ACTOR else {}
     items: list[MappingCandidate] = []
-    entries, _ = runtime.mappings.store(group).list(
-        status="all", include_archived=True, role=role, limit=1000
-    )
+    entries, _ = runtime.mappings.store(group).list(status="all", include_archived=True, role=role, limit=1000)
     for item in entries:
         shown = item.translation or item.original
-        if needle and needle not in item.original.casefold() and needle not in shown.casefold():
+        own_aliases = aliases.get(item.original, [])
+        # 别名也参与过滤: 用户记得的常常是别名, 打出来却找不到人就白费了这次补全.
+        if needle and not any(needle in value.casefold() for value in (item.original, shown, *own_aliases)):
             continue
-        items.append(MappingCandidate(original=item.original, label=shown))
+        items.append(MappingCandidate(original=item.original, label=shown, aliases=own_aliases))
         if len(items) >= limit:
             break
     return MappingCandidatesResponse(items=items)
+
+
+async def _actor_aliases_by_name(repo: RepoDep) -> dict[str, list[str]]:
+    """主名 → 别名列表.
+
+    演员在库里按主名索引, 别名只是同一人的其他写法; 录入时必须折回主名, 否则会另建一条
+    同名演员. 别名与展示名重复的条目由仓储层保证不存在, 这里不再过滤.
+    """
+    by_id = await repo.get_actor_aliases_map()
+    if not by_id:
+        return {}
+    names = await repo.get_actor_names(list(by_id))
+    return {names[actor_id]: aliases for actor_id, aliases in by_id.items() if actor_id in names}
 
 
 @router.get("/{group}/export")
