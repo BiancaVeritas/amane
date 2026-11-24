@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.28.4
+
+### 修复
+
+- **文件名不含自定义占位符标记时整理失败**: `custom_variable_values` 未命中时只是不放入取值表, 而 Jinja2 用 `StrictUndefined` —— 缺键直接抛 `'NOE' is undefined`, 整条整理任务报 `task crashed`。现在未命中显式给空串: 模板里的可选段按既有规则折叠, 缺标记的文件名照常整理, 有标记时才带上那段
+
 ## v0.28.3
 
 ### 新增
