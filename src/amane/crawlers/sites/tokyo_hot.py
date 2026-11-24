@@ -93,14 +93,15 @@ def _label_text(html: Selector, label: str) -> str | None:
     return text or None
 
 
-def _parse_runtime(value: str | None) -> int | None:
+def _parse_runtime_seconds(value: str | None) -> int | None:
+    """``HH:MM:SS`` → 总秒数; 形态不符时不猜."""
     if not value:
         return None
     match = re.fullmatch(r"\s*(\d{1,2}):(\d{2}):(\d{2})\s*", value)
     if match is None:
         return None
     hours, minutes, seconds = (int(part) for part in match.groups())
-    return round((hours * 3600 + minutes * 60 + seconds) / 60)
+    return hours * 3600 + minutes * 60 + seconds
 
 
 def _search_result(text: str, requested_number: str, page_url: str) -> tuple[str | None, str | None]:
@@ -182,9 +183,7 @@ class TokyoHotCrawler(Crawler):
             title = html.xpath("normalize-space((//h2)[1])").get()
         # 取整段 HTML 而不是 //text(): 分段靠连续 <br>, 而 <br> 之间没有文本节点,
         # 只取文本节点会丢掉分段信息, 整篇只剩单换行.
-        sentence_html = html.xpath(
-            '//div[contains(concat(" ", normalize-space(@class), " "), " sentence ")]'
-        ).get()
+        sentence_html = html.xpath('//div[contains(concat(" ", normalize-space(@class), " "), " sentence ")]').get()
         plot = _paragraphs(sentence_html or "")
 
         actors = _label_values(html, "出演者")
@@ -194,7 +193,7 @@ class TokyoHotCrawler(Crawler):
 
         release_raw = _label_text(html, "配信開始日")
         release = normalize_calendar_date(release_raw.replace("/", "-") if release_raw else None)
-        runtime = _parse_runtime(_label_text(html, "収録時間"))
+        runtime_seconds = _parse_runtime_seconds(_label_text(html, "収録時間"))
 
         # 封面有两个来源: 侧栏 jacket 链接 (3762×2522 的 DVD 封套) 与播放器的 data-poster
         # (站点按片生成的 820×462 横版图). 前者并非每部都有 —— ``li.package`` 会整段留空,
@@ -230,7 +229,7 @@ class TokyoHotCrawler(Crawler):
             studio="Tokyo-Hot",
             publisher="Tokyo-Hot",
             release=release,
-            runtime=runtime,
+            runtime_seconds=runtime_seconds,
             tags=tags,
             series=series_names[0] if series_names else None,
             series_names=series_names,

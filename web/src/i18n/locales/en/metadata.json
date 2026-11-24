@@ -73,7 +73,8 @@
     "batchDelete": "Batch Delete",
     "confirmBatchDeleteTitle": "Delete selected films?",
     "confirmBatchDeleteDesc_one": "This will permanently delete the selected films",
-    "confirmBatchDeleteDesc_other": "This will permanently delete the selected films"
+    "confirmBatchDeleteDesc_other": "This will permanently delete the selected films",
+    "batchRuntime": "Refresh duration"
   },
   "edit": {
     "title": "Edit film"
@@ -370,7 +371,8 @@
       "label": "Release Date"
     },
     "runtime": {
-      "label": "Runtime (min)"
+      "label": "Duration",
+      "description": "Minutes (120) or H:MM:SS (1:40:45); a partial minute rounds up"
     },
     "tags": {
       "label": "Tags"

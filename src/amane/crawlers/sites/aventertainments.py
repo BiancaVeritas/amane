@@ -262,9 +262,7 @@ def _metadata_from_page(url: str, text: str) -> MediaMetadata | None:
         synopsis_parts = html.xpath(
             '//*[contains(concat(" ", normalize-space(@class), " "), " product-description ")]//text()'
         ).getall()
-        description = "\n".join(
-            line for line in (re.sub(r"\s+", " ", part).strip() for part in synopsis_parts) if line
-        )
+        description = "\n".join(line for line in (re.sub(r"\s+", " ", part).strip() for part in synopsis_parts) if line)
     if not description:
         description = _text(video.get("description"))
         if description:

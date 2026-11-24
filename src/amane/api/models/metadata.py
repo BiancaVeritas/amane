@@ -47,6 +47,7 @@ class MetadataListItem(BaseModel):
     publisher: str | None = None
     release: str | None = None
     runtime: int | None = None
+    runtime_seconds: int | None = None
     tags: list[str] = []
     series: str | None = None
     series_names: list[str] = []
@@ -114,6 +115,8 @@ PartialMetadata = create_partial_model(
     ),
     json_schema_extras={
         "extrafanart_urls": anyof_extras(kv({"v-x-long": True})),
+        # 秒由时长字段一并维护, 单独摆一个整数框只会让人改到与分钟不一致的值.
+        "runtime_seconds": kv({"x-hidden": True}),
         "plot": anyof_extras(kv({"x-long": True})),
         "original_plot": anyof_extras(kv({"x-long": True})),
         "release": anyof_extras(

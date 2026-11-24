@@ -153,8 +153,12 @@ class Recorder:
     def begin(cls, log_dir: Path, task: Task, hot: HotSettings) -> Recorder:
         assert task.id is not None
         root = task_dir_for(log_dir, task.id)
+        # id 会被复用 (删过任务记录后, 自增主键从当前最大值重新排). 目录里全是上一次的产物:
+        # task.log 是追加写入的, 不清掉就会把两次不同任务的日志混在一起 —— 读记录的人会以为
+        # 这次任务刮了另一部片.
+        if root.is_dir():
+            shutil.rmtree(root, ignore_errors=True)
         root.mkdir(parents=True, exist_ok=True)
-        (root / "summary.json").unlink(missing_ok=True)  # id 复用时删除残留刮削摘要
         rec = cls(root, task.id)
         rec._task_id_token = _task_id_ctx.set(task.id)
         rec._recorder_token = _recorder_ctx.set(rec)
@@ -345,7 +349,9 @@ class Recorder:
             self._task_id_token = None
 
     def _install_log_handler(self) -> None:
-        handler = logging.FileHandler(self.root / "task.log", encoding="utf-8")
+        # 目录已在 begin 清空; 显式用 "w" 再兜一层: 任何残留 (比如上次进程崩溃留下的半截
+        # 文件) 都不会混进本次任务的日志.
+        handler = logging.FileHandler(self.root / "task.log", mode="w", encoding="utf-8")
         handler.setFormatter(
             structlog.stdlib.ProcessorFormatter(
                 processors=[

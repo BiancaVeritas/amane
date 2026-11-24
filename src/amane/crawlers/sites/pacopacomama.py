@@ -92,8 +92,8 @@ class PacopacomamaCrawler(Crawler):
         plot = data.get("Desc")
         release = data.get("Release")
         duration = data.get("Duration")
-        runtime = (
-            int(round(duration / 60))
+        runtime_seconds = (
+            int(duration)
             if isinstance(duration, (int, float)) and not isinstance(duration, bool) and duration > 0
             else None
         )
@@ -129,7 +129,7 @@ class PacopacomamaCrawler(Crawler):
             plot=plot.strip() if isinstance(plot, str) and plot.strip() else None,
             actors=film_actors(actors),
             release=release.strip() if isinstance(release, str) and release.strip() else None,
-            runtime=runtime,
+            runtime_seconds=runtime_seconds,
             series=series.strip() if isinstance(series, str) and series.strip() else None,
             tags=tags,
             poster_urls=[poster] if poster else [],

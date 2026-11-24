@@ -1,5 +1,6 @@
 """Kodi ``<movie>`` NFO, 供 Emby / Jellyfin / Kodi 读取."""
 
+import math
 import re
 from io import StringIO
 from typing import TYPE_CHECKING
@@ -18,6 +19,17 @@ if TYPE_CHECKING:
 
 
 logger = structlog.get_logger()
+
+
+def _nfo_runtime_minutes(metadata: Metadata) -> int | None:
+    """写进 NFO 的分钟数: 有秒时向上取整, 没有秒就用已有的分钟值.
+
+    取整规则集中在展示与写盘这一侧, 各站点只负责交出原始秒数 —— 否则每个爬虫各写一套
+    四舍五入 / 截断, 同一部片换个来源就会差一分钟.
+    """
+    if metadata.runtime_seconds is not None and metadata.runtime_seconds > 0:
+        return math.ceil(metadata.runtime_seconds / 60)
+    return metadata.runtime
 
 
 def _display_tags(metadata: Metadata, mapping_dir: Path | None) -> list[str]:
@@ -127,8 +139,11 @@ async def write_nfo(
             code.write(f"  <rating>{metadata.score}</rating>\n")
             code.write(f"  <criticrating>{int(metadata.score * 10)}</criticrating>\n")
 
-        if metadata.runtime is not None:
-            code.write(f"  <runtime>{metadata.runtime}</runtime>\n")
+        # NFO 的 <runtime> 是分钟, 媒体服务器按它显示时长. 有秒时向上取整 ——
+        # 站点时长普遍偏短一两秒, 向下取整会让分钟数少 1; 秒恰为 0 时不进位.
+        minutes = _nfo_runtime_minutes(metadata)
+        if minutes is not None:
+            code.write(f"  <runtime>{minutes}</runtime>\n")
 
         # 片商三件套同样走映射; 缺发行商时已按制作商补齐, 因此不会少一个维度.
         vendor = vendor_names(metadata).translated(vendor_roots(mapping_dir))

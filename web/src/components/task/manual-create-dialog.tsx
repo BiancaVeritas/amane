@@ -35,6 +35,7 @@ import {
 import type { ContentType, MetadataPartial } from "@/client/types.gen";
 import { extractErrorMessage } from "@/lib/api-error";
 import { CONTENT_TYPES } from "@/lib/exhaustive-maps";
+import { parseRuntimeInput, runtimeMinutes } from "@/lib/runtime-input";
 import {
   type CandidateOption,
   filterCandidates,
@@ -428,12 +429,14 @@ export function ManualCreateDialog({ opened, onClose, initialNumber }: ManualCre
     if (draft.plot.trim()) fields.plot = draft.plot.trim();
     if (draft.release.trim()) fields.release = draft.release.trim();
     if (draft.runtime.trim()) {
-      const runtime = Number(draft.runtime.trim());
-      if (!Number.isFinite(runtime) || runtime <= 0) {
+      const parsed = parseRuntimeInput(draft.runtime);
+      // undefined 是「认不出」, null 是「没填」; 认不出就拦住, 别把 1:40:45 悄悄存成空.
+      if (!parsed) {
         notifications.show({ message: t("create.runtimeInvalid"), color: "orange" });
         return;
       }
-      fields.runtime = Math.round(runtime);
+      fields.runtime = runtimeMinutes(parsed.seconds);
+      fields.runtime_seconds = parsed.seconds;
     }
     if (draft.studio.trim()) fields.studio = draft.studio.trim();
     if (draft.publisher.trim()) fields.publisher = draft.publisher.trim();
@@ -565,7 +568,8 @@ export function ManualCreateDialog({ opened, onClose, initialNumber }: ManualCre
             placeholder={t("create.runtimePlaceholder")}
             value={draft.runtime}
             onChange={set("runtime")}
-            inputMode="numeric"
+            // 允许冒号与句点: 时长可以写成 1:40:45 / 1.40.45, 纯数字键盘打不出来.
+            inputMode="text"
           />
           {/* 片商三类都是唯一值, 用单选补全; 选中后落的是片商表里的原始名. */}
           <VendorInput

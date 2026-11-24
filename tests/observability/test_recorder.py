@@ -291,3 +291,26 @@ def test_site_outcomes_include_unqueried(tmp_path: Path, task: Task):
 def test_site_outcomes_without_recorder_is_empty():
     """无 begin 时 (回放等) 的空壳没有站点结果."""
     assert _LogOnly(structlog.get_logger()).site_outcomes() == []
+
+
+def test_reused_task_id_starts_with_clean_record_dir(tmp_path: Path, task: Task) -> None:
+    """同一个 id 第二次跑时, 上一次的日志与产物不能留在目录里.
+
+    id 会复用 (删过任务记录后自增主键从当前最大值重排), 而 task.log 是追加写入的:
+    不清目录就会把两次不同任务的日志混在一起, 读记录的人会以为这次刮了另一部片.
+    """
+    hot = HotSettings()
+    first = Recorder.begin(tmp_path, task, hot)
+    first.finalize(task, success=True, error=None, debug_capture=False)
+    first.close()
+    root = task_dir_for(tmp_path, 42)
+    assert (root / "task.log").is_file()
+    # 模拟上一次留下的产物: 目录清理必须连它一起带走.
+    (root / "stale-artifact.json").write_text("{}", encoding="utf-8")
+
+    second = Recorder.begin(tmp_path, task, hot)
+
+    assert not (root / "stale-artifact.json").exists(), "上一次任务的产物不能残留"
+    assert (root / "task.log").stat().st_size == 0, "上一次任务的日志不能残留"
+    second.finalize(task, success=True, error=None, debug_capture=False)
+    second.close()

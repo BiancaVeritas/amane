@@ -8,6 +8,7 @@ from .protocol import FollowupTask, ProgressCallback, TaskHandler, TaskResult
 from .r18_import import *
 from .refresh import *
 from .rescrape import *
+from .rescrape_runtime import *
 from .scan_invalid import *
 from .scrape import *
 from .semantic import *

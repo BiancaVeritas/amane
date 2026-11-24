@@ -136,7 +136,7 @@ class TenmusumeCrawler(Crawler):
             year = data.get("Year")
             release = f"{year}-01-01" if isinstance(year, (int, str)) and str(year).isdigit() else None
         duration = data.get("Duration")
-        runtime = int(round(duration / 60)) if isinstance(duration, (int, float)) and duration > 0 else None
+        runtime_seconds = int(duration) if isinstance(duration, (int, float)) and duration > 0 else None
         poster = next(
             (
                 data.get(key)
@@ -166,7 +166,7 @@ class TenmusumeCrawler(Crawler):
             plot=plot if isinstance(plot, str) and plot.strip() else None,
             actors=film_actors(actors),
             release=release,
-            runtime=runtime,
+            runtime_seconds=runtime_seconds,
             series=(data.get("Series") if isinstance(data.get("Series"), str) else None)
             or (data.get("SeriesEn") if isinstance(data.get("SeriesEn"), str) else None),
             # 只取日文标签: UCNAMEEn 是同一批标签的英文写法, 并进来会让界面上日文夹英文.

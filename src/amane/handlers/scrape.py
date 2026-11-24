@@ -834,6 +834,7 @@ class ScrapeHandler(TaskHandler[ScrapePayload, ScrapeResult]):
             publisher=result.metadata.publisher,
             release=result.metadata.release,
             runtime=result.metadata.runtime,
+            runtime_seconds=result.metadata.runtime_seconds,
             tags=result.metadata.tags,
             series=result.metadata.series,
             series_names=result.metadata.series_names or ([result.metadata.series] if result.metadata.series else []),

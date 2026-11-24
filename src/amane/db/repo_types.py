@@ -302,6 +302,7 @@ class MetadataFields(TypedDict, total=False):
     publisher: str | None
     release: str | None
     runtime: int | None
+    runtime_seconds: int | None
     tags: list[str]
     series: str | None
     series_names: list[str]

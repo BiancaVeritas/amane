@@ -1,4 +1,5 @@
 import {
+  IconClock,
   type Icon,
   IconArrowsDiagonal,
   IconDatabase,
@@ -37,6 +38,8 @@ export const TASK_ICONS: Record<TaskType, Icon> = exhaustiveRecord<TaskType>()({
   actor_scrape: IconUser,
   actor_push: IconCloudUpload,
   rescrape: IconRepeat,
+  // 临时任务: 只补时长, 存量补齐后连同后端一起删.
+  rescrape_runtime: IconClock,
   scan_invalid: IconZoomExclamation,
   delete: IconTrashX,
   semantic_index: IconSparkles,

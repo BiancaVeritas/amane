@@ -110,9 +110,10 @@ def test_number_from_url(url: str, expected: str | None) -> None:
 @pytest.mark.parametrize(
     ("raw", "expected"),
     [
-        ("24:45", 25),
-        ("01:05:00", 65),
-        ("18:03", 18),
+        # 时钟串取总秒数; 取整交给 MediaMetadata, 不再各站各写一套.
+        ("24:45", 24 * 60 + 45),
+        ("01:05:00", 3600 + 5 * 60),
+        ("18:03", 18 * 60 + 3),
         ("坏值", None),
     ],
 )
@@ -155,6 +156,8 @@ async def test_scrape_detail_fields() -> None:
     assert meta.tags == ["口爆", "人妻", "巨乳"]
     assert meta.studio == "糖心Vlog"
     assert meta.publisher == "糖心Vlog"
+    # 24:45 → 1485 秒; ceil 到 25 分钟.
+    assert meta.runtime_seconds == 24 * 60 + 45
     assert meta.runtime == 25
     assert meta.release == "2026-11-12"
     assert meta.poster_urls == ["https://t.5gcdn.xyz/videos/6aef1a3558ccd9a2e6045645/cover.jpg"]
@@ -314,7 +317,9 @@ async def test_scrape_uses_jsonld() -> None:
     assert meta.title == "某标题"
     # 简介来自 VideoObject.description, 不是 p.description.
     assert meta.plot == "感谢大家的一直以来的喜欢 评论区抽一个真爱粉送红包"
-    assert meta.runtime == 46
+    # PT46M27S: 2787 秒, ceil 到 47 分钟 —— 旧口径把 27 秒抹掉了.
+    assert meta.runtime_seconds == 46 * 60 + 27
+    assert meta.runtime == 47
     assert meta.release == "2026-10-23"
     assert [a.name for a in meta.actors] == ["温温兔"]
     assert meta.tags == ["御姐", "护士", "白丝"]

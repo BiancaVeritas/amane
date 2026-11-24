@@ -76,7 +76,9 @@ async def test_scrape_maps_public_metadata_only() -> None:
     crawler = PondoCrawler(_FakeClient())  # type: ignore[arg-type]
     result = await crawler._scrape("https://www.1pondo.tv/dyn/phpauto/movie_details/movie_id/110526_001.json")
     assert result is not None
-    assert result.runtime == 61
+    # 3672 秒 = 61 分 12 秒; ceil 到 62 分钟 (旧 round 得 61).
+    assert result.runtime_seconds == 3672
+    assert result.runtime == 62
     assert result.poster_urls == ["main.jpg"]
     assert result.thumb_urls == ["main.jpg"]
     assert result.extrafanart == ["https://www.1pondo.tv/assets/sample/110526_001/popu/1.jpg"]
@@ -103,6 +105,7 @@ async def test_gallery_failure_does_not_lose_metadata() -> None:
     assert result is not None
     assert result.title == "Title"
     assert result.extrafanart == []
+
 
 @pytest.mark.asyncio
 async def test_tags_never_include_english_names() -> None:

@@ -459,6 +459,10 @@ def _fill_scalar(
         values = data.series_names or ([data.series] if data.series else [])
         result.series_names = list(dict.fromkeys(name for name in values if isinstance(name, str) and name))
         result.series = result.series_names[0] if result.series_names else None
+    elif field == MetadataField.RUNTIME:
+        # 秒是精确值, 分钟由它向上取整; 只取分钟的话就丢掉了秒, 再算回来也不准.
+        result.runtime = data.runtime
+        result.runtime_seconds = data.runtime_seconds
     else:
         setattr(result, field, getattr(data, field))
     result.field_sources[field] = source_key

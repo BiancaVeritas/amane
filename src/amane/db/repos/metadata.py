@@ -900,6 +900,8 @@ class MetadataRepoMixin(RepositoryMixinBase):
                 metadata.release = updates["release"]
             if "runtime" in updates:
                 metadata.runtime = updates["runtime"]
+            if "runtime_seconds" in updates:
+                metadata.runtime_seconds = updates["runtime_seconds"]
             if "tags" in updates:
                 metadata.tags = updates["tags"]
             if "series_names" in updates:

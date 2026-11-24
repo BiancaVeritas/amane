@@ -6430,6 +6430,17 @@ export const MetadataListItemSchema = {
             ],
             title: 'Runtime'
         },
+        runtime_seconds: {
+            anyOf: [
+                {
+                    type: 'integer'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Runtime Seconds'
+        },
         tags: {
             items: {
                 type: 'string'
@@ -6844,6 +6855,18 @@ export const MetadataPartialSchema = {
             ],
             title: 'Runtime'
         },
+        runtime_seconds: {
+            anyOf: [
+                {
+                    type: 'integer'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Runtime Seconds',
+            'x-hidden': true
+        },
         tags: {
             anyOf: [
                 {
@@ -7131,6 +7154,17 @@ export const MetadataResponseSchema = {
                 }
             ],
             title: 'Runtime'
+        },
+        runtime_seconds: {
+            anyOf: [
+                {
+                    type: 'integer'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Runtime Seconds'
         },
         tags: {
             items: {
@@ -8712,6 +8746,92 @@ export const RescrapeResultSchema = {
         'submitted'
     ],
     title: 'RescrapeResult'
+} as const;
+
+export const RescrapeRuntimeResultSchema = {
+    properties: {
+        type: {
+            type: 'string',
+            const: 'rescrape_runtime',
+            title: 'Type',
+            default: 'rescrape_runtime'
+        },
+        number: {
+            type: 'string',
+            title: 'Number'
+        },
+        runtime_seconds: {
+            anyOf: [
+                {
+                    type: 'integer'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Runtime Seconds'
+        },
+        updated: {
+            type: 'boolean',
+            title: 'Updated',
+            default: false
+        }
+    },
+    type: 'object',
+    required: [
+        'number'
+    ],
+    title: 'RescrapeRuntimeResult',
+    description: '临时任务的结果; 存量补齐后连同 payload / handler 一起删.'
+} as const;
+
+export const RescrapeRuntimeSubmissionSchema = {
+    properties: {
+        number: {
+            anyOf: [
+                {
+                    type: 'string',
+                    maxLength: 200
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Number'
+        },
+        metadata_id: {
+            anyOf: [
+                {
+                    type: 'integer'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Metadata Id'
+        },
+        content_type: {
+            anyOf: [
+                {
+                    $ref: '#/components/schemas/ContentType'
+                },
+                {
+                    type: 'null'
+                }
+            ]
+        },
+        type: {
+            type: 'string',
+            const: 'rescrape_runtime',
+            title: 'Type'
+        }
+    },
+    type: 'object',
+    required: [
+        'type'
+    ],
+    title: 'RescrapeRuntimeSubmission',
+    description: '临时任务: 只重取时长. 补齐存量后连同 handler 一起删.'
 } as const;
 
 export const RescrapeSubmissionSchema = {
@@ -11125,6 +11245,9 @@ export const TaskBatchSubmitRequestSchema = {
                         $ref: '#/components/schemas/RescrapeSubmission'
                     },
                     {
+                        $ref: '#/components/schemas/RescrapeRuntimeSubmission'
+                    },
+                    {
                         $ref: '#/components/schemas/SemanticIndexSubmission'
                     },
                     {
@@ -11142,6 +11265,7 @@ export const TaskBatchSubmitRequestSchema = {
                         r18_import: '#/components/schemas/R18ImportSubmission',
                         refresh: '#/components/schemas/RefreshSubmission',
                         rescrape: '#/components/schemas/RescrapeSubmission',
+                        rescrape_runtime: '#/components/schemas/RescrapeRuntimeSubmission',
                         scan_invalid: '#/components/schemas/ScanInvalidSubmission',
                         scrape: '#/components/schemas/ScrapeSubmission',
                         semantic_benchmark: '#/components/schemas/SemanticBenchmarkSubmission',
@@ -11697,6 +11821,9 @@ export const TaskResponseSchema = {
                             $ref: '#/components/schemas/RescrapeResult'
                         },
                         {
+                            $ref: '#/components/schemas/RescrapeRuntimeResult'
+                        },
+                        {
                             $ref: '#/components/schemas/SemanticIndexResult'
                         },
                         {
@@ -11714,6 +11841,7 @@ export const TaskResponseSchema = {
                             r18_import: '#/components/schemas/R18ImportResult',
                             refresh: '#/components/schemas/RefreshResult',
                             rescrape: '#/components/schemas/RescrapeResult',
+                            rescrape_runtime: '#/components/schemas/RescrapeRuntimeResult',
                             scan_invalid: '#/components/schemas/ScanInvalidResult',
                             scrape: '#/components/schemas/ScrapeResult',
                             semantic_benchmark: '#/components/schemas/SemanticBenchmarkResult',
@@ -11775,6 +11903,7 @@ export const TaskTypeSchema = {
         'actor_scrape',
         'actor_push',
         'rescrape',
+        'rescrape_runtime',
         'scan_invalid',
         'delete',
         'semantic_index',

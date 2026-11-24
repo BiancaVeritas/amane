@@ -174,7 +174,7 @@ def _detail(html: str, page_url: str) -> tuple[dict[str, object], list[str]]:
         "plot": parser.plot or None,
         "actors": parser.actors,
         "release": parser.release.replace("/", "-") or None,
-        "runtime": _runtime_minutes(parser.runtime),
+        "runtime_seconds": _runtime_seconds(parser.runtime),
         "series": parser.series or None,
         "tags": parser.tags,
     }
@@ -203,12 +203,13 @@ def _release_from_number(number: str) -> str | None:
     return parsed.isoformat()
 
 
-def _runtime_minutes(value: str) -> int | None:
+def _runtime_seconds(value: str) -> int | None:
+    """``HH:MM:SS`` → 总秒数; 形态不符时不猜."""
     match = re.fullmatch(r"\s*(\d{1,2}):(\d{2}):(\d{2})\s*", value)
     if not match:
         return None
     hours, minutes, seconds = map(int, match.groups())
-    return hours * 60 + minutes + (1 if seconds >= 30 else 0)
+    return hours * 3600 + minutes * 60 + seconds
 
 
 class CaribbeancomCrawler(Crawler):
@@ -256,7 +257,7 @@ class CaribbeancomCrawler(Crawler):
                 if isinstance(metadata["release"], str) and metadata["release"]
                 else _release_from_number(requested)
             ),
-            runtime=metadata["runtime"] if isinstance(metadata["runtime"], int) else None,
+            runtime_seconds=metadata["runtime_seconds"] if isinstance(metadata["runtime_seconds"], int) else None,
             series=metadata["series"] if isinstance(metadata["series"], str) else None,
             tags=metadata["tags"] if isinstance(metadata["tags"], list) else [],
             poster_urls=[poster],

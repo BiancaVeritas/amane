@@ -262,7 +262,7 @@ class ThePornDBCrawler(Crawler):
             actors=actors,
             studio=studio,
             release=scene.get("date") or None,
-            runtime=_runtime_minutes(scene.get("duration")),
+            runtime_seconds=_runtime_seconds(scene.get("duration")),
             tags=tags,
             directors=[scene["director"]] if scene.get("director") else [],
             plot=scene.get("details") or None,
@@ -355,11 +355,11 @@ def _scene_date(scene: dict[str, Any]) -> str:
     return date if isinstance(date, str) else ""
 
 
-def _runtime_minutes(duration: object) -> int | None:
-    """秒 → 分钟; 缺省与 0 视为没有时长."""
+def _runtime_seconds(duration: object) -> int | None:
+    """站点直接给秒; 缺省与 0 视为没有时长."""
     if isinstance(duration, bool) or not isinstance(duration, int) or duration <= 0:
         return None
-    return duration // 60
+    return duration
 
 
 def _scene_url(scene: dict[str, Any] | None) -> str | None:

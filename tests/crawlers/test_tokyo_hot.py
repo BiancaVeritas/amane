@@ -8,12 +8,12 @@ from amane.crawlers.sites.tokyo_hot import (
     _DETAIL_PATH_RE,
     TokyoHotCrawler,
     _normalize_number,
-    _parse_runtime,
+    _parse_runtime_seconds,
     _search_result,
 )
 from amane.enums import SiteName
 
-SEARCH_HTML = '''
+SEARCH_HTML = """
 <ul class="list slider cf">
   <li class="detail">
     <a href="/product/5770/" class="rm">
@@ -23,9 +23,9 @@ SEARCH_HTML = '''
   </li>
   <li class="detail"><a href="/product/9999/" class="rm"><div class="actor">(作品番号: N9999)</div></a></li>
 </ul>
-'''
+"""
 
-DETAIL_HTML = '''
+DETAIL_HTML = """
 <html><head><meta property="og:title" content="問答無用カン 吉永小夜 | Tokyo-Hot 東京熱"></head>
 <body>
   <h2>問答無用カン 吉永小夜</h2>
@@ -54,7 +54,7 @@ DETAIL_HTML = '''
   <div class="sample-player-shell" data-mp4-src="https://my.cdn.tokyo-hot.com/media/samples/5770.mp4"></div>
   <div class="recommend"><dt>シリーズ</dt><dd><a>DO NOT INCLUDE</a></dd></div>
 </body></html>
-'''
+"""
 
 
 class _FakeClient:
@@ -77,8 +77,8 @@ def test_number_normalization_and_runtime() -> None:
     assert _normalize_number("N1020") == "N1020"
     assert _normalize_number("N-1020") is None
     assert _normalize_number("5770") is None
-    assert _parse_runtime("01:49:13") == 109
-    assert _parse_runtime("unknown") is None
+    assert _parse_runtime_seconds("01:49:13") == 3600 + 49 * 60 + 13
+    assert _parse_runtime_seconds("unknown") is None
 
 
 @pytest.mark.asyncio
@@ -105,7 +105,9 @@ async def test_scrape_maps_multi_series_and_full_size_assets() -> None:
     assert result.studio == "Tokyo-Hot"
     assert result.publisher == "Tokyo-Hot"
     assert result.release == "2014-06-06"
-    assert result.runtime == 109
+    # 01:49:13 → 6553 秒; 分钟由 ceil 得出 (旧规则四舍五入得 109).
+    assert result.runtime_seconds == 3600 + 49 * 60 + 13
+    assert result.runtime == 110
     assert result.tags == ["中出し", "フェラ", "緊縛"]
     assert result.series_names == ["問答無用姦", "AIリマスター", "東熱"]
     assert result.series == "問答無用姦"
@@ -196,9 +198,6 @@ def test_paragraphs_collapses_extra_breaks_and_drops_edges() -> None:
     """多余空行压成一个, 首尾不留空行; 源码缩进不算正文."""
     from amane.crawlers.sites.tokyo_hot import _paragraphs
 
-    html = (
-        '<div class="sentence">\n   \n  第一段<br><br><br><br>  第二段  \n'
-        "<br><br>\n  </div>"
-    )
+    html = '<div class="sentence">\n   \n  第一段<br><br><br><br>  第二段  \n<br><br>\n  </div>'
 
     assert _paragraphs(html) == "第一段\n\n第二段"

@@ -24,6 +24,8 @@ from ...handlers import (
     RefreshResult,
     RescrapePayload,
     RescrapeResult,
+    RescrapeRuntimePayload,
+    RescrapeRuntimeResult,
     ScanInvalidPayload,
     ScanInvalidResult,
     ScrapePayload,
@@ -57,6 +59,7 @@ TaskResultPayload = Annotated[
     | ActorScrapeResult
     | ActorPushResult
     | RescrapeResult
+    | RescrapeRuntimeResult
     | SemanticIndexResult
     | SemanticBenchmarkResult,
     Field(discriminator="type"),
@@ -326,6 +329,12 @@ class RescrapeSubmission(RescrapePayload):
     type: Literal["rescrape"]
 
 
+class RescrapeRuntimeSubmission(RescrapeRuntimePayload):
+    """临时任务: 只重取时长. 补齐存量后连同 handler 一起删."""
+
+    type: Literal["rescrape_runtime"]
+
+
 class SemanticIndexSubmission(BaseModel):
     type: Literal["semantic_index"]
     limit: int | None = Field(default=None, ge=1, description="单次最多处理的条目数; 空表示全库")
@@ -365,6 +374,7 @@ TaskSubmission = Annotated[
     | ActorScrapeSubmission
     | ActorPushSubmission
     | RescrapeSubmission
+    | RescrapeRuntimeSubmission
     | SemanticIndexSubmission
     | SemanticBenchmarkSubmission,
     Field(discriminator="type"),

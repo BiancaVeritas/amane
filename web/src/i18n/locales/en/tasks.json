@@ -84,7 +84,8 @@
     "delete": "Delete",
     "semantic_index": "Semantic index",
     "semantic_benchmark": "Benchmark",
-    "actor_push": "Push actors"
+    "actor_push": "Push actors",
+    "rescrape_runtime": "Refresh duration"
   },
   "loadMoreChildren": "Load more ({{count}})",
   "loadMoreChildren_one": "Load more ({{count}})",
@@ -200,7 +201,8 @@
       "delete": "Delete",
       "semantic_index": "Semantic index",
       "semantic_benchmark": "Benchmark",
-      "actor_push": "Push actors"
+      "actor_push": "Push actors",
+      "rescrape_runtime": "Refresh duration"
     },
     "cleanup": {
       "remove_missing_files": {
@@ -492,6 +494,29 @@
         "label": "Force overwrite",
         "description": "Overwrite existing images and person fields"
       }
+    },
+    "rescrape_runtime": {
+      "number": {
+        "label": "Number"
+      },
+      "metadata_id": {
+        "label": "Bound entry",
+        "description": "Locate by this entry instead of the number"
+      },
+      "content_type": {
+        "label": "Content type",
+        "description": "Empty means auto-detect",
+        "options": {
+          "censored": "Censored",
+          "uncensored": "Uncensored",
+          "chinese": "Chinese",
+          "western": "Western",
+          "fc2": "FC2",
+          "heydouga": "Heydouga",
+          "amateur": "Amateur",
+          "hentai": "Hentai"
+        }
+      }
     }
   },
   "title": "Tasks",
@@ -566,8 +591,8 @@
     "plot": "Plot",
     "release": "Release date",
     "runtime": "Runtime",
-    "runtimePlaceholder": "minutes, e.g. 120",
-    "runtimeInvalid": "Runtime must be a positive number of minutes",
+    "runtimePlaceholder": "Minutes or H:MM:SS, e.g. 120 / 1:40:45",
+    "runtimeInvalid": "Invalid duration: use minutes (120) or H:MM:SS (1:40:45)",
     "studio": "Studio",
     "publisher": "Publisher",
     "series": "Series",

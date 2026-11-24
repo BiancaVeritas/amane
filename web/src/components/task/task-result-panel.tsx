@@ -100,6 +100,8 @@ function resultBranch(result: TaskResult, failed: boolean): ReactNode {
     case "upscale":
     case "r18_import":
     case "rescrape":
+    // 临时任务: 只补时长; 结果里没有需要汇总的计数.
+    case "rescrape_runtime":
     case "scan_invalid":
     case "delete":
       return <EmptyHint visible={!failed} />;

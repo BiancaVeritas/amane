@@ -144,7 +144,10 @@
     "facetRuleDeleted": "Rule removed",
     "commentCreated": "Comment posted",
     "commentUpdated": "Comment saved",
-    "commentDeleted": "Comment deleted"
+    "commentDeleted": "Comment deleted",
+    "batchRuntimeStarted": "Submitted {{count}} duration refresh tasks",
+    "batchRuntimeStarted_one": "common:toast.batchRuntimeStarted",
+    "batchRuntimeStarted_other": "common:toast.batchRuntimeStarted"
   },
   "batch": {
     "selected": "{{count}} selected",

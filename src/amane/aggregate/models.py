@@ -20,6 +20,7 @@ class AggregatedMetadata:
     publisher: str | None = None
     release: str | None = None
     runtime: int | None = None
+    runtime_seconds: int | None = None
     series: str | None = None
     series_names: list[str] = field(default_factory=list)
     plot: str | None = None

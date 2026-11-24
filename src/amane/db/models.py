@@ -49,6 +49,9 @@ class TaskType(StrEnum):
     ACTOR_SCRAPE = "actor_scrape"
     ACTOR_PUSH = "actor_push"
     RESCRAPE = "rescrape"
+    #: 临时任务: 只重取时长, 不动其它字段. 用于把存量条目的 runtime_seconds 补上;
+    #: 存量补齐后连同 handler 一起删掉 (见 handlers/rescrape_runtime.py).
+    RESCRAPE_RUNTIME = "rescrape_runtime"
     SCAN_INVALID = "scan_invalid"
     DELETE = "delete"
     SEMANTIC_INDEX = "semantic_index"
@@ -320,6 +323,9 @@ class Metadata(SQLModel, table=True):
     publisher: str | None = Field(default=None, index=True)
     release: str | None = None
     runtime: int | None = None
+    #: 站点给出的原始时长 (秒). ``runtime`` 是从它折算出的分钟, 保留秒是为了需要时能精确显示;
+    #: 只提供分钟的站点这里留空.
+    runtime_seconds: int | None = None
     tags: list[str] = Field(default_factory=list, sa_column=Column(JSON))
     series: str | None = Field(default=None, index=True)
     # 多系列规范化关联的有序名称投影；series 保留首个系列供旧调用方兼容。

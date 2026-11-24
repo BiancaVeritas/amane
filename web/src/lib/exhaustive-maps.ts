@@ -103,6 +103,7 @@ export const TASK_TYPES = exhaustiveTuple<TaskType>()(
   "actor_scrape",
   "actor_push",
   "rescrape",
+  "rescrape_runtime",
   "scan_invalid",
   "delete",
   "semantic_index",
@@ -209,6 +210,7 @@ export const MANUAL_TASK_TYPES = exhaustiveTuple<ManualTaskType>()(
   "actor_scrape",
   "actor_push",
   "rescrape",
+  "rescrape_runtime",
   "semantic_index",
 );
 

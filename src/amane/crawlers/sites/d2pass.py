@@ -215,7 +215,7 @@ class D2PassCrawler(Crawler):
             plot=_field(block, "description"),
             actors=film_actors([actor] if actor else []),
             release=release,
-            runtime=round(duration / 60) if duration else None,
+            runtime_seconds=duration or None,
             studio=site,
             publisher=site,
             tags=tags,

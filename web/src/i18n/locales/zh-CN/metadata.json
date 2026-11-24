@@ -72,7 +72,8 @@
     "batchScrape": "批量重新刮削",
     "batchDelete": "批量删除",
     "confirmBatchDeleteTitle": "删除选中的影片？",
-    "confirmBatchDeleteDesc": "将永久删除选中的影片, 此操作不可撤销"
+    "confirmBatchDeleteDesc": "将永久删除选中的影片, 此操作不可撤销",
+    "batchRuntime": "重新获取时长"
   },
   "edit": {
     "title": "编辑影片"
@@ -351,7 +352,8 @@
       "label": "发行日期"
     },
     "runtime": {
-      "label": "时长 (分钟)"
+      "label": "时长",
+      "description": "填分钟（120）或 时:分:秒（1:40:45）；保存时不足一分钟按一分钟计"
     },
     "tags": {
       "label": "标签"

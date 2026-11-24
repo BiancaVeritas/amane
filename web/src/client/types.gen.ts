@@ -3161,6 +3161,10 @@ export type MetadataListItem = {
      */
     runtime?: number | null;
     /**
+     * Runtime Seconds
+     */
+    runtime_seconds?: number | null;
+    /**
      * Tags
      */
     tags?: Array<string>;
@@ -3372,6 +3376,10 @@ export type MetadataPartial = {
      */
     runtime?: number | null;
     /**
+     * Runtime Seconds
+     */
+    runtime_seconds?: number | null;
+    /**
      * Tags
      */
     tags?: Array<string> | null;
@@ -3480,6 +3488,10 @@ export type MetadataResponse = {
      * Runtime
      */
     runtime?: number | null;
+    /**
+     * Runtime Seconds
+     */
+    runtime_seconds?: number | null;
     /**
      * Tags
      */
@@ -4469,6 +4481,51 @@ export type RescrapeResult = {
      * Actors
      */
     actors?: number;
+};
+
+/**
+ * RescrapeRuntimeResult
+ *
+ * 临时任务的结果; 存量补齐后连同 payload / handler 一起删.
+ */
+export type RescrapeRuntimeResult = {
+    /**
+     * Type
+     */
+    type?: 'rescrape_runtime';
+    /**
+     * Number
+     */
+    number: string;
+    /**
+     * Runtime Seconds
+     */
+    runtime_seconds?: number | null;
+    /**
+     * Updated
+     */
+    updated?: boolean;
+};
+
+/**
+ * RescrapeRuntimeSubmission
+ *
+ * 临时任务: 只重取时长. 补齐存量后连同 handler 一起删.
+ */
+export type RescrapeRuntimeSubmission = {
+    /**
+     * Number
+     */
+    number?: string | null;
+    /**
+     * Metadata Id
+     */
+    metadata_id?: number | null;
+    content_type?: ContentType | null;
+    /**
+     * Type
+     */
+    type: 'rescrape_runtime';
 };
 
 /**
@@ -5795,7 +5852,7 @@ export type TaskBatchSubmitRequest = {
     /**
      * Submissions
      */
-    submissions: Array<RefreshSubmission | OrganizeSubmission | ScanInvalidSubmission | DeleteSubmission | ScrapeSubmission | CleanupSubmission | UpscaleSubmission | R18ImportSubmission | ActorScrapeSubmission | ActorPushSubmission | RescrapeSubmission | SemanticIndexSubmission | SemanticBenchmarkSubmission>;
+    submissions: Array<RefreshSubmission | OrganizeSubmission | ScanInvalidSubmission | DeleteSubmission | ScrapeSubmission | CleanupSubmission | UpscaleSubmission | R18ImportSubmission | ActorScrapeSubmission | ActorPushSubmission | RescrapeSubmission | RescrapeRuntimeSubmission | SemanticIndexSubmission | SemanticBenchmarkSubmission>;
 };
 
 /**
@@ -6103,6 +6160,8 @@ export type TaskResponse = {
     } & ActorPushResult) | ({
         type: 'rescrape';
     } & RescrapeResult) | ({
+        type: 'rescrape_runtime';
+    } & RescrapeRuntimeResult) | ({
         type: 'semantic_index';
     } & SemanticIndexResult) | ({
         type: 'semantic_benchmark';
@@ -6122,7 +6181,7 @@ export type TaskStatus = 'queued' | 'running' | 'done' | 'failed';
 /**
  * TaskType
  */
-export type TaskType = 'scrape' | 'organize' | 'refresh' | 'cleanup' | 'upscale' | 'r18_import' | 'actor_scrape' | 'actor_push' | 'rescrape' | 'scan_invalid' | 'delete' | 'semantic_index' | 'semantic_benchmark';
+export type TaskType = 'scrape' | 'organize' | 'refresh' | 'cleanup' | 'upscale' | 'r18_import' | 'actor_scrape' | 'actor_push' | 'rescrape' | 'rescrape_runtime' | 'scan_invalid' | 'delete' | 'semantic_index' | 'semantic_benchmark';
 
 /**
  * TaskWorkerResponse
@@ -9919,6 +9978,8 @@ export type SubmitTaskData = {
     } & ActorPushSubmission) | ({
         type: 'rescrape';
     } & RescrapeSubmission) | ({
+        type: 'rescrape_runtime';
+    } & RescrapeRuntimeSubmission) | ({
         type: 'semantic_index';
     } & SemanticIndexSubmission) | ({
         type: 'semantic_benchmark';

@@ -12,6 +12,7 @@ from ...handlers import (
     R18ImportPayload,
     RefreshPayload,
     RescrapePayload,
+    RescrapeRuntimePayload,
     ScanInvalidPayload,
     ScrapePayload,
     SemanticBenchmarkPayload,
@@ -26,6 +27,7 @@ from ..models import (
     OrganizeSubmission,
     R18ImportSubmission,
     RefreshSubmission,
+    RescrapeRuntimeSubmission,
     RescrapeSubmission,
     ScanInvalidSubmission,
     ScrapeSubmission,
@@ -87,6 +89,11 @@ async def resolve_submission(req: TaskSubmission, repo: Repository) -> tuple[Tas
         case RescrapeSubmission():
             return TaskType.RESCRAPE, RescrapePayload(
                 limit=req.limit, min_age_days=req.min_age_days, targets=req.targets
+            )
+        case RescrapeRuntimeSubmission():
+            # 临时任务: 存量补齐后连这个分支一起删.
+            return TaskType.RESCRAPE_RUNTIME, RescrapeRuntimePayload(
+                number=req.number, metadata_id=req.metadata_id, content_type=req.content_type
             )
         case SemanticIndexSubmission():
             return TaskType.SEMANTIC_INDEX, SemanticIndexPayload(limit=req.limit, force=req.force, kinds=req.kinds)

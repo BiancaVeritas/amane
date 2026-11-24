@@ -1,6 +1,7 @@
+import math
 from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Self
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -67,6 +68,8 @@ class MediaMetadata(BaseModel):
     release: str | None = None
     # 分钟. 外部 API 多以秒计时, 爬虫负责换算.
     runtime: int | None = None
+    #: 站点给出的原始秒数. 只提供分钟的站点留空; 有了它才能精确显示秒, 也让 NFO 能向上取整.
+    runtime_seconds: int | None = None
     tags: list[str] = Field(default_factory=list)
     series: str | None = None
     series_names: list[str] = Field(default_factory=list)
@@ -112,3 +115,22 @@ class MediaMetadata(BaseModel):
             msg = "release must be a string"
             raise TypeError(msg)
         return normalize_calendar_date(value)
+
+    @model_validator(mode="after")
+    def _sync_runtime_seconds(self) -> Self:
+        """让 ``runtime`` 与 ``runtime_seconds`` 互相自洽.
+
+        秒是精确值, 分钟是它的向上取整: 有秒时以秒为准, 没有秒时把分钟折成秒记下来 ——
+        这样每个爬虫都留下秒数, 只给分钟的站点也不会在数据里缺这一项.
+        ``ceil`` 而不是四舍五入: 站点给出的时长普遍比实际短一两秒, 向下取整会让 NFO 里的
+        分钟偏少; 秒恰为 0 时 ceil 与取整结果相同, 因此整分钟的条目不受影响.
+        """
+        if self.runtime_seconds is not None and self.runtime_seconds > 0:
+            self.runtime = math.ceil(self.runtime_seconds / 60)
+        elif self.runtime is not None and self.runtime > 0:
+            self.runtime_seconds = self.runtime * 60
+        else:
+            # 0 与缺省同义: 站点给 0 表示没抓到时长, 不是「零长度的影片」.
+            self.runtime_seconds = None
+            self.runtime = self.runtime if self.runtime and self.runtime > 0 else None
+        return self

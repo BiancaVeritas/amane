@@ -74,7 +74,7 @@ class MuramuraCrawler(Crawler):
             year = data.get("Year")
             release = f"{year}-01-01" if isinstance(year, (int, str)) and str(year).isdigit() else None
         duration = data.get("Duration")
-        runtime = int(round(duration / 60)) if isinstance(duration, (int, float)) and duration > 0 else None
+        runtime_seconds = int(duration) if isinstance(duration, (int, float)) and duration > 0 else None
         poster = next(
             (
                 data.get(key)
@@ -108,7 +108,7 @@ class MuramuraCrawler(Crawler):
             plot=plot if isinstance(plot, str) and plot.strip() else None,
             actors=film_actors(actors),
             release=release,
-            runtime=runtime,
+            runtime_seconds=runtime_seconds,
             series=series,
             tags=tags,
             poster_urls=[poster] if poster else [],

@@ -96,7 +96,7 @@ class IqqtvCrawler(Crawler):
         actors = extract_all_texts(html, '//div[contains(@class,"tag-info")]//a[contains(@href,"actor")]/span/text()')
         studio = extract_text(html, '//a[contains(@href, "fac")]/div[@itemprop]/text()')
         release = extract_text(html, '//div[@class="date"]/text()').replace("/", "-").strip()
-        runtime = self._parse_runtime(html)
+        runtime_seconds = self._parse_runtime(html)
         tags = extract_all_texts(html, '//div[contains(@class,"tag-info")]//a[contains(@href, "tag")]/text()')
         series = extract_text(html, '//a[contains(@href, "series")]/text()')
         plot = self._extract_plot(html)
@@ -111,7 +111,7 @@ class IqqtvCrawler(Crawler):
             studio=studio or None,
             publisher=studio or None,
             release=release or None,
-            runtime=runtime,
+            runtime_seconds=runtime_seconds,
             tags=tags,
             series=series or None,
             plot=plot or None,
@@ -145,13 +145,13 @@ class IqqtvCrawler(Crawler):
 
     @staticmethod
     def _parse_runtime(html: Selector) -> int | None:
-        """分钟. 首选播放器配置里的总秒数, 取不到时退到分段列表的最后一个 ``end``."""
+        """总秒数. 首选播放器配置里的长度, 取不到时退到分段列表的最后一个 ``end``."""
         script = extract_text(html, '//script[contains(., "all_vtt")]/text()')
         match = _RUNTIME_VTT.search(script)
         if match is not None:
-            return max(1, round(int(match.group(1)) / 60))
+            return max(1, int(match.group(1)))
         ends = [int(end) for end in html.xpath('//li[contains(@class,"vdplay01")]/@end').getall() if end.isdigit()]
-        return max(1, round(max(ends) / 60)) if ends else None
+        return max(1, max(ends)) if ends else None
 
     @staticmethod
     def _trailer_urls(html: Selector, url: str) -> list[str]:

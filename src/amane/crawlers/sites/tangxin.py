@@ -198,27 +198,25 @@ def _looks_like_tangxin(file_path: str | None, number: str) -> bool:
 
 
 def _parse_runtime(value: str) -> int | None:
-    """``24:45`` → 分钟数, 与站内其它来源的口径一致 (向下取整)."""
+    """``24:45`` / ``1:24:45`` → 总秒数; 形态不符时不猜."""
     match = re.fullmatch(r"(?:(\d+):)?(\d{1,2}):(\d{2})", value.strip())
     if match is None:
         return None
     hours = int(match.group(1) or 0)
     minutes = int(match.group(2))
     seconds = int(match.group(3))
-    total = hours * 3600 + minutes * 60 + seconds
-    return round(total / 60) or None
+    return hours * 3600 + minutes * 60 + seconds or None
 
 
 def _parse_iso_duration(value: str) -> int | None:
-    """``PT46M27S`` → 分钟数."""
+    """``PT46M27S`` → 总秒数."""
     match = re.fullmatch(r"PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?", value.strip(), re.IGNORECASE)
     if match is None:
         return None
     hours = int(match.group(1) or 0)
     minutes = int(match.group(2) or 0)
     seconds = int(match.group(3) or 0)
-    total = hours * 3600 + minutes * 60 + seconds
-    return round(total / 60) or None
+    return hours * 3600 + minutes * 60 + seconds or None
 
 
 def _text_of(value: object) -> str:
@@ -403,11 +401,11 @@ class TangxinCrawler(Crawler):
         display_number = title or number
 
         # 时长: ``PT46M27S`` (ISO 8601); 退回页面上的 ``46:27``.
-        runtime = _parse_iso_duration(_text_of(video.get("duration")))
-        if runtime is None:
+        runtime_seconds = _parse_iso_duration(_text_of(video.get("duration")))
+        if runtime_seconds is None:
             meta_line = " ".join(t.strip() for t in sel.xpath("//body//text()").getall() if t.strip())
             runtime_match = re.search(r"(?<!\d)(\d{1,3}:\d{2}(?::\d{2})?)(?!\d)", meta_line)
-            runtime = _parse_runtime(runtime_match.group(1)) if runtime_match else None
+            runtime_seconds = _parse_runtime(runtime_match.group(1)) if runtime_match else None
 
         # 日期: ``2026-10-23T00:00:00+08:00`` 取日期段.
         release = _text_of(video.get("uploadDate"))
@@ -453,7 +451,7 @@ class TangxinCrawler(Crawler):
             studio=_STUDIO,
             publisher=_STUDIO,
             release=release,
-            runtime=runtime,
+            runtime_seconds=runtime_seconds,
             plot=plot,
             # 封面与海报同源: 站点的 cover.jpg 是横版 640×360, 竖版海报交给物化阶段裁.
             poster_urls=[cover],

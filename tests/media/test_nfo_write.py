@@ -284,3 +284,30 @@ async def test_vendor_tags_dedupe_when_publisher_equals_series(tmp_path: Path) -
 
     tags = [e.text for e in ET.parse(nfo).getroot().findall("tag")]
     assert tags.count("HEYZO") == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("runtime", "seconds", "expected"),
+    [
+        # 整分钟: 不凭空多一分钟.
+        (None, 3600, 60),
+        (None, 5760, 96),
+        # 有余秒: 进 1 分钟.
+        (None, 3601, 61),
+        (None, 5761, 97),
+        (None, 6553, 110),
+        # 只有分钟 (旧条目): 原样写入.
+        (120, None, 120),
+    ],
+)
+async def test_nfo_runtime_rounds_up(tmp_path: Path, runtime: int | None, seconds: int | None, expected: int) -> None:
+    """NFO 的 <runtime> 永远是分钟; 有秒时向上取整, 秒为 0 时不进位."""
+    meta = Metadata(number="RON-001", runtime=runtime, runtime_seconds=seconds)
+    nfo = tmp_path / "out.nfo"
+
+    assert await write_nfo(meta, nfo) is True
+
+    node = ET.parse(nfo).getroot().find("runtime")
+    assert node is not None
+    assert node.text == str(expected)

@@ -137,7 +137,8 @@
     "facetRuleDeleted": "规则已移除",
     "commentCreated": "评论已发表",
     "commentUpdated": "评论已保存",
-    "commentDeleted": "评论已删除"
+    "commentDeleted": "评论已删除",
+    "batchRuntimeStarted": "已提交 {{count}} 条时长补取任务"
   },
   "batch": {
     "selected": "已选 {{count}} 项"

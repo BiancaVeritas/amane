@@ -72,7 +72,8 @@
     "delete": "删除",
     "semantic_index": "语义索引",
     "semantic_benchmark": "性能测试",
-    "actor_push": "推送演员"
+    "actor_push": "推送演员",
+    "rescrape_runtime": "重新获取时长"
   },
   "loadMoreChildren": "加载更多 ({{count}})",
   "logView": {
@@ -168,7 +169,8 @@
       "delete": "删除",
       "semantic_index": "语义索引",
       "semantic_benchmark": "性能测试",
-      "actor_push": "推送演员"
+      "actor_push": "推送演员",
+      "rescrape_runtime": "重新获取时长"
     },
     "cleanup": {
       "remove_missing_files": {
@@ -461,6 +463,29 @@
         "label": "强制覆盖",
         "description": "覆盖服务器上已有的头像与人物字段"
       }
+    },
+    "rescrape_runtime": {
+      "number": {
+        "label": "番号"
+      },
+      "metadata_id": {
+        "label": "绑定条目",
+        "description": "给了就按它定位, 不必再填番号"
+      },
+      "content_type": {
+        "label": "内容类型",
+        "description": "留空则自动识别",
+        "options": {
+          "censored": "有码",
+          "uncensored": "无码",
+          "chinese": "国产",
+          "western": "欧美",
+          "fc2": "FC2",
+          "heydouga": "Heydouga",
+          "amateur": "素人",
+          "hentai": "动漫"
+        }
+      }
     }
   },
   "title": "任务",
@@ -531,8 +556,8 @@
     "plot": "剧情",
     "release": "发行日",
     "runtime": "时长",
-    "runtimePlaceholder": "分钟, 如 120",
-    "runtimeInvalid": "时长填正整数分钟",
+    "runtimePlaceholder": "分钟或 时:分:秒，如 120 / 1:40:45",
+    "runtimeInvalid": "时长格式不对：填分钟（120）或 时:分:秒（1:40:45）",
     "studio": "制作商",
     "publisher": "发行商",
     "series": "系列",

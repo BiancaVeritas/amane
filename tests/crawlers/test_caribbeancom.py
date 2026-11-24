@@ -6,7 +6,7 @@ from amane.crawlers.sites.caribbeancom import (
     _detail,
     _number,
     _release_from_number,
-    _runtime_minutes,
+    _runtime_seconds,
 )
 from amane.enums import SiteName
 
@@ -41,17 +41,18 @@ def test_detail_parses_metadata_and_all_public_gallery_links() -> None:
     assert data["plot"] == "Sample plot"
     assert data["actors"] == ["Actress A"]
     assert data["release"] == "2026-07-29"
-    assert data["runtime"] == 40
+    assert data["runtime_seconds"] == 40 * 60 + 28
     assert data["series"] == "Series A"
     assert data["tags"] == ["Tag A"]
     assert len(gallery) == 5
     assert gallery[0].endswith("/images/l/001.jpg")
 
 
-def test_runtime_rounding() -> None:
-    assert _runtime_minutes("00:40:28") == 40
-    assert _runtime_minutes("01:01:40") == 62
-    assert _runtime_minutes("bad") is None
+def test_runtime_seconds() -> None:
+    """时钟串取总秒数; 取整交给 MediaMetadata 统一处理, 不再各站各写一套."""
+    assert _runtime_seconds("00:40:28") == 40 * 60 + 28
+    assert _runtime_seconds("01:01:40") == 3600 + 60 + 40
+    assert _runtime_seconds("bad") is None
 
 
 @pytest.mark.parametrize(
@@ -100,7 +101,9 @@ async def test_scrape_uses_dedicated_player_poster_and_metadata() -> None:
     assert result.studio == "カリビアンコム"
     assert result.publisher == "カリビアンコム"
     assert result.actors[0].name == "Actor A"
+    # 00:30:00 整分钟: ceil 与原值相同, NFO 不会多进一分钟.
     assert result.runtime == 30
+    assert result.runtime_seconds == 30 * 60
     assert result.extrafanart == ["https://www.caribbeancom.com/moviepages/103126-001/images/l/001.jpg"]
 
 

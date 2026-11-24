@@ -102,7 +102,7 @@ def test_detail_only_reads_public_gallery_and_required_metadata() -> None:
     assert data["title"] == "激烈ハードに3穴責め！！Vol.2"
     assert data["plot"] == "Plot text"
     assert data["actors"] == ["Actor A"]
-    assert data["runtime"] == 61
+    assert data["runtime_seconds"] == 3600 + 38
     assert data["tags"] == ["Tag A", "Tag B"]
     assert len(gallery) == 3
     assert all("/member/" not in url for url in gallery)
@@ -141,6 +141,7 @@ async def test_scrape_uses_javbus_release_and_fixed_heyzo_labels() -> None:
     assert result.release == "2026-06-30"
     assert result.studio == "HEYZO"
     assert result.publisher == "HEYZO"
+    assert result.runtime_seconds == 3600 + 38
     assert result.runtime == 61
     assert result.original_poster_urls is None
     assert len(result.extrafanart) == 3

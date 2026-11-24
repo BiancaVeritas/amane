@@ -21,7 +21,7 @@ import { EnumArrayField } from "./enum-array-field";
 import { EnumField } from "./enum-field";
 import classes from "./field-router.module.css";
 import { LibraryField } from "./library-field";
-import { NumericField } from "./numeric-field";
+import { NumericField, RuntimeField } from "./numeric-field";
 import { ObjectArrayField } from "./object-array-field";
 import { PathField } from "./path-field";
 import { SimpleArrayField } from "./simple-array-field";
@@ -108,6 +108,12 @@ export function FieldRouter({
   }
 
   if (isNumeric(schema)) {
+    // 时长要能填 `1:40:45`: 单靠整数框只能填分钟, 秒会在保存时丢掉.
+    // 名字带 `prefix.` 前缀 (过渡态如 `editor.runtime`), 所以按末段判断.
+    if (name === "runtime" || name.endsWith(".runtime")) {
+      devLog.info(TAG, `→ RuntimeField: ${name}`);
+      return <RuntimeField schema={schema} {...basic} />;
+    }
     devLog.info(TAG, `→ NumericField: ${name}`);
     return <NumericField schema={schema} {...basic} />;
   }

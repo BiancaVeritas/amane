@@ -22,6 +22,7 @@ from amane.handlers.models import (
     R18ImportResult,
     RefreshResult,
     RescrapeResult,
+    RescrapeRuntimeResult,
     ScanInvalidResult,
     ScrapeResult,
     SemanticBenchmarkResult,
@@ -102,6 +103,7 @@ RESULT_CASES = [
     pytest.param(SemanticIndexResult(scanned=10, indexed=8, skipped=1, missing=1, failed=0), id="semantic_index"),
     pytest.param(R18ImportResult(imported=True, etag=None), id="r18_import"),
     pytest.param(RescrapeResult(submitted=5, metadata=3, actors=2), id="rescrape"),
+    pytest.param(RescrapeRuntimeResult(number="ABC-1", runtime_seconds=3995, updated=True), id="rescrape_runtime"),
     pytest.param(
         ScanInvalidResult(
             inventory_id="abc123",

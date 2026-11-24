@@ -184,7 +184,7 @@ def build_metadata(work: dict[str, Any], *, url: str) -> MediaMetadata | None:
         publisher=_product_name(products, "label"),
         series=_product_name(products, "series"),
         release=parse_js_date(_text(work.get("min_date"))),
-        runtime=first_runtime(products),
+        runtime_seconds=first_runtime(products),
         tags=_build_tags(work.get("genres")),
         directors=_build_directors(products),
         poster_urls=poster_urls,
@@ -299,9 +299,9 @@ def _build_directors(products: list[dict[str, Any]]) -> list[str]:
 
 def first_runtime(products: list[dict[str, Any]]) -> int | None:
     for product in products:
-        runtime = parse_runtime(_iteminfo(product, "volume"))
-        if runtime is not None:
-            return runtime
+        seconds = parse_runtime(_iteminfo(product, "volume"))
+        if seconds is not None:
+            return seconds
     return None
 
 
@@ -321,15 +321,15 @@ def _iteminfo(product: dict[str, Any], key: str) -> str:
 
 
 def parse_runtime(value: str) -> int | None:
-    """``"143"`` 取分钟数; ``"1:49:00"`` 按时钟串换算; 其它形态不猜."""
+    """``"143"`` 按分钟折算成秒; ``"1:49:00"`` 按时钟串取总秒数; 其它形态不猜."""
     if not value:
         return None
     if value.isdigit():
-        return int(value)
+        return int(value) * 60
     match = _CLOCK_RE.fullmatch(value)
     if not match:
         return None
-    return int(match.group("h")) * 60 + int(match.group("min"))
+    return int(match.group("h")) * 3600 + int(match.group("min")) * 60 + int(match.group("sec"))
 
 
 def parse_js_date(value: str) -> str | None:

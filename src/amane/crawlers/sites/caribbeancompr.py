@@ -137,14 +137,15 @@ def _title_key(value: str) -> str:
     return "".join(ch for ch in folded if ch.isalnum())
 
 
-def _runtime_minutes(value: str | None) -> int | None:
+def _runtime_seconds(value: str | None) -> int | None:
+    """``HH:MM:SS`` → 总秒数; 形态不符时不猜."""
     if not value:
         return None
     match = re.fullmatch(r"\s*(\d{1,2}):(\d{2}):(\d{2})\s*", value)
     if not match:
         return None
     hours, minutes, seconds = map(int, match.groups())
-    return hours * 60 + minutes + (1 if seconds >= 30 else 0)
+    return hours * 3600 + minutes * 60 + seconds
 
 
 def _javbus_title_release(html_text: str) -> tuple[str | None, str | None]:
@@ -230,7 +231,7 @@ def _detail(html_text: str, page_url: str) -> tuple[dict[str, object], list[str]
         "title": title or None,
         "plot": plot or None,
         "actors": list(dict.fromkeys(actors)),
-        "runtime": _runtime_minutes(runtime_text),
+        "runtime_seconds": _runtime_seconds(runtime_text),
         "tags": list(dict.fromkeys(tags)),
     }
     return metadata, gallery[:3], poster
@@ -382,7 +383,7 @@ class CaribbeancomprCrawler(Crawler):
             title=data["title"] if isinstance(data["title"], str) else None,
             plot=data["plot"] if isinstance(data["plot"], str) else None,
             actors=film_actors(data["actors"] if isinstance(data["actors"], list) else []),
-            runtime=data["runtime"] if isinstance(data["runtime"], int) else None,
+            runtime_seconds=data["runtime_seconds"] if isinstance(data["runtime_seconds"], int) else None,
             tags=data["tags"] if isinstance(data["tags"], list) else [],
             release=release,
             studio="HEYZO",

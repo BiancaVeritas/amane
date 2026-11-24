@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Literal, Self
 
 from fastapi import HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from starlette.status import HTTP_403_FORBIDDEN
 
 from ..db import Library, MediaFileStatus, Repository
@@ -479,3 +479,29 @@ class RescrapeResult(BaseModel):
     submitted: int
     metadata: int = 0
     actors: int = 0
+
+
+class RescrapeRuntimePayload(BaseModel):
+    """临时任务「只重取时长」的入参: 只描述哪一条, 没有别的可调项.
+
+    两种定位方式二选一: 批量补存量时前端手上只有 id, 单条补时只有番号.
+    """
+
+    number: str | None = Field(default=None, max_length=200)
+    metadata_id: int | None = None
+    content_type: ContentType | None = None
+
+    @model_validator(mode="after")
+    def _needs_identity(self) -> Self:
+        if not self.number and self.metadata_id is None:
+            raise ValueError("至少要给番号或条目 id")
+        return self
+
+
+class RescrapeRuntimeResult(BaseModel):
+    """临时任务的结果; 存量补齐后连同 payload / handler 一起删."""
+
+    type: Literal[TaskType.RESCRAPE_RUNTIME] = TaskType.RESCRAPE_RUNTIME
+    number: str
+    runtime_seconds: int | None = None
+    updated: bool = False

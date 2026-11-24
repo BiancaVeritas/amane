@@ -128,11 +128,24 @@ export const Route = createFileRoute("/meta/$metadataId")({
   component: TitleDetailPage,
 });
 
-function formatRuntime(minutes?: number | null): string | null {
+function formatRuntime(minutes?: number | null, seconds?: number | null): string | null {
+  // 有秒就用精确值: 分钟是向上取整的结果, 拿它反推会多算.
+  if (seconds && seconds > 0) {
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    const s = seconds % 60;
+    // 有小时时分钟一律补零 (`1h 09m` / `1h 01m`): 同一列里 `1h 1m` 与 `1h 09m 18s` 混排
+    // 会让数字位数跳动, 看着对不齐. 秒为 0 时不写秒, 避免尾部多一个没信息量的 `00s`.
+    if (h > 0) {
+      const head = `${h}h ${String(m).padStart(2, "0")}m`;
+      return s === 0 ? head : `${head} ${String(s).padStart(2, "0")}s`;
+    }
+    return s === 0 ? `${m}m` : `${m}m ${String(s).padStart(2, "0")}s`;
+  }
   if (!minutes) return null;
   const h = Math.floor(minutes / 60);
   const m = minutes % 60;
-  return h > 0 ? `${h}h ${m}m` : `${m}m`;
+  return h > 0 ? `${h}h ${String(m).padStart(2, "0")}m` : `${m}m`;
 }
 
 /**
@@ -160,9 +173,9 @@ function FieldBlock({
 }) {
   return (
     <div>
-      {/* 标签与徽章内的文字左对齐: 徽章自身有水平内边距, 标签若贴着块边线, 看起来就比
-          徽章里的字靠左一截. 补上同等的左内边距, 两者文字起点才齐. */}
-      <Group gap={4} wrap="nowrap" align="center" style={{ paddingLeft: "0.3125rem" }}>
+      {/* 标签与徽章内的文字左对齐: 徽章 (Mantine size="sm") 自带 12px 水平内边距,
+          标签贴着块边线就会比徽章里的字靠左一截 —— 补上同等内边距, 两者文字起点才齐. */}
+      <Group gap={4} wrap="nowrap" align="center" style={{ paddingLeft: "0.5rem" }}>
         <Text size="xs" c="dimmed">
           {label}
         </Text>
@@ -560,7 +573,7 @@ function TitleDetailPage() {
   // 取成局部量, 供播放分支在回调里引用 (属性访问的收窄不进闭包).
   const trailerUrl = item.trailer_url ?? null;
   const hasExtrafanart = item.extrafanart && item.extrafanart.length > 0;
-  const runtime = formatRuntime(item.runtime);
+  const runtime = formatRuntime(item.runtime, item.runtime_seconds);
 
   // 中日文成对字段共享一个锁控件; 写入时仍展开为后端现有的两个字段锁.
   const pairedLockFields = (field: MetadataField): MetadataField[] => {

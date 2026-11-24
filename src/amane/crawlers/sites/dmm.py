@@ -254,7 +254,7 @@ class DmmCrawler(Crawler):
         if data is None or not data.title:
             return None
 
-        runtime = int(data.duration / 60) if data.duration else None
+        runtime_seconds = int(data.duration) if data.duration else None
 
         extrafanart = _digital_extrafanart(data.sampleImages)
 
@@ -276,7 +276,7 @@ class DmmCrawler(Crawler):
             studio=data.maker.name if data.maker else None,
             publisher=data.label.name if data.label else None,
             release=data.deliveryStartDate or None,
-            runtime=runtime,
+            runtime_seconds=runtime_seconds,
             tags=[g.name for g in data.genres if g.name],
             series=data.series.name if data.series else None,
             plot=data.description or None,
@@ -336,7 +336,7 @@ class DmmCrawler(Crawler):
         )
         release = self._parse_release(release_raw)
 
-        runtime = self._parse_runtime(
+        runtime_seconds = self._parse_runtime(
             extract_text(
                 html,
                 f"{_multi}//dt[contains(text(),'収録時間')]/{_dd_text}",
@@ -431,7 +431,7 @@ class DmmCrawler(Crawler):
             studio=studio or None,
             publisher=publisher or None,
             release=release,
-            runtime=runtime,
+            runtime_seconds=runtime_seconds,
             tags=tags,
             series=series or None,
             plot=plot or None,
@@ -454,7 +454,7 @@ class DmmCrawler(Crawler):
         number = self._cid_to_number(number_raw, retail=True)
 
         title = extract_text(html, '//h1[@id="title"]/text()', '//h1[@class="item fn bold"]/text()')
-        runtime = self._parse_runtime(
+        runtime_seconds = self._parse_runtime(
             extract_text(
                 html,
                 "//td[contains(text(),'収録時間')]/following-sibling::td/text()",
@@ -487,7 +487,7 @@ class DmmCrawler(Crawler):
             studio=studio or None,
             publisher=publisher or None,
             release=None,  # rental 页无有效发售日.
-            runtime=runtime,
+            runtime_seconds=runtime_seconds,
             tags=tags,
             series=series or None,
             plot=plot or None,
@@ -527,7 +527,7 @@ class DmmCrawler(Crawler):
         trailer_url = self._derive_fanza_trailer(sample_movie.url) if sample_movie else None
 
         play_info = data.playInfo
-        runtime = int(play_info.duration / 60) if play_info and play_info.duration else None
+        runtime_seconds = int(play_info.duration) if play_info and play_info.duration else None
 
         extrafanart = [sp.imageLarge for sp in data.samplePictures if sp.imageLarge]
 
@@ -538,7 +538,7 @@ class DmmCrawler(Crawler):
             studio=data.maker.name if data.maker else None,
             publisher=data.label.name if data.label else None,
             release=data.startDeliveryAt or None,
-            runtime=runtime,
+            runtime_seconds=runtime_seconds,
             tags=[g.name for g in data.genres if g.name],
             series=data.series.name if data.series else None,
             plot=data.description or None,
@@ -585,7 +585,7 @@ class DmmCrawler(Crawler):
             studio=studio,
             publisher=studio,
             release=data.startPublicAt or None,
-            runtime=None,
+            runtime_seconds=None,
             tags=[g.name for g in data.genres if g.name],
             plot=data.description or None,
             poster_urls=[data.keyVisualImage] if data.keyVisualImage else [],
@@ -627,10 +627,11 @@ class DmmCrawler(Crawler):
 
     @staticmethod
     def _parse_runtime(text: str) -> int | None:
+        """「収録時間」只写分钟数; 折成秒, 与其它站点同一量纲."""
         if not text:
             return None
         match = re.search(r"(\d+)", text)
-        return int(match.group(1)) if match else None
+        return int(match.group(1)) * 60 if match else None
 
     @staticmethod
     def _parse_release(text: str) -> str | None:

@@ -14,7 +14,14 @@ import {
   type MantineBreakpoint,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
-import { IconArrowMerge, IconDots, IconRefresh, IconTag, IconTrash } from "@tabler/icons-react";
+import {
+  IconArrowMerge,
+  IconClock,
+  IconDots,
+  IconRefresh,
+  IconTag,
+  IconTrash,
+} from "@tabler/icons-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
@@ -30,6 +37,7 @@ import {
   mergeMetadataEntriesMutation,
   submitTaskMutation,
 } from "@/client/@tanstack/react-query.gen";
+import { batchSubmitTasks } from "@/client/sdk.gen";
 import type { CacheKind, MetadataListItem, MetadataSortField, SortOrder } from "@/client/types.gen";
 import { HintedActionIcon } from "@/components/common/hinted-action-icon";
 import { ListToolbar } from "@/components/common/list-toolbar";
@@ -174,6 +182,10 @@ export function MetaTable({
   }
   const pageIds = items.map((i) => i.id);
   const { selected, selectedIds, toggleOne, toggleAll, isAllSelected, clear } = useIdSelection();
+  // 补时长要带上番号; 选中集只有 id, 从当前页数据里取回番号.
+  const selectedRows = items
+    .filter((i) => selectedIds.includes(i.id))
+    .map((i) => ({ id: i.id, number: i.number }));
   const [tagModalOpen, setTagModalOpen] = useState(false);
   const [tagIds, setTagIds] = useState<string[]>([]);
 
@@ -212,6 +224,36 @@ export function MetaTable({
       }),
   });
 
+  /**
+   * 临时任务: 只补时长的存量数据.
+   *
+   * 逐条提交而不是做一个批量端点: 这个任务本来只为补齐 runtime_seconds 存在, 补齐后连按钮
+   * 一起删, 不值得为它扩后端接口.
+   */
+  const batchRuntime = useMutation({
+    mutationFn: async (rows: { id: number; number: string }[]) => {
+      // 番号一并带上: 任务记录里光有 id 看不出是哪一部, 排查时要再翻库.
+      const submissions = rows.map((row) => ({
+        type: "rescrape_runtime" as const,
+        metadata_id: row.id,
+        number: row.number,
+      }));
+      const { data } = await batchSubmitTasks({ body: { submissions } });
+      return data;
+    },
+    onSuccess: (res) => {
+      notifications.show({
+        message: t("common:toast.batchRuntimeStarted", { count: res?.submitted ?? 0 }),
+        color: "blue",
+      });
+      void queryClient.invalidateQueries({ queryKey: ["tasks"] });
+    },
+    onError: (err) =>
+      notifications.show({
+        message: extractErrorMessage(err, t("common:toast.operationFailed")),
+        color: "red",
+      }),
+  });
   const batchDelete = useMutation({
     ...batchDeleteMetadataMutation(),
     onSuccess: () => {
@@ -369,6 +411,17 @@ export function MetaTable({
                 />
               </Menu.Dropdown>
             </Menu>
+            {/* 临时入口: 只补存量条目的时长. 存量补齐后与后端的 rescrape_runtime 一起删. */}
+            <Button
+              size="xs"
+              variant="light"
+              leftSection={<IconClock size={14} />}
+              loading={batchRuntime.isPending}
+              disabled={selected.size === 0}
+              onClick={() => batchRuntime.mutate(selectedRows)}
+            >
+              {t("actions.batchRuntime")}
+            </Button>{" "}
             <Button
               size="xs"
               variant="light"

@@ -28,6 +28,7 @@ from ..handlers import (
     R18ImportHandler,
     RefreshHandler,
     RescrapeHandler,
+    RescrapeRuntimeHandler,
     ScanInvalidHandler,
     ScrapeHandler,
     SemanticBenchmarkHandler,
@@ -231,9 +232,7 @@ class AppRuntime:
     release_checker: ReleaseChecker
     resource_store: ResourceStore
     proxy_failure_cache: ProxyFailureCache
-    proxy_downloads: asyncio.Semaphore = field(
-        default_factory=lambda: asyncio.Semaphore(PROXY_DOWNLOAD_CONCURRENCY)
-    )
+    proxy_downloads: asyncio.Semaphore = field(default_factory=lambda: asyncio.Semaphore(PROXY_DOWNLOAD_CONCURRENCY))
     watcher_service: WatcherService | None = None
     feed_service: FeedService | None = None
     safe_dirs: list[Path] | None = field(default_factory=list)
@@ -626,6 +625,8 @@ def build_handlers(
         TaskType.CLEANUP: CleanupHandler(repo=repo, resource_store=resource_store),
         TaskType.UPSCALE: UpscaleHandler(resource_store, hot),
         TaskType.RESCRAPE: RescrapeHandler(repo),
+        # 临时任务: 只补存量条目的时长, 补齐后可删.
+        TaskType.RESCRAPE_RUNTIME: RescrapeRuntimeHandler(repo, factory, hot),
         TaskType.SEMANTIC_INDEX: SemanticIndexHandler(semantic),
         TaskType.SEMANTIC_BENCHMARK: SemanticBenchmarkHandler(semantic),
     }
