@@ -403,18 +403,19 @@ def custom_variable_values(
     placeholders: Mapping[str, CustomPlaceholder] | None,
     *filenames: str | None,
 ) -> dict[str, str]:
-    """按文件名逐个检测自定义占位符; 任一候选名命中即取值, 输出大写.
+    """按文件名逐个检测自定义占位符; 命中取名, **未命中给空串**.
 
-    ``{LTX}`` 这类占位符在模板里的名字就是配置项的键, 因此返回值直接并入 variables.
+    未命中必须显式给空串而不是省略这个键: 占位符语法下缺失的键会渲染成 ``Unknown``,
+    而 Jinja2 (``StrictUndefined``) 会直接抛 ``'NOE' is undefined`` —— 文件名里不含该
+    标记时整理会整条失败. 空串还能让模板里的可选段按既有规则折叠掉.
     """
     if not placeholders:
         return {}
     names = [name for name in filenames if name]
-    values: dict[str, str] = {}
-    for key, placeholder in placeholders.items():
-        if any(placeholder.matches(name) for name in names):
-            values[key] = placeholder.literal.upper()
-    return values
+    return {
+        key: placeholder.literal.upper() if any(placeholder.matches(name) for name in names) else ""
+        for key, placeholder in placeholders.items()
+    }
 
 
 def _join_display(names: Sequence[str], mapping: Mapping[str, str]) -> str:

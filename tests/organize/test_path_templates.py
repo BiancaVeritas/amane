@@ -26,9 +26,12 @@ from amane.organize import (
 from amane.organize.template import (
     PATH_FIELD_ELLIPSIS,
     PATH_FIELD_MAX_BYTES,
+    CustomPlaceholder,
+    JinjaPathEngine,
     PathEngine,
     TemplateContext,
     actress_names,
+    custom_variable_values,
 )
 from amane.parsing import ContentType, parse_file_info
 
@@ -1377,3 +1380,45 @@ def test_both_naming_templates_are_checked(monkeypatch) -> None:
         },
         {"NOE": "NOE"},
     )
+
+
+class TestCustomPlaceholderRendering:
+    """配置了自定义占位符, 但文件名里不含那个标记时, 渲染不能失败.
+
+    Jinja2 用 StrictUndefined: variables 里缺这个键会直接抛 `'NOE' is undefined`,
+    整条整理任务就废了. 未命中必须给空串, 让模板里的可选段自然折叠.
+    """
+
+    def test_missing_marker_yields_empty_string(self):
+        placeholders = {"NOE": CustomPlaceholder(literal="NOE")}
+        values = custom_variable_values(placeholders, "abc-123.mp4", "/in/abc-123")
+        assert values == {"NOE": ""}, "未命中要给空串, 不能省略键"
+
+    def test_present_marker_yields_literal(self):
+        placeholders = {"NOE": CustomPlaceholder(literal="NOE")}
+        values = custom_variable_values(placeholders, "abc-NOE-123.mp4", None)
+        assert values == {"NOE": "NOE"}
+
+    @pytest.mark.parametrize(
+        ("filename", "expected"),
+        [
+            ("abc-123.mp4", "A/ABC-1/ABC-1.mp4"),
+            ("abc-NOE-123.mp4", "A/ABC-1/ABC-1[NOE].mp4"),
+        ],
+    )
+    def test_jinja_template_renders_either_way(self, filename: str, expected: str):
+        """两种情形都要出结果: 缺标记时折叠掉整段, 有标记时带上."""
+        placeholders = {"NOE": CustomPlaceholder(literal="NOE")}
+        template = "{{actress}}/{{number}}/{{number}}{% if NOE %}[{{NOE}}]{% endif %}.{{ext}}"
+        variables = {
+            "actress": "A",
+            "number": "ABC-1",
+            "ext": "mp4",
+            **custom_variable_values(placeholders, filename, None),
+        }
+        engine = JinjaPathEngine(template)
+        assert engine.fill(TemplateContext.from_mapping(variables)) == expected
+
+    def test_no_placeholders_configured_is_noop(self):
+        assert custom_variable_values(None, "abc.mp4") == {}
+        assert custom_variable_values({}, "abc.mp4") == {}
