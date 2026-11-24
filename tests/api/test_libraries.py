@@ -412,3 +412,82 @@ class TestAutoOrganize:
         stored = await repo.get_library(created.json()["id"])
         assert stored is not None
         assert stored.auto_organize is True
+
+
+class TestCustomPlaceholderRemoval:
+    """删掉自定义占位符后, 命名模板里残留的引用必须在保存时就报错."""
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_removing_placeholder_in_use_is_rejected(self, client: AsyncClient, safe_path: Path):
+        """占位符语法: 模板里留着 {NOE}, 删掉占位符必须 422."""
+        target = safe_path / "plib"
+        target.mkdir()
+        created = await client.post(
+            "libraries",
+            json={
+                "path": str(target),
+                "scan": False,
+                "custom_placeholders": {"NOE": "NOE"},
+                "video_template": "{number}[{NOE}].{ext}",
+            },
+        )
+        assert created.status_code == 201, created.text
+        lib_id = created.json()["id"]
+
+        # 只删占位符、不动模板: 模板里还引着 {NOE}, 必须 422.
+        rejected = await client.patch(f"libraries/{lib_id}", json={"custom_placeholders": {}})
+        assert rejected.status_code == 422
+        assert "NOE" in rejected.text
+
+        # 同时把模板里的引用去掉就能保存.
+        ok = await client.patch(
+            f"libraries/{lib_id}",
+            json={"custom_placeholders": {}, "video_template": "{number}.{ext}"},
+        )
+        assert ok.status_code == 200, ok.text
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_removing_placeholder_in_jinja_template_is_rejected(self, client: AsyncClient, safe_path: Path):
+        """Jinja2 语法: 模板里留着 {{NOE}} / {% if NOE %}, 删掉占位符同样必须 422."""
+        target = safe_path / "plibj"
+        target.mkdir()
+        created = await client.post(
+            "libraries",
+            json={
+                "path": str(target),
+                "scan": False,
+                "use_jinja_template": True,
+                "custom_placeholders": {"NOE": "NOE"},
+                "jinja_video_template": "{{actress}}/{{number}}{% if NOE %}[{{NOE}}]{% endif %}.{{ext}}",
+            },
+        )
+        assert created.status_code == 201, created.text
+        lib_id = created.json()["id"]
+
+        rejected = await client.patch(f"libraries/{lib_id}", json={"custom_placeholders": {}})
+        assert rejected.status_code == 422
+        assert "NOE" in rejected.text
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_create_with_unknown_placeholder_is_rejected(self, client: AsyncClient, safe_path: Path):
+        target = safe_path / "plib2"
+        target.mkdir()
+        created = await client.post(
+            "libraries",
+            json={"path": str(target), "scan": False, "video_template": "{number}[{NOPE}].{ext}"},
+        )
+        assert created.status_code == 422
+        assert "NOPE" in created.text
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_patch_with_unknown_placeholder_is_rejected(self, client: AsyncClient, safe_path: Path):
+        """改任意模板字段都要查: 逐个字段都可能是残留引用的地方."""
+        target = safe_path / "plib3"
+        target.mkdir()
+        created = await client.post("libraries", json={"path": str(target), "scan": False})
+        lib_id = created.json()["id"]
+
+        for field in ("video_template", "link_template", "thumb_template", "nfo_template"):
+            bad = await client.patch(f"libraries/{lib_id}", json={field: "{link_dir}/{GONE}.ext"})
+            assert bad.status_code == 422, field
+            assert "GONE" in bad.text, field

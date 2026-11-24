@@ -14,6 +14,8 @@ from ..utils.path import is_descendant, path_key
 from .template import PLACEHOLDER_MAP_KEYS as PLACEHOLDER_MAP_KEYS
 from .template import PLACEHOLDERS as PLACEHOLDERS
 from .template import CustomPlaceholder, JinjaPathEngine, Parser, PathEngine, TemplateContext
+from .template import jinja_variables as jinja_variables
+from .template import referenced_placeholders as referenced_placeholders
 
 if TYPE_CHECKING:
     from ..db.models import Library, Metadata
@@ -162,6 +164,53 @@ ExtrafanartNameTemplate = Annotated[str, AfterValidator(validate_extrafanart_nam
 
 def render_path_template(template: str, variables: dict[str, str]) -> str:
     return PathEngine(template).render(TemplateContext.from_mapping(variables))
+
+
+#: 库配置里所有可能引用占位符的模板字段. 只校验非空的实际取值.
+TEMPLATE_FIELDS: tuple[str, ...] = (
+    "video_template",
+    "jinja_video_template",
+    "link_template",
+    "strm_content_template",
+    "thumb_template",
+    "poster_template",
+    "fanart_template",
+    "extrafanart_template",
+    "extrafanart_name_template",
+    "nfo_template",
+    "trailer_template",
+    "subtitle_template",
+)
+
+
+def validate_template_placeholders(
+    templates: Mapping[str, str | None], custom_placeholders: Mapping[str, str] | None
+) -> None:
+    """模板引用的占位符必须存在: 内置的, 或该库已配置的自定义占位符.
+
+    渲染器遇到未知名字不报错, 而是把它原样留在路径里 —— 删掉自定义占位符后模板里留着的
+    ``{NOE}`` 会变成一个真实的目录名, 文件照样落盘, 事后极难看出是模板写错了. 因此保存时
+    就把这种情况拦下来.
+
+    命名模板有两个字段 (``video_template`` / ``jinja_video_template``), 语法各不相同, 各自按
+    自己的语法取名. 它们究竟哪个生效由渲染期开关决定, 而保存时那个开关可能随后就被改掉 ——
+    所以两个都查, 不按开关跳过任何一个: 多查一份没有代价, 漏查一份等于没做.
+    """
+    extra = {name for name, literal in (custom_placeholders or {}).items() if isinstance(name, str) and literal}
+    # 带 ? 的占位符在 Jinja 里写成去掉问号的别名 (cd? → cd), 两套写法都算已定义.
+    known = set(PLACEHOLDERS) | extra | {name.rstrip("?") for name in PLACEHOLDERS if name.endswith("?")}
+    dangling: list[str] = []
+    for field in TEMPLATE_FIELDS:
+        value = templates.get(field)
+        if not value or not value.strip():
+            continue
+        try:
+            used = jinja_variables(value) if field == "jinja_video_template" else referenced_placeholders(value)
+        except ValueError as exc:
+            raise ValueError(f"{field}: {exc}") from exc
+        dangling.extend(f"{field} 引用了未定义的占位符 {{{name}}}" for name in sorted(used - known))
+    if dangling:
+        raise ValueError(f"模板引用了不存在的占位符: {'; '.join(dangling)}。请改用内置占位符或先配置对应的自定义占位符")
 
 
 def _custom_placeholders(library: Library) -> dict[str, CustomPlaceholder]:

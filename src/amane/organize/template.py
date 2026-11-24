@@ -298,6 +298,29 @@ def _nodes_use_placeholder(nodes: Sequence[_Node], name: str) -> bool:
     return False
 
 
+def _collect_placeholder_names(nodes: Sequence[_Node], out: set[str]) -> None:
+    for node in nodes:
+        if isinstance(node, _Placeholder):
+            out.add(node.name)
+        elif isinstance(node, _Group):
+            _collect_placeholder_names(node.children, out)
+
+
+def referenced_placeholders(template: str) -> set[str]:
+    """模板里引用到的全部占位符名 (含可选组内的). 语法不合法时抛 ``ValueError``."""
+    names: set[str] = set()
+    _collect_placeholder_names(Parser(template).parse(), names)
+    return names
+
+
+def jinja_variables(template: str) -> set[str]:
+    """Jinja2 模板引用到的变量名; 注释与字符串字面量里的同名片段不算. 语法不合法时抛 ``ValueError``."""
+    try:
+        return set(meta.find_undeclared_variables(_jinja_env().parse(template)))
+    except TemplateError as exc:
+        raise ValueError(f"Jinja2 模板语法错误: {exc}") from exc
+
+
 def _clip_field(value: str) -> str:
     """按 UTF-8 字节截断并追加省略号, 不得切开多字节字符. 省略号计入上限."""
     data = value.encode("utf-8")

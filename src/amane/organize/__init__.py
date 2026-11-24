@@ -4,6 +4,7 @@ from .link import create_video_link
 from .path_templates import (
     EXTRAFANART_NAME_TEMPLATE_DEFAULT,
     JINJA_VIDEO_TEMPLATE_DEFAULT,
+    TEMPLATE_FIELDS,
     VIDEO_TEMPLATE_DEFAULT,
     ExtrafanartNameTemplate,
     PathTemplate,
@@ -16,6 +17,7 @@ from .path_templates import (
     validate_extrafanart_name_template,
     validate_jinja_template,
     validate_path_template,
+    validate_template_placeholders,
 )
 from .strm_content import (
     StrmContentTemplate,
@@ -28,6 +30,7 @@ from .subtitles import SubtitleConflict, discover_sidecars, discover_subtitles, 
 __all__ = [
     "EXTRAFANART_NAME_TEMPLATE_DEFAULT",
     "JINJA_VIDEO_TEMPLATE_DEFAULT",
+    "TEMPLATE_FIELDS",
     "VIDEO_TEMPLATE_DEFAULT",
     "ExtrafanartNameTemplate",
     "MoveMode",
@@ -56,5 +59,6 @@ __all__ = [
     "validate_extrafanart_name_template",
     "validate_path_template",
     "validate_strm_content_template",
+    "validate_template_placeholders",
     "video_dest",
 ]

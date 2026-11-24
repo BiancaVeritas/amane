@@ -6,6 +6,7 @@ from fastapi import APIRouter, HTTPException, Response
 
 from ...db.models import TaskType
 from ...handlers import RefreshPayload, ScanMode
+from ...organize import TEMPLATE_FIELDS, validate_template_placeholders
 from ...utils.model import to_resp
 from ..deps import RepoDep, RuntimeDep
 from ..models import (
@@ -25,6 +26,19 @@ if TYPE_CHECKING:
 logger = structlog.get_logger()
 
 router = APIRouter(prefix="/libraries", tags=["libraries"])
+
+
+def _template_values(source: object) -> dict[str, str | None]:
+    """从请求对象里取出各模板字段的实际取值; 请求可能只带其中几个."""
+    return {field: getattr(source, field, None) for field in TEMPLATE_FIELDS}
+
+
+def _check_template_placeholders(source: object, custom: dict[str, str] | None) -> None:
+    """模板引用的占位符必须存在; 不合格转成 422, 与其它字段校验保持一致."""
+    try:
+        validate_template_placeholders(_template_values(source), custom)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @router.get("/path-template-schema")
@@ -54,6 +68,8 @@ async def create_library(req: LibraryCreateRequest, repo: RepoDep, runtime: Runt
     watch_path = to_forward_slash_path(req.watch_path)
 
     name = req.name or Path(req.path).name
+
+    _check_template_placeholders(req, req.custom_placeholders)
 
     try:
         lib = await repo.create_library(
@@ -150,6 +166,19 @@ async def update_library(
         await validate_directory_path(updates["path"], runtime.safe_dirs)
     if "watch_path" in updates:
         updates["watch_path"] = to_forward_slash_path(updates["watch_path"])
+
+    # 模板与自定义占位符是跨字段约束, 单字段校验看不出问题: 必须拿「这次要写的值」配上
+    # 「库当前的其余字段」一起核对, 否则删掉占位符后模板里的 {NOE} 会一直留着.
+    existing = await repo.get_library(library_id)
+    if existing is None:
+        raise HTTPException(status_code=404, detail="媒体库不存在")
+    merged = {field: getattr(existing, field, None) for field in TEMPLATE_FIELDS}
+    merged.update({field: updates[field] for field in TEMPLATE_FIELDS if field in updates})
+    custom = updates.get("custom_placeholders", existing.custom_placeholders or {})
+    try:
+        validate_template_placeholders(merged, custom)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     try:
         lib = await repo.update_library(library_id, **updates)

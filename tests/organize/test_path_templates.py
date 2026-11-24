@@ -21,6 +21,7 @@ from amane.organize import (
     resolve_subtitle_path,
     validate_jinja_template,
     validate_path_template,
+    validate_template_placeholders,
 )
 from amane.organize.template import (
     PATH_FIELD_ELLIPSIS,
@@ -1316,3 +1317,63 @@ class TestValidateJinjaTemplate:
     def test_unclosed_if(self):
         with pytest.raises(ValueError, match="Jinja2 模板语法错误"):
             validate_jinja_template("{{number}}{% if def %} [{{def}}]{{ext}}")
+
+
+class TestValidateTemplatePlaceholders:
+    """模板引用的占位符必须存在; 删掉自定义占位符后残留的引用要在保存时就被拦住."""
+
+    def test_builtin_placeholders_pass(self):
+        validate_template_placeholders({"video_template": "{actress}/{number}.{ext}"}, {})
+
+    def test_missing_custom_placeholder(self):
+        """删掉自定义占位符, 模板里留着的 {NOE} 必须报错, 不能静默落盘成目录名."""
+        with pytest.raises(ValueError, match="未定义的占位符"):
+            validate_template_placeholders({"video_template": "{number}{% if NOE %}[{NOE}]{% endif %}.{ext}"}, {})
+        with pytest.raises(ValueError, match=r"\{NOE\}"):
+            validate_template_placeholders({"video_template": "{number}[{NOE}].{ext}"}, {})
+
+    def test_configured_custom_placeholder_passes(self):
+        validate_template_placeholders({"video_template": "{number}[{NOE}].{ext}"}, {"NOE": "NOE"})
+
+    def test_empty_custom_literal_is_not_configured(self):
+        """字面串为空的占位符等于没配置: 渲染时取不到值, 与未定义同样危险."""
+        with pytest.raises(ValueError, match="未定义的占位符"):
+            validate_template_placeholders({"video_template": "{number}[{NOE}].{ext}"}, {"NOE": ""})
+
+    def test_optional_group_is_checked(self):
+        """可选组里的引用同样要查: 它在有值时才会渲染, 漏查等于留个定时炸弹."""
+        with pytest.raises(ValueError, match="未定义的占位符"):
+            validate_template_placeholders({"video_template": "{number}[[{GONE}]].{ext}"}, {})
+
+    def test_every_field_is_checked(self):
+        for field in ("link_template", "thumb_template", "nfo_template", "subtitle_template"):
+            with pytest.raises(ValueError, match="未定义的占位符"):
+                validate_template_placeholders({field: "{link_dir}/{GONE}.ext"}, {})
+
+    def test_blank_and_none_templates_pass(self):
+        validate_template_placeholders({"video_template": "", "link_template": None}, {})
+
+    def test_broken_syntax_is_reported(self):
+        with pytest.raises(ValueError, match="未闭合"):
+            validate_template_placeholders({"video_template": "{number"}, {})
+
+
+def test_both_naming_templates_are_checked(monkeypatch) -> None:
+    """命名模板有两个字段, 各自语法不同; 保存时不按运行开关跳过任何一个.
+
+    渲染期用哪个由 ``watch_dir_enabled`` 决定, 而它与 ``use_jinja_template`` 是两个字段:
+    按开关选择性校验就会漏掉正在使用的那个, 用户删掉占位符后照样能保存.
+    """
+    with pytest.raises(ValueError, match=r"jinja_video_template.*\{NOE\}"):
+        validate_template_placeholders({"jinja_video_template": "{{number}}[{{NOE}}].{{ext}}"}, {})
+    with pytest.raises(ValueError, match=r"video_template.*\{NOE\}"):
+        validate_template_placeholders({"video_template": "{number}[{NOE}].{ext}"}, {})
+
+    # 两个都配好占位符时一起通过.
+    validate_template_placeholders(
+        {
+            "video_template": "{number}[{NOE}].{ext}",
+            "jinja_video_template": "{{number}}[{{NOE}}].{{ext}}",
+        },
+        {"NOE": "NOE"},
+    )
