@@ -22,7 +22,7 @@ from amane.handlers import (
     ScrapeHandler,
     ScrapePayload,
 )
-from amane.handlers.scrape import _prepare_image_content_type, _searchable_title
+from amane.handlers.scrape import _prepare_image_content_type, _reusable_entry, _searchable_title
 from amane.library import CleanupInventory, InventorySource, InventoryStore, LibraryFileKind, LibraryHit, scan_inventory
 from amane.observability import Recorder
 from amane.parsing import ContentType
@@ -1005,7 +1005,13 @@ class TestScrapeHandler:
 
         media = await repo.create_media_file(library_id=1, path="/media/MIDV-123.mp4")
         result = await handler.handle(
-            ScrapePayload(media_file_id=media.id, number="MIDV-123", content_type=ContentType.CENSORED)
+            # 强制刷新: 这条测的是「联网时跳过锁定字段」, 不能被片库复用短路.
+            ScrapePayload(
+                media_file_id=media.id,
+                number="MIDV-123",
+                content_type=ContentType.CENSORED,
+                use_cache=set(),
+            )
         )
 
         assert result.success is True
@@ -1144,7 +1150,13 @@ class TestScrapeHandler:
         )
         media = await repo.create_media_file(library_id=1, path="/media/POSTER-001.mp4")
         result = await h.handle(
-            ScrapePayload(media_file_id=media.id, number="POSTER-001", content_type=ContentType.CENSORED)
+            # 强制刷新: 这条测的是「联网结果里标量全空时仍保留锁定字段来源」.
+            ScrapePayload(
+                media_file_id=media.id,
+                number="POSTER-001",
+                content_type=ContentType.CENSORED,
+                use_cache=set(),
+            )
         )
 
         assert result.success is True
@@ -2599,11 +2611,10 @@ class TestOrganizeWithoutMediaFileId:
 
 
 class TestReuseLibraryEntry:
-    """片库里已经刮过的条目直接复用, 不再联网.
+    """片库优先: 库里已有同番号条目时直接复用, 不联网.
 
-    用户的原话是「让片库里有的直接走片库信息, 不要再进行刮削, 没有的再刮削」.
-    判据取 ``raw`` 非空: 那才是「这部片刮过」的证据, 只看「有条目」会把等着补全的
-    半成品也短路掉.
+    判据就是「按番号在库里查到了」——查库本身已限定同号, 不再看 ``raw`` 或字段填没填.
+    WESTERN 除外: 它的身份是 OSHASH / ThePornDB UUID, 按番号复用会张冠李戴.
     """
 
     class _CountingCrawler(Crawler):
@@ -2662,8 +2673,12 @@ class TestReuseLibraryEntry:
         assert updated.tags == ["keep"]
 
     @pytest.mark.asyncio(loop_scope="function")
-    async def test_entry_without_raw_still_scrapes(self, repo: Repository, resource_store):
-        """只填了番号的半成品不算「库里已有」, 仍要联网补全."""
+    async def test_entry_without_raw_reuses_library_copy(self, repo: Repository, resource_store):
+        """只填了番号的条目同样算「库里已有」, 直接复用, 不联网.
+
+        片库优先: 库里同号的条目就是这部片的身份, 而联网未必查得到 (手动建的条目常常
+        来自刮削器覆盖不到的站点). 想让联网数据覆盖它, 用「强制刷新」(use_cache 为空).
+        """
         await repo.upsert_metadata(number="MIDV-123", content_type=ContentType.CENSORED, title="半成品")
 
         result = await self._handler(repo, resource_store).handle(
@@ -2671,7 +2686,33 @@ class TestReuseLibraryEntry:
         )
 
         assert result.success is True
-        assert self._CountingCrawler.calls, "没有 raw 快照时必须真的去刮"
+        assert not self._CountingCrawler.calls, "库里有同号条目时不该联网"
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_force_refresh_scrapes_even_if_entry_exists(self, repo: Repository, resource_store):
+        """显式强制刷新 (use_cache 为空) 时抛开复用, 真的去联网."""
+        await repo.upsert_metadata(number="MIDV-123", content_type=ContentType.CENSORED, title="半成品")
+
+        result = await self._handler(repo, resource_store).handle(
+            ScrapePayload(number="MIDV-123", content_type=ContentType.CENSORED, use_cache=set())
+        )
+
+        assert result.success is True
+        assert self._CountingCrawler.calls, "强制刷新必须联网"
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_western_never_reused_by_number(self, repo: Repository, resource_store):
+        """WESTERN 不参与片库复用: 身份是 OSHASH / UUID, 不是番号.
+
+        按番号复用会把另一部作品的元数据张冠李戴到当前文件上.
+        """
+        metadata = await repo.upsert_western_metadata("scene-existing", "Lancelotstylesevolution.26.10.16")
+        entry = await repo.get_metadata(metadata.id)
+
+        # 普通类型: 同号条目复用
+        assert _reusable_entry(ScrapePayload(number="X", content_type=ContentType.CENSORED), entry) is not None
+        # WESTERN: 一律不复用
+        assert _reusable_entry(ScrapePayload(number="X", content_type=ContentType.WESTERN), entry) is None
 
     @pytest.mark.asyncio(loop_scope="function")
     async def test_manual_scrape_bypasses_reuse(self, repo: Repository, resource_store):

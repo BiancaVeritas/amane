@@ -379,9 +379,7 @@ async def test_in_place_rewrites_existing_artifacts(resource_store: ResourceStor
 
 
 @pytest.mark.asyncio
-async def test_in_place_artifacts_follow_actual_file_name(
-    resource_store: ResourceStore, tmp_path: Path
-) -> None:
+async def test_in_place_artifacts_follow_actual_file_name(resource_store: ResourceStore, tmp_path: Path) -> None:
     """原地模式下产物名跟着**实际文件名**, 不能用模板算出的名字.
 
     源文件叫 `CWPBD-142 [Cos] [1080p]`, 而模板算出 `CWPBD-142 [1080p]` (没有 `[Cos]`).

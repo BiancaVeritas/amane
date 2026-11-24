@@ -104,25 +104,31 @@ class CrawlerFactoryLike(Protocol):
 
 
 def _reusable_entry(payload: ScrapePayload, db_data: Metadata | None) -> Metadata | None:
-    """库内条目已经刮削过时就返回它, 让本次刮削完全不联网.
+    """库内已有该番号的条目时返回它, 让本次刮削完全不联网.
 
-    判据是 ``raw`` 非空 —— 那才是「这部片已经刮过」的证据: 它按站点存着上次取回的快照.
-    只看「有条目」或「有标题」都太松: 手动建的条目、只填了番号的条目同样有标题, 但它们
-    还等着刮削补全, 短路掉会让用户点了刮削却什么也没补上.
+    顺序上这是**先于任何出站请求**的一步: 片库优先, 只有库里确实没有才去问站点.
+
+    判据是「按番号在库里查到了条目」——查库本身已经限定了同号, 不需要再看 ``raw`` 或
+    字段填没填: 条目是用户建的也好、刮过的也好, 都已经是这部片在库里的身份, 再联网只会
+    拿站点数据去覆盖它.
 
     几种情形必须继续联网, 不能被这里短路:
 
+    - ``WESTERN``: 它的身份是 OSHASH / ThePornDB UUID, 不是番号 —— 按番号复用会把
+      另一部作品的元数据张冠李戴到当前文件上.
     - ``manual``: 用户手动搜索后点的那一条, 意图就是「按我选的来源重新写一遍」.
     - ``source_url`` / ``append_sources``: 指定了要抓的地址, 或要补来源链接.
     - ``use_cache`` 不含 ``metadata``: 显式要求强制刷新.
     """
     if db_data is None:
         return None
+    if payload.content_type == ContentType.WESTERN:
+        return None
     if payload.manual or payload.append_sources or payload.source_url:
         return None
     if CacheKind.metadata not in payload.use_cache:
         return None
-    return db_data if db_data.raw and db_data.title else None
+    return db_data
 
 
 def _searchable_title(title: str | None) -> str | None:
